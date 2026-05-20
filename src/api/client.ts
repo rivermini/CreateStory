@@ -606,3 +606,95 @@ export async function updateServerStoryMaxChapter(storyId: string, maxChapter: n
     throw new Error(`Failed to update story maxChapter: HTTP ${res.status} — ${body}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Action History
+// ---------------------------------------------------------------------------
+
+export interface HistoryEntry {
+  id: string;
+  timestamp: string;
+  kind: 'upload_single' | 'upload_batch' | 'update_single' | 'update_batch' | 'test_sync' | 'config_save';
+  status: 'running' | 'success' | 'error' | 'cancelled';
+  title: string;
+  subtitle: string;
+  items?: HistoryItem[];
+  error?: string;
+}
+
+export interface HistoryItem {
+  id: string;
+  label: string;
+  status: 'running' | 'success' | 'error' | 'cancelled';
+  message?: string;
+}
+
+export type ActionStatus = 'running' | 'success' | 'error' | 'cancelled';
+
+export interface HistoryListResponse {
+  entries: HistoryEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface HistoryAddResponse {
+  id: string;
+  timestamp: string;
+}
+
+export interface HistoryUpdateResponse {
+  id: string;
+  success: boolean;
+}
+
+export interface HistoryDeleteResponse {
+  deleted_count: number;
+}
+
+export async function getHistory(limit = 200, offset = 0): Promise<HistoryListResponse> {
+  return apiFetch<HistoryListResponse>(`/api/drive-sync/history?limit=${limit}&offset=${offset}`);
+}
+
+export async function addHistoryEntry(
+  entry: Omit<HistoryEntry, 'timestamp'>,
+): Promise<HistoryAddResponse> {
+  return apiFetch<HistoryAddResponse>('/api/drive-sync/history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      kind: entry.kind,
+      status: entry.status,
+      title: entry.title,
+      subtitle: entry.subtitle,
+      items: entry.items,
+      error: entry.error,
+      id: entry.id,
+    }),
+  });
+}
+
+export async function updateHistoryEntry(
+  entryId: string,
+  patch: {
+    status?: string;
+    title?: string;
+    subtitle?: string;
+    items?: HistoryItem[];
+    error?: string;
+  },
+): Promise<HistoryUpdateResponse> {
+  return apiFetch<HistoryUpdateResponse>(`/api/drive-sync/history/${encodeURIComponent(entryId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteHistoryEntries(ids: string[]): Promise<HistoryDeleteResponse> {
+  return apiFetch<HistoryDeleteResponse>('/api/drive-sync/history', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
+}

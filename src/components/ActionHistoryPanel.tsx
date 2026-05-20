@@ -1,51 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
+import type { HistoryEntry, HistoryItem, ActionStatus } from '../api/client';
 
-// ─── Shared types ─────────────────────────────────────────────────────────────
-
-export type ActionKind = 'upload_single' | 'upload_batch' | 'update_single' | 'update_batch' | 'test_sync' | 'config_save';
-export type ActionStatus = 'running' | 'success' | 'error' | 'cancelled';
-
-export interface HistoryEntry {
-  id: string;
-  timestamp: string;
-  kind: ActionKind;
-  status: ActionStatus;
-  title: string;
-  subtitle: string;
-  items?: HistoryItem[];
-  error?: string;
-}
-
-export interface HistoryItem {
-  id: string;
-  label: string;
-  status: ActionStatus;
-  message?: string;
-}
-
-export interface UpdateHistoryPatch {
-  status?: ActionStatus;
-  items?: HistoryItem[];
-  error?: string;
-  subtitle?: string;
-  title?: string;
-}
-
-// ─── ActionHistoryPanel ────────────────────────────────────────────────────────
-
-interface ActionHistoryPanelProps {
-  entries: HistoryEntry[];
-  onClear: () => void;
-  onRetry: (entry: HistoryEntry) => void;
-}
+// ─── Shared types (re-exported for convenience) ────────────────────────────────
+export type { HistoryEntry, HistoryItem, ActionStatus };
 
 type HistoryFilter = 'all' | 'upload' | 'update' | 'sync';
 
-export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryPanelProps) {
+interface ActionHistoryPanelProps {
+  entries: HistoryEntry[];
+  onDelete: (ids: string[]) => Promise<void>;
+  onClearAll: () => Promise<void>;
+  onRetry: (entry: HistoryEntry) => void;
+}
+
+export function ActionHistoryPanel({ entries, onDelete, onClearAll, onRetry }: ActionHistoryPanelProps) {
   const [filter, setFilter] = useState<HistoryFilter>('all');
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevLenRef = useRef(entries.length);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (autoScroll && entries.length > prevLenRef.current && scrollRef.current) {
@@ -53,6 +28,17 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
     }
     prevLenRef.current = entries.length;
   }, [entries.length, autoScroll]);
+
+  // Clear selection when entries change (e.g. new entry added)
+  useEffect(() => {
+    setSelectedIds(prev => {
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (entries.some(e => e.id === id)) next.add(id);
+      }
+      return next;
+    });
+  }, [entries]);
 
   const filtered = entries.filter(e => {
     if (filter === 'all') return true;
@@ -62,7 +48,45 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
     return true;
   });
 
-  const kindLabel = (kind: ActionKind) => {
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(e => e.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    setDeleting(true);
+    try {
+      await onDelete(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    setDeleting(true);
+    try {
+      await onClearAll();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const kindLabel = (kind: string) => {
     switch (kind) {
       case 'upload_single': return 'Upload';
       case 'upload_batch':  return 'Upload All';
@@ -70,10 +94,11 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
       case 'update_batch':  return 'Update All';
       case 'test_sync':     return 'Test Sync';
       case 'config_save':   return 'Config';
+      default: return kind;
     }
   };
 
-  const kindIcon = (kind: ActionKind) => {
+  const kindIcon = (kind: string) => {
     if (kind === 'upload_single' || kind === 'upload_batch') {
       return (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -135,7 +160,7 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
     );
   };
 
-  const kindBadgeColor = (kind: ActionKind) => {
+  const kindBadgeColor = (kind: string) => {
     if (kind === 'upload_single' || kind === 'upload_batch') return 'bg-indigo-900/50 text-indigo-300 border-indigo-700/40';
     if (kind === 'update_single' || kind === 'update_batch') return 'bg-amber-900/50 text-amber-300 border-amber-700/40';
     if (kind === 'test_sync') return 'bg-cyan-900/50 text-cyan-300 border-cyan-700/40';
@@ -172,6 +197,9 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             Action History
+            {entries.length > 0 && (
+              <span className="text-xs font-normal text-slate-500">({entries.length})</span>
+            )}
           </h2>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
@@ -184,12 +212,47 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
               Auto-scroll
             </label>
             {entries.length > 0 && (
-              <button
-                onClick={onClear}
-                className="text-xs text-slate-500 hover:text-red-400 transition-colors"
-              >
-                Clear all
-              </button>
+              <>
+                {!selectMode ? (
+                  <>
+                    <button
+                      onClick={() => setSelectMode(true)}
+                      className="text-xs text-slate-500 hover:text-indigo-400 transition-colors"
+                    >
+                      Select
+                    </button>
+                    <button
+                      onClick={handleClearAll}
+                      disabled={deleting}
+                      className="text-xs text-slate-500 hover:text-red-400 transition-colors disabled:opacity-50"
+                    >
+                      {deleting ? 'Clearing...' : 'Clear all'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={toggleSelectAll}
+                      className="text-xs text-slate-400 hover:text-indigo-400 transition-colors"
+                    >
+                      {selectedIds.size === filtered.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                    <button
+                      onClick={handleDeleteSelected}
+                      disabled={deleting || selectedIds.size === 0}
+                      className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+                    >
+                      {deleting ? 'Deleting...' : `Delete (${selectedIds.size})`}
+                    </button>
+                    <button
+                      onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+                      className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -234,11 +297,30 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
         ) : (
           <div className="divide-y divide-slate-700/40">
             {filtered.map(entry => (
-              <div key={entry.id} className="px-4 py-3 hover:bg-slate-700/20 transition-colors">
+              <div
+                key={entry.id}
+                className={`px-4 py-3 transition-colors group ${
+                  selectedIds.has(entry.id)
+                    ? 'bg-indigo-900/20'
+                    : 'hover:bg-slate-700/20'
+                }`}
+              >
                 {/* Entry header */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                    <div className={`mt-0.5 p-1.5 rounded-lg border flex-shrink-0 ${kindBadgeColor(entry.kind)}`}>
+                    {/* Checkbox in select mode */}
+                    {selectMode ? (
+                      <div className="mt-0.5 flex-shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(entry.id)}
+                          onChange={() => toggleSelect(entry.id)}
+                          className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className={`p-1.5 rounded-lg border flex-shrink-0 ${kindBadgeColor(entry.kind)}`}>
                       {kindIcon(entry.kind)}
                     </div>
                     <div className="min-w-0">
@@ -259,7 +341,7 @@ export function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryP
                     <p className="text-xs text-slate-500">
                       {new Date(entry.timestamp).toLocaleString()}
                     </p>
-                    {entry.status === 'error' && entry.kind !== 'upload_batch' && entry.kind !== 'update_batch' && (
+                    {entry.status === 'error' && entry.kind !== 'upload_batch' && entry.kind !== 'update_batch' && !selectMode && (
                       <button
                         onClick={() => onRetry(entry)}
                         className="text-xs text-indigo-400 hover:text-indigo-300 mt-1 transition-colors"
