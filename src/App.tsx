@@ -5,8 +5,6 @@ import { CrawlPage } from './pages/CrawlPage';
 import { ResultsPage } from './pages/ResultsPage';
 import ResultsAllPage from './pages/ResultsAllPage';
 import { BatchPage } from './pages/BatchPage';
-import { BedReadPage } from './pages/BedReadPage';
-import BedReadJobsPage from './pages/BedReadJobsPage';
 import { DriveSyncPage } from './pages/DriveSyncPage';
 import FloatingNewCrawlButton from './components/FloatingNewCrawlButton.tsx';
 
@@ -75,8 +73,8 @@ function App() {
           <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
           <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
           <Route path="/results/all" element={<ResultsAllPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/bedread" element={<BedReadPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
+          <Route path="/bedread" element={<Navigate to="/" replace />} />
+          <Route path="/bedread/jobs" element={<Navigate to="/" replace />} />
           <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
