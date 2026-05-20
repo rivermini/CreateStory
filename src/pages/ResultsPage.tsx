@@ -174,7 +174,7 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
         subtitle={<span className="font-mono hidden sm:block">refreshed {lastRefresh.toLocaleTimeString()}</span>}
       />
 
-      <main className="w-full max-w-none mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <main className="w-full xl:w-[70vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
         {/* Summary Card */}
         <section className="bg-slate-800 border border-slate-700 rounded-xl p-4 sm:p-6 space-y-3">
