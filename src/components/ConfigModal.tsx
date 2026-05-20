@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   type DriveSyncConfig,
 } from '../api/client';
@@ -31,7 +31,7 @@ const FIXED_JSON_PREFIX = 'credentials/';
 export function ConfigModal({
   isOpen,
   onClose,
-  config,
+  config: _config,
   configForm,
   onFormChange,
   onSave,

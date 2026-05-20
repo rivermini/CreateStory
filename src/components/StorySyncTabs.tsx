@@ -399,7 +399,7 @@ export interface StorySyncTabsProps {
 }
 
 export function StorySyncTabs({
-  config,
+  config: _config,
   activeTab,
   onTabChange,
   onOpenSettings,
