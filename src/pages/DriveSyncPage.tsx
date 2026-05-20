@@ -6,42 +6,27 @@ import {
   checkUploadable,
   checkUpdatable,
   updateChapterCount,
+  getHistory,
+  addHistoryEntry,
+  updateHistoryEntry,
+  deleteHistoryEntries,
   type DriveSyncConfig,
   type DriveFolderEntry,
   type UpdatableStoryEntry,
   type CheckUploadableResponse,
   type CheckUpdatableResponse,
+  type HistoryEntry,
+  type HistoryItem,
 } from '../api/client';
 import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
-import { ActionHistoryPanel, type HistoryEntry, type HistoryItem, type ActionStatus } from '../components/ActionHistoryPanel';
+import { ActionHistoryPanel } from '../components/ActionHistoryPanel';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
 
 interface DriveSyncPageProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
-}
-
-// ─── History helpers ───────────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'drive_sync_history';
-
-function loadHistory(): HistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(entries: HistoryEntry[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-200)));
-  } catch {
-    // storage full or unavailable — ignore
-  }
 }
 
 function makeId(): string {
@@ -88,34 +73,66 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
 
   // ── Action History ─────────────────────────────────────────────────────────────
-  const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
 
-  const addHistory = useCallback((entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => {
-    const newEntry: HistoryEntry = {
-      ...entry,
-      id: makeId(),
-      timestamp: new Date().toISOString(),
-    };
-    setHistory(prev => {
-      const next = [newEntry, ...prev];
-      saveHistory(next);
-      return next;
-    });
-    return newEntry.id;
+  const loadHistoryFromBE = useCallback(async () => {
+    try {
+      const data = await getHistory(200, 0);
+      setHistory(data.entries);
+    } catch {
+      // silently fail — history is non-critical
+    }
   }, []);
 
-  const updateHistory = useCallback((id: string, patch: Partial<HistoryEntry>) => {
-    setHistory(prev => {
-      const next = prev.map(e => e.id === id ? { ...e, ...patch } : e);
-      saveHistory(next);
-      return next;
-    });
-  }, []);
+  // Load history on mount
+  useEffect(() => {
+    loadHistoryFromBE();
+  }, [loadHistoryFromBE]);
 
-  const clearHistory = useCallback(() => {
-    setHistory([]);
-    saveHistory([]);
-  }, []);
+  const addHistory = useCallback(async (entry: Omit<HistoryEntry, 'timestamp'>): Promise<string> => {
+    try {
+      const result = await addHistoryEntry(entry);
+      // Re-fetch to get the server-side timestamp
+      await loadHistoryFromBE();
+      return result.id;
+    } catch {
+      // Fallback: add optimistically
+      const newEntry: HistoryEntry = {
+        ...entry,
+        timestamp: new Date().toISOString(),
+      };
+      setHistory(prev => [newEntry, ...prev].slice(0, 200));
+      return entry.id;
+    }
+  }, [loadHistoryFromBE]);
+
+  const updateHistory = useCallback(async (id: string, patch: Partial<HistoryEntry>) => {
+    try {
+      await updateHistoryEntry(id, patch);
+      await loadHistoryFromBE();
+    } catch {
+      // Fallback: update locally
+      setHistory(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e));
+    }
+  }, [loadHistoryFromBE]);
+
+  const handleDeleteHistory = useCallback(async (ids: string[]) => {
+    try {
+      await deleteHistoryEntries(ids);
+      await loadHistoryFromBE();
+    } catch {
+      setHistory(prev => prev.filter(e => !ids.includes(e.id)));
+    }
+  }, [loadHistoryFromBE]);
+
+  const handleClearAllHistory = useCallback(async () => {
+    try {
+      await deleteHistoryEntries([]);
+      await loadHistoryFromBE();
+    } catch {
+      setHistory([]);
+    }
+  }, [loadHistoryFromBE]);
 
   const handleRetry = useCallback((_entry: HistoryEntry) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -163,9 +180,10 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
     setSavingConfig(true);
 
-    const historyId = addHistory({
+    const historyId = await addHistory({
+      id: makeId(),
       kind: 'config_save',
-      status: 'running' as ActionStatus,
+      status: 'running',
       title: 'Saving Drive Sync config...',
       subtitle: configForm.folder_id.slice(0, 30) + (configForm.folder_id.length > 30 ? '...' : ''),
     });
@@ -218,12 +236,13 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const handleUploadSingle = async (folder: DriveFolderEntry): Promise<string> => {
     setUploadingIds(prev => new Set(prev).add(folder.id));
 
-    const historyId = addHistory({
+    const historyId = await addHistory({
+      id: makeId(),
       kind: 'upload_single',
-      status: 'running' as ActionStatus,
+      status: 'running',
       title: `Uploading: ${folder.display_name}`,
       subtitle: folder.prefix,
-      items: [{ id: makeId(), label: folder.display_name, status: 'running' as ActionStatus }],
+      items: [{ id: makeId(), label: folder.display_name, status: 'running' }],
     });
 
     try {
@@ -231,15 +250,15 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       setUploadResults(prev => new Map(prev).set(folder.id, result));
 
       if (result.success) {
-        updateHistory(historyId, { status: 'success', items: [{ id: makeId(), label: folder.display_name, status: 'success' as ActionStatus, message: result.message }] });
+        updateHistory(historyId, { status: 'success', items: [{ id: makeId(), label: folder.display_name, status: 'success', message: result.message }] });
       } else {
-        updateHistory(historyId, { status: 'error', error: result.message, items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: result.message }] });
+        updateHistory(historyId, { status: 'error', error: result.message, items: [{ id: makeId(), label: folder.display_name, status: 'error', message: result.message }] });
       }
       return result.success ? 'success' : 'error';
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Upload failed';
       setUploadResults(prev => new Map(prev).set(folder.id, { success: false, message: msg }));
-      updateHistory(historyId, { status: 'error', error: msg, items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: msg }] });
+      updateHistory(historyId, { status: 'error', error: msg, items: [{ id: makeId(), label: folder.display_name, status: 'error', message: msg }] });
       return 'error';
     } finally {
       setUploadingIds(prev => { const n = new Set(prev); n.delete(folder.id); return n; });
@@ -250,11 +269,12 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     if (!uploadableData) return;
     const items: HistoryItem[] = uploadableData.uploadable
       .filter(f => f.is_valid_format)
-      .map(f => ({ id: makeId(), label: f.display_name, status: 'running' as ActionStatus }));
+      .map(f => ({ id: makeId(), label: f.display_name, status: 'running' }));
 
-    const historyId = addHistory({
+    const historyId = await addHistory({
+      id: makeId(),
       kind: 'upload_batch',
-      status: 'running' as ActionStatus,
+      status: 'running',
       title: `Uploading ${items.length} stories...`,
       subtitle: 'Upload All',
       items,
@@ -321,12 +341,13 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     setUpdatingIds(prev => new Set(prev).add(server_story.id));
 
     const delta = (folder.chapter_count ?? 0) - server_story.maxChapter;
-    const historyId = addHistory({
+    const historyId = await addHistory({
+      id: makeId(),
       kind: 'update_single',
-      status: 'running' as ActionStatus,
+      status: 'running',
       title: `Updating: ${folder.display_name}`,
       subtitle: `+${delta} chapters`,
-      items: [{ id: makeId(), label: `${folder.display_name} (${server_story.maxChapter} → ${folder.chapter_count ?? 0})`, status: 'running' as ActionStatus }],
+      items: [{ id: makeId(), label: `${folder.display_name} (${server_story.maxChapter} → ${folder.chapter_count ?? 0})`, status: 'running' }],
     });
 
     try {
@@ -334,15 +355,15 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       setUpdateResults(prev => new Map(prev).set(server_story.id, { success: result.success, message: result.message }));
 
       if (result.success) {
-        updateHistory(historyId, { status: 'success', items: [{ id: makeId(), label: folder.display_name, status: 'success' as ActionStatus, message: result.message }] });
+        updateHistory(historyId, { status: 'success', items: [{ id: makeId(), label: folder.display_name, status: 'success', message: result.message }] });
       } else {
-        updateHistory(historyId, { status: 'error', error: result.message, items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: result.message }] });
+        updateHistory(historyId, { status: 'error', error: result.message, items: [{ id: makeId(), label: folder.display_name, status: 'error', message: result.message }] });
       }
       return result.success ? 'success' : 'error';
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Update failed';
       setUpdateResults(prev => new Map(prev).set(server_story.id, { success: false, message: msg }));
-      updateHistory(historyId, { status: 'error', error: msg, items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: msg }] });
+      updateHistory(historyId, { status: 'error', error: msg, items: [{ id: makeId(), label: folder.display_name, status: 'error', message: msg }] });
       return 'error';
     } finally {
       setUpdatingIds(prev => { const n = new Set(prev); n.delete(server_story.id); return n; });
@@ -353,12 +374,13 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     if (!updatableData) return;
     const items: HistoryItem[] = updatableData.updatable.map((e: UpdatableStoryEntry) => {
       const delta = (e.folder.chapter_count ?? 0) - e.server_story.maxChapter;
-      return { id: makeId(), label: `${e.folder.display_name} (+${delta})`, status: 'running' as ActionStatus };
+      return { id: makeId(), label: `${e.folder.display_name} (+${delta})`, status: 'running' };
     });
 
-    const historyId = addHistory({
+    const historyId = await addHistory({
+      id: makeId(),
       kind: 'update_batch',
-      status: 'running' as ActionStatus,
+      status: 'running',
       title: `Updating ${items.length} stories...`,
       subtitle: 'Update All',
       items,
@@ -503,7 +525,8 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
               <div className="w-full lg:w-96 lg:flex-shrink-0 flex flex-col">
                 <ActionHistoryPanel
                   entries={history}
-                  onClear={clearHistory}
+                  onDelete={handleDeleteHistory}
+                  onClearAll={handleClearAllHistory}
                   onRetry={handleRetry}
                 />
               </div>
