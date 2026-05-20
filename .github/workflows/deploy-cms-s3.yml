@@ -12,6 +12,7 @@ on:
       - "vite.config.ts"
       - "index.html"
       - ".github/workflows/deploy-cms-s3.yml"
+      - ".env.production"
   workflow_dispatch:
 
 concurrency:
@@ -42,6 +43,8 @@ jobs:
 
       - name: Build CMS
         run: npm run build
+        env:
+          VITE_MAIN_BE_TOKEN: ${{ secrets.VITE_MAIN_BE_TOKEN }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
