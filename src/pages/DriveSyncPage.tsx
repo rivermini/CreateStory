@@ -12,7 +12,6 @@ import {
   type DriveFolderEntry,
   type DriveStoryPreview,
   type DriveSyncConfig,
-  type DriveSyncProgressResponse,
   type CheckUploadableResponse,
   type CheckUpdatableResponse,
   type UpdatableStoryEntry,
@@ -24,6 +23,332 @@ interface DriveSyncPageProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
 }
+
+// ─── Action History Types ──────────────────────────────────────────────────────
+
+type ActionKind = 'upload_single' | 'upload_batch' | 'update_single' | 'update_batch' | 'test_sync' | 'config_save';
+type ActionStatus = 'running' | 'success' | 'error' | 'cancelled';
+
+interface HistoryEntry {
+  id: string;
+  timestamp: string; // ISO string
+  kind: ActionKind;
+  status: ActionStatus;
+  title: string;
+  subtitle: string;
+  items?: HistoryItem[];
+  error?: string;
+}
+
+interface HistoryItem {
+  id: string;
+  label: string;
+  status: ActionStatus;
+  message?: string;
+}
+
+interface UpdateHistoryPatch {
+  status?: ActionStatus;
+  items?: HistoryItem[];
+  error?: string;
+  subtitle?: string;
+  title?: string;
+}
+
+const STORAGE_KEY = 'drive_sync_history';
+
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(entries: HistoryEntry[]) {
+  try {
+    // Keep last 200 entries
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-200)));
+  } catch {
+    // storage full or unavailable — ignore
+  }
+}
+
+function makeId(): string {
+  return Math.random().toString(36).slice(2);
+}
+
+// ─── ActionHistoryPanel ────────────────────────────────────────────────────────
+
+interface ActionHistoryPanelProps {
+  entries: HistoryEntry[];
+  onClear: () => void;
+  onRetry: (entry: HistoryEntry) => void;
+}
+
+type HistoryFilter = 'all' | 'upload' | 'update' | 'sync';
+
+function ActionHistoryPanel({ entries, onClear, onRetry }: ActionHistoryPanelProps) {
+  const [filter, setFilter] = useState<HistoryFilter>('all');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevLenRef = useRef(entries.length);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  // Auto-scroll to top when new entries are added
+  useEffect(() => {
+    if (autoScroll && entries.length > prevLenRef.current && scrollRef.current) {
+      scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    prevLenRef.current = entries.length;
+  }, [entries.length, autoScroll]);
+
+  const filtered = entries.filter(e => {
+    if (filter === 'all') return true;
+    if (filter === 'upload') return e.kind === 'upload_single' || e.kind === 'upload_batch';
+    if (filter === 'update') return e.kind === 'update_single' || e.kind === 'update_batch';
+    if (filter === 'sync') return e.kind === 'test_sync' || e.kind === 'config_save';
+    return true;
+  });
+
+  const kindLabel = (kind: ActionKind) => {
+    switch (kind) {
+      case 'upload_single': return 'Upload';
+      case 'upload_batch':  return 'Upload All';
+      case 'update_single': return 'Update';
+      case 'update_batch':  return 'Update All';
+      case 'test_sync':     return 'Test Sync';
+      case 'config_save':   return 'Config';
+    }
+  };
+
+  const kindIcon = (kind: ActionKind) => {
+    if (kind === 'upload_single' || kind === 'upload_batch') {
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+      );
+    }
+    if (kind === 'update_single' || kind === 'update_batch') {
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+      );
+    }
+    if (kind === 'test_sync') {
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      );
+    }
+    return (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    );
+  };
+
+  const statusBadge = (status: ActionStatus) => {
+    if (status === 'running') return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-900/50 text-indigo-300 border border-indigo-700/40">
+        <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Running
+      </span>
+    );
+    if (status === 'success') return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        Success
+      </span>
+    );
+    if (status === 'error') return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-900/50 text-red-300 border border-red-700/40">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        Error
+      </span>
+    );
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/40">
+        Cancelled
+      </span>
+    );
+  };
+
+  const kindBadgeColor = (kind: ActionKind) => {
+    if (kind === 'upload_single' || kind === 'upload_batch') return 'bg-indigo-900/50 text-indigo-300 border-indigo-700/40';
+    if (kind === 'update_single' || kind === 'update_batch') return 'bg-amber-900/50 text-amber-300 border-amber-700/40';
+    if (kind === 'test_sync') return 'bg-cyan-900/50 text-cyan-300 border-cyan-700/40';
+    return 'bg-slate-700/50 text-slate-300 border-slate-600/40';
+  };
+
+  const itemStatusIcon = (status: ActionStatus) => {
+    if (status === 'running') return (
+      <svg className="w-3 h-3 text-indigo-400 animate-spin flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    );
+    if (status === 'success') return (
+      <svg className="w-3 h-3 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      </svg>
+    );
+    if (status === 'error') return (
+      <svg className="w-3 h-3 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    );
+    return <div className="w-3 h-3 rounded-full border border-slate-500 flex-shrink-0" />;
+  };
+
+  return (
+    <section className="bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 border-b border-slate-700/50">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+            <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Action History
+          </h2>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoScroll}
+                onChange={e => setAutoScroll(e.target.checked)}
+                className="accent-indigo-500"
+              />
+              Auto-scroll
+            </label>
+            {entries.length > 0 && (
+              <button
+                onClick={onClear}
+                className="text-xs text-slate-500 hover:text-red-400 transition-colors"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="flex items-center gap-1 p-1 bg-slate-900/40 rounded-lg w-fit">
+          {([
+            ['all', 'All'],
+            ['upload', 'Upload'],
+            ['update', 'Update'],
+            ['sync', 'Sync'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setFilter(value)}
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                filter === value
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* History list */}
+      <div
+        ref={scrollRef}
+        className="max-h-[420px] overflow-y-auto"
+      >
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-500 text-sm">
+            <svg className="w-10 h-10 mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p>No actions yet</p>
+            <p className="text-xs text-slate-600 mt-1">Actions will appear here as you work</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-700/40">
+            {filtered.map(entry => (
+              <div key={entry.id} className="px-4 py-3 hover:bg-slate-700/20 transition-colors">
+                {/* Entry header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                    <div className={`mt-0.5 p-1.5 rounded-lg border flex-shrink-0 ${kindBadgeColor(entry.kind)}`}>
+                      {kindIcon(entry.kind)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-300">{kindLabel(entry.kind)}</span>
+                        {statusBadge(entry.status)}
+                      </div>
+                      <p className="text-sm text-slate-200 font-medium mt-0.5 truncate">{entry.title}</p>
+                      {entry.subtitle && (
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">{entry.subtitle}</p>
+                      )}
+                      {entry.error && (
+                        <p className="text-xs text-red-400 mt-1">{entry.error}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <p className="text-xs text-slate-500">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </p>
+                    {entry.status === 'error' && entry.kind !== 'upload_batch' && entry.kind !== 'update_batch' && (
+                      <button
+                        onClick={() => onRetry(entry)}
+                        className="text-xs text-indigo-400 hover:text-indigo-300 mt-1 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Item breakdown */}
+                {entry.items && entry.items.length > 0 && (
+                  <div className="mt-2 ml-9 space-y-1">
+                    {entry.items.map(item => (
+                      <div key={item.id} className="flex items-center gap-2 text-xs">
+                        {itemStatusIcon(item.status)}
+                        <span className={
+                          item.status === 'error' ? 'text-red-400' :
+                          item.status === 'success' ? 'text-emerald-400' :
+                          'text-slate-400'
+                        }>
+                          {item.label}
+                        </span>
+                        {item.message && (
+                          <span className="text-slate-500 truncate max-w-[200px]">— {item.message}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) {
   // Config
@@ -46,11 +371,9 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [previewError, setPreviewError] = useState('');
 
   // Sync status
-  const [syncStatus, setSyncStatus] = useState<DriveSyncProgressResponse | null>(null);
   const [syncRunning, setSyncRunning] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // New: Uploadable / Updatable tabs
+  // Uploadable / Updatable tabs
   type SubTab = 'uploadable' | 'updatable';
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('uploadable');
 
@@ -82,7 +405,37 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingConfigError, setSavingConfigError] = useState('');
 
-  // Poll sync status while running
+  // ── Action History ──────────────────────────────────────────────────────────
+  const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
+
+  const addHistory = useCallback((entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => {
+    const newEntry: HistoryEntry = {
+      ...entry,
+      id: makeId(),
+      timestamp: new Date().toISOString(),
+    };
+    setHistory(prev => {
+      const next = [newEntry, ...prev];
+      saveHistory(next);
+      return next;
+    });
+    return newEntry.id;
+  }, []);
+
+  const updateHistory = useCallback((id: string, patch: UpdateHistoryPatch) => {
+    setHistory(prev => {
+      const next = prev.map(e => e.id === id ? { ...e, ...patch } : e);
+      saveHistory(next);
+      return next;
+    });
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    saveHistory([]);
+  }, []);
+
+  // ── Poll sync status while running ─────────────────────────────────────────
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load config on mount
@@ -114,12 +467,11 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       .finally(() => setConfigLoading(false));
   }, []);
 
-  // Poll sync status
   useEffect(() => {
     if (!syncRunning) return;
     const poll = () => {
       getDriveSyncStatus()
-        .then(setSyncStatus)
+        .then(() => {}) // status is shown in history now
         .catch(() => {});
     };
     poll();
@@ -133,7 +485,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     const offset = reset ? 0 : foldersOffset;
     setFoldersLoading(true);
     setFoldersError('');
-    // counts=false for speed; chapter counts show in the preview panel instead
     listDriveFolders({ limit: FOLDER_PAGE_SIZE, offset })
       .then(resp => {
         if (reset) {
@@ -152,7 +503,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     setSelectedFolder(folder);
     setPreview(null);
     setPreviewError('');
-    setSyncResult(null);
     setPreviewLoading(true);
 
     previewDriveStory(folder.id)
@@ -161,6 +511,8 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       .finally(() => setPreviewLoading(false));
   }, []);
 
+  // ── Handlers with history logging ──────────────────────────────────────────
+
   const handleSaveConfig = async () => {
     setSavingConfigError('');
     if (!configForm.folder_id.trim()) {
@@ -168,6 +520,14 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       return;
     }
     setSavingConfig(true);
+
+    const historyId = addHistory({
+      kind: 'config_save',
+      status: 'running' as const,
+      title: 'Saving Drive Sync config...',
+      subtitle: configForm.folder_id.slice(0, 30) + (configForm.folder_id.length > 30 ? '...' : ''),
+    });
+
     try {
       const cfg = await initDriveSyncConfig({
         folder_id: configForm.folder_id.trim(),
@@ -184,7 +544,17 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       setFolders([]);
       setFoldersOffset(0);
       loadFolders(true);
+      updateHistory(historyId, {
+        status: 'success',
+        title: 'Drive Sync config saved',
+        subtitle: configForm.folder_id.slice(0, 30) + (configForm.folder_id.length > 30 ? '...' : ''),
+      });
     } catch (e) {
+      updateHistory(historyId, {
+        status: 'error',
+        title: 'Failed to save config',
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
       setSavingConfigError(e instanceof Error ? e.message : 'Failed to save config.');
     } finally {
       setSavingConfig(false);
@@ -193,21 +563,44 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
 
   const handleTestSync = async () => {
     setSyncRunning(true);
-    setSyncResult(null);
-    setSyncStatus(null);
+
+    const historyId = addHistory({
+      kind: 'test_sync',
+      status: 'running' as const,
+      title: 'Syncing to main BE...',
+      subtitle: selectedFolder!.display_name,
+      items: [],
+    });
+
     try {
       const result = await syncSingleDriveFolder(selectedFolder!.id);
-      setSyncResult(result);
-      setSyncRunning(false);
-      // Refresh sync status
-      getDriveSyncStatus().then(setSyncStatus).catch(() => {});
+
+      if (result.success) {
+        updateHistory(historyId, {
+          status: 'success',
+          title: 'Sync complete',
+          subtitle: selectedFolder!.display_name,
+        });
+      } else {
+        updateHistory(historyId, {
+          status: 'error',
+          title: 'Sync failed',
+          subtitle: selectedFolder!.display_name,
+          error: result.message,
+        });
+      }
     } catch (e) {
-      setSyncResult({ success: false, message: e instanceof Error ? e.message : 'Sync failed.' });
+      updateHistory(historyId, {
+        status: 'error',
+        title: 'Sync failed',
+        subtitle: selectedFolder!.display_name,
+        error: e instanceof Error ? e.message : 'Unknown error',
+      });
+    } finally {
       setSyncRunning(false);
     }
   };
 
-  // ── New: check-uploadable ────────────────────────────────────────────────
   const handleCheckUploadable = async () => {
     setUploadableLoading(true);
     setUploadableError('');
@@ -222,13 +615,43 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   };
 
-  const handleUploadSingle = async (folder: DriveFolderEntry) => {
+  const handleUploadSingle = async (folder: DriveFolderEntry): Promise<string> => {
     setUploadingIds(prev => new Set(prev).add(folder.id));
+
+    const historyId = addHistory({
+      kind: 'upload_single',
+      status: 'running' as const,
+      title: `Uploading: ${folder.display_name}`,
+      subtitle: folder.prefix,
+      items: [{ id: makeId(), label: folder.display_name, status: 'running' as ActionStatus }],
+    });
+
     try {
       const result = await syncSingleDriveFolder(folder.id);
       setUploadResults(prev => new Map(prev).set(folder.id, result));
+
+      if (result.success) {
+        updateHistory(historyId, {
+          status: 'success',
+          items: [{ id: makeId(), label: folder.display_name, status: 'success' as ActionStatus, message: result.message }],
+        });
+      } else {
+        updateHistory(historyId, {
+          status: 'error',
+          error: result.message,
+          items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: result.message }],
+        });
+      }
+      return result.success ? 'success' : 'error';
     } catch (e) {
-      setUploadResults(prev => new Map(prev).set(folder.id, { success: false, message: e instanceof Error ? e.message : 'Upload failed.' }));
+      const msg = e instanceof Error ? e.message : 'Upload failed';
+      setUploadResults(prev => new Map(prev).set(folder.id, { success: false, message: msg }));
+      updateHistory(historyId, {
+        status: 'error',
+        error: msg,
+          items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: msg }],
+      });
+      return 'error';
     } finally {
       setUploadingIds(prev => { const n = new Set(prev); n.delete(folder.id); return n; });
     }
@@ -236,15 +659,59 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
 
   const handleUploadAll = async () => {
     if (!uploadableData) return;
-    for (const folder of uploadableData.uploadable) {
+    const items: HistoryItem[] = uploadableData.uploadable
+      .filter(f => f.is_valid_format)
+      .map(f => ({ id: makeId(), label: f.display_name, status: 'running' as ActionStatus }));
+
+    const historyId = addHistory({
+      kind: 'upload_batch',
+      status: 'running' as const,
+      title: `Uploading ${items.length} stories...`,
+      subtitle: 'Upload All',
+      items,
+    });
+
+    let successCount = 0;
+    let errorCount = 0;
+    const updatedItems = [...items];
+
+    for (let i = 0; i < uploadableData.uploadable.length; i++) {
+      const folder = uploadableData.uploadable[i];
       if (!folder.is_valid_format) continue;
-      if (!uploadResults.has(folder.id)) {
-        await handleUploadSingle(folder);
+
+      try {
+        const result = await syncSingleDriveFolder(folder.id);
+        setUploadResults(prev => new Map(prev).set(folder.id, result));
+
+        const itemIdx = updatedItems.findIndex(it => it.label === folder.display_name && it.status === 'running');
+        if (itemIdx !== -1) {
+          if (result.success) {
+            successCount++;
+            updatedItems[itemIdx] = { ...updatedItems[itemIdx], status: 'success', message: result.message };
+          } else {
+            errorCount++;
+            updatedItems[itemIdx] = { ...updatedItems[itemIdx], status: 'error', message: result.message };
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Upload failed';
+        errorCount++;
+        const itemIdx = updatedItems.findIndex(it => it.label === folder.display_name && it.status === 'running');
+        if (itemIdx !== -1) {
+          updatedItems[itemIdx] = { ...updatedItems[itemIdx], status: 'error', message: msg };
+        }
       }
+
+      updateHistory(historyId, { items: [...updatedItems] });
     }
+
+    updateHistory(historyId, {
+      status: errorCount === 0 ? 'success' : successCount === 0 ? 'error' : 'success',
+      title: `Upload All — ${successCount} succeeded${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+      subtitle: `${uploadableData.uploadable.filter(f => f.is_valid_format).length} total`,
+    });
   };
 
-  // ── New: check-updatable ──────────────────────────────────────────────────
   const handleCheckUpdatable = async () => {
     setUpdatableLoading(true);
     setUpdatableError('');
@@ -259,14 +726,45 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   };
 
-  const handleUpdateSingle = async (entry: UpdatableStoryEntry) => {
+  const handleUpdateSingle = async (entry: UpdatableStoryEntry): Promise<string> => {
     const { server_story, folder } = entry;
     setUpdatingIds(prev => new Set(prev).add(server_story.id));
+
+    const delta = (folder.chapter_count ?? 0) - server_story.maxChapter;
+    const historyId = addHistory({
+      kind: 'update_single',
+      status: 'running' as const,
+      title: `Updating: ${folder.display_name}`,
+      subtitle: `+${delta} chapters`,
+      items: [{ id: makeId(), label: `${folder.display_name} (${server_story.maxChapter} → ${folder.chapter_count ?? 0})`, status: 'running' as ActionStatus }],
+    });
+
     try {
       const result = await updateChapterCount(server_story.id, folder.chapter_count ?? 0);
       setUpdateResults(prev => new Map(prev).set(server_story.id, { success: result.success, message: result.message }));
+
+      if (result.success) {
+        updateHistory(historyId, {
+          status: 'success',
+          items: [{ id: makeId(), label: folder.display_name, status: 'success' as ActionStatus, message: result.message }],
+        });
+      } else {
+        updateHistory(historyId, {
+          status: 'error',
+          error: result.message,
+          items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: result.message }],
+        });
+      }
+      return result.success ? 'success' : 'error';
     } catch (e) {
-      setUpdateResults(prev => new Map(prev).set(server_story.id, { success: false, message: e instanceof Error ? e.message : 'Update failed.' }));
+      const msg = e instanceof Error ? e.message : 'Update failed';
+      setUpdateResults(prev => new Map(prev).set(server_story.id, { success: false, message: msg }));
+      updateHistory(historyId, {
+        status: 'error',
+        error: msg,
+          items: [{ id: makeId(), label: folder.display_name, status: 'error' as ActionStatus, message: msg }],
+      });
+      return 'error';
     } finally {
       setUpdatingIds(prev => { const n = new Set(prev); n.delete(server_story.id); return n; });
     }
@@ -274,12 +772,72 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
 
   const handleUpdateAll = async () => {
     if (!updatableData) return;
-    for (const entry of updatableData.updatable) {
-      if (!updateResults.has(entry.server_story.id)) {
-        await handleUpdateSingle(entry);
+    const items: HistoryItem[] = updatableData.updatable.map((e: UpdatableStoryEntry) => {
+      const delta = (e.folder.chapter_count ?? 0) - e.server_story.maxChapter;
+      return {
+        id: makeId(),
+        label: `${e.folder.display_name} (+${delta})`,
+        status: 'running' as ActionStatus,
+      };
+    });
+
+    const historyId = addHistory({
+      kind: 'update_batch',
+      status: 'running' as const,
+      title: `Updating ${items.length} stories...`,
+      subtitle: 'Update All',
+      items,
+    });
+
+    let successCount = 0;
+    let errorCount = 0;
+    const updatedItems = [...items];
+
+    for (let i = 0; i < updatableData.updatable.length; i++) {
+      const entry = updatableData.updatable[i];
+
+      try {
+        const result = await updateChapterCount(entry.server_story.id, entry.folder.chapter_count ?? 0);
+        setUpdateResults(prev => new Map(prev).set(entry.server_story.id, { success: result.success, message: result.message }));
+
+        const itemIdx = updatedItems.findIndex(it => it.label.startsWith(entry.folder.display_name));
+        if (itemIdx !== -1) {
+          if (result.success) {
+            successCount++;
+            updatedItems[itemIdx] = { ...updatedItems[itemIdx], status: 'success', message: result.message };
+          } else {
+            errorCount++;
+            updatedItems[itemIdx] = { ...updatedItems[itemIdx], status: 'error', message: result.message };
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Update failed';
+        errorCount++;
+        const itemIdx = updatedItems.findIndex(it => it.label.startsWith(entry.folder.display_name));
+        if (itemIdx !== -1) {
+          updatedItems[itemIdx] = { ...updatedItems[itemIdx], status: 'error', message: msg };
+        }
       }
+
+      updateHistory(historyId, { items: [...updatedItems] });
     }
+
+    updateHistory(historyId, {
+      status: errorCount === 0 ? 'success' : successCount === 0 ? 'error' : 'success',
+      title: `Update All — ${successCount} succeeded${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+      subtitle: `${updatableData.updatable.length} total`,
+    });
   };
+
+  // Retry helper — re-dispatches based on kind
+  const handleRetry = useCallback((_entry: HistoryEntry) => {
+    // Re-triggering from history requires context (folder entry).
+    // For single actions, we can't easily replay without re-fetching state.
+    // For now, scroll the page to the relevant section as a UX hint.
+    // The history panel itself serves as the record; retry for complex actions
+    // should be done via the UI controls.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const statusColor = (prefix: string) => {
     if (prefix === 'DONE' || prefix === 'EXTENDED') return 'bg-emerald-900/50 text-emerald-400 border-emerald-700';
@@ -529,84 +1087,14 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
           </div>
         )}
 
-        {/* ── Last sync status ────────────────────────────────────── */}
-        {syncStatus && (
-          <div className="mb-6 px-4 py-3 bg-slate-800/60 border border-slate-700/50 rounded-xl">
-            <div className="flex items-center gap-4 text-sm">
-              {syncRunning && (
-                <div className="flex items-center gap-2 text-indigo-400">
-                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Sync running...
-                </div>
-              )}
-              {!syncRunning && syncStatus.status.last_sync_at && (
-                <div className="flex items-center gap-2 text-slate-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Last sync: <span className="text-slate-300">{new Date(syncStatus.status.last_sync_at).toLocaleString()}</span>
-                </div>
-              )}
-              {!syncRunning && syncStatus.status.stories_created > 0 && (
-                <div className="flex items-center gap-2 text-emerald-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {syncStatus.status.stories_created} stories, {syncStatus.status.chapters_added} chapters synced
-                </div>
-              )}
-              {syncStatus.status.errors.length > 0 && (
-                <div className="flex items-center gap-2 text-red-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  {syncStatus.status.errors.length} error(s)
-                </div>
-              )}
-            </div>
-            {/* Sync log */}
-            {syncStatus.log.length > 0 && (
-              <div className="mt-3 space-y-1">
-                {syncStatus.log.slice(-10).map((entry, i) => (
-                  <div key={i} className={
-                    'text-xs font-mono ' +
-                    (entry.level === 'error' ? 'text-red-400' :
-                     entry.level === 'warning' ? 'text-amber-400' : 'text-slate-500')
-                  }>
-                    <span className="text-slate-600 mr-2">{new Date(entry.timestamp).toLocaleTimeString()}</span>
-                    {entry.message}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Sync result ─────────────────────────────────────────── */}
-        {syncResult && (
-          <div className={`mb-6 px-4 py-3 rounded-xl border ${
-            syncResult.success
-              ? 'bg-emerald-900/20 border-emerald-800/50 text-emerald-400'
-              : 'bg-red-900/20 border-red-800/50 text-red-400'
-          }`}>
-            <div className="flex items-center gap-2 text-sm">
-              {syncResult.success ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              )}
-              {syncResult.message}
-            </div>
+        {/* ── Action History Panel ────────────────────────────────── */}
+        {config && !configLoading && (
+          <div className="mb-6">
+            <ActionHistoryPanel
+              entries={history}
+              onClear={clearHistory}
+              onRetry={handleRetry}
+            />
           </div>
         )}
 
@@ -895,7 +1383,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                         <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
                           Can Update ({updatableData.updatable.length})
                         </p>
-                        {updatableData.updatable.map(entry => {
+                        {updatableData.updatable.map((entry: UpdatableStoryEntry) => {
                           const delta = (entry.folder.chapter_count ?? 0) - entry.server_story.maxChapter;
                           return (
                             <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-700/40 rounded-xl">
