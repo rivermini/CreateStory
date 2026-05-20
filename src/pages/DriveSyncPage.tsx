@@ -92,11 +92,14 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const addHistory = useCallback(async (entry: Omit<HistoryEntry, 'timestamp'>): Promise<string> => {
     try {
       const result = await addHistoryEntry(entry);
-      // Re-fetch to get the server-side timestamp
-      await loadHistoryFromBE();
+      // Add to local state optimistically — the BE already persisted it
+      setHistory(prev => {
+        const newEntry: HistoryEntry = { ...entry, timestamp: result.timestamp };
+        return [newEntry, ...prev].slice(0, 200);
+      });
       return result.id;
     } catch {
-      // Fallback: add optimistically
+      // Fallback: add optimistically with client-side timestamp
       const newEntry: HistoryEntry = {
         ...entry,
         timestamp: new Date().toISOString(),
@@ -104,17 +107,18 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       setHistory(prev => [newEntry, ...prev].slice(0, 200));
       return entry.id;
     }
-  }, [loadHistoryFromBE]);
+  }, []);
 
   const updateHistory = useCallback(async (id: string, patch: Partial<HistoryEntry>) => {
     try {
       await updateHistoryEntry(id, patch);
-      await loadHistoryFromBE();
+      // Apply patch to local state immediately — avoid a round-trip re-fetch
+      setHistory(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e));
     } catch {
-      // Fallback: update locally
+      // Fallback: still apply locally
       setHistory(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e));
     }
-  }, [loadHistoryFromBE]);
+  }, []);
 
   const handleDeleteHistory = useCallback(async (ids: string[]) => {
     try {
