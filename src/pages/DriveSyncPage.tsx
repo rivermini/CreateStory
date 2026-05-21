@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   getDriveSyncConfig,
   initDriveSyncConfig,
@@ -14,13 +14,27 @@ import {
 } from '../api/client';
 import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
-import { Link } from 'react-router-dom';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
 
 interface DriveSyncPageProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
+}
+
+// ─── Upload task types ──────────────────────────────────────────────────────────
+
+export type UploadTaskStatus = 'queued' | 'running' | 'done' | 'error';
+export type UploadTaskKind = 'upload_single' | 'update_single';
+
+export interface UploadTask {
+  id: string;
+  kind: UploadTaskKind;
+  status: UploadTaskStatus;
+  folderId: string;
+  displayName: string;
+  subtitle: string;
+  maxChapter?: number; // used only for update_single kind
 }
 
 export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) {
@@ -44,6 +58,10 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   });
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingConfigError, setSavingConfigError] = useState('');
+
+  // ── Upload queue ────────────────────────────────────────────────────────────
+  const [uploadQueue, setUploadQueue] = useState<UploadTask[]>([]);
+  const processQueueRef = useRef<(() => void) | null>(null);
 
   // ── Tabs ─────────────────────────────────────────────────────────────────────
   const [activeSubTab, setActiveSubTab] = useState<StorySyncTab>('uploadable');
@@ -124,6 +142,85 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   };
 
+  // ─── Queue processor ────────────────────────────────────────────────────────
+
+  const enqueueTask = useCallback((task: UploadTask) => {
+    setUploadQueue(prev => [...prev, task]);
+  }, []);
+
+  const processQueue = useCallback(() => {
+    setUploadQueue(prev => {
+      const running = prev.find(t => t.status === 'running');
+      if (running) return prev; // already processing
+
+      const next = prev.find(t => t.status === 'queued');
+      if (!next) return prev; // nothing left
+
+      const updated = prev.map(t =>
+        t.id === next.id ? { ...t, status: 'running' as UploadTaskStatus } : t
+      );
+
+      // Execute the actual sync
+      let result: { success: boolean; message: string };
+      let kind: UploadTaskKind = next.kind;
+
+      if (kind === 'upload_single') {
+        setUploadingIds(p => new Set(p).add(next.folderId));
+        syncSingleDriveFolder(next.folderId)
+          .then(r => {
+            result = r;
+            setUploadResults(m => new Map(m).set(next.folderId, r));
+            setUploadQueue(p => p.map(t =>
+              t.id === next.id ? { ...t, status: (r.success ? 'done' : 'error') as UploadTaskStatus } : t
+            ));
+          })
+          .catch(e => {
+            const msg = e instanceof Error ? e.message : 'Upload failed';
+            result = { success: false, message: msg };
+            setUploadResults(m => new Map(m).set(next.folderId, result));
+            setUploadQueue(p => p.map(t =>
+              t.id === next.id ? { ...t, status: 'error' as UploadTaskStatus } : t
+            ));
+          })
+          .finally(() => {
+            setUploadingIds(p => { const n = new Set(p); n.delete(next.folderId); return n; });
+            // Schedule next iteration
+            setTimeout(processQueueRef.current ?? processQueue, 0);
+          });
+      } else {
+        // update_single
+        setUpdatingIds(p => new Set(p).add(next.folderId));
+        updateChapterCount(next.folderId, next.maxChapter ?? 0)
+          .then(r => {
+            result = { success: r.success, message: r.message };
+            setUpdateResults(m => new Map(m).set(next.folderId, result));
+            setUploadQueue(p => p.map(t =>
+              t.id === next.id ? { ...t, status: (r.success ? 'done' : 'error') as UploadTaskStatus } : t
+            ));
+          })
+          .catch(e => {
+            const msg = e instanceof Error ? e.message : 'Update failed';
+            result = { success: false, message: msg };
+            setUpdateResults(m => new Map(m).set(next.folderId, result));
+            setUploadQueue(p => p.map(t =>
+              t.id === next.id ? { ...t, status: 'error' as UploadTaskStatus } : t
+            ));
+          })
+          .finally(() => {
+            setUpdatingIds(p => { const n = new Set(p); n.delete(next.folderId); return n; });
+            setTimeout(processQueueRef.current ?? processQueue, 0);
+          });
+      }
+
+      return updated;
+    });
+  }, []);
+
+  // Keep processQueueRef in sync so setTimeout callbacks call the latest version
+  useEffect(() => {
+    processQueueRef.current = processQueue;
+  }, [processQueue]);
+
   // ── Uploadable handlers ─────────────────────────────────────────────────────────
   const handleCheckUploadable = async () => {
     setUploadableLoading(true);
@@ -139,38 +236,47 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   };
 
-  const handleUploadSingle = async (folder: DriveFolderEntry): Promise<string> => {
-    setUploadingIds(prev => new Set(prev).add(folder.id));
+  const handleUploadSingle = useCallback(async (folder: DriveFolderEntry): Promise<string> => {
+    const taskId = crypto.randomUUID();
 
-    try {
-      const result = await syncSingleDriveFolder(folder.id);
-      setUploadResults(prev => new Map(prev).set(folder.id, result));
-      return result.success ? 'success' : 'error';
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Upload failed';
-      setUploadResults(prev => new Map(prev).set(folder.id, { success: false, message: msg }));
-      return 'error';
-    } finally {
-      setUploadingIds(prev => { const n = new Set(prev); n.delete(folder.id); return n; });
-    }
-  };
+    enqueueTask({
+      id: taskId,
+      kind: 'upload_single',
+      status: 'queued',
+      folderId: folder.id,
+      displayName: folder.display_name,
+      subtitle: folder.name,
+    });
 
-  const handleUploadAll = async () => {
+    // Kick off the processor if idle
+    processQueue();
+
+    return taskId;
+  }, [enqueueTask, processQueue]);
+
+  const handleUploadAll = useCallback(async () => {
     if (!uploadableData) return;
 
-    for (let i = 0; i < uploadableData.uploadable.length; i++) {
-      const folder = uploadableData.uploadable[i];
-      if (!folder.is_valid_format) continue;
+    const folders = uploadableData.uploadable.filter(f => f.is_valid_format);
+    if (folders.length === 0) return;
 
-      try {
-        const result = await syncSingleDriveFolder(folder.id);
-        setUploadResults(prev => new Map(prev).set(folder.id, result));
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Upload failed';
-        setUploadResults(prev => new Map(prev).set(folder.id, { success: false, message: msg }));
-      }
+    const tasks: UploadTask[] = folders.map(folder => ({
+      id: crypto.randomUUID(),
+      kind: 'upload_single' as UploadTaskKind,
+      status: 'queued' as UploadTaskStatus,
+      folderId: folder.id,
+      displayName: folder.display_name,
+      subtitle: folder.name,
+    }));
+
+    enqueueTask(tasks[0]);
+    for (let i = 1; i < tasks.length; i++) {
+      enqueueTask(tasks[i]);
     }
-  };
+
+    // Kick off the processor
+    processQueue();
+  }, [uploadableData, enqueueTask, processQueue]);
 
   // ── Updatable handlers ─────────────────────────────────────────────────────────
   const handleCheckUpdatable = async () => {
@@ -187,38 +293,48 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   };
 
-  const handleUpdateSingle = async (entry: UpdatableStoryEntry): Promise<string> => {
+  const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry): Promise<string> => {
     const { server_story, folder } = entry;
-    setUpdatingIds(prev => new Set(prev).add(server_story.id));
+    const taskId = crypto.randomUUID();
 
-    try {
-      const result = await updateChapterCount(server_story.id, folder.chapter_count ?? 0);
-      setUpdateResults(prev => new Map(prev).set(server_story.id, { success: result.success, message: result.message }));
-      return result.success ? 'success' : 'error';
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Update failed';
-      setUpdateResults(prev => new Map(prev).set(server_story.id, { success: false, message: msg }));
-      return 'error';
-    } finally {
-      setUpdatingIds(prev => { const n = new Set(prev); n.delete(server_story.id); return n; });
-    }
-  };
+    enqueueTask({
+      id: taskId,
+      kind: 'update_single',
+      status: 'queued',
+      folderId: server_story.id,
+      displayName: folder.display_name,
+      subtitle: `maxChapter: ${server_story.maxChapter} → ${folder.chapter_count ?? 0}`,
+      maxChapter: folder.chapter_count ?? 0,
+    });
 
-  const handleUpdateAll = async () => {
+    processQueue();
+
+    return taskId;
+  }, [enqueueTask, processQueue]);
+
+  const handleUpdateAll = useCallback(async () => {
     if (!updatableData) return;
 
-    for (let i = 0; i < updatableData.updatable.length; i++) {
-      const entry = updatableData.updatable[i];
+    const entries = updatableData.updatable;
+    if (entries.length === 0) return;
 
-      try {
-        const result = await updateChapterCount(entry.server_story.id, entry.folder.chapter_count ?? 0);
-        setUpdateResults(prev => new Map(prev).set(entry.server_story.id, { success: result.success, message: result.message }));
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Update failed';
-        setUpdateResults(prev => new Map(prev).set(entry.server_story.id, { success: false, message: msg }));
-      }
+    const tasks: UploadTask[] = entries.map(entry => ({
+      id: crypto.randomUUID(),
+      kind: 'update_single' as UploadTaskKind,
+      status: 'queued' as UploadTaskStatus,
+      folderId: entry.server_story.id,
+      displayName: entry.folder.display_name,
+      subtitle: `maxChapter: ${entry.server_story.maxChapter} → ${entry.folder.chapter_count ?? 0}`,
+      maxChapter: entry.folder.chapter_count ?? 0,
+    }));
+
+    enqueueTask(tasks[0]);
+    for (let i = 1; i < tasks.length; i++) {
+      enqueueTask(tasks[i]);
     }
-  };
+
+    processQueue();
+  }, [updatableData, enqueueTask, processQueue]);
 
   return (
     <div className="min-h-screen w- bg-slate-900 flex flex-col">
@@ -274,16 +390,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                   }
                 </span>
               </span>
-              <Link
-                to="/drive-sync/history"
-                className="ml-auto text-indigo-400 hover:text-indigo-300 text-xs transition-colors flex items-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                History
-              </Link>
               <button
                 onClick={() => setShowConfigModal(true)}
                 className="text-indigo-400 hover:text-indigo-300 text-xs transition-colors flex items-center gap-1"
@@ -308,7 +414,15 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 uploadableLoading={uploadableLoading}
                 uploadableError={uploadableError}
                 uploadResults={uploadResults}
-                uploadingIds={uploadingIds}
+                uploadingIds={(() => {
+                  const s = new Set(uploadingIds);
+                  for (const t of uploadQueue) {
+                    if (t.kind === 'upload_single' && (t.status === 'queued' || t.status === 'running')) {
+                      s.add(t.folderId);
+                    }
+                  }
+                  return s;
+                })()}
                 onCheckUploadable={handleCheckUploadable}
                 onUploadSingle={handleUploadSingle}
                 onUploadAll={handleUploadAll}
@@ -316,7 +430,15 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 updatableLoading={updatableLoading}
                 updatableError={updatableError}
                 updateResults={updateResults}
-                updatingIds={updatingIds}
+                updatingIds={(() => {
+                  const s = new Set(updatingIds);
+                  for (const t of uploadQueue) {
+                    if (t.kind === 'update_single' && (t.status === 'queued' || t.status === 'running')) {
+                      s.add(t.folderId);
+                    }
+                  }
+                  return s;
+                })()}
                 onCheckUpdatable={handleCheckUpdatable}
                 onUpdateSingle={handleUpdateSingle}
                 onUpdateAll={handleUpdateAll}
