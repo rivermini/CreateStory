@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   type CheckUploadableResponse,
   type CheckUpdatableResponse,
@@ -43,15 +44,28 @@ function UploadableTab({
   onUploadSingle,
   onUploadAll,
 }: UploadableTabProps) {
+  const [search, setSearch] = useState('');
+
   const statusColor = (prefix: string) => {
     if (prefix === 'DONE' || prefix === 'EXTENDED') return 'bg-emerald-900/50 text-emerald-400 border-emerald-700';
     if (prefix === 'ING') return 'bg-amber-900/50 text-amber-400 border-amber-700';
     return 'bg-slate-700/50 text-slate-400 border-slate-600';
   };
 
-  const validCount = data?.uploadable.length ?? 0;
-  const invalidCount = data?.invalid.length ?? 0;
-  const allDone = (validCount > 0 && data?.uploadable.every(f => uploadResults.get(f.id)?.success)) ?? false;
+  const q = search.toLowerCase().trim();
+
+  const filteredInvalid = data?.invalid.filter(f =>
+    !q || f.display_name.toLowerCase().includes(q) || f.name.toLowerCase().includes(q)
+  ) ?? [];
+  const filteredUploadable = data?.uploadable.filter(f =>
+    !q || f.display_name.toLowerCase().includes(q) || f.name.toLowerCase().includes(q)
+  ) ?? [];
+  const filteredAlready = data?.already_on_server.filter(f =>
+    !q || f.display_name.toLowerCase().includes(q) || f.name.toLowerCase().includes(q)
+  ) ?? [];
+
+  const validCount = filteredUploadable.length;
+  const allDone = (validCount > 0 && filteredUploadable.every(f => uploadResults.get(f.id)?.success)) ?? false;
 
   return (
     <div className="p-4 flex flex-col h-full">
@@ -85,7 +99,7 @@ function UploadableTab({
           {data && (
             <span className="text-sm text-slate-400">
               {validCount} new / {data.already_on_server.length} already uploaded
-              {invalidCount > 0 && ` / ${invalidCount} invalid`}
+              {filteredInvalid.length > 0 && ` / ${filteredInvalid.length} invalid`}
               {data.drive_folders.length > 0 && ` (from ${data.drive_folders.length} DONE_ folders)`}
             </span>
           )}
@@ -115,6 +129,38 @@ function UploadableTab({
         )}
       </div>
 
+      {/* Search */}
+      {data && (
+        <div className="flex items-center gap-2 flex-shrink-0 my-4 px-1">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Filter stories..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 bg-slate-900/70 border border-slate-700 text-slate-200
+                         rounded-lg text-sm placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:bg-slate-900"
+            />
+            {search && (
+              <button onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {search && (
+            <span className="text-xs text-slate-500 shrink-0 hidden sm:inline">
+              {filteredUploadable.length + filteredInvalid.length + filteredAlready.length} result{filteredUploadable.length + filteredInvalid.length + filteredAlready.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="p-3 bg-red-900/20 border border-red-800/50 rounded-lg text-sm text-red-400">
           {error}
@@ -123,12 +169,12 @@ function UploadableTab({
 
       {data && (
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
-          {invalidCount > 0 && (
-            <>
-              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider my-4">
-                Invalid ({invalidCount})
+          {filteredInvalid.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-3">
+                Invalid ({filteredInvalid.length}){q && ` matching "${search}"`}
               </p>
-              {data.invalid.map(folder => (
+              {filteredInvalid.map(folder => (
                 <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-red-950/20 border-red-700/40">
                   <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
                     {folder.prefix}
@@ -147,15 +193,15 @@ function UploadableTab({
                   </span>
                 </div>
               ))}
-            </>
+            </div>
           )}
 
           {validCount > 0 && (
-            <>
-              <p className={`text-xs font-semibold uppercase tracking-wider ${invalidCount > 0 ? 'my-4 text-emerald-400' : 'text-emerald-400'}`}>
-                Ready to Upload ({validCount})
+            <div>
+              <p className={`text-xs font-semibold uppercase tracking-wider ${filteredInvalid.length > 0 ? 'mt-5 mb-3' : 'mb-3'} text-emerald-400`}>
+                Ready to Upload ({validCount}){q && ` matching "${search}"`}
               </p>
-              {data.uploadable.map(folder => {
+              {filteredUploadable.map(folder => {
                 return (
                   <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-slate-700/30 border-slate-700/40">
                     <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
@@ -193,15 +239,15 @@ function UploadableTab({
                   </div>
                 );
               })}
-            </>
+            </div>
           )}
 
-          {data.already_on_server.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider my-4">
-                Already on Server ({data.already_on_server.length})
+          {filteredAlready.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-5 mb-3">
+                Already on Server ({filteredAlready.length}){q && ` matching "${search}"`}
               </p>
-              {data.already_on_server.map(folder => (
+              {filteredAlready.map(folder => (
                 <div key={folder.id} className="flex items-center gap-3 p-3 bg-slate-800/40 border border-slate-700/30 rounded-xl opacity-60">
                   <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
                     {folder.prefix}
@@ -213,7 +259,7 @@ function UploadableTab({
                   <span className="px-2 py-1 text-xs text-slate-500 rounded-lg bg-slate-700/50">Already uploaded</span>
                 </div>
               ))}
-            </>
+            </div>
           )}
 
           {!loading && !data && (
@@ -250,6 +296,20 @@ function UpdatableTab({
   onUpdateAll,
   invalid = [],
 }: UpdatableTabProps) {
+  const [search, setSearch] = useState('');
+
+  const q = search.toLowerCase().trim();
+
+  const filteredUpdatable = data?.updatable.filter(e =>
+    !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
+  ) ?? [];
+  const filteredInvalid = invalid.filter(e =>
+    !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
+  );
+  const filteredNoUpdate = data?.no_update_needed.filter(e =>
+    !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
+  ) ?? [];
+
   return (
     <div className="p-4 flex flex-col h-full">
       <div className="flex items-center justify-between flex-shrink-0">
@@ -281,13 +341,13 @@ function UpdatableTab({
           </button>
           {data && (
             <span className="text-sm text-slate-400">
-              {data.updatable?.length ?? 0} can update / {data.no_update_needed?.length ?? 0} up-to-date
-              {data.invalid?.length ? ` / ${data.invalid.length} invalid` : ''}
+              {filteredUpdatable.length} can update / {filteredNoUpdate.length} up-to-date
+              {filteredInvalid.length > 0 && ` / ${filteredInvalid.length} invalid`}
               {data.all_extended_folders?.length ? ` (from ${data.all_extended_folders.length} EXTENDED_ folders)` : ''}
             </span>
           )}
         </div>
-        {data && data.updatable.length > 0 && (
+        {data && filteredUpdatable.length > 0 && (
           <button
             onClick={onUpdateAll}
             disabled={updatingIds.size > 0}
@@ -312,6 +372,38 @@ function UpdatableTab({
         )}
       </div>
 
+      {/* Search */}
+      {data && (
+        <div className="flex items-center gap-2 flex-shrink-0 my-4 px-1">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Filter stories..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 bg-slate-900/70 border border-slate-700 text-slate-200
+                         rounded-lg text-sm placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:bg-slate-900"
+            />
+            {search && (
+              <button onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {search && (
+            <span className="text-xs text-slate-500 shrink-0 hidden sm:inline">
+              {filteredUpdatable.length + filteredInvalid.length + filteredNoUpdate.length} result{filteredUpdatable.length + filteredInvalid.length + filteredNoUpdate.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="p-3 bg-red-900/20 border border-red-800/50 rounded-lg text-sm text-red-400">
           {error}
@@ -320,12 +412,12 @@ function UpdatableTab({
 
       {data && (
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
-          {(data.updatable?.length ?? 0) > 0 && (
-            <>
-              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider my-4">
-                Ready to Update ({data.updatable.length})
+          {filteredUpdatable.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-3">
+                Ready to Update ({filteredUpdatable.length}){q && ` matching "${search}"`}
               </p>
-              {data.updatable.map((entry: UpdatableStoryEntry) => {
+              {filteredUpdatable.map((entry: UpdatableStoryEntry) => {
                 const delta = (entry.folder.extended_chapter_count ?? 0) - entry.server_story.maxChapter;
                 return (
                   <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-700/40 rounded-xl">
@@ -375,15 +467,15 @@ function UpdatableTab({
                   </div>
                 );
               })}
-            </>
+            </div>
           )}
 
-          {invalid.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider my-4">
-                Invalid ({invalid.length})
+          {filteredInvalid.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mt-5 mb-3">
+                Invalid ({filteredInvalid.length}){q && ` matching "${search}"`}
               </p>
-              {invalid.map(entry => (
+              {filteredInvalid.map(entry => (
                 <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-red-950/20 border border-red-700/40 rounded-xl">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -409,15 +501,15 @@ function UpdatableTab({
                   </span>
                 </div>
               ))}
-            </>
+            </div>
           )}
 
-          {data.no_update_needed.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider my-4">
-                Up-to-Date ({data.no_update_needed.length})
+          {filteredNoUpdate.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-5 mb-3">
+                Up-to-Date ({filteredNoUpdate.length}){q && ` matching "${search}"`}
               </p>
-              {data.no_update_needed.map(entry => (
+              {filteredNoUpdate.map(entry => (
                 <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-800/40 border border-slate-700/30 rounded-xl opacity-60">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-400 font-medium truncate">{entry.folder.display_name}</p>
@@ -436,7 +528,7 @@ function UpdatableTab({
                   <span className="px-2 py-1 text-xs text-slate-500 rounded-lg bg-slate-700/50">Up-to-date</span>
                 </div>
               ))}
-            </>
+            </div>
           )}
 
           {!loading && !data && (

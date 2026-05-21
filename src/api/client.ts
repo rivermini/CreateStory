@@ -654,6 +654,17 @@ export async function deleteJob(jobId: string): Promise<{ deleted: boolean }> {
   );
 }
 
+export async function deleteJobs(jobIds: string[]): Promise<{ deleted: number }> {
+  return apiFetch<{ deleted: number }>(
+    '/api/drive-sync/jobs/delete',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_ids: jobIds }),
+    }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main BE direct calls (for upload check / chapter update features)
 // ---------------------------------------------------------------------------
@@ -707,4 +718,76 @@ export async function updateServerStoryMaxChapter(storyId: string, maxChapter: n
     const body = await res.text();
     throw new Error(`Failed to update story maxChapter: HTTP ${res.status} — ${body}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Main BE — Story Management (direct to main BE API)
+// ---------------------------------------------------------------------------
+
+export interface MainBeStoryFull {
+  id: string;
+  title: string;
+  synopsis: string;
+  type: string;
+  authorId: string;
+  mainCategoryId: string;
+  visibility: string;
+  canEdit: boolean;
+  isCompleted: boolean;
+  isLicensed: boolean;
+  targetAudiences: string[];
+  subCategoryIds: string[];
+  tags: string[];
+  referencePlatform: string;
+  coverImageUrl?: string;
+  maxChapter: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoryPageResponse {
+  data: {
+    page: number;
+    limit: number;
+    totalPages: number;
+    total: number;
+    items: MainBeStoryFull[];
+  };
+}
+
+export async function getStoriesPage(page: number, limit = 20): Promise<StoryPageResponse> {
+  const url = `${MAIN_BE_URL}/api/v1/story?page=${page}&limit=${limit}`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to fetch stories: HTTP ${res.status} — ${body}`);
+  }
+  return res.json() as Promise<StoryPageResponse>;
+}
+
+export async function deleteStory(storyId: string): Promise<void> {
+  const url = `${MAIN_BE_URL}/api/v1/story/${storyId}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
+      'x-user-id': '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f',
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to delete story: HTTP ${res.status} — ${body}`);
+  }
+}
+
+export async function deleteStories(storyIds: string[]): Promise<{ deleted: number; failed: number }> {
+  const results = await Promise.allSettled(storyIds.map(id => deleteStory(id)));
+  const failed = results.filter(r => r.status === 'rejected').length;
+  return { deleted: results.length - failed, failed };
 }

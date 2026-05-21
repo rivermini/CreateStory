@@ -37,6 +37,10 @@ const NAV_ITEMS: NavItem[] = [
         to: '/drive-sync/history',
         label: 'Sync History',
     },
+    {
+        to: '/story-mgmt',
+        label: 'Story Mgmt',
+    },
 ];
 
 export function Header({ themeMode, onThemeChange, rightActions, title, subtitle }: HeaderProps) {
