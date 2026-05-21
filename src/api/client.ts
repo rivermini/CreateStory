@@ -3,6 +3,12 @@
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+// ── Shared constants ──────────────────────────────────────────────────────────
+// These are the same values used in ConfigModal.tsx and DriveSyncPage.tsx.
+// Update VITE_MAIN_BE_URL in .env to change the API base URL everywhere.
+export const MAIN_BE_URL = import.meta.env.VITE_MAIN_BE_URL;
+export const FIXED_JSON_PREFIX = 'credentials/';
+
 type FetchOptions = RequestInit & { timeout?: number };
 
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
@@ -640,7 +646,6 @@ export interface MainBeStory {
   maxChapter: number;
 }
 
-const MAIN_BE_URL = import.meta.env.VITE_MAIN_BE_URL ?? 'https://api-novel.santngo.com';
 const MAIN_BE_TOKEN = import.meta.env.VITE_MAIN_BE_TOKEN ?? '';
 
 export async function getServerStories(): Promise<MainBeStory[]> {

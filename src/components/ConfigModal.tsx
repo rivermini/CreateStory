@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import {
   type DriveSyncConfig,
+  MAIN_BE_URL,
+  FIXED_JSON_PREFIX,
 } from '../api/client';
 
 export interface ConfigFormData {
@@ -22,8 +24,6 @@ export interface ConfigModalProps {
 }
 
 const FIXED_USER_ID = '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f';
-const FIXED_BE_URL = 'https://api-novel.santngo.com';
-const FIXED_JSON_PREFIX = 'credentials/';
 
 export function ConfigModal({
   isOpen,
@@ -102,7 +102,7 @@ export function ConfigModal({
               <label className="block text-sm text-slate-400 mb-1">Main BE API URL</label>
               <input
                 type="text"
-                value={FIXED_BE_URL}
+                value={MAIN_BE_URL}
                 readOnly
                 className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg
                            text-slate-400 text-sm cursor-not-allowed"

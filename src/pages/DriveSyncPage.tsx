@@ -7,6 +7,8 @@ import {
   updateChapterCount,
   createJob,
   getJob,
+  MAIN_BE_URL,
+  FIXED_JSON_PREFIX,
   type DriveSyncConfig,
   type DriveFolderEntry,
   type UpdatableStoryEntry,
@@ -35,8 +37,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [isInitialSetup, setIsInitialSetup] = useState(false);
 
   const FIXED_USER_ID = '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f';
-  const FIXED_BE_URL = 'https://api-novel.santngo.com';
-  const FIXED_JSON_PREFIX = 'credentials/';
   const [configForm, setConfigForm] = useState<ConfigFormData>({
     folder_id: '',
     service_account_json_name: 'nova-crawler-drive-sync-445ff578305c.json',
@@ -107,7 +107,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       const cfg = await initDriveSyncConfig({
         folder_id: configForm.folder_id.trim(),
         service_account_json_path: FIXED_JSON_PREFIX + configForm.service_account_json_name.trim(),
-        main_be_api_base_url: FIXED_BE_URL,
+        main_be_api_base_url: MAIN_BE_URL,
         main_be_user_id: FIXED_USER_ID,
         main_be_bearer_token: configForm.main_be_bearer_token.trim() || undefined,
       });
