@@ -21,7 +21,7 @@ interface UploadableTabProps {
 }
 
 function ValidationErrorBadge({ error }: { error: string }) {
-  const isFormat = error === "WRONG FORMAT";
+  const isFormat = error.startsWith("WRONG FORMAT");
   return (
     <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded border ${
       isFormat
