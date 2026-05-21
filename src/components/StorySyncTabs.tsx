@@ -322,7 +322,7 @@ function UpdatableTab({
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
           {(data.updatable?.length ?? 0) > 0 && (
             <>
-              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider my-4">
                 Ready to Update ({data.updatable.length})
               </p>
               {data.updatable.map((entry: UpdatableStoryEntry) => {
