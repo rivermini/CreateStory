@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { HomePage } from './pages/HomePage';
 import { CrawlPage } from './pages/CrawlPage';
 import { ResultsPage } from './pages/ResultsPage';
@@ -7,6 +7,7 @@ import ResultsAllPage from './pages/ResultsAllPage';
 import { BatchPage } from './pages/BatchPage';
 import { DriveSyncPage } from './pages/DriveSyncPage';
 import { DriveSyncHistoryPage } from './pages/DriveSyncHistoryPage';
+import { StoryMgmtPage } from './pages/StoryMgmtPage';
 import FloatingNewCrawlButton from './components/FloatingNewCrawlButton.tsx';
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -61,27 +62,36 @@ function App() {
   }, []);
 
   return (
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
+      <Shell themeMode={themeMode} onThemeChange={handleThemeChange} />
+    </BrowserRouter>
+  );
+}
+
+function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChange: (mode: ThemeMode) => void }) {
+  const location = useLocation();
+
+  return (
     <>
-      <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true,
-        }}
-      >
-        <Routes>
-          <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/batch" element={<BatchPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/results/all" element={<ResultsAllPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/bedread" element={<Navigate to="/" replace />} />
-          <Route path="/bedread/jobs" element={<Navigate to="/" replace />} />
-          <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <FloatingNewCrawlButton />
-      </BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="/batch" element={<BatchPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="/results/all" element={<ResultsAllPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="/bedread" element={<Navigate to="/" replace />} />
+        <Route path="/bedread/jobs" element={<Navigate to="/" replace />} />
+        <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="/story-mgmt" element={<StoryMgmtPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      {location.pathname !== '/story-mgmt' && <FloatingNewCrawlButton />}
     </>
   );
 }

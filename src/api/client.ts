@@ -3,6 +3,12 @@
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+// ── Shared constants ──────────────────────────────────────────────────────────
+// These are the same values used in ConfigModal.tsx and DriveSyncPage.tsx.
+// Update VITE_MAIN_BE_URL in .env to change the API base URL everywhere.
+export const MAIN_BE_URL = import.meta.env.VITE_MAIN_BE_URL;
+export const FIXED_JSON_PREFIX = 'credentials/';
+
 type FetchOptions = RequestInit & { timeout?: number };
 
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
@@ -363,7 +369,10 @@ export interface DriveFolderEntry {
   display_name: string;
   is_completed: boolean;
   is_valid_format: boolean;
+  has_chapter_duplicates: boolean;
+  validation_errors: string[];
   chapter_count: number | null;
+  extended_chapter_count: number | null;
   modified_time: string | null;
 }
 
@@ -504,6 +513,7 @@ export interface CheckUploadableResponse {
   server_stories: ServerStoryRef[];
   uploadable: DriveFolderEntry[];
   already_on_server: DriveFolderEntry[];
+  invalid: DriveFolderEntry[];
 }
 
 export interface UpdatableStoryEntry {
@@ -516,6 +526,7 @@ export interface CheckUpdatableResponse {
   server_stories: ServerStoryRef[];
   updatable: UpdatableStoryEntry[];
   no_update_needed: UpdatableStoryEntry[];
+  invalid: UpdatableStoryEntry[];
 }
 
 export interface UpdateChapterCountResponse {
@@ -542,6 +553,19 @@ export async function updateChapterCount(storyId: string, maxChapter: number): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ story_id: storyId, max_chapter: maxChapter }),
     timeout: 30000,
+  });
+}
+
+export interface UpdateChaptersResponse {
+  id: string;
+  status: string;
+  message: string;
+}
+
+export async function updateChapters(folderId: string): Promise<UpdateChaptersResponse> {
+  return apiFetch<UpdateChaptersResponse>(`/api/drive-sync/update-chapters/${folderId}`, {
+    method: 'POST',
+    timeout: 300000,
   });
 }
 
@@ -630,6 +654,17 @@ export async function deleteJob(jobId: string): Promise<{ deleted: boolean }> {
   );
 }
 
+export async function deleteJobs(jobIds: string[]): Promise<{ deleted: number }> {
+  return apiFetch<{ deleted: number }>(
+    '/api/drive-sync/jobs/delete',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_ids: jobIds }),
+    }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main BE direct calls (for upload check / chapter update features)
 // ---------------------------------------------------------------------------
@@ -640,7 +675,6 @@ export interface MainBeStory {
   maxChapter: number;
 }
 
-const MAIN_BE_URL = import.meta.env.VITE_MAIN_BE_URL ?? 'https://api-novel.santngo.com';
 const MAIN_BE_TOKEN = import.meta.env.VITE_MAIN_BE_TOKEN ?? '';
 
 export async function getServerStories(): Promise<MainBeStory[]> {
@@ -684,4 +718,76 @@ export async function updateServerStoryMaxChapter(storyId: string, maxChapter: n
     const body = await res.text();
     throw new Error(`Failed to update story maxChapter: HTTP ${res.status} — ${body}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Main BE — Story Management (direct to main BE API)
+// ---------------------------------------------------------------------------
+
+export interface MainBeStoryFull {
+  id: string;
+  title: string;
+  synopsis: string;
+  type: string;
+  authorId: string;
+  mainCategoryId: string;
+  visibility: string;
+  canEdit: boolean;
+  isCompleted: boolean;
+  isLicensed: boolean;
+  targetAudiences: string[];
+  subCategoryIds: string[];
+  tags: string[];
+  referencePlatform: string;
+  coverImageUrl?: string;
+  maxChapter: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoryPageResponse {
+  data: {
+    page: number;
+    limit: number;
+    totalPages: number;
+    total: number;
+    items: MainBeStoryFull[];
+  };
+}
+
+export async function getStoriesPage(page: number, limit = 20): Promise<StoryPageResponse> {
+  const url = `${MAIN_BE_URL}/api/v1/story?page=${page}&limit=${limit}`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to fetch stories: HTTP ${res.status} — ${body}`);
+  }
+  return res.json() as Promise<StoryPageResponse>;
+}
+
+export async function deleteStory(storyId: string): Promise<void> {
+  const url = `${MAIN_BE_URL}/api/v1/story/${storyId}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
+      'x-user-id': '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f',
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to delete story: HTTP ${res.status} — ${body}`);
+  }
+}
+
+export async function deleteStories(storyIds: string[]): Promise<{ deleted: number; failed: number }> {
+  const results = await Promise.allSettled(storyIds.map(id => deleteStory(id)));
+  const failed = results.filter(r => r.status === 'rejected').length;
+  return { deleted: results.length - failed, failed };
 }
