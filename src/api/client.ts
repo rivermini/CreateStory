@@ -351,9 +351,6 @@ export async function getNovelChapters(url: string): Promise<ChapterListResponse
 
 export interface DriveSyncConfig {
   folder_id: string;
-  schedule_hour: number;
-  schedule_minute: number;
-  schedule_enabled: boolean;
   enabled: boolean;
   main_be_api_base_url: string;
   main_category_id: string;
@@ -404,7 +401,6 @@ export interface DriveSyncStatus {
   chapters_added: number;
   errors: string[];
   enabled: boolean;
-  next_sync_at: string | null;
 }
 
 export interface DriveSyncProgressResponse {
@@ -431,18 +427,11 @@ export interface InitDriveSyncRequest {
   service_account_json_path: string;
   main_be_api_base_url: string;
   main_be_user_id: string;
-  schedule_hour?: number;
-  schedule_minute?: number;
-  schedule_enabled?: boolean;
   main_category_id?: string;
   main_be_bearer_token?: string;
 }
 
 export interface DriveSyncUpdateRequest {
-  folder_id?: string;
-  schedule_hour?: number;
-  schedule_minute?: number;
-  schedule_enabled?: boolean;
   enabled?: boolean;
   main_category_id?: string;
 }

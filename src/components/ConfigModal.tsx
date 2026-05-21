@@ -6,9 +6,6 @@ import {
 export interface ConfigFormData {
   folder_id: string;
   service_account_json_name: string;
-  schedule_enabled: boolean;
-  schedule_hour: number;
-  schedule_minute: number;
   main_be_bearer_token: string;
 }
 
@@ -145,52 +142,6 @@ export function ConfigModal({
                              focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-            </div>
-            {/* Daily Schedule */}
-            <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-sm text-slate-400">Daily Sync Schedule (UTC+7)</label>
-                <button
-                  type="button"
-                  onClick={() => onFormChange({ schedule_enabled: !configForm.schedule_enabled })}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 ${
-                    configForm.schedule_enabled ? 'bg-indigo-600' : 'bg-slate-600'
-                  }`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                    configForm.schedule_enabled ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
-              </div>
-              {configForm.schedule_enabled && (
-                <div className="flex items-center gap-3 mt-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number" min={0} max={23}
-                      value={configForm.schedule_hour}
-                      onChange={e => onFormChange({ schedule_hour: parseInt(e.target.value) || 0 })}
-                      className="w-16 px-2 py-2 bg-slate-700 border border-slate-600 rounded-lg
-                                 text-slate-100 text-sm text-center
-                                 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <span className="text-slate-400 text-sm">:</span>
-                    <input
-                      type="number" min={0} max={59}
-                      value={String(configForm.schedule_minute).padStart(2, '0')}
-                      onChange={e => onFormChange({ schedule_minute: parseInt(e.target.value) || 0 })}
-                      className="w-16 px-2 py-2 bg-slate-700 border border-slate-600 rounded-lg
-                                 text-slate-100 text-sm text-center
-                                 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <span className="text-xs text-slate-500">
-                      ICT = {String((configForm.schedule_hour - 7 + 24) % 24).padStart(2, '0')}:{String(configForm.schedule_minute).padStart(2, '0')} (UTC+7)
-                    </span>
-                  </div>
-                </div>
-              )}
-              {!configForm.schedule_enabled && (
-                <p className="text-xs text-slate-500 mt-1">Scheduled sync is disabled.</p>
-              )}
             </div>
             {/* Bearer token */}
             <div className="sm:col-span-2">

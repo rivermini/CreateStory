@@ -40,9 +40,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [configForm, setConfigForm] = useState<ConfigFormData>({
     folder_id: '',
     service_account_json_name: 'nova-crawler-drive-sync-445ff578305c.json',
-    schedule_enabled: true,
-    schedule_hour: 6,
-    schedule_minute: 0,
     main_be_bearer_token: '',
   });
   const [savingConfig, setSavingConfig] = useState(false);
@@ -82,9 +79,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
             ...f,
             folder_id: cfg.folder_id,
             service_account_json_name: jsonName,
-            schedule_enabled: cfg.schedule_enabled ?? true,
-            schedule_hour: cfg.schedule_hour,
-            schedule_minute: cfg.schedule_minute,
           }));
           setShowConfigModal(false);
         } else {
@@ -115,9 +109,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
         service_account_json_path: FIXED_JSON_PREFIX + configForm.service_account_json_name.trim(),
         main_be_api_base_url: FIXED_BE_URL,
         main_be_user_id: FIXED_USER_ID,
-        schedule_enabled: configForm.schedule_enabled,
-        schedule_hour: configForm.schedule_hour,
-        schedule_minute: configForm.schedule_minute,
         main_be_bearer_token: configForm.main_be_bearer_token.trim() || undefined,
       });
       setConfig(cfg);
@@ -325,14 +316,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 Folder: <span className="text-slate-300 font-mono text-xs">{config.folder_id.slice(0, 20)}...</span>
               </span>
               <span className="text-slate-600">|</span>
-              <span className="text-slate-400">
-                Schedule: <span className="text-slate-300">
-                  {config.schedule_enabled
-                    ? String(config.schedule_hour).padStart(2, '0') + ':' + String(config.schedule_minute).padStart(2, '0') + ' UTC = ' + String((config.schedule_hour - 7 + 24) % 24).padStart(2, '0') + ':' + String(config.schedule_minute).padStart(2, '0') + ' (UTC+7)'
-                    : 'Disabled'
-                  }
-                </span>
-              </span>
+              <span className="text-slate-400">Manual sync only</span>
               <button
                 onClick={() => setShowConfigModal(true)}
                 className="text-indigo-400 hover:text-indigo-300 text-xs transition-colors flex items-center gap-1"
