@@ -5,6 +5,7 @@ import {
   checkUploadable,
   checkUpdatable,
   updateChapterCount,
+  updateChapters,
   createJob,
   getJob,
   MAIN_BE_URL,
@@ -63,6 +64,8 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [updatableLoading, setUpdatableLoading] = useState(false);
   const [updatableError, setUpdatableError] = useState('');
   const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
+  // ── Active update jobs being tracked (server story id → job id) ─────────────────
+  const [updatingJobs, setUpdatingJobs] = useState<Map<string, string>>(new Map());
 
   // ── Load config on mount ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -202,7 +205,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const handleUploadAll = useCallback(async () => {
     if (!uploadableData) return;
 
-    const folders = uploadableData.uploadable.filter(f => f.is_valid_format);
+    const folders = uploadableData.uploadable;
     if (folders.length === 0) return;
 
     const newJobs: TrackedJob[] = [];
@@ -246,18 +249,50 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry): Promise<string> => {
     const { server_story, folder } = entry;
 
+    // Create a sync job so it appears in the history page
+    let jobId: string;
     try {
-      const r = await updateChapterCount(server_story.id, folder.chapter_count ?? 0);
-      setUpdateResults(prev => new Map(prev).set(server_story.id, {
-        success: r.success,
-        message: r.message,
-      }));
+      const job = await createJob({
+        kind: 'update_single',
+        folder_id: folder.id,
+        folder_name: folder.display_name,
+        display_name: folder.display_name,
+      });
+      jobId = job.id;
+      setUpdatingJobs(prev => new Map(prev).set(server_story.id, jobId));
     } catch (e) {
       setUpdateResults(prev => new Map(prev).set(server_story.id, {
         success: false,
-        message: e instanceof Error ? e.message : 'Update failed',
+        message: e instanceof Error ? e.message : 'Failed to create update job',
       }));
+      return server_story.id;
     }
+
+    // Poll the job until it finishes
+    const poll = async () => {
+      while (true) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const { job } = await getJob(jobId);
+          if (job.status !== 'queued' && job.status !== 'running') {
+            setUpdateResults(prev => new Map(prev).set(server_story.id, {
+              success: job.status === 'success',
+              message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
+            }));
+            setUpdatingJobs(prev => {
+              const next = new Map(prev);
+              next.delete(server_story.id);
+              return next;
+            });
+            return;
+          }
+        } catch {
+          // Keep polling
+        }
+      }
+    };
+    poll();
+
     return server_story.id;
   }, []);
 
@@ -353,13 +388,11 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 updatableLoading={updatableLoading}
                 updatableError={updatableError}
                 updateResults={updateResults}
-                updatingIds={(() => {
-                  const s = new Set<string>();
-                  return s;
-                })()}
+                updatingIds={new Set(updatingJobs.keys())}
                 onCheckUpdatable={handleCheckUpdatable}
                 onUpdateSingle={handleUpdateSingle}
                 onUpdateAll={handleUpdateAll}
+                updatableInvalid={updatableData?.invalid ?? []}
               />
             </div>
           </>

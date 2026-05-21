@@ -369,7 +369,10 @@ export interface DriveFolderEntry {
   display_name: string;
   is_completed: boolean;
   is_valid_format: boolean;
+  has_chapter_duplicates: boolean;
+  validation_errors: string[];
   chapter_count: number | null;
+  extended_chapter_count: number | null;
   modified_time: string | null;
 }
 
@@ -510,6 +513,7 @@ export interface CheckUploadableResponse {
   server_stories: ServerStoryRef[];
   uploadable: DriveFolderEntry[];
   already_on_server: DriveFolderEntry[];
+  invalid: DriveFolderEntry[];
 }
 
 export interface UpdatableStoryEntry {
@@ -522,6 +526,7 @@ export interface CheckUpdatableResponse {
   server_stories: ServerStoryRef[];
   updatable: UpdatableStoryEntry[];
   no_update_needed: UpdatableStoryEntry[];
+  invalid: UpdatableStoryEntry[];
 }
 
 export interface UpdateChapterCountResponse {
@@ -548,6 +553,19 @@ export async function updateChapterCount(storyId: string, maxChapter: number): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ story_id: storyId, max_chapter: maxChapter }),
     timeout: 30000,
+  });
+}
+
+export interface UpdateChaptersResponse {
+  id: string;
+  status: string;
+  message: string;
+}
+
+export async function updateChapters(folderId: string): Promise<UpdateChaptersResponse> {
+  return apiFetch<UpdateChaptersResponse>(`/api/drive-sync/update-chapters/${folderId}`, {
+    method: 'POST',
+    timeout: 300000,
   });
 }
 

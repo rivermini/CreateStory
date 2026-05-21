@@ -19,6 +19,20 @@ interface UploadableTabProps {
   onUploadAll: () => void;
 }
 
+function ValidationErrorBadge({ error }: { error: string }) {
+  const isFormat = error === "WRONG FORMAT";
+  return (
+    <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded border ${
+      isFormat
+        ? 'bg-red-900/60 text-red-300 border-red-700/50'
+        : 'bg-amber-900/60 text-amber-300 border-amber-700/50'
+    }`}>
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      {error}
+    </span>
+  );
+}
+
 function UploadableTab({
   data,
   loading,
@@ -35,6 +49,10 @@ function UploadableTab({
     return 'bg-slate-700/50 text-slate-400 border-slate-600';
   };
 
+  const validCount = data?.uploadable.length ?? 0;
+  const invalidCount = data?.invalid.length ?? 0;
+  const allDone = (validCount > 0 && data?.uploadable.every(f => uploadResults.get(f.id)?.success)) ?? false;
+
   return (
     <div className="p-4 flex flex-col h-full">
       <div className="flex items-center justify-between flex-shrink-0">
@@ -42,7 +60,7 @@ function UploadableTab({
           <button
             onClick={onCheck}
             disabled={loading}
-            className="px-4 py-2 mb-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500
+            className="px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500
                        disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed
                        text-white rounded-lg transition-colors flex items-center gap-2"
           >
@@ -66,15 +84,16 @@ function UploadableTab({
           </button>
           {data && (
             <span className="text-sm text-slate-400">
-              {data.uploadable.length} new / {data.already_on_server.length} already uploaded
+              {validCount} new / {data.already_on_server.length} already uploaded
+              {invalidCount > 0 && ` / ${invalidCount} invalid`}
               {data.drive_folders.length > 0 && ` (from ${data.drive_folders.length} DONE_ folders)`}
             </span>
           )}
         </div>
-        {data && data.uploadable.length > 0 && (
+        {data && validCount > 0 && (
           <button
             onClick={onUploadAll}
-            disabled={uploadingIds.size > 0}
+            disabled={uploadingIds.size > 0 || allDone}
             className="px-4 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500
                        disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed
                        text-white rounded-lg transition-colors flex items-center gap-2"
@@ -104,33 +123,49 @@ function UploadableTab({
 
       {data && (
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
-          {data.uploadable.length > 0 && (
+          {invalidCount > 0 && (
             <>
-              <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                Ready to Upload ({data.uploadable.length})
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider my-4">
+                Invalid ({invalidCount})
+              </p>
+              {data.invalid.map(folder => (
+                <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-red-950/20 border-red-700/40">
+                  <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
+                    {folder.prefix}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-red-300 truncate">{folder.display_name}</p>
+                      {folder.validation_errors.map((err, i) => (
+                        <ValidationErrorBadge key={i} error={err} />
+                      ))}
+                    </div>
+                    <span className="text-xs font-mono text-red-400/80">{folder.name}</span>
+                  </div>
+                  <span className="px-2 py-1 text-xs text-red-400 rounded-lg bg-red-900/40 border border-red-700/50 whitespace-nowrap">
+                    Cannot Upload
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {validCount > 0 && (
+            <>
+              <p className={`text-xs font-semibold uppercase tracking-wider ${invalidCount > 0 ? 'my-4 text-emerald-400' : 'text-emerald-400'}`}>
+                Ready to Upload ({validCount})
               </p>
               {data.uploadable.map(folder => {
-                const isInvalid = !folder.is_valid_format;
                 return (
-                  <div key={folder.id} className={`flex items-center gap-3 p-3 rounded-xl border ${
-                    isInvalid
-                      ? 'bg-red-950/20 border-red-700/40'
-                      : 'bg-slate-700/30 border-slate-700/40'
-                  }`}>
+                  <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-slate-700/30 border-slate-700/40">
                     <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
                       {folder.prefix}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className={`text-sm font-medium truncate ${isInvalid ? 'text-red-300' : 'text-slate-200'}`}>{folder.display_name}</p>
-                        {isInvalid && (
-                          <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-900/60 text-red-300 rounded border border-red-700/50">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                            WRONG FORMAT
-                          </span>
-                        )}
+                        <p className="text-sm font-medium text-slate-200 truncate">{folder.display_name}</p>
                       </div>
-                      <span className={`text-xs font-mono ${isInvalid ? 'text-red-400/80' : 'text-slate-500'}`}>{folder.name}</span>
+                      <span className="text-xs font-mono text-slate-500">{folder.name}</span>
                       {uploadResults.get(folder.id) && (
                         <p className={`text-xs mt-0.5 ${uploadResults.get(folder.id)!.success ? 'text-emerald-400' : 'text-red-400'}`}>
                           {uploadResults.get(folder.id)!.message}
@@ -140,11 +175,8 @@ function UploadableTab({
                     <button
                       onClick={() => onUploadSingle(folder)}
                       disabled={uploadingIds.has(folder.id) || !!uploadResults.get(folder.id)?.success}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                        isInvalid
-                          ? 'bg-red-700/60 hover:bg-red-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white'
-                          : 'bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white'
-                      }`}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap
+                                 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white"
                     >
                       {uploadingIds.has(folder.id) ? (
                         <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,7 +198,7 @@ function UploadableTab({
 
           {data.already_on_server.length > 0 && (
             <>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider my-4">
                 Already on Server ({data.already_on_server.length})
               </p>
               {data.already_on_server.map(folder => (
@@ -204,6 +236,7 @@ interface UpdatableTabProps {
   onCheck: () => void;
   onUpdateSingle: (entry: UpdatableStoryEntry) => Promise<string>;
   onUpdateAll: () => void;
+  invalid: UpdatableStoryEntry[];
 }
 
 function UpdatableTab({
@@ -215,6 +248,7 @@ function UpdatableTab({
   onCheck,
   onUpdateSingle,
   onUpdateAll,
+  invalid = [],
 }: UpdatableTabProps) {
   return (
     <div className="p-4 flex flex-col h-full">
@@ -247,8 +281,9 @@ function UpdatableTab({
           </button>
           {data && (
             <span className="text-sm text-slate-400">
-              {data.updatable.length} can update / {data.no_update_needed.length} up-to-date
-              {data.all_extended_folders.length > 0 && ` (from ${data.all_extended_folders.length} EXTENDED_ folders)`}
+              {data.updatable?.length ?? 0} can update / {data.no_update_needed?.length ?? 0} up-to-date
+              {data.invalid?.length ? ` / ${data.invalid.length} invalid` : ''}
+              {data.all_extended_folders?.length ? ` (from ${data.all_extended_folders.length} EXTENDED_ folders)` : ''}
             </span>
           )}
         </div>
@@ -285,13 +320,13 @@ function UpdatableTab({
 
       {data && (
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
-          {data.updatable.length > 0 && (
+          {(data.updatable?.length ?? 0) > 0 && (
             <>
               <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                Can Update ({data.updatable.length})
+                Ready to Update ({data.updatable.length})
               </p>
               {data.updatable.map((entry: UpdatableStoryEntry) => {
-                const delta = (entry.folder.chapter_count ?? 0) - entry.server_story.maxChapter;
+                const delta = (entry.folder.extended_chapter_count ?? 0) - entry.server_story.maxChapter;
                 return (
                   <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-700/40 rounded-xl">
                     <div className="flex-1 min-w-0">
@@ -300,11 +335,17 @@ function UpdatableTab({
                         <span className="text-xs text-slate-500">
                           Server: <span className="text-slate-300">{entry.server_story.maxChapter}</span>
                         </span>
-                        <span className="text-slate-600">{'->'}</span>
+                        <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                        </svg>
                         <span className="text-xs text-slate-500">
-                          Drive: <span className="text-slate-300">{entry.folder.chapter_count ?? 0}</span>
+                          Drive: <span className="text-slate-300">{entry.folder.extended_chapter_count ?? 0}</span>
                         </span>
-                        <span className="text-xs text-amber-400 font-semibold">+{delta}</span>
+                        {delta > 0 && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded border bg-amber-900/60 text-amber-300 border-amber-700/50">
+                            Ready to update {delta} chapter{delta > 1 ? 's' : ''}
+                          </span>
+                        )}
                       </div>
                       {updateResults.get(entry.server_story.id) && (
                         <p className={`text-xs mt-0.5 ${updateResults.get(entry.server_story.id)!.success ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -329,7 +370,7 @@ function UpdatableTab({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       ) : null}
-                      {updatingIds.has(entry.server_story.id) ? 'Updating...' : updateResults.get(entry.server_story.id)?.success ? 'Updated' : 'Update'}
+                      {updatingIds.has(entry.server_story.id) ? 'Updating...' : updateResults.get(entry.server_story.id)?.success ? 'Updated' : 'Ready to Update'}
                     </button>
                   </div>
                 );
@@ -337,9 +378,43 @@ function UpdatableTab({
             </>
           )}
 
+          {invalid.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider my-4">
+                Invalid ({invalid.length})
+              </p>
+              {invalid.map(entry => (
+                <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-red-950/20 border border-red-700/40 rounded-xl">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-red-300 truncate">{entry.folder.display_name}</p>
+                      {entry.folder.validation_errors.map((err, i) => (
+                        <ValidationErrorBadge key={i} error={err} />
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-xs text-slate-500">
+                        Server: <span className="text-slate-300">{entry.server_story.maxChapter}</span>
+                      </span>
+                      <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                      <span className="text-xs text-slate-500">
+                        Drive: <span className="text-slate-300">{entry.folder.extended_chapter_count ?? 0}</span>
+                      </span>
+                    </div>
+                  </div>
+                  <span className="px-2 py-1 text-xs text-red-400 rounded-lg bg-red-900/40 border border-red-700/50 whitespace-nowrap">
+                    Cannot Update
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
           {data.no_update_needed.length > 0 && (
             <>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider my-4">
                 Up-to-Date ({data.no_update_needed.length})
               </p>
               {data.no_update_needed.map(entry => (
@@ -350,9 +425,11 @@ function UpdatableTab({
                       <span className="text-xs text-slate-500">
                         Server: <span className="text-slate-300">{entry.server_story.maxChapter}</span>
                       </span>
-                      <span className="text-slate-600">{'->'}</span>
+                      <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
                       <span className="text-xs text-slate-500">
-                        Drive: <span className="text-slate-300">{entry.folder.chapter_count ?? 0}</span>
+                        Drive: <span className="text-slate-300">{entry.folder.extended_chapter_count ?? 0}</span>
                       </span>
                     </div>
                   </div>
@@ -396,6 +473,7 @@ export interface StorySyncTabsProps {
   onCheckUpdatable: () => void;
   onUpdateSingle: (entry: UpdatableStoryEntry) => Promise<string>;
   onUpdateAll: () => void;
+  updatableInvalid: UpdatableStoryEntry[];
 }
 
 export function StorySyncTabs({
@@ -419,6 +497,7 @@ export function StorySyncTabs({
   onCheckUpdatable,
   onUpdateSingle,
   onUpdateAll,
+  updatableInvalid,
 }: StorySyncTabsProps) {
   return (
     <section className="bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden flex flex-col">
@@ -497,7 +576,7 @@ export function StorySyncTabs({
             onUploadAll={onUploadAll}
           />
         )}
-        {activeTab === 'updatable' && (
+          {activeTab === 'updatable' && (
           <UpdatableTab
             data={updatableData}
             loading={updatableLoading}
@@ -507,6 +586,7 @@ export function StorySyncTabs({
             onCheck={onCheckUpdatable}
             onUpdateSingle={onUpdateSingle}
             onUpdateAll={onUpdateAll}
+            invalid={updatableInvalid}
           />
         )}
       </div>
