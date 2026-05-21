@@ -2,15 +2,17 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   getDriveSyncConfig,
   initDriveSyncConfig,
-  syncSingleDriveFolder,
   checkUploadable,
   checkUpdatable,
   updateChapterCount,
+  createJob,
+  getJob,
   type DriveSyncConfig,
   type DriveFolderEntry,
   type UpdatableStoryEntry,
   type CheckUploadableResponse,
   type CheckUpdatableResponse,
+  type TrackedJob,
 } from '../api/client';
 import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
@@ -22,20 +24,7 @@ interface DriveSyncPageProps {
   onThemeChange: (mode: ThemeMode) => void;
 }
 
-// ─── Upload task types ──────────────────────────────────────────────────────────
-
-export type UploadTaskStatus = 'queued' | 'running' | 'done' | 'error';
-export type UploadTaskKind = 'upload_single' | 'update_single';
-
-export interface UploadTask {
-  id: string;
-  kind: UploadTaskKind;
-  status: UploadTaskStatus;
-  folderId: string;
-  displayName: string;
-  subtitle: string;
-  maxChapter?: number; // used only for update_single kind
-}
+// ─── Job tracking types ─────────────────────────────────────────────────────────
 
 export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) {
   // ── Config ──────────────────────────────────────────────────────────────────
@@ -59,9 +48,8 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingConfigError, setSavingConfigError] = useState('');
 
-  // ── Upload queue ────────────────────────────────────────────────────────────
-  const [uploadQueue, setUploadQueue] = useState<UploadTask[]>([]);
-  const processQueueRef = useRef<(() => void) | null>(null);
+  // ── Active jobs being tracked (job_id → folder info) ────────────────────────
+  const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
 
   // ── Tabs ─────────────────────────────────────────────────────────────────────
   const [activeSubTab, setActiveSubTab] = useState<StorySyncTab>('uploadable');
@@ -70,15 +58,14 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [uploadableData, setUploadableData] = useState<CheckUploadableResponse | null>(null);
   const [uploadableLoading, setUploadableLoading] = useState(false);
   const [uploadableError, setUploadableError] = useState('');
+  // ── Upload results (folderId → result) ─────────────────────────────────────
   const [uploadResults, setUploadResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
-  const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
 
   // ── Updatable ─────────────────────────────────────────────────────────────────
   const [updatableData, setUpdatableData] = useState<CheckUpdatableResponse | null>(null);
   const [updatableLoading, setUpdatableLoading] = useState(false);
   const [updatableError, setUpdatableError] = useState('');
   const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
-  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
 
   // ── Load config on mount ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -142,86 +129,59 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   };
 
-  // ─── Queue processor ────────────────────────────────────────────────────────
+  // ─── Job polling ─────────────────────────────────────────────────────────────
 
-  const enqueueTask = useCallback((task: UploadTask) => {
-    setUploadQueue(prev => [...prev, task]);
-  }, []);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const processQueue = useCallback(() => {
-    setUploadQueue(prev => {
-      const running = prev.find(t => t.status === 'running');
-      if (running) return prev; // already processing
+  // Poll active jobs every 4 seconds
+  useEffect(() => {
+    const doPoll = async () => {
+      if (trackedJobs.length === 0) return;
 
-      const next = prev.find(t => t.status === 'queued');
-      if (!next) return prev; // nothing left
+      const completedIds: string[] = [];
 
-      const updated = prev.map(t =>
-        t.id === next.id ? { ...t, status: 'running' as UploadTaskStatus } : t
-      );
+      for (const tracked of trackedJobs) {
+        try {
+          const { job } = await getJob(tracked.jobId);
 
-      // Execute the actual sync
-      let result: { success: boolean; message: string };
-      let kind: UploadTaskKind = next.kind;
+          if (job.status === 'queued' || job.status === 'running') {
+            continue;
+          }
 
-      if (kind === 'upload_single') {
-        setUploadingIds(p => new Set(p).add(next.folderId));
-        syncSingleDriveFolder(next.folderId)
-          .then(r => {
-            result = r;
-            setUploadResults(m => new Map(m).set(next.folderId, r));
-            setUploadQueue(p => p.map(t =>
-              t.id === next.id ? { ...t, status: (r.success ? 'done' : 'error') as UploadTaskStatus } : t
-            ));
-          })
-          .catch(e => {
-            const msg = e instanceof Error ? e.message : 'Upload failed';
-            result = { success: false, message: msg };
-            setUploadResults(m => new Map(m).set(next.folderId, result));
-            setUploadQueue(p => p.map(t =>
-              t.id === next.id ? { ...t, status: 'error' as UploadTaskStatus } : t
-            ));
-          })
-          .finally(() => {
-            setUploadingIds(p => { const n = new Set(p); n.delete(next.folderId); return n; });
-            // Schedule next iteration
-            setTimeout(processQueueRef.current ?? processQueue, 0);
-          });
-      } else {
-        // update_single
-        setUpdatingIds(p => new Set(p).add(next.folderId));
-        updateChapterCount(next.folderId, next.maxChapter ?? 0)
-          .then(r => {
-            result = { success: r.success, message: r.message };
-            setUpdateResults(m => new Map(m).set(next.folderId, result));
-            setUploadQueue(p => p.map(t =>
-              t.id === next.id ? { ...t, status: (r.success ? 'done' : 'error') as UploadTaskStatus } : t
-            ));
-          })
-          .catch(e => {
-            const msg = e instanceof Error ? e.message : 'Update failed';
-            result = { success: false, message: msg };
-            setUpdateResults(m => new Map(m).set(next.folderId, result));
-            setUploadQueue(p => p.map(t =>
-              t.id === next.id ? { ...t, status: 'error' as UploadTaskStatus } : t
-            ));
-          })
-          .finally(() => {
-            setUpdatingIds(p => { const n = new Set(p); n.delete(next.folderId); return n; });
-            setTimeout(processQueueRef.current ?? processQueue, 0);
-          });
+          completedIds.push(tracked.jobId);
+
+          if (job.status === 'success') {
+            setUploadResults(prev => new Map(prev).set(tracked.folderId, {
+              success: true,
+              message: job.result_message ?? 'Done',
+            }));
+          } else {
+            setUploadResults(prev => new Map(prev).set(tracked.folderId, {
+              success: false,
+              message: job.error ?? 'Upload failed',
+            }));
+          }
+        } catch {
+          // Job might not be available yet, skip
+        }
       }
 
-      return updated;
-    });
+      if (completedIds.length > 0) {
+        setTrackedJobs(prev => prev.filter(j => !completedIds.includes(j.jobId)));
+      }
+    };
+
+    const interval = setInterval(doPoll, 4000);
+    return () => clearInterval(interval);
+  }, [trackedJobs]);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
-  // Keep processQueueRef in sync so setTimeout callbacks call the latest version
-  useEffect(() => {
-    processQueueRef.current = processQueue;
-  }, [processQueue]);
-
-  // ── Uploadable handlers ─────────────────────────────────────────────────────────
+  // ─── Enqueue helpers ────────────────────────────────────────────────────────
   const handleCheckUploadable = async () => {
     setUploadableLoading(true);
     setUploadableError('');
@@ -237,22 +197,16 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   };
 
   const handleUploadSingle = useCallback(async (folder: DriveFolderEntry): Promise<string> => {
-    const taskId = crypto.randomUUID();
-
-    enqueueTask({
-      id: taskId,
+    const res = await createJob({
       kind: 'upload_single',
-      status: 'queued',
-      folderId: folder.id,
-      displayName: folder.display_name,
-      subtitle: folder.name,
+      folder_id: folder.id,
+      folder_name: folder.name,
+      display_name: folder.display_name,
     });
 
-    // Kick off the processor if idle
-    processQueue();
-
-    return taskId;
-  }, [enqueueTask, processQueue]);
+    setTrackedJobs(prev => [...prev, { jobId: res.id, folderId: folder.id, displayName: folder.display_name }]);
+    return res.id;
+  }, []);
 
   const handleUploadAll = useCallback(async () => {
     if (!uploadableData) return;
@@ -260,23 +214,28 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     const folders = uploadableData.uploadable.filter(f => f.is_valid_format);
     if (folders.length === 0) return;
 
-    const tasks: UploadTask[] = folders.map(folder => ({
-      id: crypto.randomUUID(),
-      kind: 'upload_single' as UploadTaskKind,
-      status: 'queued' as UploadTaskStatus,
-      folderId: folder.id,
-      displayName: folder.display_name,
-      subtitle: folder.name,
-    }));
-
-    enqueueTask(tasks[0]);
-    for (let i = 1; i < tasks.length; i++) {
-      enqueueTask(tasks[i]);
+    const newJobs: TrackedJob[] = [];
+    for (const folder of folders) {
+      try {
+        const res = await createJob({
+          kind: 'upload_single',
+          folder_id: folder.id,
+          folder_name: folder.name,
+          display_name: folder.display_name,
+        });
+        newJobs.push({ jobId: res.id, folderId: folder.id, displayName: folder.display_name });
+      } catch (e) {
+        setUploadResults(prev => new Map(prev).set(folder.id, {
+          success: false,
+          message: e instanceof Error ? e.message : 'Failed to enqueue job',
+        }));
+      }
     }
 
-    // Kick off the processor
-    processQueue();
-  }, [uploadableData, enqueueTask, processQueue]);
+    if (newJobs.length > 0) {
+      setTrackedJobs(prev => [...prev, ...newJobs]);
+    }
+  }, [uploadableData]);
 
   // ── Updatable handlers ─────────────────────────────────────────────────────────
   const handleCheckUpdatable = async () => {
@@ -295,46 +254,30 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
 
   const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry): Promise<string> => {
     const { server_story, folder } = entry;
-    const taskId = crypto.randomUUID();
 
-    enqueueTask({
-      id: taskId,
-      kind: 'update_single',
-      status: 'queued',
-      folderId: server_story.id,
-      displayName: folder.display_name,
-      subtitle: `maxChapter: ${server_story.maxChapter} → ${folder.chapter_count ?? 0}`,
-      maxChapter: folder.chapter_count ?? 0,
-    });
-
-    processQueue();
-
-    return taskId;
-  }, [enqueueTask, processQueue]);
+    try {
+      const r = await updateChapterCount(server_story.id, folder.chapter_count ?? 0);
+      setUpdateResults(prev => new Map(prev).set(server_story.id, {
+        success: r.success,
+        message: r.message,
+      }));
+    } catch (e) {
+      setUpdateResults(prev => new Map(prev).set(server_story.id, {
+        success: false,
+        message: e instanceof Error ? e.message : 'Update failed',
+      }));
+    }
+    return server_story.id;
+  }, []);
 
   const handleUpdateAll = useCallback(async () => {
     if (!updatableData) return;
-
     const entries = updatableData.updatable;
     if (entries.length === 0) return;
-
-    const tasks: UploadTask[] = entries.map(entry => ({
-      id: crypto.randomUUID(),
-      kind: 'update_single' as UploadTaskKind,
-      status: 'queued' as UploadTaskStatus,
-      folderId: entry.server_story.id,
-      displayName: entry.folder.display_name,
-      subtitle: `maxChapter: ${entry.server_story.maxChapter} → ${entry.folder.chapter_count ?? 0}`,
-      maxChapter: entry.folder.chapter_count ?? 0,
-    }));
-
-    enqueueTask(tasks[0]);
-    for (let i = 1; i < tasks.length; i++) {
-      enqueueTask(tasks[i]);
+    for (const entry of entries) {
+      handleUpdateSingle(entry);
     }
-
-    processQueue();
-  }, [updatableData, enqueueTask, processQueue]);
+  }, [updatableData, handleUpdateSingle]);
 
   return (
     <div className="min-h-screen w- bg-slate-900 flex flex-col">
@@ -415,12 +358,8 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 uploadableError={uploadableError}
                 uploadResults={uploadResults}
                 uploadingIds={(() => {
-                  const s = new Set(uploadingIds);
-                  for (const t of uploadQueue) {
-                    if (t.kind === 'upload_single' && (t.status === 'queued' || t.status === 'running')) {
-                      s.add(t.folderId);
-                    }
-                  }
+                  const s = new Set<string>();
+                  for (const j of trackedJobs) s.add(j.folderId);
                   return s;
                 })()}
                 onCheckUploadable={handleCheckUploadable}
@@ -431,12 +370,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 updatableError={updatableError}
                 updateResults={updateResults}
                 updatingIds={(() => {
-                  const s = new Set(updatingIds);
-                  for (const t of uploadQueue) {
-                    if (t.kind === 'update_single' && (t.status === 'queued' || t.status === 'running')) {
-                      s.add(t.folderId);
-                    }
-                  }
+                  const s = new Set<string>();
                   return s;
                 })()}
                 onCheckUpdatable={handleCheckUpdatable}

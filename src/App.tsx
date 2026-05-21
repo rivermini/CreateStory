@@ -6,6 +6,7 @@ import { ResultsPage } from './pages/ResultsPage';
 import ResultsAllPage from './pages/ResultsAllPage';
 import { BatchPage } from './pages/BatchPage';
 import { DriveSyncPage } from './pages/DriveSyncPage';
+import { DriveSyncHistoryPage } from './pages/DriveSyncHistoryPage';
 import FloatingNewCrawlButton from './components/FloatingNewCrawlButton.tsx';
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -76,6 +77,7 @@ function App() {
           <Route path="/bedread" element={<Navigate to="/" replace />} />
           <Route path="/bedread/jobs" element={<Navigate to="/" replace />} />
           <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
+          <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={handleThemeChange} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <FloatingNewCrawlButton />
