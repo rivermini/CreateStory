@@ -542,6 +542,11 @@ export async function checkUpdatable(): Promise<CheckUpdatableResponse> {
   return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable', { timeout: 120000 });
 }
 
+export interface UpdateChapterCountResponse {
+  success: boolean;
+  message: string;
+}
+
 export async function updateChapterCount(storyId: string, maxChapter: number): Promise<UpdateChapterCountResponse> {
   return apiFetch<UpdateChapterCountResponse>('/api/drive-sync/update-chapter-count', {
     method: 'POST',
@@ -549,6 +554,91 @@ export async function updateChapterCount(storyId: string, maxChapter: number): P
     body: JSON.stringify({ story_id: storyId, max_chapter: maxChapter }),
     timeout: 30000,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Drive Sync — Job system
+// ---------------------------------------------------------------------------
+
+/** Client-side tracking of an enqueued job */
+export interface TrackedJob {
+  jobId: string;
+  folderId: string;
+  displayName: string;
+}
+
+export interface SyncJob {
+  id: string;
+  kind: 'upload_single' | 'update_single';
+  status: 'queued' | 'running' | 'success' | 'error' | 'cancelled';
+  folder_id: string;
+  folder_name: string;
+  display_name: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  result_message: string | null;
+  chapters_added: number;
+  chapters_skipped: number;
+  error: string | null;
+  logs: JobLogEntry[];
+}
+
+export interface JobLogEntry {
+  timestamp: string;
+  level: 'info' | 'warning' | 'error' | 'debug';
+  message: string;
+}
+
+export interface JobCreateRequest {
+  kind: 'upload_single' | 'update_single';
+  folder_id: string;
+  folder_name: string;
+  display_name: string;
+}
+
+export interface JobCreateResponse {
+  id: string;
+  status: string;
+  message: string;
+}
+
+export interface JobListResponse {
+  jobs: SyncJob[];
+  total: number;
+}
+
+export interface JobResponse {
+  job: SyncJob;
+}
+
+export async function createJob(req: JobCreateRequest): Promise<JobCreateResponse> {
+  return apiFetch<JobCreateResponse>('/api/drive-sync/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+export async function listJobs(limit = 100, offset = 0): Promise<JobListResponse> {
+  return apiFetch<JobListResponse>(
+    `/api/drive-sync/jobs?limit=${limit}&offset=${offset}`,
+    { timeout: 15000 }
+  );
+}
+
+export async function getJob(jobId: string): Promise<JobResponse> {
+  return apiFetch<JobResponse>(
+    `/api/drive-sync/jobs/${encodeURIComponent(jobId)}`,
+    { timeout: 15000 }
+  );
+}
+
+export async function deleteJob(jobId: string): Promise<{ deleted: boolean }> {
+  return apiFetch<{ deleted: boolean }>(
+    `/api/drive-sync/jobs/${encodeURIComponent(jobId)}`,
+    { method: 'DELETE' }
+  );
 }
 
 // ---------------------------------------------------------------------------
