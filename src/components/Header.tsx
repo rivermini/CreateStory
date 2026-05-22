@@ -12,7 +12,6 @@ interface HeaderProps {
 }
 
 function navActive(locationPath: string, expect: string) {
-    // Results stays active for any /results/* route
     if (expect === '/results/all') {
         return locationPath.startsWith('/results');
     }
@@ -29,24 +28,17 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
     { to: '/batch', label: 'Batch' },
     { to: '/results/all', label: 'Results' },
-    {
-        to: '/drive-sync',
-        label: 'Drive Sync',
-    },
-    {
-        to: '/drive-sync/history',
-        label: 'Sync History',
-    },
-    {
-        to: '/story-mgmt',
-        label: 'Story Mgmt',
-    },
+    { to: '/drive-sync', label: 'Drive Sync' },
+    { to: '/drive-sync/history', label: 'Sync History' },
+    { to: '/story-mgmt', label: 'Story Mgmt' },
 ];
 
 export function Header({ themeMode, onThemeChange, rightActions, title, subtitle }: HeaderProps) {
     const navigate = useNavigate();
     const location = useLocation();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    const isDark = themeMode === 'dark';
 
     const makeBtn = (item: NavItem) => {
         const active = navActive(location.pathname, item.to);
@@ -57,12 +49,13 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
                     navigate(item.to);
                     setMobileMenuOpen(false);
                 }}
-                className={
-                    'w-full sm:w-auto px-3 py-2 text-sm rounded-lg transition-colors text-left sm:text-center ' +
-                    (active
+                className={`w-full sm:w-auto px-3 py-2 text-sm rounded-lg transition-colors text-left sm:text-center ${
+                    active
                         ? 'bg-indigo-600 text-white'
-                        : 'text-slate-300 md:bg-slate-600/30 hover:bg-slate-700')
-                }
+                        : isDark
+                            ? 'text-slate-300 md:bg-slate-600/30 hover:bg-slate-700'
+                            : 'text-gray-600 md:bg-gray-100 hover:bg-gray-200'
+                }`}
             >
                 <span className="flex items-center gap-2">
                     {item.icon}
@@ -73,7 +66,10 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
     };
 
     return (
-        <header className="border-b border-slate-800 bg-slate-950 sticky top-0 z-50">
+        <header className={`border-b sticky top-0 z-50 ${isDark
+            ? 'border-slate-800 bg-slate-950 shadow-none'
+            : 'border-gray-200 bg-white shadow-sm'
+        }`}>
             <div className="w-full max-w-none mx-auto px-4 sm:px-6 py-3 sm:py-4">
                 <div className="flex items-center justify-between gap-3">
                     {/* Left: Logo + Title */}
@@ -81,11 +77,13 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
                         <AppIcon size="lg" className="flex-shrink-0" />
                         <div className="min-w-0">
                             {title ? (
-                                <h1 className="text-base sm:text-lg font-semibold text-slate-100">{title}</h1>
+                                <h1 className={`text-base sm:text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{title}</h1>
                             ) : (
-                                <h1 className="text-base sm:text-lg font-semibold text-slate-100">Novel Crawler</h1>
+                                <h1 className={`text-base sm:text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Novel Crawler</h1>
                             )}
-                            {subtitle && <p className="text-xs text-slate-500 hidden sm:block">{subtitle}</p>}
+                            {subtitle && (
+                                <p className={`text-xs hidden sm:block ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{subtitle}</p>
+                            )}
                         </div>
                     </div>
 
@@ -101,7 +99,10 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
                         <ThemeToggle mode={themeMode} onChange={onThemeChange} />
                         <button
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
+                            className={`p-2 rounded-lg transition-colors ${isDark
+                                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                            }`}
                             aria-label="Toggle menu"
                         >
                             {mobileMenuOpen ? (
@@ -119,10 +120,10 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
 
                 {/* Mobile dropdown menu */}
                 {mobileMenuOpen && (
-                    <div className="md:hidden pt-3 pb-2 border-t border-slate-800 mt-3 space-y-1">
+                    <div className={`md:hidden pt-3 pb-2 mt-3 space-y-1 ${isDark ? 'border-t border-slate-800' : 'border-t border-gray-200'}`}>
                         {NAV_ITEMS.map(makeBtn)}
                         {rightActions && (
-                            <div className="pt-2 border-t border-slate-800">
+                            <div className={`pt-2 ${isDark ? 'border-t border-slate-800' : 'border-t border-gray-200'}`}>
                                 {rightActions}
                             </div>
                         )}
