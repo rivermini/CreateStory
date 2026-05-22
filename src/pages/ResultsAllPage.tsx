@@ -48,38 +48,43 @@ function formatDuration(start: string | null, finish: string | null): string {
     }
 }
 
-const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
-    completed: { label: 'Completed', dot: 'bg-emerald-400', text: 'text-emerald-400' },
-    failed: { label: 'Failed', dot: 'bg-red-400', text: 'text-red-400' },
-    cancelled: { label: 'Cancelled', dot: 'bg-amber-400', text: 'text-amber-400' },
-    running: { label: 'Running', dot: 'bg-blue-400', text: 'text-blue-400' },
-    idle: { label: 'Idle', dot: 'bg-slate-500', text: 'text-slate-400' },
-};
-
-// CHANGED: Added deleteMode prop to interface
-function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelect, deleteMode }: {
+function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelect, deleteMode, isDark }: {
     session: CrawlSessionSummary;
     onDownloadFile: (crawlId: string, filename: string) => void;
     order?: number;
     isSelected?: boolean;
     onToggleSelect?: (crawlId: string) => void;
     deleteMode?: boolean;
+    isDark: boolean;
 }) {
     const navigate = useNavigate();
     const [expanded, setExpanded] = useState(false);
 
-    const status = STATUS_CONFIG[session.status] ?? { label: session.status, dot: 'bg-slate-500', text: 'text-slate-400' };
+    const statusDotMap: Record<string, string> = {
+        completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
+        failed:    isDark ? 'bg-red-400'    : 'bg-red-500',
+        cancelled: isDark ? 'bg-amber-400'  : 'bg-amber-500',
+        running:   isDark ? 'bg-blue-400'   : 'bg-blue-500',
+        idle:      isDark ? 'bg-slate-500'  : 'bg-gray-400',
+    };
+    const statusTextMap: Record<string, string> = {
+        completed: isDark ? 'text-emerald-400' : 'text-emerald-600',
+        failed:    isDark ? 'text-red-400'    : 'text-red-600',
+        cancelled: isDark ? 'text-amber-400'  : 'text-amber-600',
+        running:   isDark ? 'text-blue-400'   : 'text-blue-600',
+        idle:      isDark ? 'text-slate-400'  : 'text-gray-500',
+    };
+
+    const dot = statusDotMap[session.status] ?? (isDark ? 'bg-slate-500' : 'bg-gray-400');
+    const text = statusTextMap[session.status] ?? (isDark ? 'text-slate-400' : 'text-gray-500');
+    const label = session.status.charAt(0).toUpperCase() + session.status.slice(1);
     const hasCombined = !!(session.combined_file || session.combined_txt_file);
     const chapterFiles = (session.output_files || []).filter(f =>
         !hasCombined || (f.filename !== (session.combined_txt_file || session.combined_file))
     );
     const totalSize = (session.output_files || []).reduce((sum, f) => sum + (f.size_bytes || 0), 0);
     const hasFiles = (session.output_files || []).length > 0;
-
-    const displayTitle =
-        session.novel_metadata?.title ||
-        session.novel_name ||
-        session.crawl_id;
+    const displayTitle = session.novel_metadata?.title || session.novel_name || session.crawl_id;
     const progress = session.chapters_total > 0
         ? Math.min(100, (session.chapters_crawled / session.chapters_total) * 100)
         : 0;
@@ -95,26 +100,22 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
         document.body.removeChild(a);
     };
 
-    // CHANGED: Added dynamic card styling for delete mode selection
     const cardBg = deleteMode && isSelected
-        ? 'bg-red-950/40 border-red-800/60'
-        : 'bg-slate-800 border-slate-700';
+        ? isDark ? 'bg-red-950/40 border-red-800/60' : 'bg-red-50 border-red-200'
+        : isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200';
 
     const rootClasses = `${cardBg} rounded-xl border overflow-hidden flex transition-colors duration-150 ${deleteMode ? 'cursor-pointer select-none' : ''}`;
 
-    // CHANGED: Dynamic background for order column based on selection state
     const orderBg = deleteMode && isSelected
-        ? 'bg-red-900/50 border-red-800/40 text-red-300'
-        : 'bg-indigo-900/30 border-indigo-800/40 text-indigo-300';
+        ? isDark ? 'bg-red-900/50 border-red-800/40 text-red-300' : 'bg-red-100 border-red-200 text-red-700'
+        : isDark ? 'bg-indigo-900/30 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
 
     return (
-        // CHANGED: Added onClick, updated className for selection tint and interaction
         <div
             className={rootClasses}
             onClick={deleteMode && onToggleSelect ? () => onToggleSelect(session.crawl_id) : undefined}
         >
             {order != null && (
-                // CHANGED: Applied orderBg for left accent strip functionality
                 <div className={`w-12 flex-shrink-0 border-r flex flex-col items-center justify-center rounded-l-xl transition-colors duration-150 ${orderBg}`}>
                     <span className="text-base font-bold select-none">#{order}</span>
                 </div>
@@ -123,19 +124,18 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
             <div className="flex-1 min-w-0 flex flex-col">
                 <div className="px-4 sm:px-5 py-4 flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
                     <div className="flex-shrink-0 mt-1 flex items-center gap-2">
-                        {/* CHANGED: Removed checkbox entirely */}
-                        <div className={`w-2.5 h-2.5 rounded-full ${status.dot}`} />
+                        <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />
                     </div>
 
                     <div className="flex-1 min-w-0 w-full">
                         <div className="min-w-0 w-full sm:w-auto">
-                            <h3 className="text-sm sm:text-base font-semibold text-slate-100 truncate">{displayTitle}</h3>
+                            <h3 className={`text-sm sm:text-base font-semibold truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{displayTitle}</h3>
                             {session.novel_metadata?.author && (
-                                <p className="text-sm text-slate-400 truncate mt-0.5">by {session.novel_metadata.author}</p>
+                                <p className={`text-sm truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>by {session.novel_metadata.author}</p>
                             )}
-                            <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
+                            <div className={`flex items-center gap-3 mt-1.5 text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
                                 {session.spider_name && <span>{session.spider_name}</span>}
-                                <span className={status.text}>{status.label}</span>
+                                <span className={text}>{label}</span>
                                 {session.chapters_crawled > 0 && (
                                     <span>{session.chapters_crawled} chapter{session.chapters_crawled !== 1 ? 's' : ''}</span>
                                 )}
@@ -147,7 +147,6 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                             {hasFiles && (
                                 <button
                                     onClick={(e) => {
-                                        // CHANGED: Added stopPropagation
                                         e.stopPropagation();
                                         const a = document.createElement('a');
                                         a.href = getDownloadAllUrl(session.crawl_id);
@@ -165,7 +164,6 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                             {hasCombined && (
                                 <button
                                     onClick={(e) => {
-                                        // CHANGED: Added stopPropagation
                                         e.stopPropagation();
                                         handleDownloadCombined();
                                     }}
@@ -180,31 +178,37 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                             )}
                             <button
                                 onClick={(e) => {
-                                    // CHANGED: Added stopPropagation
                                     e.stopPropagation();
                                     navigate(`/results?session=${session.crawl_id}`);
                                 }}
-                                className="px-2 sm:px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                                className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isDark
+                                    ? 'text-slate-300 bg-slate-700 hover:bg-slate-600'
+                                    : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                                }`}
                             >
                                 View
                             </button>
                             <button
                                 onClick={(e) => {
-                                    // CHANGED: Added stopPropagation
                                     e.stopPropagation();
                                     navigate(`/crawl?session=${session.crawl_id}`);
                                 }}
-                                className="px-2 sm:px-3 py-1.5 text-xs font-medium text-indigo-300 border border-indigo-700 rounded-lg hover:bg-indigo-900/30 transition-colors"
+                                className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isDark
+                                    ? 'text-indigo-300 border border-indigo-700 hover:bg-indigo-900/30'
+                                    : 'text-indigo-600 border border-indigo-200 hover:bg-indigo-50'
+                                }`}
                             >
                                 Session
                             </button>
                             <button
                                 onClick={(e) => {
-                                    // CHANGED: Added stopPropagation
                                     e.stopPropagation();
                                     setExpanded(v => !v);
                                 }}
-                                className="px-2 sm:px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 rounded-lg border border-slate-600 hover:bg-slate-700 transition-colors"
+                                className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${isDark
+                                    ? 'text-slate-400 hover:text-slate-200 border-slate-600 hover:bg-slate-700'
+                                    : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-100'
+                                }`}
                             >
                                 {expanded ? 'Hide' : `${chapterFiles.length > 0 ? chapterFiles.length + 'F' : ''}`}
                             </button>
@@ -212,13 +216,11 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
 
                         {session.status === 'running' && session.chapters_total > 0 && (
                             <div className="mt-3 space-y-1.5">
-                                <div className="flex items-center justify-between text-xs text-slate-500">
-                                    <span>
-                                        {session.chapters_crawled}/{session.chapters_total} chapters
-                                    </span>
+                                <div className={`flex items-center justify-between text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                                    <span>{session.chapters_crawled}/{session.chapters_total} chapters</span>
                                     <span>{Math.round(progress)}%</span>
                                 </div>
-                                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
                                     <div
                                         className="h-full bg-indigo-500 transition-all duration-300"
                                         style={{ width: `${progress}%` }}
@@ -228,7 +230,7 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                         )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-2 text-xs text-slate-500">
+                    <div className={`flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
                         <span>Started {formatDate(session.started_at)}</span>
                         {session.finished_at && (
                             <>
@@ -237,40 +239,46 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                             </>
                         )}
                         {session.status === 'running' && session.chapters_total > 0 && (
-                            <span>
-                                {session.chapters_crawled}/{session.chapters_total}
-                            </span>
+                            <span>{session.chapters_crawled}/{session.chapters_total}</span>
                         )}
                     </div>
 
                     {session.error_message && (
-                        <p className="text-xs text-red-400 mt-2">{session.error_message}</p>
+                        <p className={`text-xs mt-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{session.error_message}</p>
                     )}
                 </div>
 
                 {expanded && chapterFiles.length > 0 && (
-                    <div className="border-t border-slate-700 px-5 py-3 bg-slate-900/50">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold mb-2">
+                    <div className={`border-t px-5 py-3 ${isDark
+                        ? 'border-slate-700 bg-slate-900/50'
+                        : 'border-gray-200 bg-gray-50/50'
+                    }`}>
+                        <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
                             Individual Chapters
                         </p>
                         <div className="space-y-1.5">
                             {chapterFiles.slice(0, 5).map((file) => (
                                 <div key={file.filename} className="flex items-center justify-between gap-3 py-1">
                                     <div className="flex items-center gap-2 min-w-0">
-                                        <span className="inline-flex items-center justify-center w-6 h-6 bg-indigo-900/50 text-indigo-400 rounded text-[10px] font-mono flex-shrink-0">
+                                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-mono flex-shrink-0 ${isDark
+                                            ? 'bg-indigo-900/50 text-indigo-400'
+                                            : 'bg-indigo-100 text-indigo-600'
+                                        }`}>
                                             {file.chapter_number > 0 ? `#${file.chapter_number}` : '—'}
                                         </span>
-                                        <span className="text-sm text-slate-300 truncate font-mono">{file.filename}</span>
+                                        <span className={`text-sm truncate font-mono ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{file.filename}</span>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                        <span className="text-xs text-slate-500">{formatBytes(file.size_bytes)}</span>
+                                        <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{formatBytes(file.size_bytes)}</span>
                                         <button
                                             onClick={(e) => {
-                                                // CHANGED: Added stopPropagation
                                                 e.stopPropagation();
                                                 onDownloadFile(session.crawl_id, file.filename);
                                             }}
-                                            className="px-2.5 py-1 text-xs text-slate-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                                            className={`px-2.5 py-1 text-xs rounded transition-colors ${isDark
+                                                ? 'text-slate-300 bg-slate-700 hover:bg-slate-600'
+                                                : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                                            }`}
                                         >
                                             Download
                                         </button>
@@ -280,11 +288,13 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                             {chapterFiles.length > 5 && (
                                 <button
                                     onClick={(e) => {
-                                        // CHANGED: Added stopPropagation
                                         e.stopPropagation();
                                         navigate(`/results?session=${session.crawl_id}`);
                                     }}
-                                    className="flex items-center gap-2 py-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                                    className={`flex items-center gap-2 py-1 text-xs transition-colors ${isDark
+                                        ? 'text-indigo-400 hover:text-indigo-300'
+                                        : 'text-indigo-600 hover:text-indigo-700'
+                                    }`}
                                 >
                                     <span>+{chapterFiles.length - 5} more files — view all in session</span>
                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -301,6 +311,7 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
 }
 
 export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllPageProps) {
+    const isDark = themeMode === 'dark';
     const PAGE_SIZE = 15;
     const navigate = useNavigate();
     const [sessions, setSessions] = useState<CrawlSessionSummary[]>([]);
@@ -317,8 +328,6 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; crawlIds: string[]; hasRunning: boolean }>({ open: false, crawlIds: [], hasRunning: false });
     const loadMoreRef = useRef<HTMLDivElement | null>(null);
-
-    // CHANGED: Added deleteMode state
     const [deleteMode, setDeleteMode] = useState(false);
 
     const fetchSessions = useCallback((): Promise<void> => {
@@ -375,8 +384,6 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
 
     const visibleSessions = filtered.slice(0, visibleCount);
     const hasMore = visibleCount < filtered.length;
-
-    // CHANGED: Helper logic for Select All / Unselect All
     const allVisibleSelected = visibleSessions.length > 0 && visibleSessions.every(s => selectedCrawlIds.has(s.crawl_id));
 
     useEffect(() => {
@@ -408,7 +415,6 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
         running: sessions.filter(s => s.status === 'running').length,
     };
 
-    // Counts based on filtered sessions (respects time range)
     const filteredCounts = {
         all: filtered.length,
         completed: filtered.filter(s => s.status === 'completed').length,
@@ -436,7 +442,6 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
         setSelectedCrawlIds(newSelected);
     };
 
-    // CHANGED: Update toggleDeleteMode logic
     const toggleDeleteMode = () => {
         if (deleteMode) {
             setDeleteMode(false);
@@ -471,8 +476,12 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
         }
     };
 
+    const filterBarBase = isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200';
+    const filterBtnActive = 'bg-indigo-600 text-white';
+    const filterBtnInactive = isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-500 hover:text-gray-700';
+
     return (
-        <div className="min-h-screen bg-slate-900">
+        <div className={`min-h-screen ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
             <Header
                 themeMode={themeMode}
                 onThemeChange={onThemeChange}
@@ -493,7 +502,10 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                             setTimeout(() => setDownloadingAll(false), 2000);
                         }}
                         disabled={downloadingAll || sessions.length === 0}
-                        className="px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 disabled:text-indigo-400 rounded-lg transition-colors flex items-center gap-1.5"
+                        className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${downloadingAll || sessions.length === 0
+                            ? isDark ? 'bg-indigo-900/50 text-indigo-400 cursor-not-allowed' : 'bg-indigo-100 text-indigo-400 cursor-not-allowed'
+                            : 'text-white bg-indigo-600 hover:bg-indigo-500'
+                        }`}
                     >
                         {downloadingAll ? 'Zipping...' : 'Download Everything'}
                     </button>
@@ -508,23 +520,24 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                             setTimeout(() => setDownloadingAllCombined(false), 2000);
                         }}
                         disabled={downloadingAllCombined || !sessions.some(s => s.combined_file || s.combined_txt_file)}
-                        className="px-3 py-1.5 text-sm text-white bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:text-emerald-400 rounded-lg transition-colors flex items-center gap-1.5"
+                        className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${downloadingAllCombined || !sessions.some(s => s.combined_file || s.combined_txt_file)
+                            ? isDark ? 'bg-emerald-900/50 text-emerald-400 cursor-not-allowed' : 'bg-emerald-100 text-emerald-400 cursor-not-allowed'
+                            : 'text-white bg-emerald-600 hover:bg-emerald-500'
+                        }`}
                     >
                         {downloadingAllCombined ? 'Zipping...' : 'All Combined'}
                     </button>
 
-                    {/* CHANGED: Delete Mode Toggle Button */}
                     <button
                         onClick={toggleDeleteMode}
                         className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${deleteMode
-                                ? 'text-red-300 border border-red-700 bg-red-900/20 hover:bg-red-900/40'
-                                : 'text-slate-300 border border-slate-600 hover:bg-slate-700'
-                            }`}
+                            ? isDark ? 'text-red-300 border border-red-700 bg-red-900/20 hover:bg-red-900/40' : 'text-red-600 border border-red-300 bg-red-50 hover:bg-red-100'
+                            : isDark ? 'text-slate-300 border border-slate-600 hover:bg-slate-700' : 'text-gray-600 border border-gray-300 hover:bg-gray-100'
+                        }`}
                     >
                         {deleteMode ? '✕ Exit Delete' : 'Delete Mode'}
                     </button>
 
-                    {/* CHANGED: Select All / Unselect All Button */}
                     {deleteMode && (
                         <button
                             onClick={() => {
@@ -537,20 +550,22 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                                 }
                             }}
                             className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${allVisibleSelected
-                                    ? 'text-amber-300 border border-amber-700 bg-amber-900/20 hover:bg-amber-900/30'
-                                    : 'text-slate-300 border border-slate-600 hover:bg-slate-700'
-                                }`}
+                                ? isDark ? 'text-amber-300 border border-amber-700 bg-amber-900/20 hover:bg-amber-900/30' : 'text-amber-600 border border-amber-300 bg-amber-50 hover:bg-amber-100'
+                                : isDark ? 'text-slate-300 border border-slate-600 hover:bg-slate-700' : 'text-gray-600 border border-gray-300 hover:bg-gray-100'
+                            }`}
                         >
                             {allVisibleSelected ? 'Unselect All' : 'Select All'}
                         </button>
                     )}
 
-                    {/* CHANGED: Delete (N) conditionally updated to only render in deleteMode */}
                     {deleteMode && selectedCrawlIds.size > 0 && (
                         <button
                             onClick={handleDeleteClick}
                             disabled={isDeleting}
-                            className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:text-red-400 rounded-lg transition-colors flex items-center gap-1.5"
+                            className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${isDeleting
+                                ? isDark ? 'bg-red-900/50 text-red-400 cursor-not-allowed' : 'bg-red-100 text-red-400 cursor-not-allowed'
+                                : 'text-white bg-red-600 hover:bg-red-500'
+                            }`}
                         >
                             {isDeleting ? 'Deleting...' : `Delete (${selectedCrawlIds.size})`}
                         </button>
@@ -558,7 +573,7 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <div className="flex items-center gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700">
+                    <div className={`flex items-center gap-1 p-1 rounded-lg border ${filterBarBase}`}>
                         {([
                             ['all', `All (${filteredCounts.all})`],
                             ['running', `Running (${filteredCounts.running})`],
@@ -568,36 +583,31 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                             <button
                                 key={value}
                                 onClick={() => setFilter(value)}
-                                className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${filter === value
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'text-slate-400 hover:text-slate-200'
-                                    }`}
+                                className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${filter === value ? filterBtnActive : filterBtnInactive}`}
                             >
                                 {label}
                             </button>
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700">
-                        <span className="px-2 text-xs text-slate-500 hidden sm:inline">Sort:</span>
+                    <div className={`flex items-center gap-1 p-1 rounded-lg border ${filterBarBase}`}>
+                        <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Sort:</span>
                         <button
                             onClick={() => setSortOrder('newest')}
-                            className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${sortOrder === 'newest' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                                }`}
+                            className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${sortOrder === 'newest' ? filterBtnActive : filterBtnInactive}`}
                         >
                             Newest
                         </button>
                         <button
                             onClick={() => setSortOrder('oldest')}
-                            className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${sortOrder === 'oldest' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                                }`}
+                            className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${sortOrder === 'oldest' ? filterBtnActive : filterBtnInactive}`}
                         >
                             Oldest
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700">
-                        <span className="px-2 text-xs text-slate-500 hidden sm:inline">Time:</span>
+                    <div className={`flex items-center gap-1 p-1 rounded-lg border ${filterBarBase}`}>
+                        <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Time:</span>
                         {([
                             ['all', 'All time'],
                             ['today', 'Today'],
@@ -607,8 +617,7 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                             <button
                                 key={value}
                                 onClick={() => setTimeRange(value)}
-                                className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${timeRange === value ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                                    }`}
+                                className={`px-3 py-1 text-xs sm:text-sm rounded-md transition-colors ${timeRange === value ? filterBtnActive : filterBtnInactive}`}
                             >
                                 {label}
                             </button>
@@ -617,7 +626,10 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
 
                     <button
                         onClick={() => { setIsLoading(true); fetchSessions().finally(() => setIsLoading(false)); }}
-                        className="px-3 py-1 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-1.5 ml-1"
+                        className={`px-3 py-1 text-xs border rounded-lg transition-colors flex items-center gap-1.5 ml-1 ${isDark
+                            ? 'text-slate-400 hover:text-slate-200 border-slate-700 hover:bg-slate-800'
+                            : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-100'
+                        }`}
                         title="Refresh now"
                     >
                         <svg className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -627,7 +639,7 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                 </div>
 
                 {isLoading && sessions.length === 0 && (
-                    <div className="flex items-center justify-center py-16 text-slate-400 gap-3">
+                    <div className={`flex items-center justify-center py-16 gap-3 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                         <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -637,25 +649,28 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                 )}
 
                 {error && (
-                    <div className="flex items-center justify-between gap-3 p-4 bg-red-900/30 border border-red-800 rounded-xl text-red-400">
+                    <div className={`flex items-center justify-between gap-3 p-4 rounded-xl text-sm ${isDark
+                        ? 'bg-red-900/30 border border-red-800 text-red-400'
+                        : 'bg-red-50 border border-red-200 text-red-600'
+                    }`}>
                         <span>{error}</span>
-                        <button onClick={fetchSessions} className="text-sm underline hover:no-underline">Retry</button>
+                        <button onClick={fetchSessions} className="underline hover:no-underline">Retry</button>
                     </div>
                 )}
 
                 {!isLoading && filtered.length === 0 && (
-                    <div className="text-center py-20 text-slate-500 space-y-3">
+                    <div className={`text-center py-20 space-y-3 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
                         <div className="flex justify-center">
-                            <svg className="w-12 h-12 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={`w-12 h-12 ${isDark ? 'text-slate-600' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                         </div>
-                        <p className="text-slate-400">
+                        <p className={isDark ? 'text-slate-400' : 'text-gray-500'}>
                             {filter === 'all' ? 'No crawl sessions yet.' : `No ${filter} sessions.`}
                         </p>
                         <button
                             onClick={() => navigate('/')}
-                            className="text-sm text-indigo-400 hover:text-indigo-300 underline"
+                            className={`text-sm underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
                         >
                             Start your first crawl
                         </button>
@@ -671,13 +686,13 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                             order={index + 1}
                             isSelected={selectedCrawlIds.has(session.crawl_id)}
                             onToggleSelect={handleToggleSelect}
-                            // CHANGED: Passed deleteMode prop
                             deleteMode={deleteMode}
+                            isDark={isDark}
                         />
                     ))}
 
                     {hasMore && (
-                        <div ref={loadMoreRef} className="py-6 text-center text-xs text-slate-500">Loading more sessions...</div>
+                        <div className={`py-6 text-center text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Loading more sessions...</div>
                     )}
                 </div>
 
@@ -685,7 +700,10 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                     <div className="flex justify-center pt-2">
                         <button
                             onClick={fetchSessions}
-                            className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors"
+                            className={`px-4 py-2 text-sm border rounded-lg transition-colors ${isDark
+                                ? 'text-slate-400 hover:text-slate-200 border-slate-700 hover:bg-slate-800'
+                                : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-100'
+                            }`}
                         >
                             Refresh
                         </button>
@@ -694,29 +712,25 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
 
                 {deleteConfirmation.open && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md w-full space-y-4">
-                            <h3 className="text-lg font-semibold text-slate-100">
+                        <div className={`rounded-xl p-6 max-w-md w-full space-y-4 ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+                            <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                 {deleteConfirmation.hasRunning ? '⚠️ Warning' : 'Confirm Delete'}
                             </h3>
                             {deleteConfirmation.hasRunning ? (
                                 <div className="space-y-3">
-                                    <p className="text-sm text-amber-400">
+                                    <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                                         You are about to delete {deleteConfirmation.crawlIds.length} session{deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}, including <strong>running crawl(s)</strong>.
                                     </p>
-                                    <p className="text-sm text-slate-300">
-                                        Deleting a running session will:
-                                    </p>
-                                    <ul className="text-sm text-slate-400 space-y-1 ml-4">
+                                    <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Deleting a running session will:</p>
+                                    <ul className={`text-sm space-y-1 ml-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                                         <li>• Stop the active crawl</li>
                                         <li>• Remove all downloaded data</li>
                                         <li>• Clear the session permanently</li>
                                     </ul>
-                                    <p className="text-sm text-amber-300 font-medium">
-                                        This action cannot be undone.
-                                    </p>
+                                    <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>This action cannot be undone.</p>
                                 </div>
                             ) : (
-                                <p className="text-sm text-slate-300">
+                                <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                                     Are you sure you want to delete {deleteConfirmation.crawlIds.length} session{deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}? This action cannot be undone.
                                 </p>
                             )}
@@ -724,14 +738,20 @@ export default function ResultsAllPage({ themeMode, onThemeChange }: ResultsAllP
                                 <button
                                     onClick={() => setDeleteConfirmation({ open: false, crawlIds: [], hasRunning: false })}
                                     disabled={isDeleting}
-                                    className="px-4 py-2 text-sm text-slate-300 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg transition-colors"
+                                    className={`px-4 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 ${isDark
+                                        ? 'text-slate-300 bg-slate-700 hover:bg-slate-600'
+                                        : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                                    }`}
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleConfirmDelete}
                                     disabled={isDeleting}
-                                    className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:text-red-400 rounded-lg transition-colors"
+                                    className={`px-4 py-2 text-sm text-white rounded-lg transition-colors disabled:opacity-50 ${isDark
+                                        ? 'bg-red-600 hover:bg-red-500 disabled:bg-red-900/50 disabled:text-red-400'
+                                        : 'bg-red-600 hover:bg-red-500'
+                                    }`}
                                 >
                                     {isDeleting ? 'Deleting...' : 'Delete'}
                                 </button>
