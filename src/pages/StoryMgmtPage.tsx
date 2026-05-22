@@ -508,7 +508,7 @@ export function StoryMgmtPage({ themeMode, onThemeChange }: StoryMgmtPageProps) 
             <p className="text-sm text-slate-300">
               {deleteTarget.kind === 'single'
                 ? 'Are you sure you want to permanently delete this story? This action cannot be undone.'
-                : `Are you sure you want to permanently delete ${bulkStories.length} story${bulkStories.length !== 1 ? 'ies' : ''}? This action cannot be undone.`}
+                : `Are you sure you want to permanently delete ${bulkStories.length} stor${bulkStories.length !== 1 ? 'ies' : 'y'}? This action cannot be undone.`}
             </p>
 
             <div className="bg-slate-900 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
