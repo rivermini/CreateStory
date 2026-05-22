@@ -34,12 +34,12 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [isInitialSetup, setIsInitialSetup] = useState(false);
 
-  const FIXED_USER_ID = '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f';
   const [configForm, setConfigForm] = useState<ConfigFormData>({
     folder_id: '',
     service_account_json_name: 'nova-crawler-drive-sync-445ff578305c.json',
     main_be_api_base_url: '',
     main_be_bearer_token: '',
+    main_be_user_id: '',
   });
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingConfigError, setSavingConfigError] = useState('');
@@ -81,6 +81,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
             folder_id: cfg.folder_id,
             service_account_json_name: jsonName,
             main_be_api_base_url: cfg.main_be_api_base_url,
+            main_be_user_id: (cfg as DriveSyncConfig & { main_be_user_id?: string }).main_be_user_id ?? '',
           }));
           setShowConfigModal(false);
         } else {
@@ -110,7 +111,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
         folder_id: configForm.folder_id.trim(),
         service_account_json_path: FIXED_JSON_PREFIX + configForm.service_account_json_name.trim(),
         main_be_api_base_url: configForm.main_be_api_base_url.trim(),
-        main_be_user_id: FIXED_USER_ID,
+        main_be_user_id: configForm.main_be_user_id.trim(),
         main_be_bearer_token: configForm.main_be_bearer_token.trim() || undefined,
       });
       setConfig(cfg);

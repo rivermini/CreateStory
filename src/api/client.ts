@@ -364,6 +364,7 @@ export interface DriveSyncConfig {
   enabled: boolean;
   main_be_api_base_url: string;
   main_category_id: string;
+  main_be_user_id?: string;
 }
 
 export interface DriveFolderEntry {
@@ -445,8 +446,12 @@ export interface InitDriveSyncRequest {
 }
 
 export interface DriveSyncUpdateRequest {
-  enabled?: boolean;
+  folder_id?: string;
+  service_account_json_path?: string;
+  main_be_api_base_url?: string;
+  main_be_user_id?: string;
   main_category_id?: string;
+  main_be_bearer_token?: string;
 }
 
 export async function getDriveSyncConfig(): Promise<DriveSyncConfig | null> {
