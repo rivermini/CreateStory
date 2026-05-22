@@ -27,6 +27,8 @@ interface DriveSyncPageProps {
 // ─── Job tracking types ─────────────────────────────────────────────────────────
 
 export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) {
+  const isDark = themeMode === 'dark';
+
   // ── Config ──────────────────────────────────────────────────────────────────
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
@@ -306,7 +308,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   }, [updatableData, handleUpdateSingle]);
 
   return (
-    <div className="min-h-screen w- bg-slate-900 flex flex-col">
+    <div className={`min-h-screen w- flex flex-col ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
       <Header
         themeMode={themeMode}
         onThemeChange={onThemeChange}
@@ -318,17 +320,17 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
 
         {/* ── Loading / Error states ───────────────────────────────── */}
         {configLoading && (
-          <div className="flex items-center gap-3 p-4 mb-6 bg-slate-800/80 border border-slate-700 rounded-2xl">
+          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl ${isDark ? 'bg-slate-800/80 border border-slate-700' : 'bg-white border border-gray-200'}`}>
             <svg className="w-5 h-5 animate-spin text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span className="text-sm text-slate-400">Loading Drive Sync config...</span>
+            <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>Loading Drive Sync config...</span>
           </div>
         )}
 
         {configError && (
-          <div className="flex items-center gap-3 p-4 mb-6 bg-red-900/20 border border-red-800/50 rounded-2xl text-red-400 text-sm">
+          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl text-sm ${isDark ? 'bg-red-900/20 border border-red-800/50 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
             <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -341,20 +343,20 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
         {config && !configLoading && (
           <>
             {/* ── Config summary bar ─────────────────────────────── */}
-            <div className="flex flex-wrap items-center gap-3 mb-6 px-4 py-3 bg-slate-800/60 border border-slate-700/50 rounded-xl text-sm">
+            <div className={`flex flex-wrap items-center gap-3 mb-6 px-4 py-3 rounded-xl text-sm ${isDark ? 'bg-slate-800/60 border border-slate-700/50' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-slate-300">Drive Sync Active</span>
+                <span className={isDark ? 'text-slate-300' : 'text-gray-700'}>Drive Sync Active</span>
               </div>
-              <span className="text-slate-600">|</span>
-              <span className="text-slate-400">
-                Folder: <span className="text-slate-300 font-mono text-xs">{config.folder_id.slice(0, 20)}...</span>
+              <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>|</span>
+              <span className={isDark ? 'text-slate-400' : 'text-gray-500'}>
+                Folder: <span className={`${isDark ? 'text-slate-300' : 'text-gray-700'} font-mono text-xs`}>{config.folder_id.slice(0, 20)}...</span>
               </span>
-              <span className="text-slate-600">|</span>
-              <span className="text-slate-400">Manual sync only</span>
+              <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>|</span>
+              <span className={isDark ? 'text-slate-400' : 'text-gray-500'}>Manual sync only</span>
               <button
                 onClick={() => setShowConfigModal(true)}
-                className="text-indigo-400 hover:text-indigo-300 text-xs transition-colors flex items-center gap-1"
+                className={`text-xs transition-colors flex items-center gap-1 ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -371,6 +373,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 config={config}
                 activeTab={activeSubTab}
                 onTabChange={setActiveSubTab}
+                themeMode={themeMode}
                 uploadableData={uploadableData}
                 uploadableLoading={uploadableLoading}
                 uploadableError={uploadableError}
@@ -412,6 +415,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
         savingConfig={savingConfig}
         savingConfigError={savingConfigError}
         isInitialSetup={isInitialSetup}
+        themeMode={themeMode}
       />
     </div>
   );

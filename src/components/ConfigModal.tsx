@@ -3,6 +3,7 @@ import {
   type DriveSyncConfig,
   FIXED_JSON_PREFIX,
 } from '../api/client';
+import { type ThemeMode } from '../components/ThemeToggle';
 
 export interface ConfigFormData {
   folder_id: string;
@@ -22,6 +23,7 @@ export interface ConfigModalProps {
   savingConfig: boolean;
   savingConfigError: string;
   isInitialSetup?: boolean;
+  themeMode?: ThemeMode;
 }
 
 export function ConfigModal({
@@ -34,7 +36,9 @@ export function ConfigModal({
   savingConfig,
   savingConfigError,
   isInitialSetup = false,
+  themeMode,
 }: ConfigModalProps) {
+  const isDark = themeMode !== 'light';
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,25 +60,28 @@ export function ConfigModal({
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+      <div className={`w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+        <div className={`flex items-center justify-between px-6 py-4 ${isDark ? 'border-b border-slate-700' : 'border-b border-gray-200'}`}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-900/50 rounded-lg border border-indigo-700/40">
-              <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className={`p-2 rounded-lg border ${isDark ? 'bg-indigo-900/50 border-indigo-700/40' : 'bg-indigo-50 border-indigo-200'}`}>
+              <svg className={`w-5 h-5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-100">Drive Sync Settings</h2>
-              <p className="text-xs text-slate-500">{isInitialSetup ? 'Set up your Drive Sync configuration to get started' : 'Modify your Drive Sync configuration'}</p>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Drive Sync Settings</h2>
+              <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{isInitialSetup ? 'Set up your Drive Sync configuration to get started' : 'Modify your Drive Sync configuration'}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
+            className={`p-2 rounded-lg transition-colors ${isDark
+              ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -87,52 +94,60 @@ export function ConfigModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* User ID — editable */}
             <div>
-              <label className="block text-sm text-slate-400 mb-1">User ID (x-user-id)</label>
+              <label className={`block text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>User ID (x-user-id)</label>
               <input
                 type="text"
                 value={configForm.main_be_user_id}
                 onChange={e => onFormChange({ main_be_user_id: e.target.value })}
                 placeholder="3b2fae40-e482-4ea1-af7a-96e35ecfbf5f"
-                className="w-full px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg
-                           text-slate-100 placeholder-slate-500 text-sm font-mono
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`w-full px-3 py-2.5 border rounded-lg text-sm font-mono
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                    ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+                  }`}
               />
             </div>
             {/* Main BE API URL */}
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Main BE API URL</label>
+              <label className={`block text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Main BE API URL</label>
               <input
                 type="text"
                 value={configForm.main_be_api_base_url}
                 onChange={e => onFormChange({ main_be_api_base_url: e.target.value })}
                 placeholder="https://cnlhzl7bul.execute-api.ap-southeast-1.amazonaws.com"
-                className="w-full px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg
-                           text-slate-100 placeholder-slate-500 text-sm
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`w-full px-3 py-2.5 border rounded-lg text-sm
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                    ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+                  }`}
               />
             </div>
             {/* Drive Folder ID */}
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Drive Folder ID</label>
+              <label className={`block text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Drive Folder ID</label>
               <input
                 type="text"
                 value={configForm.folder_id}
                 onChange={e => onFormChange({ folder_id: e.target.value })}
                 placeholder="1r6AVDCI4GMETi3piMjSyIxlOEW9CqDEa"
-                className="w-full px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg
-                           text-slate-100 placeholder-slate-500 text-sm
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`w-full px-3 py-2.5 border rounded-lg text-sm
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                    ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+                  }`}
               />
             </div>
             {/* Service Account JSON */}
             <div>
-              <label className="block text-sm text-slate-400 mb-1">
+              <label className={`block text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                 Service Account JSON{' '}
-                <span className="text-slate-600 font-normal">(credentials/ + filename)</span>
+                <span className={`font-normal ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>(credentials/ + filename)</span>
               </label>
               <div className="flex items-center gap-2">
-                <span className="px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg
-                                 text-slate-400 text-sm whitespace-nowrap select-none">
+                <span className={`px-3 py-2.5 border rounded-lg text-sm whitespace-nowrap select-none ${isDark
+                  ? 'bg-slate-900 border-slate-600 text-slate-400'
+                  : 'bg-gray-100 border-gray-300 text-gray-500'
+                }`}>
                   {FIXED_JSON_PREFIX}
                 </span>
                 <input
@@ -140,33 +155,37 @@ export function ConfigModal({
                   value={configForm.service_account_json_name}
                   onChange={e => onFormChange({ service_account_json_name: e.target.value })}
                   placeholder="nova-crawler-drive-sync-445ff578305c.json"
-                  className="flex-1 min-w-0 px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg
-                             text-slate-100 placeholder-slate-500 text-sm font-mono
-                             focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className={`flex-1 min-w-0 px-3 py-2.5 border rounded-lg text-sm font-mono
+                    focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                      ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500'
+                      : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+                    }`}
                 />
               </div>
             </div>
             {/* Bearer token */}
             <div className="sm:col-span-2">
-              <label className="block text-sm text-slate-400 mb-1">
+              <label className={`block text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                 Main BE Bearer Token
-                <span className="text-slate-600 font-normal"> (for check-uploadable & chapter update features)</span>
+                <span className={`font-normal ${isDark ? 'text-slate-600' : 'text-gray-400'}`}> (for check-uploadable & chapter update features)</span>
               </label>
               <input
                 type="password"
                 value={configForm.main_be_bearer_token}
                 onChange={e => onFormChange({ main_be_bearer_token: e.target.value })}
                 placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                className="w-full px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg
-                           text-slate-100 placeholder-slate-500 text-sm font-mono
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className={`w-full px-3 py-2.5 border rounded-lg text-sm font-mono
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                    ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+                  }`}
               />
-              <p className="text-xs text-slate-600 mt-1">Required for checking server stories and updating chapter counts.</p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Required for checking server stories and updating chapter counts.</p>
             </div>
           </div>
 
           {savingConfigError && (
-            <p className="mt-4 text-sm text-red-400 flex items-center gap-2">
+            <p className={`mt-4 text-sm flex items-center gap-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -177,19 +196,26 @@ export function ConfigModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700 bg-slate-800/50">
+        <div className={`flex items-center justify-end gap-3 px-6 py-4 ${isDark ? 'border-t border-slate-700 bg-slate-800/50' : 'border-t border-gray-200 bg-gray-50'}`}>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 rounded-lg transition-colors"
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${isDark
+              ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+              : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+            }`}
           >
             Cancel
           </button>
           <button
             onClick={onSave}
             disabled={savingConfig}
-            className="px-5 py-2.5 text-white font-semibold bg-indigo-600 hover:bg-indigo-500
-                       disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed
-                       rounded-lg transition-colors flex items-center gap-2"
+            className={`px-5 py-2.5 font-semibold rounded-lg transition-colors flex items-center gap-2 ${
+              savingConfig
+                ? isDark
+                  ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                  : 'bg-indigo-300 text-indigo-800 cursor-not-allowed'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+            }`}
           >
             {savingConfig ? (
               <>
