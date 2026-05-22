@@ -175,7 +175,7 @@ function UploadableTab({
                 Invalid ({filteredInvalid.length}){q && ` matching "${search}"`}
               </p>
               {filteredInvalid.map(folder => (
-                <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-red-950/20 border-red-700/40">
+                <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-red-950/20 border-red-700/40 mt-2">
                   <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
                     {folder.prefix}
                   </span>
@@ -203,7 +203,7 @@ function UploadableTab({
               </p>
               {filteredUploadable.map(folder => {
                 return (
-                  <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-slate-700/30 border-slate-700/40">
+                  <div key={folder.id} className="flex items-center gap-3 p-3 rounded-xl border bg-slate-700/30 border-slate-700/40 mt-2">
                     <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
                       {folder.prefix}
                     </span>
@@ -248,7 +248,7 @@ function UploadableTab({
                 Already on Server ({filteredAlready.length}){q && ` matching "${search}"`}
               </p>
               {filteredAlready.map(folder => (
-                <div key={folder.id} className="flex items-center gap-3 p-3 bg-slate-800/40 border border-slate-700/30 rounded-xl opacity-60">
+                <div key={folder.id} className="flex items-center gap-3 p-3 bg-slate-800/40 border border-slate-700/30 rounded-xl opacity-60 mt-2">
                   <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full border ${statusColor(folder.prefix)}`}>
                     {folder.prefix}
                   </span>
@@ -420,10 +420,11 @@ function UpdatableTab({
               {filteredUpdatable.map((entry: UpdatableStoryEntry) => {
                 const delta = (entry.folder.extended_chapter_count ?? 0) - entry.server_story.maxChapter;
                 return (
-                  <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-700/40 rounded-xl">
+                  <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-700/40 rounded-xl mt-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-slate-200 font-medium truncate">{entry.folder.display_name}</p>
-                      <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-xs font-mono text-slate-500">{entry.folder.name}</span>
+                      <div className="flex items-center gap-3 mt-1">
                         <span className="text-xs text-slate-500">
                           Server: <span className="text-slate-300">{entry.server_story.maxChapter}</span>
                         </span>
@@ -476,7 +477,7 @@ function UpdatableTab({
                 Invalid ({filteredInvalid.length}){q && ` matching "${search}"`}
               </p>
               {filteredInvalid.map(entry => (
-                <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-red-950/20 border border-red-700/40 rounded-xl">
+                <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-red-950/20 border border-red-700/40 rounded-xl mt-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-medium text-red-300 truncate">{entry.folder.display_name}</p>
@@ -484,7 +485,8 @@ function UpdatableTab({
                         <ValidationErrorBadge key={i} error={err} />
                       ))}
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5">
+                    <span className="text-xs font-mono text-red-400/80">{entry.folder.name}</span>
+                    <div className="flex items-center gap-3 mt-1">
                       <span className="text-xs text-slate-500">
                         Server: <span className="text-slate-300">{entry.server_story.maxChapter}</span>
                       </span>
@@ -510,10 +512,11 @@ function UpdatableTab({
                 Up-to-Date ({filteredNoUpdate.length}){q && ` matching "${search}"`}
               </p>
               {filteredNoUpdate.map(entry => (
-                <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-800/40 border border-slate-700/30 rounded-xl opacity-60">
+                <div key={entry.server_story.id} className="flex items-center gap-3 p-3 bg-slate-800/40 border border-slate-700/30 rounded-xl opacity-60 mt-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-400 font-medium truncate">{entry.folder.display_name}</p>
-                    <div className="flex items-center gap-3 mt-0.5">
+                    <span className="text-xs text-slate-500 font-mono">{entry.folder.name}</span>
+                    <div className="flex items-center gap-3 mt-1">
                       <span className="text-xs text-slate-500">
                         Server: <span className="text-slate-300">{entry.server_story.maxChapter}</span>
                       </span>
