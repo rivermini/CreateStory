@@ -11,7 +11,7 @@ interface DriveSyncHistoryPageProps {
 type FilterStatus = 'all' | 'queued' | 'running' | 'success' | 'error' | 'cancelled';
 type FilterKind = 'all' | 'upload_single' | 'update_single';
 
-const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
+const STATUS_CONFIG_DARK: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
   success:  { label: 'Success',   dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-950/40',   border: 'border-emerald-800/40'   },
   error:    { label: 'Error',     dot: 'bg-red-400',     text: 'text-red-400',     bg: 'bg-red-950/40',     border: 'border-red-800/40'     },
   running:  { label: 'Running',   dot: 'bg-blue-400',    text: 'text-blue-400',    bg: 'bg-blue-950/40',    border: 'border-blue-800/40'    },
@@ -19,7 +19,16 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string; 
   cancelled:{ label: 'Cancelled', dot: 'bg-slate-500',   text: 'text-slate-400',  bg: 'bg-slate-800/40',   border: 'border-slate-700/40'   },
 };
 
+const STATUS_CONFIG_LIGHT: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
+  success:  { label: 'Success',   dot: 'bg-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50',     border: 'border-emerald-200' },
+  error:    { label: 'Error',     dot: 'bg-red-500',     text: 'text-red-600',     bg: 'bg-red-50',       border: 'border-red-200'   },
+  running:  { label: 'Running',   dot: 'bg-blue-500',    text: 'text-blue-600',    bg: 'bg-blue-50',      border: 'border-blue-200'   },
+  queued:   { label: 'Queued',    dot: 'bg-amber-500',   text: 'text-amber-600',  bg: 'bg-amber-50',     border: 'border-amber-200'  },
+  cancelled:{ label: 'Cancelled', dot: 'bg-gray-400',    text: 'text-gray-500',   bg: 'bg-gray-100',     border: 'border-gray-200'   },
+};
+
 export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHistoryPageProps) {
+  const isDark = themeMode === 'dark';
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,6 +42,8 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteTarget, setBulkDeleteTarget] = useState<SyncJob[] | null>(null);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const statusConfig = isDark ? STATUS_CONFIG_DARK : STATUS_CONFIG_LIGHT;
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
@@ -151,27 +162,27 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
   };
 
   const statCards: { label: string; value: number; color: string; dot: string }[] = [
-    { label: 'Total',   value: stats.total,   color: 'text-slate-100', dot: 'bg-slate-400'   },
-    { label: 'Success', value: stats.success,  color: 'text-emerald-400', dot: 'bg-emerald-400' },
-    { label: 'Errors',  value: stats.error,    color: 'text-red-400',    dot: 'bg-red-400'     },
-    { label: 'Running', value: stats.running,  color: 'text-blue-400',   dot: 'bg-blue-400'    },
+    { label: 'Total',   value: stats.total,   color: isDark ? 'text-slate-100' : 'text-gray-900',   dot: isDark ? 'bg-slate-400'   : 'bg-gray-400'   },
+    { label: 'Success', value: stats.success,  color: isDark ? 'text-emerald-400' : 'text-emerald-600', dot: isDark ? 'bg-emerald-400' : 'bg-emerald-500' },
+    { label: 'Errors',  value: stats.error,    color: isDark ? 'text-red-400' : 'text-red-600',    dot: isDark ? 'bg-red-400'     : 'bg-red-500'     },
+    { label: 'Running', value: stats.running,  color: isDark ? 'text-blue-400' : 'text-blue-600',   dot: isDark ? 'bg-blue-400'    : 'bg-blue-500'    },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col">
+    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
       <Header
         themeMode={themeMode}
         onThemeChange={onThemeChange}
         title="Sync History"
         subtitle={<>
-          <span className="text-slate-400">{filtered.length}</span>
+          <span className={isDark ? 'text-slate-400' : 'text-gray-500'}>{filtered.length}</span>
           {filter !== 'all' || filterKind !== 'all' || search ? (
-            <span className="text-slate-500"> of {jobs.length}</span>
+            <span className={isDark ? 'text-slate-500' : 'text-gray-400'}> of {jobs.length}</span>
           ) : null}
-          <span className="text-slate-500"> job{jobs.length !== 1 ? 's' : ''}</span>
-          {filter !== 'all' && <span className="text-slate-600"> · {filter}</span>}
-          {filterKind !== 'all' && <span className="text-slate-600"> · {filterKind === 'upload_single' ? 'Upload' : 'Update'}</span>}
-          <span className="text-slate-600"> · refreshed {lastRefresh.toLocaleTimeString()}</span>
+          <span className={isDark ? 'text-slate-500' : 'text-gray-400'}> job{jobs.length !== 1 ? 's' : ''}</span>
+          {filter !== 'all' && <span className={isDark ? 'text-slate-600' : 'text-gray-400'}> · {filter}</span>}
+          {filterKind !== 'all' && <span className={isDark ? 'text-slate-600' : 'text-gray-400'}> · {filterKind === 'upload_single' ? 'Upload' : 'Update'}</span>}
+          <span className={isDark ? 'text-slate-600' : 'text-gray-400'}> · refreshed {lastRefresh.toLocaleTimeString()}</span>
         </>}
       />
 
@@ -189,13 +200,15 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
                   if (label === 'Errors')  setFilter('error');
                   if (label === 'Running') setFilter('running');
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border bg-slate-800/60 border-slate-700/50
-                  hover:bg-slate-800 hover:border-slate-600 transition-colors text-left group`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left group transition-colors ${isDark
+                  ? 'bg-slate-800/60 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
+                  : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                }`}
               >
                 <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot} ${label === 'Running' && value > 0 ? 'animate-pulse' : ''}`} />
                 <div>
                   <div className={`text-xl font-bold ${color} tabular-nums leading-none`}>{value}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{label}</div>
+                  <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{label}</div>
                 </div>
               </button>
             ))}
@@ -206,8 +219,8 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
         <div className="flex flex-wrap items-center gap-2">
 
           {/* Kind filter */}
-          <div className="flex items-center gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700">
-            <span className="px-2 text-xs text-slate-500 hidden sm:inline">Type:</span>
+          <div className={`flex items-center gap-1 p-1 rounded-lg ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+            <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Type:</span>
             {([
               ['all', 'All'],
               ['upload_single', 'Upload'],
@@ -218,7 +231,7 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
                 onClick={() => setFilterKind(value)}
                 className={`px-3 py-1 text-xs rounded-md transition-colors ${filterKind === value
                   ? 'bg-indigo-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : `${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-500 hover:text-gray-700'}`
                 }`}
               >
                 {label}
@@ -228,7 +241,7 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
 
           {/* Search */}
           <div className="relative flex-1 min-w-[180px]">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-slate-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
@@ -236,13 +249,16 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
               placeholder="Search by story name..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 text-slate-200
-                         rounded-lg text-sm placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+              className={`w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:border-indigo-500 ${
+                isDark
+                  ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500'
+                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+              }`}
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-400 hover:text-gray-600'}`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -254,7 +270,10 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
           {/* Refresh */}
           <button
             onClick={() => { setLoading(true); loadJobs(); }}
-            className="px-3 py-2 text-sm text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-1.5"
+            className={`px-3 py-2 text-sm border rounded-lg transition-colors flex items-center gap-1.5 ${isDark
+              ? 'text-slate-400 hover:text-slate-200 border-slate-700 hover:bg-slate-800'
+              : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -266,7 +285,10 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
           {selectedIds.size > 0 && (
             <button
               onClick={() => setBulkDeleteTarget(filtered.filter(j => selectedIds.has(j.id)))}
-              className="px-3 py-2 text-sm text-red-400 border border-red-800/60 rounded-lg hover:bg-red-900/50 transition-colors flex items-center gap-1.5"
+              className={`px-3 py-2 text-sm border rounded-lg transition-colors flex items-center gap-1.5 ${isDark
+                ? 'text-red-400 border-red-800/60 hover:bg-red-900/50'
+                : 'text-red-600 border-red-300 hover:bg-red-50'
+              }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -284,9 +306,12 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
               checked={selectedIds.size === filtered.length && filtered.length > 0}
               ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length; }}
               onChange={toggleSelectAll}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+              className={`w-4 h-4 rounded cursor-pointer ${isDark
+                ? 'border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0'
+                : 'border-gray-300 bg-white text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0'
+              }`}
             />
-            <span className="text-xs text-slate-400">
+            <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
               {selectedIds.size > 0 ? `${selectedIds.size} selected` : `Select all ${filtered.length}`}
             </span>
           </div>
@@ -294,15 +319,15 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
 
         {/* ── Error ────────────────────────────────────────────────────── */}
         {error && (
-          <div className="flex items-center justify-between gap-3 p-4 bg-red-900/30 border border-red-800 rounded-xl text-red-400">
-            <span className="text-sm">{error}</span>
-            <button onClick={loadJobs} className="text-sm underline hover:no-underline shrink-0">Retry</button>
+          <div className={`flex items-center justify-between gap-3 p-4 rounded-xl text-sm ${isDark ? 'bg-red-900/30 border border-red-800 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
+            <span>{error}</span>
+            <button onClick={loadJobs} className="underline hover:no-underline shrink-0">Retry</button>
           </div>
         )}
 
         {/* ── Loading ──────────────────────────────────────────────────── */}
         {loading && jobs.length === 0 && (
-          <div className="flex items-center justify-center py-20 text-slate-400 gap-3">
+          <div className={`flex items-center justify-center py-20 gap-3 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
             <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -313,13 +338,13 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
 
         {/* ── Empty ────────────────────────────────────────────────────── */}
         {!loading && jobs.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-500 space-y-3">
-            <svg className="w-14 h-14 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`flex flex-col items-center justify-center py-24 space-y-3 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+            <svg className={`w-14 h-14 ${isDark ? 'text-slate-700' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <p className="text-slate-400">No sync jobs yet.</p>
-            <p className="text-sm text-slate-500">Upload a story from the Drive Sync page to get started.</p>
+            <p className={isDark ? 'text-slate-400' : 'text-gray-500'}>No sync jobs yet.</p>
+            <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Upload a story from the Drive Sync page to get started.</p>
           </div>
         )}
 
@@ -327,7 +352,13 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
         {filtered.length > 0 && (
           <div className="space-y-2">
             {filtered.map((job) => {
-              const statusCfg = STATUS_CONFIG[job.status] ?? { label: job.status, dot: 'bg-slate-500', text: 'text-slate-400', bg: 'bg-slate-800/40', border: 'border-slate-700/40' };
+              const statusCfg = statusConfig[job.status] ?? {
+                label: job.status,
+                dot: isDark ? 'bg-slate-500' : 'bg-gray-400',
+                text: isDark ? 'text-slate-400' : 'text-gray-500',
+                bg: isDark ? 'bg-slate-800/40' : 'bg-gray-50',
+                border: isDark ? 'border-slate-700/40' : 'border-gray-200',
+              };
               const isExpanded = expandedJobId === job.id;
 
               return (
@@ -343,7 +374,10 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
                       type="checkbox"
                       checked={selectedIds.has(job.id)}
                       onChange={() => toggleSelect(job.id)}
-                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer shrink-0"
+                      className={`w-4 h-4 rounded shrink-0 cursor-pointer ${isDark
+                        ? 'border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0'
+                        : 'border-gray-300 bg-white text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0'
+                      }`}
                     />
 
                     {/* Status dot */}
@@ -351,47 +385,55 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
 
                     {/* Title */}
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-slate-100 truncate pr-2">
+                      <h3 className={`text-sm font-semibold truncate pr-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                         {job.display_name || job.folder_name}
                       </h3>
                       {job.result_message && !job.error && (
-                        <p className="text-xs text-slate-500 truncate mt-0.5 pr-4">{job.result_message}</p>
+                        <p className={`text-xs truncate mt-0.5 pr-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{job.result_message}</p>
                       )}
                       {job.error && (
-                        <p className="text-xs text-red-400 truncate mt-0.5 pr-4">{job.error}</p>
+                        <p className={`text-xs truncate mt-0.5 pr-4 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{job.error}</p>
                       )}
                     </div>
 
                     {/* Type badge */}
                     <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
                       job.kind === 'upload_single'
-                        ? 'bg-blue-900/40 text-blue-400 border-blue-800/40'
-                        : 'bg-amber-900/40 text-amber-400 border-amber-800/40'
+                        ? isDark
+                          ? 'bg-blue-900/40 text-blue-400 border-blue-800/40'
+                          : 'bg-blue-50 text-blue-600 border-blue-200'
+                        : isDark
+                          ? 'bg-amber-900/40 text-amber-400 border-amber-800/40'
+                          : 'bg-amber-50 text-amber-600 border-amber-200'
                     }`}>
                       {job.kind === 'upload_single' ? 'Upload' : 'Update'}
                     </span>
 
                     {/* Stats badges */}
                     {job.chapters_added > 0 && (
-                      <span className="shrink-0 text-xs text-emerald-400 font-medium hidden sm:inline">
+                      <span className={`shrink-0 text-xs font-medium hidden sm:inline ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
                         +{job.chapters_added} added
                       </span>
                     )}
                     {job.chapters_skipped > 0 && (
-                      <span className="shrink-0 text-xs text-amber-400 font-medium hidden sm:inline">
+                      <span className={`shrink-0 text-xs font-medium hidden sm:inline ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                         {job.chapters_skipped} skipped
                       </span>
                     )}
 
                     {/* Duration pill (completed) */}
                     {job.started_at && job.finished_at && (
-                      <span className="shrink-0 hidden md:inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-900/30 text-indigo-400 text-xs border border-indigo-800/40">
+                      <span className={`shrink-0 hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
+                        isDark
+                          ? 'bg-indigo-900/30 text-indigo-400 border border-indigo-800/40'
+                          : 'bg-indigo-50 text-indigo-600 border border-indigo-200'
+                      }`}>
                         {formatDuration(job.started_at, job.finished_at)}
                       </span>
                     )}
 
                     {/* Time */}
-                    <span className="shrink-0 text-xs text-slate-500 hidden lg:inline">
+                    <span className={`shrink-0 text-xs hidden lg:inline ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
                       {formatTime(job.created_at)}
                     </span>
 
@@ -399,7 +441,10 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
-                        className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-700/60 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1"
+                        className={`px-2.5 py-1.5 text-xs rounded-lg transition-colors flex items-center gap-1 ${isDark
+                          ? 'text-slate-400 hover:text-slate-200 bg-slate-700/60 hover:bg-slate-700'
+                          : 'text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'
+                        }`}
                         title={isExpanded ? 'Hide logs' : 'Show logs'}
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -412,7 +457,10 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
                       </button>
                       <button
                         onClick={() => setDeleteTarget(job)}
-                        className="p-1.5 text-slate-600 hover:text-red-400 bg-slate-700/40 hover:bg-red-900/40 rounded-lg transition-colors"
+                        className={`p-1.5 rounded-lg transition-colors ${isDark
+                          ? 'text-slate-600 hover:text-red-400 bg-slate-700/40 hover:bg-red-900/40'
+                          : 'text-gray-400 hover:text-red-600 bg-gray-100 hover:bg-red-50'
+                        }`}
                         title="Delete job"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -425,11 +473,11 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
 
                   {/* Expanded logs */}
                   {isExpanded && job.logs.length > 0 && (
-                    <div className="border-t border-slate-700/40 px-4 py-3 bg-black/20">
-                      <p className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold mb-2">Logs</p>
+                    <div className={`border-t px-4 py-3 ${isDark ? 'border-slate-700/40 bg-black/20' : 'border-gray-200 bg-gray-50/50'}`}>
+                      <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Logs</p>
                       <div className="space-y-1 max-h-48 overflow-y-auto">
                         {job.logs.map((log, i) => (
-                          <LogLine key={i} log={log} />
+                          <LogLine key={i} log={log} isDark={isDark} />
                         ))}
                       </div>
                     </div>
@@ -442,11 +490,11 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
 
         {/* ── No results ─────────────────────────────────────────────── */}
         {!loading && jobs.length > 0 && filtered.length === 0 && (
-          <div className="text-center py-20 text-slate-500 space-y-3">
-            <svg className="w-12 h-12 text-slate-700 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`text-center py-20 space-y-3 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+            <svg className={`w-12 h-12 mx-auto ${isDark ? 'text-slate-700' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <p className="text-slate-400">No jobs match your filters or search.</p>
+            <p className={isDark ? 'text-slate-400' : 'text-gray-500'}>No jobs match your filters or search.</p>
             <button onClick={() => { setFilter('all'); setFilterKind('all'); setSearch(''); }}
               className="text-sm text-indigo-400 hover:text-indigo-300">
               Clear all filters
@@ -458,7 +506,10 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
         {!loading && jobs.length > 0 && (
           <div className="flex justify-center pt-2">
             <button onClick={loadJobs}
-              className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors">
+              className={`px-4 py-2 text-sm border rounded-lg transition-colors ${isDark
+                ? 'text-slate-400 hover:text-slate-200 border-slate-700 hover:bg-slate-800'
+                : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}>
               Refresh
             </button>
           </div>
@@ -467,24 +518,27 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
         {/* ── Delete modal ─────────────────────────────────────────────── */}
         {deleteTarget && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className={`rounded-2xl p-6 max-w-sm w-full shadow-2xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-red-900/30 rounded-lg">
-                  <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className={`p-2 rounded-lg ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
+                  <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-slate-100">Delete Job</h3>
+                <h3 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Delete Job</h3>
               </div>
-              <p className="text-sm text-slate-400 mb-5">
+              <p className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                 Permanently delete{' '}
-                <span className="text-slate-200 font-medium">{deleteTarget.display_name || deleteTarget.folder_name}</span>?
+                <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{deleteTarget.display_name || deleteTarget.folder_name}</span>?
                 This cannot be undone.
               </p>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setDeleteTarget(null)} disabled={isDeleting}
-                  className="px-4 py-2 text-sm text-slate-300 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg transition-colors">
+                  className={`px-4 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 ${isDark
+                    ? 'text-slate-300 bg-slate-700 hover:bg-slate-600'
+                    : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                  }`}>
                   Cancel
                 </button>
                 <button onClick={handleConfirmDelete} disabled={isDeleting}
@@ -499,32 +553,35 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
         {/* ── Bulk delete modal ───────────────────────────────────────── */}
         {bulkDeleteTarget && bulkDeleteTarget.length > 0 && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className={`rounded-2xl p-6 max-w-sm w-full shadow-2xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-red-900/30 rounded-lg">
-                  <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className={`p-2 rounded-lg ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
+                  <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </div>
-                <h3 className="text-base font-semibold text-slate-100">Delete {bulkDeleteTarget.length} Jobs</h3>
+                <h3 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Delete {bulkDeleteTarget.length} Jobs</h3>
               </div>
-              <p className="text-sm text-slate-400 mb-4">
-                Permanently delete <span className="text-slate-200 font-medium">{bulkDeleteTarget.length} selected jobs</span>?
+              <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                Permanently delete <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{bulkDeleteTarget.length} selected jobs</span>?
                 This cannot be undone.
               </p>
-              <div className="max-h-44 overflow-y-auto bg-slate-900/60 rounded-xl p-3 space-y-1 mb-5">
+              <div className={`max-h-44 overflow-y-auto rounded-xl p-3 space-y-1 mb-5 ${isDark ? 'bg-slate-900/60' : 'bg-gray-50'}`}>
                 {bulkDeleteTarget.map(job => (
-                  <div key={job.id} className="flex items-center gap-2 text-xs py-1">
-                    <span className="text-slate-500 font-mono">{job.id.slice(0, 6)}</span>
-                    <span className="text-slate-300 truncate">{job.display_name || job.folder_name}</span>
-                    <span className="ml-auto shrink-0 text-slate-600">({job.status})</span>
+                  <div key={job.id} className={`flex items-center gap-2 text-xs py-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                    <span className={`font-mono ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{job.id.slice(0, 6)}</span>
+                    <span className="truncate">{job.display_name || job.folder_name}</span>
+                    <span className={`ml-auto shrink-0 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>({job.status})</span>
                   </div>
                 ))}
               </div>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setBulkDeleteTarget(null)} disabled={isBulkDeleting}
-                  className="px-4 py-2 text-sm text-slate-300 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg transition-colors">
+                  className={`px-4 py-2 text-sm rounded-lg transition-colors disabled:opacity-50 ${isDark
+                    ? 'text-slate-300 bg-slate-700 hover:bg-slate-600'
+                    : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                  }`}>
                   Cancel
                 </button>
                 <button onClick={handleConfirmBulkDelete} disabled={isBulkDeleting}
@@ -540,12 +597,14 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
   );
 }
 
-function LogLine({ log }: { log: JobLogEntry }) {
-  const colors = { info: 'text-slate-400', warning: 'text-amber-400', error: 'text-red-400', debug: 'text-slate-600' };
+function LogLine({ log, isDark }: { log: JobLogEntry; isDark: boolean }) {
+  const colors = isDark
+    ? { info: 'text-slate-400', warning: 'text-amber-400', error: 'text-red-400', debug: 'text-slate-600' }
+    : { info: 'text-gray-500', warning: 'text-amber-600', error: 'text-red-600', debug: 'text-gray-400' };
   return (
-    <div className={`text-xs font-mono ${colors[log.level] || 'text-slate-400'}`}>
-      <span className="text-slate-600">{new Date(log.timestamp).toLocaleTimeString()}</span>
-      {' '}<span className="uppercase text-[10px] font-bold opacity-60">[{log.level}]</span>{' '}{log.message}
+    <div className={`text-xs font-mono ${colors[log.level] || (isDark ? 'text-slate-400' : 'text-gray-500')}`}>
+      <span className={isDark ? 'text-slate-600' : 'text-gray-400'}>{new Date(log.timestamp).toLocaleTimeString()}</span>
+      {' '}<span className={`uppercase text-[10px] font-bold opacity-60`}>[{log.level}]</span>{' '}{log.message}
     </div>
   );
 }
