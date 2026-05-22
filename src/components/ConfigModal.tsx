@@ -9,6 +9,7 @@ export interface ConfigFormData {
   service_account_json_name: string;
   main_be_api_base_url: string;
   main_be_bearer_token: string;
+  main_be_user_id: string;
 }
 
 export interface ConfigModalProps {
@@ -22,8 +23,6 @@ export interface ConfigModalProps {
   savingConfigError: string;
   isInitialSetup?: boolean;
 }
-
-const FIXED_USER_ID = '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f';
 
 export function ConfigModal({
   isOpen,
@@ -86,15 +85,17 @@ export function ConfigModal({
         {/* Body */}
         <div className="px-6 py-5 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* User ID — fixed */}
+            {/* User ID — editable */}
             <div>
               <label className="block text-sm text-slate-400 mb-1">User ID (x-user-id)</label>
               <input
                 type="text"
-                value={FIXED_USER_ID}
-                readOnly
-                className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg
-                           text-slate-400 text-sm cursor-not-allowed font-mono"
+                value={configForm.main_be_user_id}
+                onChange={e => onFormChange({ main_be_user_id: e.target.value })}
+                placeholder="3b2fae40-e482-4ea1-af7a-96e35ecfbf5f"
+                className="w-full px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg
+                           text-slate-100 placeholder-slate-500 text-sm font-mono
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             {/* Main BE API URL */}
