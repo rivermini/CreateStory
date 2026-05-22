@@ -4,8 +4,6 @@ import {
   initDriveSyncConfig,
   checkUploadable,
   checkUpdatable,
-  updateChapterCount,
-  updateChapters,
   createJob,
   getJob,
   MAIN_BE_URL,
