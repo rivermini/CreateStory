@@ -4,9 +4,13 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 // ── Shared constants ──────────────────────────────────────────────────────────
-// These are the same values used in ConfigModal.tsx and DriveSyncPage.tsx.
-// Update VITE_MAIN_BE_URL in .env to change the API base URL everywhere.
-export const MAIN_BE_URL = import.meta.env.VITE_MAIN_BE_URL;
+export interface MainBeUrlResponse {
+  url: string | null;
+}
+
+export async function getMainBeUrl(): Promise<MainBeUrlResponse> {
+  return apiFetch<MainBeUrlResponse>('/api/drive-sync/config/url');
+}
 export const FIXED_JSON_PREFIX = 'credentials/';
 
 type FetchOptions = RequestInit & { timeout?: number };
@@ -675,18 +679,16 @@ export interface MainBeStory {
   maxChapter: number;
 }
 
-const MAIN_BE_TOKEN = import.meta.env.VITE_MAIN_BE_TOKEN ?? '';
-
-export async function getServerStories(): Promise<MainBeStory[]> {
+export async function getServerStories(baseUrl: string, token: string): Promise<MainBeStory[]> {
   const stories: MainBeStory[] = [];
   let page = 1;
   let totalPages = 1;
 
   while (page <= totalPages) {
-    const url = `${MAIN_BE_URL}/api/v1/story?page=${page}&limit=100`;
+    const url = `${baseUrl}/api/v1/story?page=${page}&limit=100`;
     const res = await fetch(url, {
       headers: {
-        'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
@@ -702,16 +704,16 @@ export async function getServerStories(): Promise<MainBeStory[]> {
   return stories;
 }
 
-export async function updateServerStoryMaxChapter(storyId: string, maxChapter: number): Promise<void> {
-  const url = `${MAIN_BE_URL}/api/v1/story/${storyId}`;
+export async function updateServerStoryMaxChapter(baseUrl: string, token: string, storyId: string, maxChapter: number): Promise<void> {
+  const url = `${baseUrl}/api/v1/story/${storyId}`;
   const userId = '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f';
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
-      'x-user-id': userId,
-      'Content-Type': 'application/json',
-    },
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'x-user-id': userId,
+        'Content-Type': 'application/json',
+      },
     body: JSON.stringify({ maxChapter }),
   });
   if (!res.ok) {
@@ -722,7 +724,16 @@ export async function updateServerStoryMaxChapter(storyId: string, maxChapter: n
 
 // ---------------------------------------------------------------------------
 // Main BE — Story Management (direct to main BE API)
+// Token is fetched from the local backend (set via Drive Sync Config Modal).
 // ---------------------------------------------------------------------------
+
+export interface MainBeTokenResponse {
+  token: string | null;
+}
+
+export async function getMainBeToken(): Promise<MainBeTokenResponse> {
+  return apiFetch<MainBeTokenResponse>('/api/drive-sync/config/token');
+}
 
 export interface MainBeStoryFull {
   id: string;
@@ -755,11 +766,11 @@ export interface StoryPageResponse {
   };
 }
 
-export async function getStoriesPage(page: number, limit = 20): Promise<StoryPageResponse> {
-  const url = `${MAIN_BE_URL}/api/v1/story?page=${page}&limit=${limit}`;
+export async function getStoriesPage(baseUrl: string, token: string, page: number, limit = 20): Promise<StoryPageResponse> {
+  const url = `${baseUrl}/api/v1/story?page=${page}&limit=${limit}`;
   const res = await fetch(url, {
     headers: {
-      'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
   });
@@ -770,12 +781,12 @@ export async function getStoriesPage(page: number, limit = 20): Promise<StoryPag
   return res.json() as Promise<StoryPageResponse>;
 }
 
-export async function deleteStory(storyId: string): Promise<void> {
-  const url = `${MAIN_BE_URL}/api/v1/story/${storyId}`;
+export async function deleteStory(baseUrl: string, token: string, storyId: string): Promise<void> {
+  const url = `${baseUrl}/api/v1/story/${storyId}`;
   const res = await fetch(url, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${MAIN_BE_TOKEN}`,
+      'Authorization': `Bearer ${token}`,
       'x-user-id': '3b2fae40-e482-4ea1-af7a-96e35ecfbf5f',
       'Content-Type': 'application/json',
     },
@@ -786,8 +797,8 @@ export async function deleteStory(storyId: string): Promise<void> {
   }
 }
 
-export async function deleteStories(storyIds: string[]): Promise<{ deleted: number; failed: number }> {
-  const results = await Promise.allSettled(storyIds.map(id => deleteStory(id)));
+export async function deleteStories(baseUrl: string, token: string, storyIds: string[]): Promise<{ deleted: number; failed: number }> {
+  const results = await Promise.allSettled(storyIds.map(id => deleteStory(baseUrl, token, id)));
   const failed = results.filter(r => r.status === 'rejected').length;
   return { deleted: results.length - failed, failed };
 }

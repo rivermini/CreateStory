@@ -6,7 +6,6 @@ import {
   checkUpdatable,
   createJob,
   getJob,
-  MAIN_BE_URL,
   FIXED_JSON_PREFIX,
   type DriveSyncConfig,
   type DriveFolderEntry,
@@ -39,6 +38,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [configForm, setConfigForm] = useState<ConfigFormData>({
     folder_id: '',
     service_account_json_name: 'nova-crawler-drive-sync-445ff578305c.json',
+    main_be_api_base_url: '',
     main_be_bearer_token: '',
   });
   const [savingConfig, setSavingConfig] = useState(false);
@@ -80,6 +80,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
             ...f,
             folder_id: cfg.folder_id,
             service_account_json_name: jsonName,
+            main_be_api_base_url: cfg.main_be_api_base_url,
           }));
           setShowConfigModal(false);
         } else {
@@ -108,7 +109,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       const cfg = await initDriveSyncConfig({
         folder_id: configForm.folder_id.trim(),
         service_account_json_path: FIXED_JSON_PREFIX + configForm.service_account_json_name.trim(),
-        main_be_api_base_url: MAIN_BE_URL,
+        main_be_api_base_url: configForm.main_be_api_base_url.trim(),
         main_be_user_id: FIXED_USER_ID,
         main_be_bearer_token: configForm.main_be_bearer_token.trim() || undefined,
       });
@@ -369,7 +370,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
                 config={config}
                 activeTab={activeSubTab}
                 onTabChange={setActiveSubTab}
-                onOpenSettings={() => setShowConfigModal(true)}
                 uploadableData={uploadableData}
                 uploadableLoading={uploadableLoading}
                 uploadableError={uploadableError}

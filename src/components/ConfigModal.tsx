@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react';
 import {
   type DriveSyncConfig,
-  MAIN_BE_URL,
   FIXED_JSON_PREFIX,
 } from '../api/client';
 
 export interface ConfigFormData {
   folder_id: string;
   service_account_json_name: string;
+  main_be_api_base_url: string;
   main_be_bearer_token: string;
 }
 
@@ -97,15 +97,17 @@ export function ConfigModal({
                            text-slate-400 text-sm cursor-not-allowed font-mono"
               />
             </div>
-            {/* Main BE API URL — fixed */}
+            {/* Main BE API URL */}
             <div>
               <label className="block text-sm text-slate-400 mb-1">Main BE API URL</label>
               <input
                 type="text"
-                value={MAIN_BE_URL}
-                readOnly
-                className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg
-                           text-slate-400 text-sm cursor-not-allowed"
+                value={configForm.main_be_api_base_url}
+                onChange={e => onFormChange({ main_be_api_base_url: e.target.value })}
+                placeholder="https://cnlhzl7bul.execute-api.ap-southeast-1.amazonaws.com"
+                className="w-full px-3 py-2.5 bg-slate-700 border border-slate-600 rounded-lg
+                           text-slate-100 placeholder-slate-500 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
             {/* Drive Folder ID */}

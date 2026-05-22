@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getStoriesPage, deleteStories, type MainBeStoryFull } from '../api/client';
+import { getMainBeUrl, getMainBeToken, getStoriesPage, deleteStories, type MainBeStoryFull } from '../api/client';
 import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
 
@@ -26,12 +26,34 @@ export function StoryMgmtPage({ themeMode, onThemeChange }: StoryMgmtPageProps) 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{ deleted: number; failed: number } | null>(null);
+  const [mainBeUrl, setMainBeUrl] = useState<string | null>(null);
+  const [mainBeToken, setMainBeToken] = useState<string | null>(null);
+
+  // Load Main BE config (URL + token) from local backend (set via Drive Sync Config Modal)
+  const loadConfig = useCallback(async () => {
+    try {
+      const [urlResp, tokenResp] = await Promise.all([getMainBeUrl(), getMainBeToken()]);
+      setMainBeUrl(urlResp.url);
+      setMainBeToken(tokenResp.token);
+    } catch {
+      // Non-fatal — config may not be set yet
+    }
+  }, []);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
   const loadPage = useCallback(async (pageNum: number) => {
+    if (!mainBeUrl || !mainBeToken) {
+      setError('Main BE API URL or token not configured. Please set them in Drive Sync Settings.');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const data = await getStoriesPage(pageNum, PAGE_SIZE);
+      const data = await getStoriesPage(mainBeUrl, mainBeToken, pageNum, PAGE_SIZE);
       const total = data.data.total;
       const serverPages = data.data.totalPages;
       const computed = serverPages > 0 ? serverPages : Math.ceil(total / PAGE_SIZE);
@@ -44,7 +66,7 @@ export function StoryMgmtPage({ themeMode, onThemeChange }: StoryMgmtPageProps) 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mainBeUrl, mainBeToken]);
 
   useEffect(() => {
     loadPage(1);
@@ -94,16 +116,16 @@ export function StoryMgmtPage({ themeMode, onThemeChange }: StoryMgmtPageProps) 
   };
 
   const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !mainBeUrl || !mainBeToken) return;
     setIsDeleting(true);
     setDeleteResult(null);
     try {
       if (deleteTarget.kind === 'single') {
-        await deleteStories([deleteTarget.story.id]);
+        await deleteStories(mainBeUrl, mainBeToken, [deleteTarget.story.id]);
         setStories(prev => prev.filter(s => s.id !== deleteTarget.story.id));
       } else {
         const ids = deleteTarget.stories.map(s => s.id);
-        const result = await deleteStories(ids);
+        const result = await deleteStories(mainBeUrl, mainBeToken, ids);
         setDeleteResult(result);
         setStories(prev => prev.filter(s => !ids.includes(s.id)));
         setSelected(new Set());
