@@ -26,6 +26,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+    { to: '/', label: 'New Crawl' },
     { to: '/batch', label: 'Batch' },
     { to: '/results/all', label: 'Results' },
     { to: '/drive-sync', label: 'Drive Sync' },
