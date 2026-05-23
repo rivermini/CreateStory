@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
 import { ThemeToggle, type ThemeMode } from './ThemeToggle';
 
@@ -34,7 +34,6 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function Header({ themeMode, onThemeChange, rightActions, title, subtitle }: HeaderProps) {
-    const navigate = useNavigate();
     const location = useLocation();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -43,13 +42,11 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
     const makeBtn = (item: NavItem) => {
         const active = navActive(location.pathname, item.to);
         return (
-            <button
+            <Link
                 key={item.to}
-                onClick={() => {
-                    navigate(item.to);
-                    setMobileMenuOpen(false);
-                }}
-                className={`w-full sm:w-auto px-3 py-2 text-sm rounded-lg transition-colors text-left sm:text-center ${
+                to={item.to}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`w-full sm:w-auto px-3 py-2 text-sm rounded-lg transition-colors text-left sm:text-center text-decoration-none ${
                     active
                         ? 'bg-indigo-600 text-white'
                         : isDark
@@ -61,7 +58,7 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
                     {item.icon}
                     {item.label}
                 </span>
-            </button>
+            </Link>
         );
     };
 

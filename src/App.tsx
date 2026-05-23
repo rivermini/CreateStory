@@ -66,8 +66,6 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
           <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/results/all" element={<ResultsAllPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/bedread" element={<Navigate to="/" replace />} />
-          <Route path="/bedread/jobs" element={<Navigate to="/" replace />} />
           <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/story-mgmt" element={<StoryMgmtPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
