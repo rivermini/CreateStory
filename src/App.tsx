@@ -11,7 +11,7 @@ const DriveSyncPage = lazy(() => import('./pages/DriveSyncPage').then(m => ({ de
 const DriveSyncHistoryPage = lazy(() => import('./pages/DriveSyncHistoryPage').then(m => ({ default: m.DriveSyncHistoryPage })));
 const StoryMgmtPage = lazy(() => import('./pages/StoryMgmtPage').then(m => ({ default: m.StoryMgmtPage })));
 
-type ThemeMode = 'system' | 'light' | 'dark';
+type ThemeMode = 'light' | 'dark';
 
 const THEME_COOKIE = 'novel_crawler_theme';
 
@@ -19,7 +19,7 @@ function readThemeCookie(): ThemeMode | null {
   const match = document.cookie.match(new RegExp(`(?:^|; )${THEME_COOKIE}=([^;]*)`));
   if (!match) return null;
   const value = decodeURIComponent(match[1]);
-  return value === 'light' || value === 'dark' || value === 'system' ? value : null;
+  return value === 'light' || value === 'dark' ? value : null;
 }
 
 function writeThemeCookie(mode: ThemeMode) {
@@ -27,34 +27,14 @@ function writeThemeCookie(mode: ThemeMode) {
   document.cookie = `${THEME_COOKIE}=${encodeURIComponent(mode)}; path=/; max-age=${maxAge}; samesite=lax`;
 }
 
-function getSystemTheme(): 'light' | 'dark' {
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-}
-
 function App() {
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeCookie() ?? 'system');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeCookie() ?? 'light');
 
   useEffect(() => {
     const root = document.documentElement;
-    const resolved = themeMode === 'system' ? getSystemTheme() : themeMode;
-    root.dataset.theme = resolved;
+    root.dataset.theme = themeMode;
     root.dataset.themeMode = themeMode;
-    root.style.colorScheme = resolved;
-  }, [themeMode]);
-
-  useEffect(() => {
-    if (themeMode !== 'system') return;
-
-    const media = window.matchMedia('(prefers-color-scheme: light)');
-    const apply = () => {
-      const root = document.documentElement;
-      root.dataset.theme = media.matches ? 'light' : 'dark';
-      root.style.colorScheme = media.matches ? 'light' : 'dark';
-    };
-
-    media.addEventListener('change', apply);
-    apply();
-    return () => media.removeEventListener('change', apply);
+    root.style.colorScheme = themeMode;
   }, [themeMode]);
 
   const handleThemeChange = useCallback((mode: ThemeMode) => {
@@ -86,8 +66,6 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
           <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/results/all" element={<ResultsAllPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/bedread" element={<Navigate to="/" replace />} />
-          <Route path="/bedread/jobs" element={<Navigate to="/" replace />} />
           <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
           <Route path="/story-mgmt" element={<StoryMgmtPage themeMode={themeMode} onThemeChange={onThemeChange} />} />

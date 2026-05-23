@@ -18,7 +18,7 @@ Browser (this app)
     │
     ├── HTTP/SSE ──► FastAPI backend (port 8000)
     │                   │
-    │                   ├── Scrapy subprocess ──► freewebnovel.com / wattpad.com
+    │                   ├── Scrapy subprocess ──► wattpad.com
     │                   ├── Kokoro ONNX ──► WAV/MP3 audio
     │                   └── External API ──► BedRead story library
     │
@@ -128,12 +128,12 @@ All HTTP calls go through `src/api/client.ts`. Key functions:
 ```typescript
 // Start a crawl
 const { crawl_id } = await startCrawl({
-  spider_name: "freewebnovel",
-  novel: "https://freewebnovel.com/novel/martial-peak",
+  spider_name: "wattpad",
+  novel: "https://www.wattpad.com/1284690197-slug",
   limit: 10,
   output_format: "jsonl",
   chapter_range: "1-10",
-  novel_name: "Martial Peak",
+  novel_name: "Story Title",
   completed: true,
   combine_chapters: true,
 });

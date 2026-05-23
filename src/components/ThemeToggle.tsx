@@ -1,19 +1,10 @@
 import { useState } from 'react';
 
-export type ThemeMode = 'system' | 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark';
 
-const THEMES: ThemeMode[] = ['system', 'light', 'dark'];
+const THEMES: ThemeMode[] = ['light', 'dark'];
 
 const ThemeIcon = ({ mode, className }: { mode: ThemeMode; className?: string }) => {
-    if (mode === 'system') {
-        return (
-            <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <rect x={2} y={3} width={20} height={14} rx={2} ry={2} />
-                <line x1={8} y1={21} x2={16} y2={21} />
-                <line x1={12} y1={17} x2={12} y2={21} />
-            </svg>
-        );
-    }
     if (mode === 'light') {
         return (
             <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -51,22 +42,30 @@ export function ThemeToggle({ mode, onChange }: { mode: ThemeMode; onChange: (mo
         }, 150);
     };
 
+    const isDark = mode === 'dark';
+
     return (
         <button
             type="button"
             onClick={cycleTheme}
-            className="relative w-9 h-9 flex items-center justify-center rounded-full border border-slate-700 bg-slate-900/90 shadow-lg backdrop-blur-sm hover:bg-slate-800/90 hover:border-slate-600 transition-all duration-200 group overflow-hidden"
+            className={`relative w-9 h-9 flex items-center justify-center rounded-full border shadow-lg backdrop-blur-sm transition-all duration-200 group overflow-hidden ${
+                isDark
+                    ? 'border-slate-700 bg-slate-900/90 hover:bg-slate-800/90 hover:border-slate-600'
+                    : 'border-gray-300 bg-white/90 hover:bg-gray-100/90 hover:border-gray-400'
+            }`}
             title={`Theme: ${mode}`}
         >
             <div
-                className={`relative w-5 h-5 text-slate-400 transition-all duration-200 ${
+                className={`relative w-5 h-5 transition-all duration-200 ${
                     animating ? 'scale-0 opacity-0 rotate-90' : 'scale-100 opacity-100 rotate-0'
-                } group-hover:text-slate-200`}
+                } ${isDark ? 'text-slate-400 group-hover:text-slate-200' : 'text-gray-500 group-hover:text-gray-800'}`}
             >
                 <ThemeIcon mode={displayMode} className="absolute inset-0 w-full h-full" />
             </div>
 
-            <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+            <div className={`absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ${
+                isDark ? 'bg-gradient-to-r from-transparent via-white/5 to-transparent' : 'bg-gradient-to-r from-transparent via-black/3 to-transparent'
+            }`} />
         </button>
     );
 }

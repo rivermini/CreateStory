@@ -4,16 +4,24 @@ import type { LogEntry } from '../hooks/useCrawlStream';
 export interface CrawlLogProps {
   lines: LogEntry[];
   maxLines?: number;
+  isDark?: boolean;
 }
 
-const levelStyles: Record<string, string> = {
-  error: 'text-red-400',
+const levelStylesDark: Record<string, string> = {
+  error:   'text-red-400',
   warning: 'text-amber-400',
-  info: 'text-slate-300',
-  debug: 'text-slate-500',
+  info:    'text-slate-300',
+  debug:   'text-slate-500',
 };
 
-export function CrawlLog({ lines, maxLines = 200 }: CrawlLogProps) {
+const levelStylesLight: Record<string, string> = {
+  error:   'text-red-600',
+  warning: 'text-amber-600',
+  info:    'text-gray-700',
+  debug:   'text-gray-400',
+};
+
+export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,23 +29,27 @@ export function CrawlLog({ lines, maxLines = 200 }: CrawlLogProps) {
   }, [lines]);
 
   const displayLines = lines.slice(-maxLines);
+  const levelStyles = isDark ? levelStylesDark : levelStylesLight;
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-300">Crawl Log</h3>
-        <span className="text-xs text-slate-500">{displayLines.length} lines</span>
+        <h3 className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Crawl Log</h3>
+        <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{displayLines.length} lines</span>
       </div>
       <div
-        className="bg-slate-950 border border-slate-700 rounded-lg p-3 overflow-y-auto"
+        className={`border rounded-lg p-3 overflow-y-auto ${isDark
+          ? 'bg-slate-950 border-slate-700'
+          : 'bg-gray-100 border-gray-200'
+        }`}
         style={{ maxHeight: 'min(400px, 40vh)' }}
       >
         {displayLines.length === 0 ? (
-          <p className="text-slate-500 text-sm italic">Waiting for output...</p>
+          <p className={`text-sm italic ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Waiting for output...</p>
         ) : (
           displayLines.map((entry, idx) => (
-            <div key={idx} className={`font-mono text-xs leading-relaxed ${levelStyles[entry.level] ?? 'text-slate-300'}`}>
-              <span className="text-slate-600">[{entry.timestamp}]</span>{' '}
+            <div key={idx} className={`font-mono text-xs leading-relaxed ${levelStyles[entry.level] ?? levelStyles.info}`}>
+              <span className={isDark ? 'text-slate-600' : 'text-gray-400'}>[{entry.timestamp}]</span>{' '}
               <span>{entry.message}</span>
             </div>
           ))
