@@ -30,18 +30,9 @@ const NAV_ITEMS: NavItem[] = [
     { to: '/', label: 'New Crawl' },
     { to: '/batch', label: 'Batch' },
     { to: '/results/all', label: 'Results' },
-    {
-        to: '/drive-sync',
-        label: 'Drive Sync',
-    },
-    {
-        to: '/drive-sync/history',
-        label: 'Sync History',
-    },
-    {
-        to: '/story-mgmt',
-        label: 'Story Mgmt',
-    },
+    { to: '/drive-sync', label: 'Drive Sync' },
+    { to: '/drive-sync/history', label: 'Sync History' },
+    { to: '/story-mgmt', label: 'Story Mgmt' },
 ];
 
 export function Header({ themeMode, onThemeChange, rightActions, title, subtitle }: HeaderProps) {
