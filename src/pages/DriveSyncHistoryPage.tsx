@@ -146,9 +146,10 @@ export function DriveSyncHistoryPage({ themeMode, onThemeChange }: DriveSyncHist
     try { return new Date(iso).toLocaleString(); } catch { return iso; }
   };
 
-  const formatDuration = (started?: string | null, _finished?: string | null): string => {
+  const formatDuration = (started?: string | null, finished?: string | null): string => {
     if (!started) return '—';
-    const secs = Math.floor((Date.now() - new Date(started).getTime()) / 1000);
+    const end = finished ? new Date(finished).getTime() : Date.now();
+    const secs = Math.floor((end - new Date(started).getTime()) / 1000);
     if (secs < 0) return '—';
     if (secs < 60) return `${secs}s`;
     return `${Math.floor(secs / 60)}m ${secs % 60}s`;

@@ -91,7 +91,7 @@ function UploadableTab({
             className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${
               loading
                 ? isDark
-                  ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                  ? 'bg-indigo-900 text-gray-700 cursor-not-allowed'
                   : 'bg-indigo-300 text-indigo-800 cursor-not-allowed'
                 : 'bg-indigo-600 hover:bg-indigo-500 text-white'
             }`}
@@ -355,7 +355,7 @@ function UpdatableTab({
             className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${
               loading
                 ? isDark
-                  ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                  ? 'bg-indigo-900 text-gray-700 cursor-not-allowed'
                   : 'bg-indigo-300 text-indigo-800 cursor-not-allowed'
                 : 'bg-indigo-600 hover:bg-indigo-500 text-white'
             }`}
