@@ -37,7 +37,7 @@ export function UrlInput({ onSlugDetected, initialUrl = '' }: UrlInputProps) {
           value={url}
           onChange={handleChange}
           onBlur={handleBlur}
-          placeholder="https://freewebnovel.com/novel/martial-peak"
+          placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
           className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg
                      text-slate-100 placeholder-slate-500
                      focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent

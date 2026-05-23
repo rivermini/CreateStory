@@ -116,7 +116,7 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
                   <h2 className={`text-base font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>1. Paste a Novel URL</h2>
-                  <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Supported: freewebnovel.com, wattpad.com</p>
+                  <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Supported: wattpad.com</p>
                 </div>
                 <button
                   onClick={() => navigate('/batch')}
@@ -142,7 +142,7 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                     type="url"
                     value={inputUrl}
                     onChange={(e) => handleUrlChange(e.target.value)}
-                    placeholder="https://freewebnovel.com/novel/martial-peak"
+                    placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
                     className={`w-full px-4 py-3 border rounded-lg
                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors
                       ${isDark
@@ -390,10 +390,6 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
             }`}>
               <h2 className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Supported Sites</h2>
               <div className={`space-y-2 text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
-                  <span className={`font-medium min-w-28 sm:min-w-32 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>freewebnovel.com</span>
-                  <code className={`text-xs break-all ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>https://freewebnovel.com/novel/martial-peak</code>
-                </div>
                 <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
                   <span className={`font-medium min-w-28 sm:min-w-32 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>wattpad.com</span>
                   <code className={`text-xs break-all ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>https://www.wattpad.com/1284690197-...-chapter-one</code>

@@ -212,7 +212,7 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
                       onChange={e => handleUrlChange(entry.id, e.target.value)}
                       onBlur={() => handleDetectEntry(entry)}
                       onKeyDown={e => handleUrlKeyDown(e, entry)}
-                      placeholder="https://freewebnovel.com/novel/martial-peak"
+                      placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
                       className={`w-full px-4 py-2.5 border rounded-lg text-sm transition-colors
                         focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                         ${isDark
