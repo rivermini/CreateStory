@@ -44,8 +44,8 @@ export function NovelInfoPanel({
 
   if (error) {
     return (
-      <div className={`rounded-xl p-5 space-y-3 border ${isDark
-        ? 'bg-slate-800 border-slate-700'
+      <div className={`rounded-2xl p-5 space-y-3 border ${isDark
+        ? 'bg-slate-900/60 border-slate-800/60'
         : 'bg-white border-gray-200'
       }`}>
         <div className={`flex items-center gap-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
@@ -68,13 +68,13 @@ export function NovelInfoPanel({
   const panelTitle = novelMetadata?.title || storyTitle || 'Novel Info';
 
   return (
-    <div className={`rounded-xl overflow-hidden flex flex-col max-h-[calc(100vh-6rem)] lg:max-h-[calc(100vh-5rem)] border ${isDark
-      ? 'bg-slate-800 border-slate-700'
+    <div className={`rounded-2xl overflow-hidden flex flex-col max-h-[calc(100vh-6rem)] lg:max-h-[calc(100vh-5rem)] border ${isDark
+      ? 'bg-slate-900/60 border-slate-800/60'
       : 'bg-white border-gray-200'
     }`}>
       {/* DEBUG */}
       {import.meta.env.DEV && novelMetadata && (
-        <details className={`border-b ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+        <details className={`border-b ${isDark ? 'bg-slate-900/80 border-slate-800/60' : 'bg-gray-50 border-gray-200'}`}>
           <summary className={`px-4 py-1.5 text-[10px] cursor-pointer select-none hover:underline ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
             [DEBUG] Raw API metadata
           </summary>
@@ -85,7 +85,7 @@ export function NovelInfoPanel({
       )}
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <div className={`px-4 sm:px-4 py-3 space-y-3 flex-shrink-0 ${isDark ? 'border-slate-700' : 'border-gray-200'} border-b`}>
+      <div className={`px-4 sm:px-5 py-4 space-y-3 flex-shrink-0 ${isDark ? 'border-slate-800/60' : 'border-gray-200'} border-b`}>
 
         {/* Title row + chapter badge */}
         <div className="flex items-start gap-3">
@@ -120,11 +120,11 @@ export function NovelInfoPanel({
           {/* Chapter count badge */}
           {displayedTotal > 0 && (
             <div className="flex-shrink-0 text-right">
-              <div className={`px-2.5 py-1 rounded-lg border ${isDark
+              <div className={`px-3 py-1.5 rounded-xl border ${isDark
                 ? 'bg-indigo-900/30 border-indigo-800/40'
                 : 'bg-indigo-50 border-indigo-200'
               }`}>
-                <p className={`text-xs font-semibold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                <p className={`text-sm font-bold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
                   {showPartial
                     ? `${chapterCount} / ${totalChapterCount?.toLocaleString()}`
                     : displayedTotal.toLocaleString()}
@@ -137,7 +137,7 @@ export function NovelInfoPanel({
 
         {/* Stats row */}
         {(novelMetadata?.views != null || novelMetadata?.stars != null || novelMetadata?.comment_count != null || displayedTotal > 0) && (
-          <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-xs ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+          <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
             {novelMetadata?.views != null && (
               <span className="flex items-center gap-1">
                 <EyeIcon isDark={isDark} />
@@ -196,16 +196,16 @@ export function NovelInfoPanel({
             {novelMetadata.tags.slice(0, 12).map(tag => (
               <span
                 key={tag}
-                className={`px-2 py-0.5 text-xs rounded ${isDark
-                  ? 'bg-slate-700 text-slate-300'
-                  : 'bg-gray-200 text-gray-700'
+                className={`px-2 py-0.5 text-xs rounded-lg ${isDark
+                  ? 'bg-slate-800/60 text-slate-300 border border-slate-700/50'
+                  : 'bg-gray-100 text-gray-700'
                 }`}
               >
                 {tag}
               </span>
             ))}
             {novelMetadata.tags.length > 12 && (
-              <span className={`px-2 py-0.5 text-xs rounded ${isDark ? 'bg-slate-700 text-slate-500' : 'bg-gray-200 text-gray-400'}`}>
+              <span className={`px-2 py-0.5 text-xs rounded-lg ${isDark ? 'bg-slate-800/60 text-slate-500 border border-slate-700/50' : 'bg-gray-100 text-gray-400'}`}>
                 +{novelMetadata.tags.length - 12} more
               </span>
             )}
@@ -214,11 +214,11 @@ export function NovelInfoPanel({
 
         {/* Total chapters banner */}
         {totalChapterCount != null && (
-          <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border ${isDark
-            ? 'bg-indigo-900/30 border-indigo-800/40'
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isDark
+            ? 'bg-indigo-900/20 border-indigo-800/30'
             : 'bg-indigo-50 border-indigo-200'
           }`}>
-            <svg className={`w-3.5 h-3.5 flex-shrink-0 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
             <span className={`text-xs ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
@@ -233,19 +233,19 @@ export function NovelInfoPanel({
 
       {/* ── Wattpad Original block ─────────────────────────────── */}
       {isPaywalled && (
-        <div className={`px-4 py-3 border-b flex-shrink-0 ${isDark
-          ? 'border-slate-700 bg-amber-950/30'
-          : 'border-gray-200 bg-amber-50'
+        <div className={`px-4 py-3 flex-shrink-0 ${isDark
+          ? 'border-slate-800/60 bg-amber-950/20 border-b'
+          : 'border-gray-200 bg-amber-50 border-b'
         }`}>
-          <div className={`rounded-lg p-3 border ${isDark
-            ? 'bg-amber-900/40 border-amber-700'
+          <div className={`rounded-xl p-4 border ${isDark
+            ? 'bg-amber-900/30 border-amber-800/40'
             : 'bg-amber-100 border-amber-200'
           }`}>
             <div className={`flex items-center gap-2 font-semibold text-sm ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
               <LockIcon />
               Wattpad Original
             </div>
-            <p className={`text-xs leading-relaxed mt-1 ${isDark ? 'text-amber-200/70' : 'text-amber-800/70'}`}>
+            <p className={`text-xs leading-relaxed mt-2 ${isDark ? 'text-amber-200/70' : 'text-amber-800/70'}`}>
               This story contains chapters locked behind Wattpad coins.
               Crawling is disabled to respect author monetization and Wattpad's terms of service.
             </p>
@@ -268,13 +268,13 @@ export function NovelInfoPanel({
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className={`sticky top-0 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'} border-b`}>
+            <thead className={`sticky top-0 ${isDark ? 'bg-slate-900/80 border-slate-800/60' : 'bg-white border-gray-200'} border-b`}>
               <tr>
-                <th className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider w-12 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>#</th>
-                <th className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Chapter Title</th>
+                <th className={`px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider w-12 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>#</th>
+                <th className={`px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Chapter Title</th>
               </tr>
             </thead>
-            <tbody className={`divide-y ${isDark ? 'divide-slate-700/50' : 'divide-gray-200'}`}>
+            <tbody className={`divide-y ${isDark ? 'divide-slate-800/60' : 'divide-gray-200'}`}>
               {chapters.map(chapter => (
                 <ChapterRow key={chapter.url} chapter={chapter} isDark={isDark} />
               ))}
@@ -284,7 +284,7 @@ export function NovelInfoPanel({
       </div>
 
       {/* ── Footer CTA ─────────────────────────────────────────── */}
-      <div className={`px-4 sm:px-4 py-3 flex-shrink-0 space-y-2 ${isDark ? 'border-slate-700' : 'border-gray-200'} border-t`}>
+      <div className={`px-4 sm:px-5 py-4 flex-shrink-0 space-y-3 ${isDark ? 'border-slate-800/60' : 'border-gray-200'} border-t`}>
         {estimatedMax > 0 && (
           <p className={`text-xs text-center ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
             Range: 1 &ndash; {estimatedMax.toLocaleString()}
@@ -295,25 +295,25 @@ export function NovelInfoPanel({
             Crawling unavailable for Wattpad Originals
           </p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {/* Format row */}
             <div className="flex items-center gap-2 px-1">
               <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Format:</span>
-              <span className="px-2 py-0.5 text-xs rounded bg-indigo-600 text-white">TXT</span>
+              <span className="px-2.5 py-0.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">TXT</span>
             </div>
             <button
               onClick={() => {
                 onCrawlNovel(estimatedMax > 0 ? estimatedMax : totalChapterCount ?? chapterCount);
               }}
               disabled={estimatedMax === 0 && totalChapterCount == null}
-              className={`w-full py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 ${estimatedMax === 0 && totalChapterCount == null
+              className={`w-full py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 font-semibold shadow-lg ${estimatedMax === 0 && totalChapterCount == null
                 ? isDark
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
+                  : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
                 : isDark
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                } text-sm font-semibold`}
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
+                } text-sm`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -333,7 +333,7 @@ function CoverImage({ url, title, isDark }: { url?: string; title: string; isDar
   const [failed, setFailed] = useState(false);
   if (!url || failed) {
     return (
-      <div className={`w-16 h-20 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
+      <div className={`w-16 h-20 rounded-xl flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-slate-800/60 border border-slate-700/50' : 'bg-gray-100'}`}>
         <span className="text-2xl">&#128214;</span>
       </div>
     );
@@ -344,7 +344,7 @@ function CoverImage({ url, title, isDark }: { url?: string; title: string; isDar
       alt={`Cover for ${title}`}
       loading="lazy"
       onError={() => setFailed(true)}
-      className="w-16 h-20 rounded-lg object-cover flex-shrink-0"
+      className="w-16 h-20 rounded-xl object-cover flex-shrink-0 border border-transparent"
     />
   );
 }
@@ -370,11 +370,11 @@ function DescriptionBlock({ text, expanded, onToggle, isDark }: { text: string; 
 
 function ChapterRow({ chapter, isDark }: { chapter: ChapterEntry; isDark: boolean }) {
   return (
-    <tr className={`transition-colors ${isDark ? 'hover:bg-slate-700/40' : 'hover:bg-gray-50'}`}>
-      <td className={`px-3 py-2 text-xs font-mono whitespace-nowrap ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+    <tr className={`transition-colors ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-gray-50'}`}>
+      <td className={`px-4 py-2.5 text-xs font-mono whitespace-nowrap ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
         {chapter.chapter_number}
       </td>
-      <td className={`px-3 py-2 text-xs leading-relaxed ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+      <td className={`px-4 py-2.5 text-xs leading-relaxed ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
         <span className="block truncate" title={chapter.title}>
           {chapter.title || <em className={`not-italic ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Untitled</em>}
         </span>
@@ -385,8 +385,8 @@ function ChapterRow({ chapter, isDark }: { chapter: ChapterEntry; isDark: boolea
 
 function BadgeCompleted({ isDark }: { isDark: boolean }) {
   return (
-    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${isDark
-      ? 'bg-emerald-900/60 text-emerald-300 border-emerald-700'
+    <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border ${isDark
+      ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/40'
       : 'bg-emerald-100 text-emerald-700 border-emerald-200'
     }`}>
       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -399,8 +399,8 @@ function BadgeCompleted({ isDark }: { isDark: boolean }) {
 
 function BadgeOngoing({ isDark }: { isDark: boolean }) {
   return (
-    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${isDark
-      ? 'bg-amber-900/60 text-amber-300 border-amber-700'
+    <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border ${isDark
+      ? 'bg-amber-900/30 text-amber-400 border-amber-800/40'
       : 'bg-amber-100 text-amber-700 border-amber-200'
     }`}>
       Ongoing
@@ -410,8 +410,8 @@ function BadgeOngoing({ isDark }: { isDark: boolean }) {
 
 function BadgeMature({ isDark }: { isDark: boolean }) {
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${isDark
-      ? 'bg-red-900/60 text-red-300 border-red-700'
+    <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${isDark
+      ? 'bg-red-900/30 text-red-400 border-red-800/40'
       : 'bg-red-100 text-red-700 border-red-200'
     }`}>
       18+
@@ -475,16 +475,21 @@ function InfoIcon() {
 function NovelInfoPanelSkeleton({ isDetecting, isDark }: { isDetecting: boolean; isDark: boolean }) {
   const shimmer = isDark ? 'bg-slate-700' : 'bg-gray-200';
   return (
-    <div className={`rounded-xl overflow-hidden border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-      <div className={`px-4 py-3 space-y-2 border-b ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
-        <div className={`h-4 ${shimmer} rounded w-3/4 animate-pulse`} />
-        <div className={`h-3 ${shimmer} rounded w-1/4 animate-pulse`} />
+    <div className={`rounded-2xl overflow-hidden border ${isDark ? 'bg-slate-900/60 border-slate-800/60' : 'bg-white border-gray-200'}`}>
+      <div className={`px-4 py-4 space-y-3 border-b ${isDark ? 'border-slate-800/60' : 'border-gray-200'}`}>
+        <div className="flex items-start gap-3">
+          <div className={`w-16 h-20 rounded-xl ${shimmer} animate-pulse`} />
+          <div className="flex-1 space-y-2 pt-1">
+            <div className={`h-4 ${shimmer} rounded w-3/4 animate-pulse`} />
+            <div className={`h-3 ${shimmer} rounded w-1/3 animate-pulse`} />
+          </div>
+        </div>
       </div>
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 py-5 space-y-4">
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-center">
-            <div className="w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
-              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
             </div>
@@ -496,8 +501,8 @@ function NovelInfoPanelSkeleton({ isDetecting, isDark }: { isDetecting: boolean;
         </div>
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-center">
-            <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
-              <svg className="animate-spin w-3.5 h-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
+              <svg className="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -513,7 +518,7 @@ function NovelInfoPanelSkeleton({ isDetecting, isDark }: { isDetecting: boolean;
           </div>
         </div>
       </div>
-      <div className="px-4 pb-4 space-y-2">
+      <div className="px-4 pb-5 space-y-2">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 animate-pulse">
             <div className={`w-8 h-3 ${shimmer} rounded flex-shrink-0`} />

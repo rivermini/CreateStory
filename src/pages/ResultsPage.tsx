@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getCrawlResult, getCombinedResult, getDownloadUrl, getDownloadCombinedUrl, getDownloadAllUrl, type CrawlSessionSummary } from '../api/client';
 import { FilePreview } from '../components/FilePreview';
-import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
 
 interface ResultsPageProps {
@@ -10,7 +9,7 @@ interface ResultsPageProps {
   onThemeChange: (mode: ThemeMode) => void;
 }
 
-export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
+export function ResultsPage({ themeMode }: ResultsPageProps) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -21,7 +20,6 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
   const [result, setResult] = useState<CrawlSessionSummary | null>(null);
   const [combinedFilename, setCombinedFilename] = useState('');
   const [files, setFiles] = useState<{ filename: string; size_bytes: number; chapter_number: number }[]>([]);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
 
   const fetchResult = useCallback(() => {
     if (!crawlId) return;
@@ -50,6 +48,7 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
           novel_metadata: individualResult.novel_metadata || undefined,
           combined_file: '',
           combined_txt_file: '',
+          source_url: (individualResult as { source_url?: string }).source_url || '',
         });
 
         const allFiles = individualResult.output_files
@@ -72,7 +71,6 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
       setError(e instanceof Error ? e.message : 'Failed to load crawl results.');
     }).finally(() => {
       setIsLoading(false);
-      setLastRefresh(new Date());
     });
   }, [crawlId]);
 
@@ -95,8 +93,8 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
 
   if (isLoading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
-        <div className={`flex items-center gap-3 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
+        <div className="flex items-center gap-3">
           <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -109,7 +107,7 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
 
   if (error || !result) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
         <div className="text-center space-y-4">
           <div className={`flex items-center justify-center gap-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,7 +117,7 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
           </div>
           <button
             onClick={() => navigate('/')}
-            className="px-4 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors text-sm"
+            className="px-4 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors text-sm font-medium shadow-lg shadow-indigo-600/30"
           >
             Start New Crawl
           </button>
@@ -165,23 +163,26 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
   };
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
-      <Header
-        themeMode={themeMode}
-        onThemeChange={onThemeChange}
-        title={meta?.title || result.novel_name || 'Crawl Results'}
-        subtitle={<span className="font-mono hidden sm:block">refreshed {lastRefresh.toLocaleTimeString()}</span>}
-      />
+    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
-      <main className="w-full xl:w-[70vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        {/* Page Header */}
+        <div className="mb-2">
+          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+            Crawl Results
+          </h1>
+          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+            {result.novel_name || 'Crawl Session'}
+          </p>
+        </div>
 
         {/* Summary Card */}
-        <section className={`rounded-xl p-4 sm:p-6 space-y-3 ${isDark
-          ? 'bg-slate-800 border border-slate-700'
+        <section className={`rounded-2xl p-5 sm:p-6 space-y-4 ${isDark
+          ? 'bg-slate-900/60 border border-slate-800/60'
           : 'bg-white border border-gray-200'
         }`}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1">
               {meta?.author_fullname && (
                 <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>by {meta.author_fullname}</p>
               )}
@@ -194,6 +195,19 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
                   <> &middot; {result.chapters_crawled} chapter{result.chapters_crawled !== 1 ? 's' : ''}</>
                 )}
               </p>
+              {result.source_url && (
+                <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                  <span className="font-medium">Source:</span>{' '}
+                  <a
+                    href={result.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`underline hover:no-underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
+                  >
+                    {result.source_url}
+                  </a>
+                </p>
+              )}
             </div>
             {files.length > 0 && (
               <button
@@ -204,7 +218,7 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
                   a.click();
                   document.body.removeChild(a);
                 }}
-                className="px-4 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors text-sm"
+                className="px-4 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all text-sm font-medium shadow-lg shadow-indigo-600/30"
               >
                 Download All
               </button>
@@ -217,13 +231,13 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
               {meta.stars != null && <span>{meta.stars.toLocaleString()} stars</span>}
               {meta.chapter_count != null && <span>{meta.chapter_count} parts</span>}
               {meta.completed === true && (
-                <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>Completed</span>
+                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Completed</span>
               )}
               {meta.mature === true && (
-                <span className={`px-2 py-0.5 rounded text-xs ${isDark ? 'bg-amber-900/50 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>18+</span>
+                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium border ${isDark ? 'bg-amber-900/40 text-amber-400 border-amber-800/40' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>18+</span>
               )}
               {meta.is_paywalled === true && (
-                <span className={`px-2 py-0.5 rounded text-xs ${isDark ? 'bg-red-900/50 text-red-400' : 'bg-red-100 text-red-700'}`}>Locked chapters present</span>
+                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium border ${isDark ? 'bg-red-900/40 text-red-400 border-red-800/40' : 'bg-red-100 text-red-700 border-red-200'}`}>Locked chapters present</span>
               )}
             </div>
           )}
@@ -231,7 +245,7 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
           {meta?.tags && meta.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {meta.tags.map(tag => (
-                <span key={tag} className={`px-2 py-0.5 text-xs rounded ${isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'}`}>{tag}</span>
+                <span key={tag} className={`px-2 py-0.5 text-xs rounded-lg ${isDark ? 'bg-slate-800/60 text-slate-300 border border-slate-700/50' : 'bg-gray-100 text-gray-700'}`}>{tag}</span>
               ))}
             </div>
           )}
@@ -241,8 +255,8 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
           )}
 
           {result.error_message && (
-            <div className={`p-3 rounded-lg text-sm ${isDark
-              ? 'bg-red-900/30 border border-red-800 text-red-400'
+            <div className={`p-3 rounded-xl text-sm ${isDark
+              ? 'bg-red-900/20 border border-red-800/30 text-red-400'
               : 'bg-red-50 border border-red-200 text-red-600'
             }`}>
               <strong>Error:</strong> {result.error_message}
@@ -252,8 +266,8 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
 
         {/* File List */}
         {nonCombinedFiles.length > 0 || combinedFilename ? (
-          <section className="space-y-3">
-            <h2 className={`text-base font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
+          <section className="space-y-4">
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
               Chapters ({nonCombinedFiles.length})
             </h2>
 
@@ -275,7 +289,7 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
                     Individual Chapters
                   </p>
                 )}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {nonCombinedFiles.map(file => (
                     <FilePreview
                       key={file.filename}
@@ -291,8 +305,8 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
             )}
           </section>
         ) : (
-          <section className={`rounded-xl p-8 text-center ${isDark
-            ? 'bg-slate-800 border border-slate-700 text-slate-500'
+          <section className={`rounded-2xl p-8 text-center ${isDark
+            ? 'bg-slate-900/60 border border-slate-800/60 text-slate-500'
             : 'bg-white border border-gray-200 text-gray-400'
           }`}>
             No output files found for this crawl session.
@@ -300,14 +314,16 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
         )}
 
         {/* Phase 2 placeholder */}
-        <section className={`rounded-xl p-6 space-y-3 ${isDark
-          ? 'bg-slate-800 border border-slate-700'
+        <section className={`rounded-2xl p-6 space-y-3 ${isDark
+          ? 'bg-slate-900/60 border border-slate-800/60'
           : 'bg-white border border-gray-200'
         }`}>
-          <div className="flex items-center gap-2">
-            <svg className={`w-5 h-5 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-xl ${isDark ? 'bg-slate-800 text-slate-500' : 'bg-gray-100 text-gray-400'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </div>
             <h2 className={`text-base font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Send to Company Backend</h2>
           </div>
           <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
@@ -316,8 +332,8 @@ export function ResultsPage({ themeMode, onThemeChange }: ResultsPageProps) {
           </p>
           <button
             disabled
-            className={`px-4 py-2 text-sm rounded-lg cursor-not-allowed ${isDark
-              ? 'text-slate-400 bg-slate-700 border border-slate-600'
+            className={`px-4 py-2 text-sm rounded-xl cursor-not-allowed ${isDark
+              ? 'text-slate-400 bg-slate-800 border border-slate-700'
               : 'text-gray-400 bg-gray-100 border border-gray-300'
             }`}
           >

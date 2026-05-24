@@ -32,15 +32,17 @@ export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps
   const levelStyles = isDark ? levelStylesDark : levelStylesLight;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Crawl Log</h3>
-        <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{displayLines.length} lines</span>
+        <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Crawl Log</h3>
+        <span className={`text-xs px-2 py-1 rounded-lg ${isDark ? 'bg-slate-800/60 text-slate-500' : 'bg-gray-100 text-gray-500'}`}>
+          {displayLines.length} lines
+        </span>
       </div>
       <div
-        className={`border rounded-lg p-3 overflow-y-auto ${isDark
-          ? 'bg-slate-950 border-slate-700'
-          : 'bg-gray-100 border-gray-200'
+        className={`border rounded-2xl p-4 overflow-y-auto ${isDark
+          ? 'bg-slate-950 border-slate-800/60'
+          : 'bg-gray-50 border-gray-200'
         }`}
         style={{ maxHeight: 'min(400px, 40vh)' }}
       >
@@ -49,7 +51,7 @@ export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps
         ) : (
           displayLines.map((entry, idx) => (
             <div key={idx} className={`font-mono text-xs leading-relaxed ${levelStyles[entry.level] ?? levelStyles.info}`}>
-              <span className={isDark ? 'text-slate-600' : 'text-gray-400'}>[{entry.timestamp}]</span>{' '}
+              <span className={isDark ? 'text-slate-700' : 'text-gray-400'}>[{entry.timestamp}]</span>{' '}
               <span>{entry.message}</span>
             </div>
           ))

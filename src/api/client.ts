@@ -87,6 +87,7 @@ export interface CrawlRequest {
   novel_name?: string;
   completed?: boolean;
   combine_chapters?: boolean;
+  source_url?: string;
 }
 
 export interface ActiveCrawl {
@@ -117,6 +118,7 @@ export interface ProgressUpdate {
   current_title: string;
   status: string;
   error_message?: string;
+  source_url?: string | null;
 }
 
 export async function startCrawl(request: CrawlRequest): Promise<CrawlStartResponse> {
@@ -221,6 +223,8 @@ export interface CrawlResult {
   combined_txt_file?: string | null;
   /** Only present in combined result responses (TXT format) */
   txt_content?: string;
+  /** The original URL submitted for the crawl */
+  source_url?: string | null;
 }
 
 export async function getCrawlResult(crawlId: string, timeout?: number): Promise<CrawlResult> {
@@ -280,6 +284,7 @@ export interface CrawlSessionSummary {
   combined_file: string | null;
   combined_txt_file?: string | null;
   output_format?: string;
+  source_url?: string | null;
 }
 
 export async function listAllResults(): Promise<CrawlSessionSummary[]> {

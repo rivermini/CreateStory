@@ -61,27 +61,33 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
 
   const isJson = filename.endsWith('.json');
 
+  const accentColors = accent === 'emerald'
+    ? { border: 'border-l-emerald-500', bg: isDark ? 'bg-emerald-900/20' : 'bg-emerald-50' }
+    : accent === 'cyan'
+    ? { border: 'border-l-cyan-500', bg: isDark ? 'bg-cyan-900/20' : 'bg-cyan-50' }
+    : { border: '', bg: '' };
+
   return (
-    <div className={`border rounded-lg overflow-hidden ${isDark
-      ? 'border-slate-700 bg-slate-800'
+    <div className={`border rounded-2xl overflow-hidden ${isDark
+      ? 'border-slate-800/60 bg-slate-900/60'
       : 'border-gray-200 bg-white'
-    } ${accent === 'emerald' ? 'border-l-4 border-l-emerald-500' : accent === 'cyan' ? 'border-l-4 border-l-cyan-500' : ''}`}>
+    } ${accentColors.border} border-l-4`}>
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex-shrink-0">
             {isJson ? (
-              <span className={`inline-flex items-center justify-center w-8 h-8 rounded text-xs font-bold ${isDark
-                ? 'bg-indigo-900/50 text-indigo-400'
+              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
+                ? 'bg-indigo-900/40 text-indigo-400'
                 : 'bg-indigo-100 text-indigo-600'
               }`}>{'{}'}</span>
             ) : filename.endsWith('.txt') || filename.endsWith('.md') ? (
-              <span className={`inline-flex items-center justify-center w-8 h-8 rounded text-xs font-bold ${isDark
-                ? 'bg-cyan-900/50 text-cyan-400'
+              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
+                ? 'bg-cyan-900/40 text-cyan-400'
                 : 'bg-cyan-100 text-cyan-600'
               }`}>TXT</span>
             ) : (
-              <span className={`inline-flex items-center justify-center w-8 h-8 rounded text-xs font-bold ${isDark
-                ? 'bg-emerald-900/50 text-emerald-400'
+              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
+                ? 'bg-emerald-900/40 text-emerald-400'
                 : 'bg-emerald-100 text-emerald-600'
               }`}>CSV</span>
             )}
@@ -95,8 +101,8 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
           <button
             onClick={handleExpand}
             disabled={loading}
-            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors disabled:opacity-50 ${isDark
-              ? 'text-slate-300 bg-slate-700 hover:bg-slate-600'
+            className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-200 disabled:opacity-50 ${isDark
+              ? 'text-slate-300 bg-slate-800/60 hover:bg-slate-800'
               : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
             }`}
           >
@@ -105,8 +111,8 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
           <button
             onClick={handleCopy}
             disabled={copied}
-            className={`relative flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-xs font-medium rounded
-              transition-colors duration-200 disabled:cursor-default bg-emerald-600 hover:bg-emerald-500 text-white
+            className={`relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl
+              transition-all duration-200 disabled:cursor-default bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30
               ${copied ? 'bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
             title="Copy full file content to clipboard"
             onMouseLeave={() => copied && setCopied(false)}
@@ -126,7 +132,7 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
           </button>
           <button
             onClick={onDownload}
-            className={`px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors`}
+            className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-200 text-white bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/30`}
           >
             Download
           </button>
@@ -134,13 +140,13 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
       </div>
 
       {expanded && (
-        <div className={`border-t px-4 py-3 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
-          {err && <p className={`text-sm mb-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{err}</p>}
+        <div className={`border-t px-4 py-4 ${isDark ? 'border-slate-800/60' : 'border-gray-200'}`}>
+          {err && <p className={`text-sm mb-3 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{err}</p>}
           {preview ? (
             <div className="space-y-2">
-              <pre className={`border rounded p-3 overflow-x-auto text-xs font-mono max-h-60 overflow-y-auto ${isDark
-                ? 'bg-slate-950 border-slate-700 text-slate-300'
-                : 'bg-gray-100 border-gray-200 text-gray-700'
+              <pre className={`border rounded-xl p-4 overflow-x-auto text-xs font-mono max-h-60 overflow-y-auto ${isDark
+                ? 'bg-slate-950 border-slate-800/60 text-slate-300'
+                : 'bg-gray-50 border-gray-200 text-gray-700'
               }`}>
                 <code>{preview.preview || '(empty file)'}</code>
               </pre>

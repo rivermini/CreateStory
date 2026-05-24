@@ -14,7 +14,6 @@ import {
   type CheckUpdatableResponse,
   type TrackedJob,
 } from '../api/client';
-import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
@@ -26,7 +25,7 @@ interface DriveSyncPageProps {
 
 // ─── Job tracking types ─────────────────────────────────────────────────────────
 
-export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) {
+export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const isDark = themeMode === 'dark';
 
   // ── Config ──────────────────────────────────────────────────────────────────
@@ -308,19 +307,22 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   }, [updatableData, handleUpdateSingle]);
 
   return (
-    <div className={`min-h-screen w- flex flex-col ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
-      <Header
-        themeMode={themeMode}
-        onThemeChange={onThemeChange}
-        title="Drive Sync"
-        subtitle="Sync stories from Google Drive to main BE"
-      />
+    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+      <main className="xl:w-[68vw] px-4 sm:px-6 py-6 sm:py-8 flex flex-col flex-1 mx-auto">
 
-      <main className="xl:w-[70vw] px-4 sm:px-6 py-6 sm:py-8 flex flex-col flex-1 mx-auto">
+        {/* ── Page Header ───────────────────────────────── */}
+        <div className="mb-6">
+          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+            Drive Sync
+          </h1>
+          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+            Sync your crawled novels with Google Drive
+          </p>
+        </div>
 
         {/* ── Loading / Error states ───────────────────────────────── */}
         {configLoading && (
-          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl ${isDark ? 'bg-slate-800/80 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl ${isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
             <svg className="w-5 h-5 animate-spin text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -330,7 +332,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
         )}
 
         {configError && (
-          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl text-sm ${isDark ? 'bg-red-900/20 border border-red-800/50 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
+          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl text-sm ${isDark ? 'bg-red-900/20 border border-red-800/30 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
             <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -343,9 +345,9 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
         {config && !configLoading && (
           <>
             {/* ── Config summary bar ─────────────────────────────── */}
-            <div className={`flex flex-wrap items-center gap-3 mb-6 px-4 py-3 rounded-xl text-sm ${isDark ? 'bg-slate-800/60 border border-slate-700/50' : 'bg-white border border-gray-200'}`}>
+            <div className={`flex flex-wrap items-center gap-4 mb-6 px-4 py-3 rounded-2xl text-sm ${isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                 <span className={isDark ? 'text-slate-300' : 'text-gray-700'}>Drive Sync Active</span>
               </div>
               <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>|</span>
@@ -356,7 +358,7 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
               <span className={isDark ? 'text-slate-400' : 'text-gray-500'}>Manual sync only</span>
               <button
                 onClick={() => setShowConfigModal(true)}
-                className={`text-xs transition-colors flex items-center gap-1 ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
+                className={`text-xs transition-colors flex items-center gap-1.5 ml-auto ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
