@@ -47,16 +47,16 @@ export function Header({ themeMode, onThemeChange, rightActions, title, subtitle
                 key={item.to}
                 to={item.to}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`w-full sm:w-auto px-3 py-2 text-sm rounded-lg transition-colors text-left sm:text-center text-decoration-none ${
+                className={`w-full md:w-auto px-3 py-2 text-sm rounded-lg transition-colors text-left md:text-center no-underline block ${
                     active
                         ? 'bg-indigo-600 text-white'
                         : isDark
-                            ? 'text-slate-300 md:bg-slate-600/30 hover:bg-slate-700'
-                            : 'text-gray-600 md:bg-gray-100 hover:bg-gray-200'
+                            ? 'text-slate-300 bg-slate-800/50 md:bg-slate-600/30 hover:bg-slate-700'
+                            : 'text-gray-600 bg-gray-50 md:bg-gray-100 hover:bg-gray-200'
                 }`}
             >
                 <span className="flex items-center gap-2">
-                    {item.icon}
+                    {item.icon && item.icon}
                     {item.label}
                 </span>
             </Link>
