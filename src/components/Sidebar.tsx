@@ -65,7 +65,7 @@ const navIcons: Record<string, React.ReactNode> = {
 const NAV_ITEMS: NavItem[] = [
     { to: '/', label: 'New Crawl', icon: navIcons['/'] },
     { to: '/batch', label: 'Batch', icon: navIcons['/batch'] },
-    { to: '/results/all', label: 'Results', icon: navIcons['/results/all'] },
+    { to: '/results/all', label: 'Crawl History', icon: navIcons['/results/all'] },
     { to: '/drive-sync', label: 'Drive Sync', icon: navIcons['/drive-sync'] },
     { to: '/drive-sync/history', label: 'Sync History', icon: navIcons['/drive-sync/history'] },
     { to: '/story-mgmt', label: 'Story Mgmt', icon: navIcons['/story-mgmt'] },
