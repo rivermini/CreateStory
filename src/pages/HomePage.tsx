@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { startCrawl, getSettings } from '../api/client';
 import { NovelInfoPanel } from '../components/NovelInfoPanel';
+import { MobileBottomSheet } from '../components/MobileBottomSheet';
 import { useSiteDetection } from '../hooks/useSiteDetection';
 import { useNovelInfo } from '../hooks/useNovelInfo';
 import { type ThemeMode } from '../components/ThemeToggle';
@@ -24,6 +25,7 @@ export function HomePage({ themeMode }: HomePageProps) {
   const [rangeMode, setRangeMode] = useState<'count' | 'range'>('count');
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState('');
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const outputFormat = 'txt' as const;
 
   // Apply defaults loaded from backend settings on mount
@@ -106,7 +108,7 @@ export function HomePage({ themeMode }: HomePageProps) {
   };
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
       <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Page Header */}
         <div className="mb-8">
@@ -122,6 +124,46 @@ export function HomePage({ themeMode }: HomePageProps) {
 
           {/* Left column */}
           <div className="space-y-6">
+
+            {/* Mobile: Novel Info Preview */}
+            {isValid && (
+              <button
+                onClick={() => setMobileSheetOpen(true)}
+                className={`lg:hidden w-full rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 ${
+                  isDark
+                    ? 'bg-slate-900/60 border border-slate-800/60 hover:bg-slate-800/60'
+                    : 'bg-white border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className={`w-12 h-16 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  isDark ? 'bg-slate-800/60' : 'bg-gray-100'
+                }`}>
+                  {novelMetadata?.cover_url ? (
+                    <img
+                      src={novelMetadata.cover_url}
+                      alt="Cover"
+                      className="w-full h-full rounded-lg object-cover"
+                      onError={(e) => e.currentTarget.style.display = 'none'}
+                    />
+                  ) : (
+                    <span className="text-xl">📖</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className={`font-semibold truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                    {panelTitle || storyTitle}
+                  </p>
+                  {totalChapterCount != null && (
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                      {totalChapterCount.toLocaleString()} chapters
+                    </p>
+                  )}
+                </div>
+                <svg className={`w-5 h-5 flex-shrink-0 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
 
             {/* URL Input Card */}
             <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
@@ -459,6 +501,25 @@ export function HomePage({ themeMode }: HomePageProps) {
           </div>
         </div>
       </main>
+
+      {/* Mobile Bottom Sheet */}
+      <MobileBottomSheet
+        isOpen={mobileSheetOpen}
+        onClose={() => setMobileSheetOpen(false)}
+        storyTitle={panelTitle || storyTitle}
+        siteName={siteInfo?.site_name || null}
+        chapters={chapters}
+        chapterCount={chapterCount}
+        totalChapterCount={totalChapterCount}
+        isLoading={isLoadingChapters}
+        isDetecting={isLoading}
+        error={chaptersError}
+        warning={warning}
+        isChapterUrl={isChapterUrl}
+        novelMetadata={novelMetadata}
+        onCrawlNovel={handleCrawlNovel}
+        isDark={isDark}
+      />
     </div>
   );
 }

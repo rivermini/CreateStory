@@ -342,3 +342,29 @@ html[data-theme='dark'] .from-indigo-50 {
 html[data-theme='dark'] .hover\:bg-indigo-50\/10:hover {
   background-color: rgba(99, 102, 241, 0.08) !important;
 }
+
+/* ── Safe area insets for mobile devices ── */
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Mobile touch optimization ── */
+
+@media (hover: none) {
+  /* Disable hover states on touch devices */
+  .hover\:bg-gray-50:hover,
+  .hover\:bg-gray-100:hover,
+  .hover\:bg-indigo-50:hover {
+    background-color: inherit;
+  }
+}
+
+/* ── Prevent pull-to-refresh on mobile ── */
+body {
+  overscroll-behavior-y: contain;
+}

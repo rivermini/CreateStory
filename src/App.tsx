@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
+import { MobileNav, MobileHeader, MobileDrawer } from './components/MobileNav';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -58,16 +59,35 @@ function App() {
 
 function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChange: (mode: ThemeMode) => void }) {
   const isDark = themeMode === 'dark';
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   return (
     <>
+      {/* Desktop Sidebar */}
       <Sidebar themeMode={themeMode} onThemeChange={onThemeChange} />
+
+      {/* Mobile Header */}
+      <MobileHeader
+        isDark={isDark}
+        onMenuOpen={() => setMobileDrawerOpen(true)}
+      />
+
+      {/* Mobile Bottom Navigation */}
+      <MobileNav isDark={isDark} />
+
+      {/* Mobile Drawer */}
+      <MobileDrawer
+        isOpen={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        isDark={isDark}
+      />
+
       <div
         className={`min-h-screen transition-colors duration-300 ${
           isDark ? 'bg-slate-950' : 'bg-gray-50'
         }`}
       >
-        <div className="lg:pl-64">
+        <div className="lg:pl-64 pt-14 lg:pt-0">
           <Suspense fallback={
             <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
               Loading...
