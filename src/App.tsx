@@ -13,6 +13,7 @@ const DriveSyncPage = lazy(() => import('./pages/DriveSyncPage').then(m => ({ de
 const DriveSyncHistoryPage = lazy(() => import('./pages/DriveSyncHistoryPage').then(m => ({ default: m.DriveSyncHistoryPage })));
 const StoryMgmtPage = lazy(() => import('./pages/StoryMgmtPage').then(m => ({ default: m.StoryMgmtPage })));
 const SupportedSitesPage = lazy(() => import('./pages/SupportedSitesPage').then(m => ({ default: m.SupportedSitesPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 
 const THEME_COOKIE = 'novel_crawler_theme';
 
@@ -81,6 +82,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
               <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/story-mgmt" element={<StoryMgmtPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/settings" element={<SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

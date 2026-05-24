@@ -325,6 +325,30 @@ export async function deleteCrawlSessions(crawlIds: string[]): Promise<{ deleted
 }
 
 // ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export interface SettingsResponse {
+  theme: string;
+  crawl_mode: string;
+  crawl_default_count: number;
+  crawl_default_range_from: number;
+  crawl_default_range_to: number;
+}
+
+export async function getSettings(): Promise<SettingsResponse> {
+  return apiFetch<SettingsResponse>('/api/settings');
+}
+
+export async function updateSettings(patch: Partial<Omit<SettingsResponse, never>>): Promise<SettingsResponse> {
+  return apiFetch<SettingsResponse>('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Novel chapter list
 // ---------------------------------------------------------------------------
 

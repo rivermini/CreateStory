@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { startCrawl } from '../api/client';
+import { startCrawl, getSettings } from '../api/client';
 import { NovelInfoPanel } from '../components/NovelInfoPanel';
 import { useSiteDetection } from '../hooks/useSiteDetection';
 import { useNovelInfo } from '../hooks/useNovelInfo';
@@ -19,12 +19,24 @@ export function HomePage({ themeMode }: HomePageProps) {
 
   const [inputUrl, setInputUrl] = useState('');
   const [toChapter, setToChapter] = useState(10);
-  const [rangeFrom, setRangeFrom] = useState(2);
-  const [rangeTo, setRangeTo] = useState(6);
-  const [rangeMode, setRangeMode] = useState<'count' | 'range'>('range');
+  const [rangeFrom, setRangeFrom] = useState(1);
+  const [rangeTo, setRangeTo] = useState(10);
+  const [rangeMode, setRangeMode] = useState<'count' | 'range'>('count');
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState('');
   const outputFormat = 'txt' as const;
+
+  // Apply defaults loaded from backend settings on mount
+  useEffect(() => {
+    getSettings()
+      .then(s => {
+        setRangeMode(s.crawl_mode as 'count' | 'range');
+        setToChapter(s.crawl_default_count);
+        setRangeFrom(s.crawl_default_range_from);
+        setRangeTo(s.crawl_default_range_to);
+      })
+      .catch(() => {/* ignore — use local defaults */});
+  }, []);
 
   const inputsLocked = !isValid;
   const effectiveMax = totalChapterCount ?? 999999;
