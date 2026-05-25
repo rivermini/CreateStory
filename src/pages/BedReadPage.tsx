@@ -6,6 +6,7 @@ import {
   getBatchJob,
   getChapterAudioUrl,
   getBatchZipUrl,
+  getDriveSyncConfig,
   getLanguages,
   getVoices,
   searchBedReadStories,
@@ -25,6 +26,48 @@ interface BedReadPageProps {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+const STORAGE_KEY_STORIES = 'bedread_stories';
+const STORAGE_KEY_SELECTED = 'bedread_selected_story_id';
+const STORAGE_KEY_SORT = 'bedread_sort_by';
+
+function loadStoredStories(): BedReadStory[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_STORIES);
+    return stored ? JSON.parse(stored) : [];
+  } catch { return []; }
+}
+
+function saveStories(stories: BedReadStory[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY_STORIES, JSON.stringify(stories));
+  } catch { /* ignore */ }
+}
+
+function loadStoredSelectedId(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY_SELECTED);
+  } catch { return null; }
+}
+
+function saveSelectedStoryId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(STORAGE_KEY_SELECTED, id);
+    else localStorage.removeItem(STORAGE_KEY_SELECTED);
+  } catch { /* ignore */ }
+}
+
+function loadStoredSort(): 'release_date' | 'title' | 'chapter_count' | 'popular' {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_SORT);
+    if (stored === 'title' || stored === 'chapter_count' || stored === 'popular') return stored;
+  } catch { /* ignore */ }
+  return 'release_date';
+}
+
+function saveSortBy(sort: string) {
+  try { localStorage.setItem(STORAGE_KEY_SORT, sort); } catch { /* ignore */ }
+}
+
 export function BedReadPage({ themeMode }: BedReadPageProps) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
@@ -34,13 +77,18 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const [storiesError, setStoriesError] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'release_date' | 'title' | 'chapter_count' | 'popular'>('release_date');
+  const [sortBy, setSortBy] = useState<'release_date' | 'title' | 'chapter_count' | 'popular'>(loadStoredSort);
   const [pageLimit] = useState(20);
-  const [allLoadedStories, setAllLoadedStories] = useState<BedReadStory[]>([]);
+  const [allLoadedStories, setAllLoadedStories] = useState<BedReadStory[]>(loadStoredStories);
 
-  const [selectedStory, setSelectedStory] = useState<BedReadStory | null>(null);
+  const [selectedStory, setSelectedStory] = useState<BedReadStory | null>(() => {
+    const storedId = loadStoredSelectedId();
+    const stories = loadStoredStories();
+    return stories.find(s => s.storyId === storedId) || null;
+  });
   const [chapters, setChapters] = useState<BedReadChapter[]>([]);
   const [chaptersLoading, setChaptersLoading] = useState(false);
+  const [bedReadUserId, setBedReadUserId] = useState<string | null>(null);
 
   const [allChapters, setAllChapters] = useState(true);
   const [rangeStart, setRangeStart] = useState(1);
@@ -67,6 +115,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     searchBedReadStories({ sort: sortBy, page: 1, limit: 20 })
       .then((res: BedReadStorySearchResponse) => {
         setAllLoadedStories(res.stories);
+        saveStories(res.stories);
         setCurrentPage(1);
         const totalPg = Math.max(1, Math.ceil(res.total / 20));
         const pageRequests: Promise<BedReadStorySearchResponse>[] = [];
@@ -82,6 +131,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
               return true;
             });
           setAllLoadedStories(allStories);
+          saveStories(allStories);
           setAllStoriesLoaded(true);
         }).catch(() => {});
       })
@@ -112,6 +162,11 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     fetchPage1();
   }, [sortBy]);
 
+  const handleSortChange = (newSort: 'release_date' | 'title' | 'chapter_count' | 'popular') => {
+    setSortBy(newSort);
+    saveSortBy(newSort);
+  };
+
   useEffect(() => { setCurrentPage(1); }, [searchKeyword]);
 
   useEffect(() => {
@@ -122,13 +177,21 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   }, [selectedLang, voices, selectedVoice]);
 
   useEffect(() => {
+    getDriveSyncConfig().then(cfg => {
+      if (cfg?.main_be_user_id) {
+        setBedReadUserId(cfg.main_be_user_id);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     setBatchId(null);
     setBatchJob(null);
     setIsGenerating(false);
     setGenerationError('');
     if (!selectedStory) return;
     setChaptersLoading(true);
-    getBedReadChapters(selectedStory.storyId)
+    getBedReadChapters(selectedStory.storyId, bedReadUserId ?? undefined)
       .then(ch => {
         setChapters(ch);
         const maxChapter = Math.max(...ch.map(c => c.chapterNumber), 1);
@@ -136,7 +199,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
       })
       .catch(() => setChapters([]))
       .finally(() => setChaptersLoading(false));
-  }, [selectedStory]);
+  }, [selectedStory, bedReadUserId]);
 
   useEffect(() => {
     if (!batchId) return;
@@ -200,7 +263,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
         lang: selectedLang,
         speed,
         format,
-      });
+      }, bedReadUserId ?? undefined);
       setBatchId(res.batch_id);
     } catch (e) {
       setGenerationError(e instanceof Error ? e.message : 'Failed to start batch job.');
@@ -318,7 +381,19 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                     </svg>
                     Library
                   </h2>
-                  <span className={'text-xs ' + text500}>{filteredStories.length.toLocaleString()} stories</span>
+                  <div className="flex items-center gap-2">
+                    <span className={'text-xs ' + text500}>{filteredStories.length.toLocaleString()} stories</span>
+                    <button
+                      onClick={() => fetchPage1()}
+                      disabled={storiesLoading}
+                      className={'p-1 rounded-lg ' + bg700_50 + ' hover:' + bg700_60 + ' disabled:opacity-50 transition-colors'}
+                      title="Refresh story list"
+                    >
+                      <svg className={'w-4 h-4 ' + text400 + (storiesLoading ? ' animate-spin' : '')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -341,7 +416,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                   <span className={'text-xs ' + text500}>Sort:</span>
                   <select
                     value={sortBy}
-                    onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                    onChange={e => handleSortChange(e.target.value as typeof sortBy)}
                     className={'flex-1 px-2 py-1.5 ' + bg700_50 + ' border ' + border600_30 + ' rounded-lg ' + text300 + ' text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer'}
                   >
                     <option value="release_date">Latest</option>
@@ -381,7 +456,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                   {paginatedStories.map(story => (
                     <button
                       key={story.storyId}
-                      onClick={() => setSelectedStory(story)}
+                      onClick={() => { setSelectedStory(story); saveSelectedStoryId(story.storyId); }}
                       className={
                         'w-full flex gap-3 p-3 rounded-xl text-left transition-all duration-200 group ' +
                         (selectedStory?.storyId === story.storyId
@@ -608,7 +683,9 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
             {selectedStory && (
               <section className={bg800 + ' border ' + border700_solid + ' rounded-xl p-4 sm:p-6 space-y-4'}>
                 {generationError && (
-                  <div className={'p-3 ' + (isDark ? 'bg-red-900/30 border-red-800' : 'bg-red-50 border-red-200') + ' rounded-xl text-sm text-red-400'}>{generationError}</div>
+                  <div className={'p-3 ' + (isDark ? 'bg-red-900/30 border-red-800' : 'bg-red-50 border-red-200') + ' rounded-xl text-sm text-red-400'} title={generationError}>
+                    <span className="line-clamp-2">{generationError.length > 150 ? generationError.slice(0, 150) + '...' : generationError}</span>
+                  </div>
                 )}
 
                 {chaptersToGenerate.length > 100 && !isGenerating && (
@@ -687,7 +764,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                       {statusIcon(ch.status)}
                       <div className="flex-1 min-w-0">
                         <p className={'text-xs font-medium ' + text300 + ' truncate'}>Ch. {ch.chapter_number}: {ch.title}</p>
-                        {ch.error && <p className={'text-xs text-red-400 truncate'}>{ch.error}</p>}
+                        {ch.error && <p className={'text-xs text-red-400 truncate max-w-[200px]'} title={ch.error}>{ch.error.length > 80 ? ch.error.slice(0, 80) + '...' : ch.error}</p>}
                       </div>
                       {ch.status === 'completed' && (
                         <div className="flex items-center gap-1 flex-shrink-0">

@@ -1031,14 +1031,20 @@ export async function searchBedReadStories(params: BedReadStorySearchParams): Pr
   return apiFetch<BedReadStorySearchResponse>(`/api/bedread/stories/search?${searchParams.toString()}`, { timeout: 30000 });
 }
 
-export async function getBedReadChapters(storyId: string): Promise<BedReadChapter[]> {
-  return apiFetch<BedReadChapter[]>(`/api/bedread/stories/${encodeURIComponent(storyId)}/chapters`);
+export async function getBedReadChapters(storyId: string, userId?: string): Promise<BedReadChapter[]> {
+  return apiFetch<BedReadChapter[]>(
+    `/api/bedread/stories/${encodeURIComponent(storyId)}/chapters`,
+    userId ? { headers: { 'x-user-id': userId } } : {}
+  );
 }
 
-export async function startBatchGenerate(request: BatchGenerateRequest): Promise<BatchGenerateResponse> {
+export async function startBatchGenerate(request: BatchGenerateRequest, userId?: string): Promise<BatchGenerateResponse> {
   return apiFetch<BatchGenerateResponse>('/api/bedread/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(userId ? { 'x-user-id': userId } : {}),
+    },
     body: JSON.stringify(request),
     timeout: 30000,
   });
