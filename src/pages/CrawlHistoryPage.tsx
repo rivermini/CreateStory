@@ -109,6 +109,21 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
         ? isDark ? 'bg-red-900/40 border-red-800/40 text-red-300' : 'bg-red-100 border-red-200 text-red-700'
         : isDark ? 'bg-indigo-900/20 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
 
+    const isRetryable = session.status === 'failed' || session.status === 'cancelled';
+
+    const handleRetry = () => {
+        const params = new URLSearchParams();
+        if (session.source_url) {
+            params.set('retryUrl', session.source_url);
+        }
+        // Pass existing chapter range if available from output files count
+        if (session.chapters_crawled > 0) {
+            params.set('retryLimit', String(session.chapters_crawled));
+        }
+        const queryString = params.toString();
+        navigate(`/${queryString ? `?${queryString}` : ''}`);
+    };
+
     return (
         <div
             className={rootClasses}
@@ -212,18 +227,20 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                             >
                                 Session
                             </button>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setExpanded(v => !v);
-                                }}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${isDark
-                                    ? 'text-slate-400 hover:text-slate-200 border-slate-700 hover:bg-slate-800'
-                                    : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-100'
-                                }`}
-                            >
-                                {expanded ? 'Hide' : `${chapterFiles.length > 0 ? chapterFiles.length + 'F' : ''}`}
-                            </button>
+                            {chapterFiles.length > 0 && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpanded(v => !v);
+                                    }}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${isDark
+                                        ? 'text-slate-400 hover:text-slate-200 border-slate-700 hover:bg-slate-800'
+                                        : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    {expanded ? 'Hide' : `${chapterFiles.length}F`}
+                                </button>
+                            )}
                         </div>
 
                         {session.status === 'running' && session.chapters_total > 0 && (
@@ -254,6 +271,24 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                             <span>{session.chapters_crawled}/{session.chapters_total}</span>
                         )}
                     </div>
+
+                    {isRetryable && (
+                        <div className="flex justify-end">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRetry();
+                                }}
+                                className="px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 shadow-lg bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/30"
+                                title="Retry this crawl with the same URL"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Retry Crawl
+                            </button>
+                        </div>
+                    )}
 
                     {session.error_message && (
                         <p className={`text-xs mt-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{session.error_message}</p>

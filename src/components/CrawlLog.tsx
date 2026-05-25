@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LogEntry } from '../hooks/useCrawlStream';
 
 export interface CrawlLogProps {
@@ -23,10 +23,24 @@ const levelStylesLight: Record<string, string> = {
 
 export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Track whether the user has manually scrolled away from the bottom.
+  // When true, stop auto-scrolling so reading position is preserved.
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lines]);
+    if (!userScrolledUp) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [lines, userScrolledUp]);
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    // Snap to bottom if within ~40px, otherwise flag that user scrolled up
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setUserScrolledUp(!atBottom);
+  };
 
   const displayLines = lines.slice(-maxLines);
   const levelStyles = isDark ? levelStylesDark : levelStylesLight;
@@ -40,6 +54,8 @@ export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps
         </span>
       </div>
       <div
+        ref={containerRef}
+        onScroll={handleScroll}
         className={`border rounded-2xl p-4 overflow-y-auto ${isDark
           ? 'bg-slate-950 border-slate-800/60'
           : 'bg-gray-50 border-gray-200'

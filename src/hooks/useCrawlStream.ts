@@ -15,6 +15,7 @@ export interface UseCrawlStreamResult {
   sourceUrl: string;
   close: () => void;
   reconnect: () => void;
+  onFirstComplete: (callback: (crawlId: string) => void) => void;
 }
 
 export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
@@ -25,6 +26,8 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
   const [sourceUrl, setSourceUrl] = useState('');
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completedCallbackRef = useRef<((crawlId: string) => void) | null>(null);
+  const hasCalledCompleteRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -45,6 +48,17 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
       }
       if (data.progress.error_message) {
         setError(data.progress.error_message);
+      }
+
+      // Fire the "first complete" callback only once — even on remounts.
+      const terminalStatuses = ['completed', 'failed', 'cancelled'];
+      if (
+        !hasCalledCompleteRef.current &&
+        terminalStatuses.includes(data.progress.status) &&
+        completedCallbackRef.current
+      ) {
+        hasCalledCompleteRef.current = true;
+        completedCallbackRef.current(crawlId ?? '');
       }
 
       // Update log lines - keep last 200
@@ -106,5 +120,9 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
     stopPolling();
   }, [stopPolling]);
 
-  return { logLines, progress, status, error, sourceUrl, close, reconnect };
+  const onFirstComplete = useCallback((callback: (crawlId: string) => void) => {
+    completedCallbackRef.current = callback;
+  }, []);
+
+  return { logLines, progress, status, error, sourceUrl, close, reconnect, onFirstComplete };
 }

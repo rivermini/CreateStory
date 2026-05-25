@@ -7,7 +7,7 @@ type ThemeMode = 'light' | 'dark';
 
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const CrawlPage = lazy(() => import('./pages/CrawlPage').then(m => ({ default: m.CrawlPage })));
-const ResultsPage = lazy(() => import('./pages/ResultsPage').then(m => ({ default: m.ResultsPage })));
+const ResultPage = lazy(() => import('./pages/ResultPage').then(m => ({ default: m.ResultPage })));
 const CrawlHistory = lazy(() => import('./pages/CrawlHistoryPage'));
 const BatchPage = lazy(() => import('./pages/BatchPage').then(m => ({ default: m.BatchPage })));
 const BedReadPage = lazy(() => import('./pages/BedReadPage').then(m => ({ default: m.BedReadPage })));
@@ -98,7 +98,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
               <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/batch" element={<BatchPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/results" element={<ResultPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/bedread" element={<BedReadPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
