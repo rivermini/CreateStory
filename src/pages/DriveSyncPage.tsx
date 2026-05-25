@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   getDriveSyncConfig,
   initDriveSyncConfig,
@@ -115,8 +115,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       setSavingConfig(false);
     }
   };
-
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const doPoll = async () => {
