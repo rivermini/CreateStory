@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { startCrawl, getSettings } from '../api/client';
 import { NovelInfoPanel } from '../components/NovelInfoPanel';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
@@ -15,6 +15,7 @@ interface HomePageProps {
 export function HomePage({ themeMode }: HomePageProps) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { siteInfo, slug, storyTitle, resolvedUrl, isValid, isLoading, error, detect, novelMetadata } = useSiteDetection();
   const { chapters, chapterCount, totalChapterCount, storyTitle: panelTitle, isLoadingChapters, chaptersError, warning, isChapterUrl, refresh } = useNovelInfo();
 
@@ -38,6 +39,33 @@ export function HomePage({ themeMode }: HomePageProps) {
         setRangeTo(s.crawl_default_range_to);
       })
       .catch(() => {/* ignore — use local defaults */});
+  }, []);
+
+  // Handle retry params from failed/cancelled sessions
+  useEffect(() => {
+    const retryUrl = searchParams.get('retryUrl');
+    const retryRangeFrom = searchParams.get('retryFrom');
+    const retryRangeTo = searchParams.get('retryTo');
+    const retryLimit = searchParams.get('retryLimit');
+
+    if (retryUrl) {
+      setInputUrl(retryUrl);
+      detect(retryUrl);
+      refresh(retryUrl);
+    }
+    if (retryRangeFrom && retryRangeTo) {
+      setRangeMode('range');
+      setRangeFrom(parseInt(retryRangeFrom) || 1);
+      setRangeTo(parseInt(retryRangeTo) || 10);
+    } else if (retryLimit) {
+      setRangeMode('count');
+      setToChapter(parseInt(retryLimit) || 10);
+    }
+
+    // Clear the params after applying them
+    if (retryUrl || retryRangeFrom || retryRangeTo || retryLimit) {
+      setSearchParams({});
+    }
   }, []);
 
   const inputsLocked = !isValid;
