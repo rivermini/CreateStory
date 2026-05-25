@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables — keep local, never commit
+.env
+.env.development
+.env.production
+.env.local
+.env.*.local
