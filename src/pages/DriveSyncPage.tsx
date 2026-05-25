@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   getDriveSyncConfig,
   initDriveSyncConfig,
@@ -48,47 +48,15 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
   const [activeSubTab, setActiveSubTab] = useState<StorySyncTab>('uploadable');
 
-  const [uploadableData, setUploadableData] = useState<CheckUploadableResponse | null>(() => {
-    try {
-      const stored = sessionStorage.getItem('drivesync_uploadableData');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [uploadableData, setUploadableData] = useState<CheckUploadableResponse | null>(null);
   const [uploadableLoading, setUploadableLoading] = useState(false);
-  const [uploadableError, setUploadableError] = useState(() => {
-    return sessionStorage.getItem('drivesync_uploadableError') ?? '';
-  });
-  const [uploadResults, setUploadResults] = useState<Map<string, { success: boolean; message: string }>>(() => {
-    try {
-      const stored = sessionStorage.getItem('drivesync_uploadResults');
-      return stored ? new Map(JSON.parse(stored)) : new Map();
-    } catch {
-      return new Map();
-    }
-  });
+  const [uploadableError, setUploadableError] = useState('');
+  const [uploadResults, setUploadResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
 
-  const [updatableData, setUpdatableData] = useState<CheckUpdatableResponse | null>(() => {
-    try {
-      const stored = sessionStorage.getItem('drivesync_updatableData');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [updatableData, setUpdatableData] = useState<CheckUpdatableResponse | null>(null);
   const [updatableLoading, setUpdatableLoading] = useState(false);
-  const [updatableError, setUpdatableError] = useState(() => {
-    return sessionStorage.getItem('drivesync_updatableError') ?? '';
-  });
-  const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(() => {
-    try {
-      const stored = sessionStorage.getItem('drivesync_updateResults');
-      return stored ? new Map(JSON.parse(stored)) : new Map();
-    } catch {
-      return new Map();
-    }
-  });
+  const [updatableError, setUpdatableError] = useState('');
+  const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [updatingJobs, setUpdatingJobs] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
@@ -148,8 +116,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     }
   };
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   useEffect(() => {
     const doPoll = async () => {
       if (trackedJobs.length === 0) return;
@@ -172,7 +138,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
                 success: true,
                 message: job.result_message ?? 'Done',
               });
-              sessionStorage.setItem('drivesync_uploadResults', JSON.stringify([...next]));
               return next;
             });
           } else {
@@ -181,7 +146,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
                 success: false,
                 message: job.error ?? 'Upload failed',
               });
-              sessionStorage.setItem('drivesync_uploadResults', JSON.stringify([...next]));
               return next;
             });
           }
@@ -200,26 +164,27 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      sessionStorage.removeItem('drivesync_uploadableData');
+      sessionStorage.removeItem('drivesync_uploadableError');
+      sessionStorage.removeItem('drivesync_uploadResults');
+      sessionStorage.removeItem('drivesync_updatableData');
+      sessionStorage.removeItem('drivesync_updatableError');
+      sessionStorage.removeItem('drivesync_updateResults');
     };
   }, []);
 
   const handleCheckUploadable = async () => {
     setUploadableData(null);
-    sessionStorage.removeItem('drivesync_uploadableData');
     setUploadableLoading(true);
     setUploadableError('');
     setUploadResults(new Map());
     try {
       const data = await checkUploadable();
       setUploadableData(data);
-      sessionStorage.setItem('drivesync_uploadableData', JSON.stringify(data));
-      sessionStorage.setItem('drivesync_uploadableError', '');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to check uploadable stories.';
       setUploadableError(msg);
-      sessionStorage.setItem('drivesync_uploadableError', msg);
-      sessionStorage.removeItem('drivesync_uploadableData');
+      setUploadableData(null);
     } finally {
       setUploadableLoading(false);
     }
@@ -261,7 +226,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
             success: false,
             message: e instanceof Error ? e.message : 'Failed to enqueue job',
           });
-          sessionStorage.setItem('drivesync_uploadResults', JSON.stringify([...next]));
           return next;
         });
       }
@@ -274,20 +238,16 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
   const handleCheckUpdatable = async () => {
     setUpdatableData(null);
-    sessionStorage.removeItem('drivesync_updatableData');
     setUpdatableLoading(true);
     setUpdatableError('');
     setUpdateResults(new Map());
     try {
       const data = await checkUpdatable();
       setUpdatableData(data);
-      sessionStorage.setItem('drivesync_updatableData', JSON.stringify(data));
-      sessionStorage.setItem('drivesync_updatableError', '');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to check updatable stories.';
       setUpdatableError(msg);
-      sessionStorage.setItem('drivesync_updatableError', msg);
-      sessionStorage.removeItem('drivesync_updatableData');
+      setUpdatableData(null);
     } finally {
       setUpdatableLoading(false);
     }
@@ -313,7 +273,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           success: false,
           message: e instanceof Error ? e.message : 'Failed to create update job',
         });
-        sessionStorage.setItem('drivesync_updateResults', JSON.stringify([...next]));
         return next;
       });
       return server_story.id;
@@ -330,7 +289,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
                 success: job.status === 'success',
                 message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
               });
-              sessionStorage.setItem('drivesync_updateResults', JSON.stringify([...next]));
               return next;
             });
             setUpdatingJobs(prev => {
@@ -503,6 +461,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               onUpdateSingle={handleUpdateSingle}
               onUpdateAll={handleUpdateAll}
               updatableInvalid={updatableData?.invalid ?? []}
+              updatableNoServerMatch={updatableData?.no_server_match ?? []}
+              updatableEmptyExtended={updatableData?.empty_extended ?? []}
             />
           </div>
         )}
