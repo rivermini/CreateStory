@@ -18,7 +18,7 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
   const [searchParams] = useSearchParams();
   const crawlId = searchParams.get('session');
 
-  const { logLines, progress, status, error, sourceUrl } = useCrawlStream(crawlId);
+  const { logLines, progress, status, error, sourceUrl, onFirstComplete } = useCrawlStream(crawlId);
   const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
@@ -27,14 +27,17 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
     }
   }, [crawlId, navigate]);
 
+  // Persist the "already redirected" flag in sessionStorage so navigating back
+  // to a finished crawl page does NOT trigger another redirect.
   useEffect(() => {
-    if (status === 'completed' || status === 'failed' || status === 'cancelled') {
-      const timer = setTimeout(() => {
-        if (crawlId) navigate(`/results?session=${crawlId}`);
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [status, crawlId, navigate]);
+    onFirstComplete((sessionId: string) => {
+      const key = `crawl_redirected_${sessionId}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        setTimeout(() => navigate(`/results?session=${sessionId}`), 1500);
+      }
+    });
+  }, [onFirstComplete]);
 
   const handleCancel = async () => {
     if (!crawlId) return;

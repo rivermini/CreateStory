@@ -1,15 +1,39 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCrawlResult, getCombinedResult, getDownloadUrl, getDownloadCombinedUrl, getDownloadAllUrl, type CrawlSessionSummary } from '../api/client';
+import { getCrawlResult, getCombinedResult, getDownloadUrl, getDownloadCombinedUrl, getDownloadAllUrl, listAllResults, type CrawlSessionSummary } from '../api/client';
 import { FilePreview } from '../components/FilePreview';
 import { type ThemeMode } from '../components/ThemeToggle';
 
-interface ResultsPageProps {
+interface ResultPageProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
 }
 
-export function ResultsPage({ themeMode }: ResultsPageProps) {
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function formatDuration(start: string | null, finish: string | null): string {
+  if (!start || !finish) return '—';
+  try {
+    const s = new Date(start).getTime();
+    const f = new Date(finish).getTime();
+    const secs = Math.floor((f - s) / 1000);
+    if (secs < 60) return `${secs}s`;
+    const m = Math.floor(secs / 60);
+    const r = secs % 60;
+    return `${m}m ${r}s`;
+  } catch {
+    return '—';
+  }
+}
+
+export function ResultPage({ themeMode }: ResultPageProps) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -20,6 +44,11 @@ export function ResultsPage({ themeMode }: ResultsPageProps) {
   const [result, setResult] = useState<CrawlSessionSummary | null>(null);
   const [combinedFilename, setCombinedFilename] = useState('');
   const [files, setFiles] = useState<{ filename: string; size_bytes: number; chapter_number: number }[]>([]);
+
+  // Session history state
+  const [sessions, setSessions] = useState<CrawlSessionSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const fetchResult = useCallback(() => {
     if (!crawlId) return;
@@ -74,6 +103,13 @@ export function ResultsPage({ themeMode }: ResultsPageProps) {
     });
   }, [crawlId]);
 
+  const fetchHistory = useCallback(() => {
+    setHistoryLoading(true);
+    listAllResults()
+      .then(data => setSessions(data))
+      .finally(() => setHistoryLoading(false));
+  }, []);
+
   useEffect(() => {
     if (!crawlId) {
       navigate('/');
@@ -81,7 +117,8 @@ export function ResultsPage({ themeMode }: ResultsPageProps) {
     }
     setIsLoading(true);
     fetchResult();
-  }, [crawlId, navigate, fetchResult]);
+    fetchHistory();
+  }, [crawlId, navigate, fetchResult, fetchHistory]);
 
   useEffect(() => {
     if (!result || result.status === 'completed' || result.status === 'failed' || result.status === 'cancelled') return;
@@ -140,6 +177,14 @@ export function ResultsPage({ themeMode }: ResultsPageProps) {
     running: 'Running',
   };
 
+  const statusDotMap: Record<string, string> = {
+    completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
+    failed:    isDark ? 'bg-red-400'    : 'bg-red-500',
+    cancelled: isDark ? 'bg-amber-400'  : 'bg-amber-500',
+    running:   isDark ? 'bg-blue-400'   : 'bg-blue-500',
+    idle:      isDark ? 'bg-slate-500'  : 'bg-gray-400',
+  };
+
   const meta = result.novel_metadata;
   const nonCombinedFiles = files.filter(f => f.filename !== combinedFilename);
 
@@ -162,19 +207,136 @@ export function ResultsPage({ themeMode }: ResultsPageProps) {
     document.body.removeChild(a);
   };
 
+  // Filter out the current session from history
+  const otherSessions = sessions.filter(s => s.crawl_id !== crawlId);
+
   return (
     <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
       <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
         {/* Page Header */}
-        <div className="mb-2">
-          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-            Crawl Results
-          </h1>
-          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-            {result.novel_name || 'Crawl Session'}
-          </p>
+        <div className="mb-2 flex items-start justify-between gap-4">
+          <div>
+            <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+              Crawl Results
+            </h1>
+            <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+              {result.novel_name || 'Crawl Session'}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setShowHistory(v => !v);
+              if (!sessions.length) fetchHistory();
+            }}
+            className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors flex items-center gap-1.5 ${
+              showHistory
+                ? isDark ? 'bg-indigo-900/40 border-indigo-700 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                : isDark ? 'text-slate-400 border-slate-700 hover:bg-slate-800' : 'text-gray-600 border-gray-300 hover:bg-gray-100'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {showHistory ? 'Hide History' : 'Session History'}
+          </button>
         </div>
+
+        {/* Session History Panel */}
+        {showHistory && (
+          <section className={`rounded-2xl overflow-hidden border ${isDark
+            ? 'bg-slate-900/60 border-slate-800/60'
+            : 'bg-white border-gray-200'
+          }`}>
+            <div className="px-5 py-3 border-b border-inherit">
+              <div className="flex items-center justify-between">
+                <h2 className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                  Recent Sessions ({otherSessions.length})
+                </h2>
+                <button
+                  onClick={fetchHistory}
+                  disabled={historyLoading}
+                  className={`p-1.5 rounded-lg transition-colors ${isDark
+                    ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                  }`}
+                  title="Refresh"
+                >
+                  <svg className={`w-4 h-4 ${historyLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {historyLoading && otherSessions.length === 0 ? (
+              <div className={`flex items-center justify-center gap-2 py-8 text-sm ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Loading history...
+              </div>
+            ) : otherSessions.length === 0 ? (
+              <div className={`py-8 text-center text-sm ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                No other sessions yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-inherit">
+                {otherSessions.slice(0, 8).map(session => {
+                  const dot = statusDotMap[session.status] ?? (isDark ? 'bg-slate-500' : 'bg-gray-400');
+                  const label = statusLabels[session.status] ?? session.status;
+                  const textColor = statusColors[session.status] ?? (isDark ? 'text-slate-400' : 'text-gray-500');
+                  const displayTitle = session.novel_name || session.crawl_id;
+
+                  return (
+                    <div
+                      key={session.crawl_id}
+                      className={`flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors ${
+                        isDark ? 'hover:bg-slate-800/50' : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => navigate(`/results?session=${session.crawl_id}`)}
+                    >
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                          {displayTitle}
+                        </p>
+                        <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                          <span className={textColor}>{label}</span>
+                          <span>·</span>
+                          <span>{session.chapters_crawled} ch</span>
+                          <span>·</span>
+                          <span>{formatDate(session.started_at)}</span>
+                          {session.finished_at && (
+                            <>
+                              <span>·</span>
+                              <span>{formatDuration(session.started_at, session.finished_at)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-slate-600' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {otherSessions.length > 8 && (
+              <div className="px-5 py-3 border-t border-inherit">
+                <button
+                  onClick={() => navigate('/results/all')}
+                  className={`text-xs font-medium transition-colors ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
+                >
+                  View all {otherSessions.length} sessions →
+                </button>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Summary Card */}
         <section className={`rounded-2xl p-5 sm:p-6 space-y-4 ${isDark
