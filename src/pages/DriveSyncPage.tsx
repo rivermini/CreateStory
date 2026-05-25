@@ -18,6 +18,7 @@ import { type ThemeMode } from '../components/ThemeToggle';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
 import { ServerModeBanner } from '../components/ServerModeBanner';
+import { showToast } from '../components/Toast';
 
 interface DriveSyncPageProps {
   themeMode: ThemeMode;
@@ -139,6 +140,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       });
       setConfig(cfg);
       setShowConfigModal(false);
+      showToast('Drive Sync configuration saved successfully.', 'success', 2000, 'top-center');
     } catch (e) {
       setSavingConfigError(e instanceof Error ? e.message : 'Failed to save config.');
     } finally {
