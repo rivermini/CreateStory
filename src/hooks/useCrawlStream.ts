@@ -58,7 +58,7 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
         completedCallbackRef.current
       ) {
         hasCalledCompleteRef.current = true;
-        completedCallbackRef.current(data.progress.crawl_id ?? crawlId ?? '');
+        completedCallbackRef.current(crawlId ?? '');
       }
 
       // Update log lines - keep last 200

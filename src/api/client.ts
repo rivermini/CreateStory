@@ -394,6 +394,8 @@ export interface DriveSyncConfig {
   main_be_api_base_url: string;
   main_category_id: string;
   main_be_user_id?: string;
+  service_account_json_name?: string;
+  main_be_bearer_token?: string;
 }
 
 export interface DriveFolderEntry {
