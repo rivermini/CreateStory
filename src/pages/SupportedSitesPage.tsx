@@ -146,7 +146,7 @@ export function SupportedSitesPage({ themeMode }: SupportedSitesPageProps) {
                 Need another platform?
               </h3>
               <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                We are actively working on adding support for more novel platforms. If you need a specific site supported, please let us know.
+                We are actively working on adding support for more novel platforms. If you need a specific site supported, please let me know.
               </p>
             </div>
           </div>

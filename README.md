@@ -2,7 +2,7 @@
 
 **CreateStory_FE** is the web interface for the Nova Crawler suite. Enter any novel URL, crawl chapters in real time, preview and download results in multiple formats, generate audio with GPU-accelerated text-to-speech, or explore the BedRead story library for batch audio synthesis. It connects to the [CreateStory_BE](https://github.com/hatrumtruong27/createstory-be) FastAPI backend.
 
-Built with React 19, TypeScript, and Tailwind CSS — deployed on Vercel.
+Built with React 19, TypeScript, and Tailwind CSS — deployed on Vercel
 
 ---
 
