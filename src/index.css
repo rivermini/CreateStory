@@ -374,3 +374,16 @@ html[data-theme='dark'] .hover\:bg-indigo-50\/10:hover {
 body {
   overscroll-behavior-y: contain;
 }
+
+/* ── Counter-clockwise spin (override for all spinner icons) ── */
+.animate-spin-ccw {
+  animation: spin-ccw 1s linear infinite;
+}
+@keyframes spin-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
