@@ -836,3 +836,240 @@ export async function deleteStories(baseUrl: string, token: string, storyIds: st
   const failed = results.filter(r => r.status === 'rejected').length;
   return { deleted: results.length - failed, failed };
 }
+
+// ---------------------------------------------------------------------------
+// TTS — Kokoro text-to-speech
+// ---------------------------------------------------------------------------
+
+export interface TTSVoice {
+  id: string;
+  label: string;
+  lang: string;
+}
+
+export interface TTSLanguage {
+  code: string;
+  label: string;
+}
+
+export interface TTSJob {
+  job_id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  voice: string;
+  lang: string;
+  speed: number;
+  format: string;
+  chunks_total: number;
+  chunks_done: number;
+  progress_pct: number;
+  error: string;
+  output_filename: string;
+  started_at: string | null;
+  finished_at: string | null;
+  queue_position: number;
+}
+
+export interface SpeakRequest {
+  text: string;
+  voice: string;
+  lang: string;
+  speed: number;
+  format: 'wav' | 'mp3';
+}
+
+export interface SpeakResponse {
+  job_id: string;
+  status: string;
+}
+
+export async function getVoices(): Promise<TTSVoice[]> {
+  return apiFetch<TTSVoice[]>('/api/tts/voices');
+}
+
+export async function getLanguages(): Promise<TTSLanguage[]> {
+  return apiFetch<TTSLanguage[]>('/api/tts/languages');
+}
+
+export async function startSpeak(request: SpeakRequest): Promise<SpeakResponse> {
+  return apiFetch<SpeakResponse>('/api/tts/speak', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    timeout: 15000,
+  });
+}
+
+export async function getTTSJob(jobId: string): Promise<TTSJob> {
+  return apiFetch<TTSJob>(`/api/tts/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export async function cancelTTSJob(jobId: string): Promise<{ job_id: string; status: string }> {
+  return apiFetch<{ job_id: string; status: string }>(
+    `/api/tts/jobs/${encodeURIComponent(jobId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export function getTTSAudioUrl(jobId: string): string {
+  return `${BASE_URL}/api/tts/jobs/${encodeURIComponent(jobId)}/audio`;
+}
+
+export async function getTTSQueue(): Promise<{
+  concurrency: number;
+  active_workers: number;
+  queue_size: number;
+  currently_processing: TTSJob[];
+  queued: TTSJob[];
+}> {
+  return apiFetch('/api/tts/queue');
+}
+
+export async function listTTSJobs(): Promise<TTSJob[]> {
+  return apiFetch<TTSJob[]>('/api/tts/jobs');
+}
+
+// ---------------------------------------------------------------------------
+// BedRead — Novel TTS Reader
+// ---------------------------------------------------------------------------
+
+export interface BedReadStory {
+  storyId: string;
+  title: string;
+  author: string;
+  chapterCount: number;
+  coverUrl?: string | null;
+  description?: string | null;
+  tags: string[];
+}
+
+export interface BedReadStorySearchParams {
+  keyword?: string;
+  categories?: string[];
+  status?: 'all' | 'ongoing' | 'completed';
+  sort?: 'release_date' | 'title' | 'chapter_count' | 'popular';
+  minChapters?: number;
+  publishedWithin?: number;
+  page?: number;
+  limit?: number;
+}
+
+export interface BedReadStorySearchResponse {
+  stories: BedReadStory[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface BedReadChapter {
+  chapterNumber: number;
+  title: string;
+  plainContent?: string | null;
+}
+
+export interface BatchJobChapter {
+  chapter_number: number;
+  title: string;
+  status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed';
+  progress_pct: number;
+  output_filename: string;
+  error: string;
+}
+
+export interface BatchJob {
+  batch_id: string;
+  story_id: string;
+  story_title: string;
+  voice: string;
+  lang: string;
+  speed: number;
+  format: string;
+  status: 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress_pct: number;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string;
+  chapters: BatchJobChapter[];
+  queue_position?: number;
+}
+
+export interface BatchGenerateRequest {
+  story_id: string;
+  story_title: string;
+  chapter_start?: number;
+  chapter_end?: number | null;
+  voice?: string;
+  lang?: string;
+  speed?: number;
+  format?: string;
+}
+
+export interface BatchGenerateResponse {
+  batch_id: string;
+  status: string;
+  total_chapters: number;
+}
+
+export async function getBedReadStories(): Promise<BedReadStory[]> {
+  return apiFetch<BedReadStory[]>('/api/bedread/stories');
+}
+
+export async function searchBedReadStories(params: BedReadStorySearchParams): Promise<BedReadStorySearchResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (params.keyword) searchParams.set('keyword', params.keyword);
+  if (params.status && params.status !== 'all') searchParams.set('status', params.status);
+  if (params.sort) searchParams.set('sort', params.sort);
+  if (params.minChapters !== undefined) searchParams.set('minchapters', String(params.minChapters));
+  if (params.publishedWithin !== undefined) searchParams.set('publishedWithin', String(params.publishedWithin));
+  if (params.page !== undefined) searchParams.set('page', String(params.page));
+  if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+  if (params.categories && params.categories.length > 0) {
+    params.categories.forEach(cat => searchParams.append('categories', cat));
+  }
+
+  return apiFetch<BedReadStorySearchResponse>(`/api/bedread/stories/search?${searchParams.toString()}`, { timeout: 30000 });
+}
+
+export async function getBedReadChapters(storyId: string): Promise<BedReadChapter[]> {
+  return apiFetch<BedReadChapter[]>(`/api/bedread/stories/${encodeURIComponent(storyId)}/chapters`);
+}
+
+export async function startBatchGenerate(request: BatchGenerateRequest): Promise<BatchGenerateResponse> {
+  return apiFetch<BatchGenerateResponse>('/api/bedread/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    timeout: 30000,
+  });
+}
+
+export async function getBatchJob(batchId: string): Promise<BatchJob> {
+  return apiFetch<BatchJob>(`/api/bedread/jobs/${encodeURIComponent(batchId)}`);
+}
+
+export async function cancelBatchJob(batchId: string): Promise<{ batch_id: string; status: string }> {
+  return apiFetch<{ batch_id: string; status: string }>(
+    `/api/bedread/jobs/${encodeURIComponent(batchId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function listAllBatchJobs(): Promise<BatchJob[]> {
+  return apiFetch<BatchJob[]>('/api/bedread/jobs');
+}
+
+export async function removeBatchJob(batchId: string): Promise<{ batch_id: string; status: string }> {
+  return apiFetch<{ batch_id: string; status: string }>(
+    `/api/bedread/jobs/${encodeURIComponent(batchId)}/remove`,
+    { method: 'POST' }
+  );
+}
+
+export function getChapterAudioUrl(batchId: string, chapterNum: number): string {
+  return `${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/download?chapter=${chapterNum}`;
+}
+
+export function getBatchZipUrl(batchId: string): string {
+  return `${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/zip`;
+}
