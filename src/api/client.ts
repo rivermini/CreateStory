@@ -635,6 +635,7 @@ export interface SyncJob {
   chapters_skipped: number;
   error: string | null;
   logs: JobLogEntry[];
+  main_be_api_base_url?: string;
 }
 
 export interface JobLogEntry {
@@ -648,6 +649,7 @@ export interface JobCreateRequest {
   folder_id: string;
   folder_name: string;
   display_name: string;
+  main_be_api_base_url?: string;
 }
 
 export interface JobCreateResponse {
@@ -700,7 +702,7 @@ export async function deleteJobs(jobIds: string[]): Promise<{ deleted: number }>
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_ids: jobIds }),
+      body: JSON.stringify({ ids: jobIds }),
     }
   );
 }

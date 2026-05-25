@@ -18,6 +18,7 @@ import {
   type TTSLanguage,
   type TTSVoice,
 } from '../api/client';
+import { ServerModeBanner } from '../components/ServerModeBanner';
 
 interface BedReadPageProps {
   themeMode: 'light' | 'dark';
@@ -89,6 +90,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const [chapters, setChapters] = useState<BedReadChapter[]>([]);
   const [chaptersLoading, setChaptersLoading] = useState(false);
   const [bedReadUserId, setBedReadUserId] = useState<string | null>(null);
+  const [mainBeApiUrl, setMainBeApiUrl] = useState<string | null>(null);
 
   const [allChapters, setAllChapters] = useState(true);
   const [rangeStart, setRangeStart] = useState(1);
@@ -180,6 +182,9 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     getDriveSyncConfig().then(cfg => {
       if (cfg?.main_be_user_id) {
         setBedReadUserId(cfg.main_be_user_id);
+      }
+      if (cfg?.main_be_api_base_url) {
+        setMainBeApiUrl(cfg.main_be_api_base_url);
       }
     }).catch(() => {});
   }, []);
@@ -367,6 +372,9 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
           <h1 className={'text-2xl sm:text-3xl font-bold ' + text100}>BedReads</h1>
           <p className={'mt-1 text-sm sm:text-base ' + text400}>Novel TTS Reader — batch audio from web novels</p>
         </div>
+
+        {/* Server Mode Banner */}
+        <ServerModeBanner serverUrl={mainBeApiUrl} isDark={isDark} />
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Left Column: Story List */}

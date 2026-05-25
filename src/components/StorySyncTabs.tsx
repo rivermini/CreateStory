@@ -7,6 +7,7 @@ import {
   type DriveSyncConfig,
 } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
+import { BatchConfirmDialog } from './BatchConfirmDialog';
 
 function ValidationErrorBadge({ error, isDark }: { error: string; isDark: boolean }) {
   const isFormat = error.startsWith("WRONG FORMAT");
@@ -68,7 +69,7 @@ interface UploadableTabProps {
   uploadingIds: Set<string>;
   onCheck: () => void;
   onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
-  onUploadAll: () => void;
+  onRequestUploadAll: () => void;
   themeMode: ThemeMode;
 }
 
@@ -80,7 +81,7 @@ function UploadableTab({
   uploadingIds,
   onCheck,
   onUploadSingle,
-  onUploadAll,
+  onRequestUploadAll,
   themeMode,
 }: UploadableTabProps) {
   const isDark = themeMode === 'dark';
@@ -168,7 +169,7 @@ function UploadableTab({
 
           {data && validCount > 0 && (
             <button
-              onClick={onUploadAll}
+              onClick={onRequestUploadAll}
               disabled={isUploadingAny || allDone}
               className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUploadingAny || allDone
                   ? isDark
@@ -632,8 +633,8 @@ interface UpdatableTabProps {
   updatingIds: Set<string>;
   onCheck: () => void;
   onUpdateSingle: (entry: UpdatableStoryEntry) => Promise<string>;
-  onUpdateAll: () => void;
-  invalid: UpdatableStoryEntry[];
+  onRequestUpdateAll: () => void;
+  invalid?: UpdatableStoryEntry[];
   themeMode: ThemeMode;
 }
 
@@ -645,8 +646,8 @@ function UpdatableTab({
   updatingIds,
   onCheck,
   onUpdateSingle,
-  onUpdateAll,
-  invalid = [],
+  onRequestUpdateAll,
+  invalid,
   themeMode,
 }: UpdatableTabProps) {
   const isDark = themeMode === 'dark';
@@ -658,9 +659,9 @@ function UpdatableTab({
   const filteredUpdatable = data?.updatable.filter(e =>
     !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
   ) ?? [];
-  const filteredInvalid = invalid.filter(e =>
+  const filteredInvalid = invalid?.filter(e =>
     !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
-  );
+  ) ?? [];
   const filteredNoUpdate = data?.no_update_needed.filter(e =>
     !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
   ) ?? [];
@@ -733,7 +734,7 @@ function UpdatableTab({
 
           {data && updateCount > 0 && (
             <button
-              onClick={onUpdateAll}
+              onClick={onRequestUpdateAll}
               disabled={isUpdatingAny}
               className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdatingAny
                   ? isDark
@@ -1310,10 +1311,46 @@ export function StorySyncTabs({
 }: StorySyncTabsProps) {
   const isDark = themeMode === 'dark';
 
+  const [showUploadConfirm, setShowUploadConfirm] = useState(false);
+  const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
+
   const uploadableCount = uploadableData?.uploadable.length ?? 0;
   const updatableCount = updatableData?.updatable.length ?? 0;
 
+  const handleUploadAll = () => {
+    setShowUploadConfirm(false);
+    onUploadAll();
+  };
+
+  const handleUpdateAll = () => {
+    setShowUpdateConfirm(false);
+    onUpdateAll();
+  };
+
   return (
+    <>
+      <BatchConfirmDialog
+        isOpen={showUploadConfirm}
+        title="Upload All Stories"
+        message={`You are about to upload ${uploadableCount} stories to Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of files.`}
+        itemCount={uploadableCount}
+        confirmText="Start Upload"
+        isDark={isDark}
+        onConfirm={handleUploadAll}
+        onCancel={() => setShowUploadConfirm(false)}
+      />
+
+      <BatchConfirmDialog
+        isOpen={showUpdateConfirm}
+        title="Update All Stories"
+        message={`You are about to update ${updatableCount} stories with new chapters from Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of updates.`}
+        itemCount={updatableCount}
+        confirmText="Start Update"
+        isDark={isDark}
+        onConfirm={handleUpdateAll}
+        onCancel={() => setShowUpdateConfirm(false)}
+      />
+
     <div className={`rounded-2xl shadow-xl shadow-black/5 ${isDark ? 'bg-slate-900/80 backdrop-blur-sm border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
       {/* Tab bar */}
       <div className={`flex items-stretch ${isDark ? 'bg-slate-900/40 border-b border-slate-800/60' : 'bg-gray-50/80 border-b border-gray-200'}`}>
@@ -1395,7 +1432,7 @@ export function StorySyncTabs({
             uploadingIds={uploadingIds}
             onCheck={onCheckUploadable}
             onUploadSingle={onUploadSingle}
-            onUploadAll={onUploadAll}
+            onRequestUploadAll={() => setShowUploadConfirm(true)}
             themeMode={themeMode}
           />
         )}
@@ -1408,12 +1445,13 @@ export function StorySyncTabs({
             updatingIds={updatingIds}
             onCheck={onCheckUpdatable}
             onUpdateSingle={onUpdateSingle}
-            onUpdateAll={onUpdateAll}
+            onRequestUpdateAll={() => setShowUpdateConfirm(true)}
             invalid={updatableInvalid}
             themeMode={themeMode}
           />
         )}
       </div>
     </div>
+    </>
   );
 }
