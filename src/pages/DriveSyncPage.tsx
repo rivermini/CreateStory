@@ -253,7 +253,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     }
   };
 
-  const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry): Promise<string> => {
+  const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry, chaptersCount?: number): Promise<string> => {
     const { server_story, folder } = entry;
 
     let jobId: string;
@@ -264,6 +264,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         folder_name: folder.display_name,
         display_name: folder.display_name,
         main_be_api_base_url: config?.main_be_api_base_url,
+        chapters_count: chaptersCount,
       });
       jobId = job.id;
       setUpdatingJobs(prev => new Map(prev).set(server_story.id, jobId));

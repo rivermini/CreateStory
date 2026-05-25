@@ -60,11 +60,6 @@ const navIcons: Record<string, React.ReactNode> = {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
     ),
-    '/story-mgmt': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-        </svg>
-    ),
     '/supported-sites': (
         <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
@@ -86,7 +81,6 @@ const NAV_ITEMS_AUDIO: NavItem[] = [
 const NAV_ITEMS_BEDREADS: NavItem[] = [
     { to: '/drive-sync', label: 'Drive Sync', icon: navIcons['/drive-sync'] },
     { to: '/drive-sync/history', label: 'Sync History', icon: navIcons['/drive-sync/history'] },
-    { to: '/story-mgmt', label: 'Story Mgmt', icon: navIcons['/story-mgmt'] },
 ];
 
 const NAV_ITEMS_SYSTEM: NavItem[] = [
