@@ -507,45 +507,75 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                 </div>
               </div>
 
-              <div className={'border-t ' + border700 + ' ' + bg700_30}>
-                <div className="px-4 py-3 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {storiesLoading ? (
-                      <>
-                        <svg className={'w-4 h-4 animate-spin ' + textIndigo} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        <span className={'text-xs ' + text500}>Loading...</span>
-                      </>
-                    ) : (
-                      <div className={'text-xs ' + text500}>
-                        Page {currentPage} of {filteredTotalPages}
-                      </div>
-                    )}
-                  </div>
-                  {filteredTotalPages > 1 && (
-                    <div className="flex items-center gap-1">
+              <div className={'border-t ' + border700 + ' ' + bg700_30 + (storiesLoading ? ' animate-pulse' : '')}>
+                <div className="px-4 py-3 flex items-center justify-center gap-1 flex-wrap">
+                  {storiesLoading ? (
+                    <div className="flex items-center gap-2">
+                      <svg className={'w-4 h-4 animate-spin ' + textIndigo} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span className={'text-xs ' + text500}>Loading stories...</span>
+                    </div>
+                  ) : (
+                    <>
                       <button
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        disabled={currentPage <= 1 || storiesLoading}
-                        className={'p-1.5 rounded-lg ' + bg700_50 + ' ' + text400 + ' disabled:opacity-30 disabled:cursor-not-allowed transition-colors'}
+                        disabled={currentPage <= 1}
+                        className={'w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition-all duration-150 ' +
+                          (currentPage <= 1
+                            ? bg700_30 + ' ' + text500 + ' opacity-40 cursor-not-allowed'
+                            : bg700_50 + ' ' + text400 + ' hover:' + bg700_60 + ' active:scale-95')}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                       </button>
-                      <span className={'text-xs ' + text500}>{currentPage}/{filteredTotalPages}</span>
+
+                      {(() => {
+                        const total = filteredTotalPages;
+                        const cur = currentPage;
+                        const pages: (number | '...')[] = [];
+                        if (total <= 7) {
+                          for (let i = 1; i <= total; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          if (cur > 3) pages.push('...');
+                          for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i);
+                          if (cur < total - 2) pages.push('...');
+                          pages.push(total);
+                        }
+                        return pages.map((p, i) =>
+                          p === '...' ? (
+                            <span key={'ellipsis-' + i} className={'w-8 h-8 flex items-center justify-center text-xs ' + text500}>...</span>
+                          ) : (
+                            <button
+                              key={p}
+                              onClick={() => setCurrentPage(p)}
+                              className={'w-8 h-8 flex items-center justify-center rounded-lg text-xs font-medium transition-all duration-150 ' +
+                                (p === cur
+                                  ? 'bg-indigo-600 text-white shadow-sm'
+                                  : bg700_50 + ' ' + text400 + ' hover:' + bg700_60 + ' active:scale-95')}
+                            >
+                              {p}
+                            </button>
+                          )
+                        );
+                      })()}
+
                       <button
                         onClick={() => setCurrentPage(p => Math.min(filteredTotalPages, p + 1))}
-                        disabled={currentPage >= filteredTotalPages || storiesLoading}
-                        className={'p-1.5 rounded-lg ' + bg700_50 + ' ' + text400 + ' disabled:opacity-30 disabled:cursor-not-allowed transition-colors'}
+                        disabled={currentPage >= filteredTotalPages}
+                        className={'w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition-all duration-150 ' +
+                          (currentPage >= filteredTotalPages
+                            ? bg700_30 + ' ' + text500 + ' opacity-40 cursor-not-allowed'
+                            : bg700_50 + ' ' + text400 + ' hover:' + bg700_60 + ' active:scale-95')}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </button>
-                    </div>
+                    </>
                   )}
                 </div>
               </div>
