@@ -559,6 +559,7 @@ export interface CheckUploadableResponse {
 export interface UpdatableStoryEntry {
   folder: DriveFolderEntry;
   server_story: ServerStoryRef;
+  new_chapters_count?: number;
 }
 
 export interface CheckUpdatableResponse {
@@ -566,6 +567,8 @@ export interface CheckUpdatableResponse {
   server_stories: ServerStoryRef[];
   updatable: UpdatableStoryEntry[];
   no_update_needed: UpdatableStoryEntry[];
+  no_server_match: DriveFolderEntry[];
+  empty_extended: DriveFolderEntry[];
   invalid: UpdatableStoryEntry[];
 }
 

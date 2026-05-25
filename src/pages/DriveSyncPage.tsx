@@ -461,6 +461,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               onUpdateSingle={handleUpdateSingle}
               onUpdateAll={handleUpdateAll}
               updatableInvalid={updatableData?.invalid ?? []}
+              updatableNoServerMatch={updatableData?.no_server_match ?? []}
+              updatableEmptyExtended={updatableData?.empty_extended ?? []}
             />
           </div>
         )}

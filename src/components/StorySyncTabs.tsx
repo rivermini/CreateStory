@@ -635,6 +635,8 @@ interface UpdatableTabProps {
   onUpdateSingle: (entry: UpdatableStoryEntry) => Promise<string>;
   onRequestUpdateAll: () => void;
   invalid?: UpdatableStoryEntry[];
+  noServerMatch?: DriveFolderEntry[];
+  emptyExtended?: DriveFolderEntry[];
   themeMode: ThemeMode;
 }
 
@@ -648,11 +650,13 @@ function UpdatableTab({
   onUpdateSingle,
   onRequestUpdateAll,
   invalid,
+  noServerMatch,
+  emptyExtended,
   themeMode,
 }: UpdatableTabProps) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
-  const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uptodate'>('all');
+  const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uptodate' | 'noServerMatch' | 'emptyExtended'>('invalid');
 
   const q = search.toLowerCase().trim();
 
@@ -664,6 +668,12 @@ function UpdatableTab({
   ) ?? [];
   const filteredNoUpdate = data?.no_update_needed.filter(e =>
     !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
+  ) ?? [];
+  const filteredNoServerMatch = noServerMatch?.filter(e =>
+    !q || e.display_name.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
+  ) ?? [];
+  const filteredEmptyExtended = emptyExtended?.filter(e =>
+    !q || e.display_name.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
   ) ?? [];
 
   const updateCount = filteredUpdatable.length;
@@ -775,7 +785,7 @@ function UpdatableTab({
                 : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
               }`}
           >
-            All ({filteredUpdatable.length + filteredInvalid.length + filteredNoUpdate.length})
+            All ({filteredUpdatable.length + filteredInvalid.length + filteredNoUpdate.length + filteredNoServerMatch.length + filteredEmptyExtended.length})
           </button>
           <button
             onClick={() => setFilterSection('ready')}
@@ -804,6 +814,28 @@ function UpdatableTab({
           >
             Up-to-date ({filteredNoUpdate.length})
           </button>
+          {filteredNoServerMatch.length > 0 && (
+            <button
+              onClick={() => setFilterSection('noServerMatch')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'noServerMatch'
+                  ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
+                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              No Server Match ({filteredNoServerMatch.length})
+            </button>
+          )}
+          {filteredEmptyExtended.length > 0 && (
+            <button
+              onClick={() => setFilterSection('emptyExtended')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'emptyExtended'
+                  ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
+                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              Empty EXTENDED ({filteredEmptyExtended.length})
+            </button>
+          )}
         </div>
       )}
 
@@ -846,6 +878,22 @@ function UpdatableTab({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
               {filteredInvalid.length} invalid
+            </div>
+          )}
+          {filteredNoServerMatch.length > 0 && (
+            <div className={`flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {filteredNoServerMatch.length} no server match
+            </div>
+          )}
+          {filteredEmptyExtended.length > 0 && (
+            <div className={`flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15v4c0 1.1.896 2 2 2h14a2 2 0 002-2v-4M17 9l-5 5-5-5M12 12.8V2.5" />
+              </svg>
+              {filteredEmptyExtended.length} empty EXTENDED
             </div>
           )}
           {successCount > 0 && (
@@ -904,7 +952,7 @@ function UpdatableTab({
                 </h3>
                 <div className="space-y-2">
                   {filteredUpdatable.map((entry: UpdatableStoryEntry) => {
-                    const delta = (entry.folder.extended_chapter_count ?? 0) - entry.server_story.maxChapter;
+                    const newCount = entry.new_chapters_count ?? 0;
                     const result = updateResults.get(entry.server_story.id);
                     const isUpdating = updatingIds.has(entry.server_story.id);
                     const isSuccess = result?.success;
@@ -916,9 +964,9 @@ function UpdatableTab({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <h4 className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{entry.folder.display_name}</h4>
-                              {delta > 0 && (
+                              {newCount > 0 && (
                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>
-                                  +{delta} ch
+                                  +{newCount} ch
                                 </span>
                               )}
                             </div>
@@ -1094,7 +1142,7 @@ function UpdatableTab({
         {data && filterSection === 'ready' && updateCount > 0 && (
           <div className="space-y-2">
             {filteredUpdatable.map((entry: UpdatableStoryEntry) => {
-              const delta = (entry.folder.extended_chapter_count ?? 0) - entry.server_story.maxChapter;
+              const newCount = entry.new_chapters_count ?? 0;
               const result = updateResults.get(entry.server_story.id);
               const isUpdating = updatingIds.has(entry.server_story.id);
               const isSuccess = result?.success;
@@ -1105,9 +1153,9 @@ function UpdatableTab({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{entry.folder.display_name}</h4>
-                        {delta > 0 && (
+                        {newCount > 0 && (
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>
-                            +{delta} ch
+                            +{newCount} ch
                           </span>
                         )}
                       </div>
@@ -1244,10 +1292,54 @@ function UpdatableTab({
           </div>
         )}
 
+        {data && filterSection === 'noServerMatch' && filteredNoServerMatch.length > 0 && (
+          <div className="space-y-2">
+            {filteredNoServerMatch.map(entry => (
+              <div key={entry.id} className={`p-4 rounded-xl ${isDark ? 'bg-slate-900/20 border border-slate-800/40' : 'bg-gray-50 border border-gray-200'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`text-sm font-medium truncate mb-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.display_name}</h4>
+                    <p className={`text-xs font-mono ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>{entry.name}</p>
+                    <div className={`flex items-center gap-1.5 text-xs mt-1.5 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                      No matching story found on the server
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 text-xs font-medium rounded-lg ${isDark ? 'text-slate-500 bg-slate-800/60' : 'text-gray-500 bg-gray-200'}`}>
+                    No Server Match
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data && filterSection === 'emptyExtended' && filteredEmptyExtended.length > 0 && (
+          <div className="space-y-2">
+            {filteredEmptyExtended.map(entry => (
+              <div key={entry.id} className={`p-4 rounded-xl ${isDark ? 'bg-slate-900/20 border border-slate-800/40' : 'bg-gray-50 border border-gray-200'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`text-sm font-medium truncate mb-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.display_name}</h4>
+                    <p className={`text-xs font-mono ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>{entry.name}</p>
+                    <div className={`flex items-center gap-1.5 text-xs mt-1.5 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                      EXTENDED subfolder is empty
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 text-xs font-medium rounded-lg ${isDark ? 'text-slate-500 bg-slate-800/60' : 'text-gray-500 bg-gray-200'}`}>
+                    Empty EXTENDED
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {data && (
           ((filterSection === 'ready' && updateCount === 0) ||
             (filterSection === 'invalid' && filteredInvalid.length === 0) ||
-            (filterSection === 'uptodate' && filteredNoUpdate.length === 0)) && (
+            (filterSection === 'uptodate' && filteredNoUpdate.length === 0) ||
+            (filterSection === 'noServerMatch' && filteredNoServerMatch.length === 0) ||
+            (filterSection === 'emptyExtended' && filteredEmptyExtended.length === 0)) && (
             <div className={`text-center py-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
               <svg className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-700' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1285,6 +1377,8 @@ export interface StorySyncTabsProps {
   onUpdateSingle: (entry: UpdatableStoryEntry) => Promise<string>;
   onUpdateAll: () => void;
   updatableInvalid: UpdatableStoryEntry[];
+  updatableNoServerMatch?: DriveFolderEntry[];
+  updatableEmptyExtended?: DriveFolderEntry[];
 }
 
 export function StorySyncTabs({
@@ -1308,6 +1402,8 @@ export function StorySyncTabs({
   onUpdateSingle,
   onUpdateAll,
   updatableInvalid,
+  updatableNoServerMatch,
+  updatableEmptyExtended,
 }: StorySyncTabsProps) {
   const isDark = themeMode === 'dark';
 
@@ -1447,6 +1543,8 @@ export function StorySyncTabs({
             onUpdateSingle={onUpdateSingle}
             onRequestUpdateAll={() => setShowUpdateConfirm(true)}
             invalid={updatableInvalid}
+            noServerMatch={updatableNoServerMatch}
+            emptyExtended={updatableEmptyExtended}
             themeMode={themeMode}
           />
         )}
