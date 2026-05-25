@@ -9,7 +9,7 @@ interface SettingsPageProps {
 
 export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const isDark = themeMode === 'dark';
-  const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [, setSettings] = useState<SettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState('');

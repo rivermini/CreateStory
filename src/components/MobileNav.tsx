@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { useLocation, Link, useNavigate } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
 
 interface MobileNavProps {
@@ -91,10 +90,9 @@ export function MobileNav({ isDark }: MobileNavProps) {
 
 interface MobileHeaderProps {
     isDark: boolean;
-    onMenuOpen: () => void;
 }
 
-export function MobileHeader({ isDark, onMenuOpen }: MobileHeaderProps) {
+export function MobileHeader({ isDark }: MobileHeaderProps) {
     return (
         <header className={`lg:hidden fixed top-0 left-0 right-0 z-40 safe-area-top ${isDark
             ? 'bg-slate-900/95 border-b border-slate-800/80 backdrop-blur-xl'

@@ -69,7 +69,6 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
       {/* Mobile Header */}
       <MobileHeader
         isDark={isDark}
-        onMenuOpen={() => setMobileDrawerOpen(true)}
       />
 
       {/* Mobile Bottom Navigation */}

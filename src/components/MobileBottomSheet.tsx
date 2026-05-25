@@ -6,15 +6,9 @@ interface MobileBottomSheetProps {
     isOpen: boolean;
     onClose: () => void;
     storyTitle: string | null;
-    siteName: string | null;
     chapters: ChapterEntry[];
     chapterCount: number;
     totalChapterCount: number | null;
-    isLoading: boolean;
-    isDetecting: boolean;
-    error: string;
-    warning: string | null;
-    isChapterUrl: boolean;
     novelMetadata: NovelMetadata | null | undefined;
     onCrawlNovel: (toChapter: number) => void;
     isDark: boolean;
@@ -24,15 +18,9 @@ export function MobileBottomSheet({
     isOpen,
     onClose,
     storyTitle,
-    siteName,
     chapters,
     chapterCount,
     totalChapterCount,
-    isLoading,
-    isDetecting,
-    error,
-    warning,
-    isChapterUrl,
     novelMetadata,
     onCrawlNovel,
     isDark,

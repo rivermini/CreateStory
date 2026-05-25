@@ -507,15 +507,9 @@ export function HomePage({ themeMode }: HomePageProps) {
         isOpen={mobileSheetOpen}
         onClose={() => setMobileSheetOpen(false)}
         storyTitle={panelTitle || storyTitle}
-        siteName={siteInfo?.site_name || null}
         chapters={chapters}
         chapterCount={chapterCount}
         totalChapterCount={totalChapterCount}
-        isLoading={isLoadingChapters}
-        isDetecting={isLoading}
-        error={chaptersError}
-        warning={warning}
-        isChapterUrl={isChapterUrl}
         novelMetadata={novelMetadata}
         onCrawlNovel={handleCrawlNovel}
         isDark={isDark}
