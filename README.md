@@ -1,15 +1,25 @@
-# fe_novel_crawler
+# Nova Crawler — Frontend
 
-The web interface for the Novel Crawler project. Enter a novel URL, crawl chapters, preview and download results, generate audio with text-to-speech, or browse the built-in story library for batch TTS.
+**CreateStory_FE** is the web interface for the Nova Crawler suite. Enter any novel URL, crawl chapters in real time, preview and download results in multiple formats, generate audio with GPU-accelerated text-to-speech, or explore the BedRead story library for batch audio synthesis. It connects to the [CreateStory_BE](https://github.com/hatrumtruong27/createstory-be) FastAPI backend.
+
+Built with React 19, TypeScript, and Tailwind CSS — deployed on Vercel.
+
+---
 
 ## Features
 
-- **URL auto-detection** -- paste any novel URL and the app identifies the site and fetches metadata automatically
-- **Live crawl progress** -- real-time log streaming as chapters are scraped
-- **Multi-format output** -- download individual chapters, combined files, or full ZIP archives
-- **Text-to-speech** -- pick a voice, adjust speed, generate audio from any text
-- **BedRead story library** -- browse stories, configure TTS settings, and batch-generate audio for entire novels
-- **Dark mode** -- system-aware theme switching
+| Feature | Description |
+|---|---|
+| **URL auto-detection** | Paste any novel URL — the app identifies the site and fetches metadata automatically |
+| **Live crawl progress** | Real-time progress streaming with a live log panel as chapters are scraped |
+| **Multi-format output** | Download individual chapters, merged files, or full ZIP archives |
+| **Text-to-speech** | Pick a voice, adjust speed, generate WAV/MP3 audio from any crawled text |
+| **Batch crawl** | Launch multiple crawls simultaneously from a list of URLs |
+| **BedRead library** | Browse the story library, configure TTS settings, batch-generate audio for entire novels |
+| **Google Drive sync** | Configure and monitor Drive-to-backend story synchronization |
+| **Dark / light mode** | System-aware theme switching with a manual toggle |
+
+---
 
 ## Architecture
 
@@ -18,29 +28,53 @@ Browser (this app)
     │
     ├── HTTP/SSE ──► FastAPI backend (port 8000)
     │                   │
-    │                   ├── Scrapy subprocess ──► wattpad.com
+    │                   ├── Scrapy + Selenium/Chrome ──► wattpad.com
     │                   ├── Kokoro ONNX ──► WAV/MP3 audio
-    │                   └── External API ──► BedRead story library
+    │                   ├── Google Drive API ──► Story sync
+    │                   └── External BedRead API ──► Story library
     │
     └── In dev: Vite proxy /api/* ──► localhost:8000
-        In prod: Direct HTTP to Cloudflare Tunnel URL
+        In prod: Direct HTTP to Cloudflare Tunnel URL or VPS endpoint
 ```
 
-The frontend connects to the [novel_crawler](https://github.com/hatrumtruong27/novel_crawler) backend API.
+The frontend communicates exclusively through the API client (`src/api/client.ts`). No `fetch()` calls exist outside that module.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | React 19 |
+| Language | TypeScript |
+| Build tool | Vite 8 |
+| Routing | React Router v6 |
+| Styling | Tailwind CSS v3 |
+| Fonts | Inter (via @fontsource/inter) |
+| HTTP client | Native `fetch` (centralized wrapper) |
+| Deployment | Vercel |
+
+---
 
 ## Prerequisites
 
 - **Node.js 18+**
 - **npm 9+**
 
+---
+
 ## Quick Start
 
 ```bash
+cd CreateStory_FE
+
 npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173).
+Open [http://localhost:5173](http://localhost:5173). The app will connect to the backend at `http://localhost:8000` (configured via `VITE_API_BASE_URL`).
+
+---
 
 ## Environment Variables
 
@@ -51,48 +85,58 @@ Create a `.env` file in the project root:
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
-In production (Vercel), set `VITE_API_BASE_URL` via the Vercel dashboard under **Settings > Environment Variables**. It should point to your backend's Cloudflare Tunnel URL or public IP.
+For production (Vercel), set `VITE_API_BASE_URL` under **Settings > Environment Variables** in the Vercel dashboard. Point it to your backend's Cloudflare Tunnel URL or public VPS IP.
+
+---
 
 ## Pages
 
-| Page | Route | What it does |
-|------|-------|--------------|
+| Page | Route | Description |
+|---|---|---|
 | **Home** | `/` | Paste a URL, auto-detect the site, configure crawl settings, start crawling |
 | **Results** | `/results` | Browse all past crawl sessions, preview and download files |
 | **Active Crawls** | `/active` | Monitor all running and recently finished crawl sessions |
 | **Batch** | `/batch` | Start multiple crawls at once from a list of URLs |
 | **BedRead** | `/bedread` | Browse the story library, configure TTS, batch-generate audio |
+| **Drive Sync** | `/drive-sync` | Configure Drive sync settings and monitor sync status |
+
+---
 
 ## Project Structure
 
 ```
 src/
 ├── api/
-│   └── client.ts          # All API calls -- no fetch() anywhere else
+│   └── client.ts              # All HTTP calls — the single source of truth for API communication
 ├── hooks/
-│   ├── useSiteDetection.ts  # URL detection with 300ms debounce
-│   ├── useCrawlStream.ts    # Crawl progress polling (2s interval)
-│   └── useResults.ts        # Results fetching and caching
+│   ├── useSiteDetection.ts    # URL detection with 300 ms debounce
+│   ├── useCrawlStream.ts      # Crawl progress polling (2 s interval)
+│   └── useResults.ts          # Results fetching and caching
 ├── pages/
-│   ├── Home.tsx           # Main crawl page
-│   ├── Results.tsx        # Results browser
-│   ├── ActiveCrawls.tsx   # Active session monitor
-│   ├── Batch.tsx          # Multi-crawl launcher
-│   └── BedRead.tsx        # Story library + batch TTS
-└── components/
-    ├── UrlInput.tsx        # URL input with auto-detection
-    ├── ProgressBar.tsx      # Crawl progress bar
-    ├── CrawlLog.tsx        # Live log output
-    ├── FilePreview.tsx      # In-browser file preview
-    ├── TTSPlayer.tsx       # Audio player for TTS output
-    └── VoiceSelector.tsx   # Voice picker with language grouping
+│   ├── Home.tsx               # Main crawl page
+│   ├── Results.tsx            # Results browser
+│   ├── ActiveCrawls.tsx       # Active session monitor
+│   ├── Batch.tsx              # Multi-crawl launcher
+│   ├── BedRead.tsx            # Story library + batch TTS
+│   └── DriveSync.tsx          # Drive sync configuration & monitoring
+├── components/
+│   ├── UrlInput.tsx           # URL input with auto-detection
+│   ├── ProgressBar.tsx        # Crawl progress bar
+│   ├── CrawlLog.tsx           # Live log output
+│   ├── FilePreview.tsx        # In-browser file preview
+│   ├── TTSPlayer.tsx          # Audio player for TTS output
+│   ├── VoiceSelector.tsx      # Voice picker with language grouping
+│   └── ThemeToggle.tsx        # Dark/light mode toggle
+└── main.tsx                   # App entry point, router setup
 ```
+
+---
 
 ## State Management
 
-No global state library. Each page owns its local state via `useState`. Shared server state is fetched on demand through custom hooks.
+No global state library is used. Each page owns its local state via `useState`. Shared server state is fetched on demand through custom hooks. The API client (`src/api/client.ts`) is the single source of truth for all HTTP communication.
 
-The API client (`src/api/client.ts`) is the single source of truth for all HTTP communication.
+---
 
 ## Build and Deploy
 
@@ -117,9 +161,9 @@ npm run build
 vercel deploy
 ```
 
-Or connect the repository to Vercel for automatic deployments on push.
+Or connect the repository to Vercel for automatic deployments on push. Set `VITE_API_BASE_URL` in Vercel's environment variables to your backend URL.
 
-Set `VITE_API_BASE_URL` in Vercel's environment variables to your backend URL (Cloudflare Tunnel URL or public IP).
+---
 
 ## API Client
 
@@ -131,11 +175,9 @@ const { crawl_id } = await startCrawl({
   spider_name: "wattpad",
   novel: "https://www.wattpad.com/1284690197-slug",
   limit: 10,
-  output_format: "jsonl",
+  output_format: "txt",
   chapter_range: "1-10",
   novel_name: "Story Title",
-  completed: true,
-  combine_chapters: true,
 });
 
 // Poll for progress (useCrawlStream hook does this automatically)
@@ -144,32 +186,32 @@ const { progress, logLines } = await getCrawlStatusWithLogs(crawl_id);
 // Get results
 const result = await getCrawlResult(crawl_id);
 
-// Download
+// Download as ZIP
 const zipUrl = getDownloadAllUrl(crawlId);
+
+// Start batch crawl
+await startBatchCrawl(requests);
+
+// TTS
+const { job_id } = await speak({ text, voice, lang, speed, format: "wav" });
+const job = await getJobStatus(jobId);
+const audioBlob = await getJobAudio(jobId);
 ```
 
 See `src/api/client.ts` for the complete API surface.
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Framework | React 19 |
-| Language | TypeScript |
-| Build tool | Vite 8 |
-| Routing | React Router v6 |
-| Styling | Tailwind CSS v3 |
-| HTTP client | Native `fetch` (via centralized wrapper) |
-| Deployment | Vercel |
+---
 
 ## Troubleshooting
 
-**Frontend can't reach the backend:** Make sure the backend is running (`python main.py` in the `novel_crawler` directory). Check that `VITE_API_BASE_URL` in `.env` matches `http://localhost:8000`.
+**Frontend can't reach the backend.** Make sure the backend is running (`python main.py` in the CreateStory_BE directory). Check that `VITE_API_BASE_URL` in `.env` matches `http://localhost:8000`.
 
-**CORS errors in dev:** The Vite proxy (`vite.config.ts`) forwards `/api` to `localhost:8000`. This only works in `npm run dev`. For production, `VITE_API_BASE_URL` must point to your deployed backend.
+**CORS errors in dev.** The Vite proxy (`vite.config.ts`) forwards `/api` to `localhost:8000`. This only works in `npm run dev`. For production, `VITE_API_BASE_URL` must point to your deployed backend.
 
-**SSE not updating:** The frontend uses HTTP polling (every 2 seconds), not Server-Sent Events. This is intentional -- polling works through Cloudflare Tunnel, while SSE gets buffered.
+**SSE not updating.** The frontend uses HTTP polling (every 2 seconds), not Server-Sent Events. This is intentional — polling works reliably through Cloudflare Tunnel, while SSE gets buffered by intermediaries.
 
-## Further Reading
+---
 
-For a deep-dive into how every component works, see [DEVELOPER_GUIDE.md](../DEVELOPER_GUIDE.md) in the project root.
+## Related Projects
+
+- [CreateStory_BE](https://github.com/hatrumtruong27/createstory-be) — FastAPI backend API
