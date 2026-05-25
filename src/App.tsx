@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav, MobileHeader, MobileDrawer } from './components/MobileNav';
+import { ToastContainer } from './components/Toast';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -112,6 +113,9 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
           </Suspense>
         </div>
       </div>
+
+      {/* Global Toast Notifications */}
+      <ToastContainer />
     </>
   );
 }

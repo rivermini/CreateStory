@@ -17,6 +17,8 @@ import {
 import { type ThemeMode } from '../components/ThemeToggle';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
+import { ServerModeBanner } from '../components/ServerModeBanner';
+import { showToast } from '../components/Toast';
 
 interface DriveSyncPageProps {
   themeMode: ThemeMode;
@@ -138,6 +140,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       });
       setConfig(cfg);
       setShowConfigModal(false);
+      showToast('Drive Sync configuration saved successfully.', 'success', 2000, 'top-center');
     } catch (e) {
       setSavingConfigError(e instanceof Error ? e.message : 'Failed to save config.');
     } finally {
@@ -202,6 +205,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   }, []);
 
   const handleCheckUploadable = async () => {
+    setUploadableData(null);
+    sessionStorage.removeItem('drivesync_uploadableData');
     setUploadableLoading(true);
     setUploadableError('');
     setUploadResults(new Map());
@@ -226,11 +231,12 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       folder_id: folder.id,
       folder_name: folder.name,
       display_name: folder.display_name,
+      main_be_api_base_url: config?.main_be_api_base_url,
     });
 
     setTrackedJobs(prev => [...prev, { jobId: res.id, folderId: folder.id, displayName: folder.display_name }]);
     return res.id;
-  }, []);
+  }, [config]);
 
   const handleUploadAll = useCallback(async () => {
     if (!uploadableData) return;
@@ -246,6 +252,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           folder_id: folder.id,
           folder_name: folder.name,
           display_name: folder.display_name,
+          main_be_api_base_url: config?.main_be_api_base_url,
         });
         newJobs.push({ jobId: res.id, folderId: folder.id, displayName: folder.display_name });
       } catch (e) {
@@ -263,9 +270,11 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     if (newJobs.length > 0) {
       setTrackedJobs(prev => [...prev, ...newJobs]);
     }
-  }, [uploadableData]);
+  }, [uploadableData, config]);
 
   const handleCheckUpdatable = async () => {
+    setUpdatableData(null);
+    sessionStorage.removeItem('drivesync_updatableData');
     setUpdatableLoading(true);
     setUpdatableError('');
     setUpdateResults(new Map());
@@ -294,6 +303,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         folder_id: folder.id,
         folder_name: folder.display_name,
         display_name: folder.display_name,
+        main_be_api_base_url: config?.main_be_api_base_url,
       });
       jobId = job.id;
       setUpdatingJobs(prev => new Map(prev).set(server_story.id, jobId));
@@ -346,7 +356,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     for (const entry of entries) {
       handleUpdateSingle(entry);
     }
-  }, [updatableData, handleUpdateSingle]);
+  }, [updatableData, handleUpdateSingle, config]);
 
   const hasActiveJobs = trackedJobs.length > 0 || updatingJobs.size > 0;
   const totalUploadable = uploadableData?.uploadable.length ?? 0;
@@ -464,6 +474,9 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         {/* Main content */}
         {config && !configLoading && (
           <div className="mt-2">
+            {/* Server Mode Banner */}
+            <ServerModeBanner serverUrl={config.main_be_api_base_url} isDark={isDark} />
+
             <StorySyncTabs
               config={config}
               activeTab={activeSubTab}

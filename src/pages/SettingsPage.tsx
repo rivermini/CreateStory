@@ -10,6 +10,7 @@ import {
 } from '../api/client';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
 import { type ThemeMode } from '../components/ThemeToggle';
+import { showToast } from '../components/Toast';
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
@@ -105,6 +106,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
       });
       setConfig(cfg);
       setShowConfigModal(false);
+      showToast('Drive Sync configuration saved successfully.', 'success', 2000, 'top-center');
     } catch (e) {
       setSavingConfigError(e instanceof Error ? e.message : 'Failed to save config.');
     } finally {

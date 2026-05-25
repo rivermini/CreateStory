@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getMainBeUrl, getMainBeToken, getStoriesPage, deleteStories, type MainBeStoryFull } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
+import { ServerModeBanner } from '../components/ServerModeBanner';
 
 interface StoryMgmtPageProps {
   themeMode: ThemeMode;
@@ -166,6 +167,9 @@ export function StoryMgmtPage({ themeMode }: StoryMgmtPageProps) {
             Manage stories from the company backend
           </p>
         </div>
+
+        {/* Server Mode Banner */}
+        <ServerModeBanner serverUrl={mainBeUrl} isDark={isDark} />
 
         {/* Controls */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">

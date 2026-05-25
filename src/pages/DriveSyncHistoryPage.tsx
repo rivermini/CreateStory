@@ -2,6 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { listJobs, deleteJob, deleteJobs, type SyncJob, type JobLogEntry } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
 
+const PRODUCTION_URL = 'https://api-novel.santngo.com/';
+const PRODUCTION_URL_V2 = 'https://api-novel.santngo.com';
+
 interface DriveSyncHistoryPageProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
@@ -400,6 +403,34 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                     }`}>
                       {job.kind === 'upload_single' ? 'Upload' : 'Update'}
                     </span>
+
+                    {/* Server badge */}
+                    {job.main_be_api_base_url && (() => {
+                      const normalizedUrl = job.main_be_api_base_url!.endsWith('/') ? job.main_be_api_base_url!.slice(0, -1) : job.main_be_api_base_url!;
+                      const isProduction = normalizedUrl === PRODUCTION_URL_V2 || normalizedUrl === PRODUCTION_URL;
+                      return (
+                        <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border ${
+                          isProduction
+                            ? isDark
+                              ? 'bg-emerald-900/40 text-emerald-400 border-emerald-800/40'
+                              : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                            : isDark
+                              ? 'bg-slate-800/60 text-slate-400 border-slate-700/40'
+                              : 'bg-gray-100 text-gray-600 border-gray-200'
+                        }`}>
+                          {isProduction ? (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                          {isProduction ? 'Prod' : 'Test'}
+                        </span>
+                      );
+                    })()}
 
                     {/* Stats badges */}
                     {job.chapters_added > 0 && (
