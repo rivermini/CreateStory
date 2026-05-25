@@ -202,6 +202,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   }, []);
 
   const handleCheckUploadable = async () => {
+    setUploadableData(null);
+    sessionStorage.removeItem('drivesync_uploadableData');
     setUploadableLoading(true);
     setUploadableError('');
     setUploadResults(new Map());
@@ -266,6 +268,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   }, [uploadableData]);
 
   const handleCheckUpdatable = async () => {
+    setUpdatableData(null);
+    sessionStorage.removeItem('drivesync_updatableData');
     setUpdatableLoading(true);
     setUpdatableError('');
     setUpdateResults(new Map());
