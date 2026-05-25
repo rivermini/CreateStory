@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { startCrawl } from '../api/client';
+import { startCrawl, getSettings } from '../api/client';
 import { NovelInfoPanel } from '../components/NovelInfoPanel';
+import { MobileBottomSheet } from '../components/MobileBottomSheet';
 import { useSiteDetection } from '../hooks/useSiteDetection';
 import { useNovelInfo } from '../hooks/useNovelInfo';
-import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
 
 interface HomePageProps {
@@ -12,7 +12,7 @@ interface HomePageProps {
   onThemeChange: (mode: ThemeMode) => void;
 }
 
-export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
+export function HomePage({ themeMode }: HomePageProps) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
   const { siteInfo, slug, storyTitle, resolvedUrl, isValid, isLoading, error, detect, novelMetadata } = useSiteDetection();
@@ -20,12 +20,25 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
 
   const [inputUrl, setInputUrl] = useState('');
   const [toChapter, setToChapter] = useState(10);
-  const [rangeFrom, setRangeFrom] = useState(2);
-  const [rangeTo, setRangeTo] = useState(6);
+  const [rangeFrom, setRangeFrom] = useState(1);
+  const [rangeTo, setRangeTo] = useState(10);
   const [rangeMode, setRangeMode] = useState<'count' | 'range'>('count');
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState('');
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const outputFormat = 'txt' as const;
+
+  // Apply defaults loaded from backend settings on mount
+  useEffect(() => {
+    getSettings()
+      .then(s => {
+        setRangeMode(s.crawl_mode as 'count' | 'range');
+        setToChapter(s.crawl_default_count);
+        setRangeFrom(s.crawl_default_range_from);
+        setRangeTo(s.crawl_default_range_to);
+      })
+      .catch(() => {/* ignore — use local defaults */});
+  }, []);
 
   const inputsLocked = !isValid;
   const effectiveMax = totalChapterCount ?? 999999;
@@ -84,6 +97,7 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
           ? { chapter_range: `${rangeFrom}-${rangeTo}` }
           : {}),
         completed: novelMetadata?.completed,
+        source_url: inputUrl,
       });
       navigate(`/crawl?session=${res.crawl_id}`);
     } catch (e) {
@@ -94,46 +108,104 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
   };
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
-      <Header
-        themeMode={themeMode}
-        onThemeChange={onThemeChange}
-        title={"Single Crawl"}
-        subtitle={"Quickly crawl a single novel"}
-      />
+    <div className={`min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+            New Crawl
+          </h1>
+          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+            Enter a novel URL to start crawling chapters
+          </p>
+        </div>
 
-      <main className="w-full xl:w-[70vw] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
 
           {/* Left column */}
           <div className="space-y-6">
 
-            {/* URL Input */}
-            <section className={`rounded-xl p-4 sm:p-6 space-y-4 ${isDark
-              ? 'bg-slate-800 border border-slate-700'
+            {/* Mobile: Novel Info Preview */}
+            {isValid && (
+              <button
+                onClick={() => setMobileSheetOpen(true)}
+                className={`lg:hidden w-full rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 ${
+                  isDark
+                    ? 'bg-slate-900/60 border border-slate-800/60 hover:bg-slate-800/60'
+                    : 'bg-white border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className={`w-12 h-16 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  isDark ? 'bg-slate-800/60' : 'bg-gray-100'
+                }`}>
+                  {novelMetadata?.cover_url ? (
+                    <img
+                      src={novelMetadata.cover_url}
+                      alt="Cover"
+                      className="w-full h-full rounded-lg object-cover"
+                      onError={(e) => e.currentTarget.style.display = 'none'}
+                    />
+                  ) : (
+                    <span className="text-xl">📖</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className={`font-semibold truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                    {panelTitle || storyTitle}
+                  </p>
+                  {totalChapterCount != null && (
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                      {totalChapterCount.toLocaleString()} chapters
+                    </p>
+                  )}
+                </div>
+                <svg className={`w-5 h-5 flex-shrink-0 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
+
+            {/* URL Input Card */}
+            <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
+              ? 'bg-slate-900/60 border border-slate-800/60'
               : 'bg-white border border-gray-200'
             }`}>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className={`text-base font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>1. Paste a Novel URL</h2>
-                  <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Supported: wattpad.com</p>
+              {/* Card Header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark
+                      ? 'bg-indigo-600/20 text-indigo-400'
+                      : 'bg-indigo-100 text-indigo-600'
+                    }`}>
+                      1
+                    </span>
+                    <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
+                      Paste a Novel URL
+                    </h2>
+                  </div>
+                  <p className={`text-xs sm:text-sm ml-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                    Supported: wattpad.com
+                  </p>
                 </div>
                 <button
                   onClick={() => navigate('/batch')}
-                  className={`flex-shrink-0 px-3 py-1.5 text-sm border rounded-lg transition-colors flex items-center gap-1.5 w-full sm:w-auto justify-center sm:justify-start ${isDark
-                    ? 'text-indigo-400 hover:text-indigo-300 border-indigo-600/40 hover:bg-indigo-600/10'
-                    : 'text-indigo-600 hover:text-indigo-700 border-indigo-300 hover:bg-indigo-50'
+                  className={`flex-shrink-0 px-3.5 py-2 text-sm font-medium border rounded-xl transition-all duration-200 flex items-center gap-2 ${isDark
+                    ? 'text-indigo-400 border-indigo-800/50 hover:border-indigo-600 hover:bg-indigo-600/10'
+                    : 'text-indigo-600 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50'
                   }`}
                   title="Crawl multiple novels at once"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                   </svg>
                   Batch
                 </button>
               </div>
+
+              {/* URL Input */}
               <div className="space-y-2">
-                <label htmlFor="url-input" className={`block text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                <label htmlFor="url-input" className={`block text-sm font-medium ${isDark ? 'text-slate-400' : 'text-gray-700'}`}>
                   Novel URL
                 </label>
                 <div className="relative">
@@ -143,11 +215,11 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                     value={inputUrl}
                     onChange={(e) => handleUrlChange(e.target.value)}
                     placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
-                    className={`w-full px-4 py-3 border rounded-lg
-                      focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors
+                    className={`w-full px-4 py-3.5 border rounded-xl
+                      focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200
                       ${isDark
-                        ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-500'
-                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                        ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
+                        : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
                       }`}
                   />
                   {isLoading && (
@@ -161,33 +233,42 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                 </div>
               </div>
 
+              {/* Detection Result */}
               {isValid && siteInfo && (
-                <div className="space-y-1.5">
-                  <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <div className={`rounded-xl p-4 space-y-2 ${isDark
+                  ? 'bg-emerald-900/20 border border-emerald-800/30'
+                  : 'bg-emerald-50 border border-emerald-200'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <svg className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>
-                      Detected: <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{siteInfo.site_name}</span>
-                      {storyTitle && (
-                        <span className={`ml-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}> — {storyTitle}</span>
-                      )}
+                    <span className={`font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                      {siteInfo.site_name}
                     </span>
+                    {storyTitle && (
+                      <span className={`${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                        — {storyTitle}
+                      </span>
+                    )}
                   </div>
                   {siteInfo.config_name === 'wattpad' && resolvedUrl && (
-                    <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                      URL type resolved: {inputUrl.includes('/character') ? 'Character page' :
+                    <p className={`text-xs ml-7 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                      {inputUrl.includes('/character') ? 'Character page' :
                         inputUrl.includes('/prologue') ? 'Prologue' :
                           inputUrl.includes('/chapter-') ? 'Chapter page' : 'Story page'} &rarr; Chapter 1
-                      {slug && <span className="ml-1">(ID: <code className={isDark ? 'text-indigo-300' : 'text-indigo-600'}>{slug}</code>)</span>}
+                      {slug && <span className="ml-1">(ID: <code className={`${isDark ? 'text-indigo-300' : 'text-indigo-600'} font-mono`}>{slug}</code>)</span>}
                     </p>
                   )}
                 </div>
               )}
 
               {error && (
-                <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${isDark
+                  ? 'bg-red-900/20 border border-red-800/30 text-red-400'
+                  : 'bg-red-50 border border-red-200 text-red-600'
+                }`}>
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>{error}</span>
@@ -195,24 +276,35 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
               )}
             </section>
 
-            {/* Chapter Range */}
-            <section className={`rounded-xl p-4 sm:p-6 space-y-4 transition-opacity duration-200 ${inputsLocked ? 'opacity-60' : ''} ${isDark
-              ? inputsLocked ? 'bg-slate-800 border border-slate-700' : 'bg-slate-800 border border-slate-700'
-              : inputsLocked ? 'bg-white border border-gray-200' : 'bg-white border border-gray-200'
+            {/* Chapter Range Card */}
+            <section className={`rounded-2xl p-5 sm:p-6 space-y-5 transition-all duration-200 ${inputsLocked ? 'opacity-60' : ''} ${isDark
+              ? 'bg-slate-900/60 border border-slate-800/60'
+              : 'bg-white border border-gray-200'
             }`}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className={`text-base font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>2. Chapter Range</h2>
-                  <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+              {/* Card Header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark
+                      ? 'bg-indigo-600/20 text-indigo-400'
+                      : 'bg-indigo-100 text-indigo-600'
+                    }`}>
+                      2
+                    </span>
+                    <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
+                      Chapter Range
+                    </h2>
+                  </div>
+                  <p className={`text-xs sm:text-sm ml-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
                     {inputsLocked ? 'Paste a novel URL first' : 'Set which chapters to crawl'}
                   </p>
                 </div>
                 {totalChapterCount != null && (
-                  <div className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-right border ${isDark
-                    ? 'bg-indigo-900/30 border-indigo-800/40'
-                    : 'bg-indigo-50 border-indigo-200'
+                  <div className={`flex-shrink-0 px-3 py-2 rounded-xl text-right ${isDark
+                    ? 'bg-indigo-900/30 border border-indigo-800/40'
+                    : 'bg-indigo-50 border border-indigo-200'
                   }`}>
-                    <p className={`text-xs font-semibold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                    <p className={`text-sm font-bold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
                       {totalChapterCount.toLocaleString()}
                     </p>
                     <p className={`text-[10px] mt-0.5 leading-none ${isDark ? 'text-indigo-400/70' : 'text-indigo-500/70'}`}>max chapters</p>
@@ -221,12 +313,12 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
               </div>
 
               {/* Mode toggle */}
-              <div className={`flex items-center gap-1 p-1 rounded-lg w-fit ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
+              <div className={`flex items-center gap-1 p-1 rounded-xl w-fit ${isDark ? 'bg-slate-800/80' : 'bg-gray-100'}`}>
                 <button
                   onClick={() => setRangeMode('count')}
                   disabled={inputsLocked}
-                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${rangeMode === 'count'
-                    ? 'bg-indigo-600 text-white'
+                  className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${rangeMode === 'count'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                     : isDark
                       ? 'text-slate-400 hover:text-slate-200 disabled:opacity-40'
                       : 'text-gray-500 hover:text-gray-700 disabled:opacity-40'
@@ -237,8 +329,8 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                 <button
                   onClick={() => setRangeMode('range')}
                   disabled={inputsLocked}
-                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${rangeMode === 'range'
-                    ? 'bg-indigo-600 text-white'
+                  className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${rangeMode === 'range'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                     : isDark
                       ? 'text-slate-400 hover:text-slate-200 disabled:opacity-40'
                       : 'text-gray-500 hover:text-gray-700 disabled:opacity-40'
@@ -248,9 +340,10 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                 </button>
               </div>
 
+              {/* Range inputs */}
               {rangeMode === 'count' ? (
                 <div className="max-w-xs w-full">
-                  <label className={`block text-sm mb-1.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                  <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                     Max chapters to crawl
                     {totalChapterCount != null && (
                       <span className={`ml-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>(max: {totalChapterCount.toLocaleString()})</span>
@@ -264,15 +357,15 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                       value={toChapter}
                       disabled={inputsLocked}
                       onChange={(e) => handleToChapterChange(parseInt(e.target.value) || 1)}
-                      className={`w-full px-4 py-2.5 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed
+                      className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
                         focus:outline-none focus:ring-2 focus:ring-indigo-500
                         ${isDark
-                          ? 'bg-slate-700 border-slate-600 text-slate-100'
-                          : 'bg-white border-gray-300 text-gray-900'
+                          ? 'bg-slate-800/60 border-slate-700 text-slate-100'
+                          : 'bg-gray-50 border-gray-300 text-gray-900'
                         }`}
                     />
                     {totalChapterCount != null && (
-                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs pointer-events-none ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                      <span className={`absolute right-4 top-1/2 -translate-y-1/2 text-sm pointer-events-none ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
                         / {totalChapterCount.toLocaleString()}
                       </span>
                     )}
@@ -281,7 +374,7 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
               ) : (
                 <div className="flex items-end gap-3 max-w-sm w-full">
                   <div className="flex-1 min-w-0">
-                    <label className={`block text-sm mb-1.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                    <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                       From chapter
                       {totalChapterCount != null && (
                         <span className={`ml-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>(max: {totalChapterCount.toLocaleString()})</span>
@@ -294,17 +387,17 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                       value={rangeFrom}
                       disabled={inputsLocked}
                       onChange={(e) => handleRangeFromChange(parseInt(e.target.value) || 1)}
-                      className={`w-full px-4 py-2.5 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed
+                      className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
                         focus:outline-none focus:ring-2 focus:ring-indigo-500
                         ${isDark
-                          ? 'bg-slate-700 border-slate-600 text-slate-100'
-                          : 'bg-white border-gray-300 text-gray-900'
+                          ? 'bg-slate-800/60 border-slate-700 text-slate-100'
+                          : 'bg-gray-50 border-gray-300 text-gray-900'
                         }`}
                     />
                   </div>
-                  <span className={`pb-3 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>to</span>
+                  <span className={`pb-3 font-medium ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>to</span>
                   <div className="flex-1">
-                    <label className={`block text-sm mb-1.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                    <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                       To chapter
                       {totalChapterCount != null && (
                         <span className={`ml-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>(max: {totalChapterCount.toLocaleString()})</span>
@@ -317,24 +410,25 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
                       value={rangeTo}
                       disabled={inputsLocked}
                       onChange={(e) => handleRangeToChange(parseInt(e.target.value) || rangeFrom)}
-                      className={`w-full px-4 py-2.5 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed
+                      className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
                         focus:outline-none focus:ring-2 focus:ring-indigo-500
                         ${isDark
-                          ? 'bg-slate-700 border-slate-600 text-slate-100'
-                          : 'bg-white border-gray-300 text-gray-900'
+                          ? 'bg-slate-800/60 border-slate-700 text-slate-100'
+                          : 'bg-gray-50 border-gray-300 text-gray-900'
                         }`}
                     />
                   </div>
                 </div>
               )}
 
+              {/* Format indicator */}
               <div className="flex items-center gap-3">
                 <label className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Format:</label>
-                <span className="px-3 py-1 text-sm rounded-md bg-indigo-600 text-white">TXT</span>
+                <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">TXT</span>
               </div>
 
               {rangeMode === 'range' && !inputsLocked && (
-                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
                   Will crawl chapters {rangeFrom}&ndash;{rangeTo} ({rangeTotal.toLocaleString()} total)
                 </p>
               )}
@@ -342,11 +436,11 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
 
             {/* Start Error */}
             {startError && (
-              <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${isDark
-                ? 'bg-red-900/30 border border-red-800 text-red-400'
+              <div className={`flex items-center gap-3 p-4 rounded-xl text-sm ${isDark
+                ? 'bg-red-900/20 border border-red-800/30 text-red-400'
                 : 'bg-red-50 border border-red-200 text-red-600'
               }`}>
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {startError}
@@ -358,11 +452,11 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
               onClick={handleStart}
               disabled={isStarting || !isValid || isPaywalled}
               title={isPaywalled ? 'Crawling disabled — Wattpad Original' : undefined}
-              className={`w-full py-3.5 font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 ${isPaywalled || isStarting || !isValid
+              className={`w-full py-4 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${isPaywalled || isStarting || !isValid
                 ? isDark
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
+                  : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'
                 }`}
             >
               {isStarting ? (
@@ -383,23 +477,10 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
               )}
             </button>
 
-            {/* Supported Sites */}
-            <section className={`rounded-xl p-4 sm:p-6 space-y-3 ${isDark
-              ? 'bg-slate-800 border border-slate-700'
-              : 'bg-white border border-gray-200'
-            }`}>
-              <h2 className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Supported Sites</h2>
-              <div className={`space-y-2 text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-2">
-                  <span className={`font-medium min-w-28 sm:min-w-32 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>wattpad.com</span>
-                  <code className={`text-xs break-all ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>https://www.wattpad.com/1284690197-...-chapter-one</code>
-                </div>
-              </div>
-            </section>
           </div>
 
           {/* Right column */}
-          <div className="space-y-4 lg:sticky lg:top-20">
+          <div className="space-y-4 lg:sticky lg:top-6">
             {isValid && (
               <NovelInfoPanel
                 storyTitle={panelTitle || storyTitle}
@@ -420,6 +501,19 @@ export function HomePage({ themeMode, onThemeChange }: HomePageProps) {
           </div>
         </div>
       </main>
+
+      {/* Mobile Bottom Sheet */}
+      <MobileBottomSheet
+        isOpen={mobileSheetOpen}
+        onClose={() => setMobileSheetOpen(false)}
+        storyTitle={panelTitle || storyTitle}
+        chapters={chapters}
+        chapterCount={chapterCount}
+        totalChapterCount={totalChapterCount}
+        novelMetadata={novelMetadata}
+        onCrawlNovel={handleCrawlNovel}
+        isDark={isDark}
+      />
     </div>
   );
 }

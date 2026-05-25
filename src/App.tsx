@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import FloatingNewCrawlButton from './components/FloatingNewCrawlButton';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Sidebar } from './components/Sidebar';
+import { MobileNav, MobileHeader, MobileDrawer } from './components/MobileNav';
+
+type ThemeMode = 'light' | 'dark';
 
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const CrawlPage = lazy(() => import('./pages/CrawlPage').then(m => ({ default: m.CrawlPage })));
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then(m => ({ default: m.ResultsPage })));
-const ResultsAllPage = lazy(() => import('./pages/ResultsAllPage'));
+const CrawlHistory = lazy(() => import('./pages/CrawlHistoryPage'));
 const BatchPage = lazy(() => import('./pages/BatchPage').then(m => ({ default: m.BatchPage })));
 const DriveSyncPage = lazy(() => import('./pages/DriveSyncPage').then(m => ({ default: m.DriveSyncPage })));
 const DriveSyncHistoryPage = lazy(() => import('./pages/DriveSyncHistoryPage').then(m => ({ default: m.DriveSyncHistoryPage })));
 const StoryMgmtPage = lazy(() => import('./pages/StoryMgmtPage').then(m => ({ default: m.StoryMgmtPage })));
-
-type ThemeMode = 'light' | 'dark';
+const SupportedSitesPage = lazy(() => import('./pages/SupportedSitesPage').then(m => ({ default: m.SupportedSitesPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 
 const THEME_COOKIE = 'novel_crawler_theme';
 
@@ -55,24 +58,56 @@ function App() {
 }
 
 function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChange: (mode: ThemeMode) => void }) {
-  const location = useLocation();
+  const isDark = themeMode === 'dark';
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   return (
     <>
-      <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900"><div className="text-slate-400">Loading...</div></div>}>
-        <Routes>
-          <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/batch" element={<BatchPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/results/all" element={<ResultsAllPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="/story-mgmt" element={<StoryMgmtPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-      {location.pathname !== '/story-mgmt' && <FloatingNewCrawlButton />}
+      {/* Desktop Sidebar */}
+      <Sidebar themeMode={themeMode} onThemeChange={onThemeChange} />
+
+      {/* Mobile Header */}
+      <MobileHeader
+        isDark={isDark}
+      />
+
+      {/* Mobile Bottom Navigation */}
+      <MobileNav isDark={isDark} />
+
+      {/* Mobile Drawer */}
+      <MobileDrawer
+        isOpen={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        isDark={isDark}
+      />
+
+      <div
+        className={`min-h-screen transition-colors duration-300 ${
+          isDark ? 'bg-slate-950' : 'bg-gray-50'
+        }`}
+      >
+        <div className="lg:pl-64 pt-14 lg:pt-0">
+          <Suspense fallback={
+            <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
+              Loading...
+            </div>
+          }>
+            <Routes>
+              <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/batch" element={<BatchPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/results" element={<ResultsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/story-mgmt" element={<StoryMgmtPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/settings" element={<SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </div>
+      </div>
     </>
   );
 }

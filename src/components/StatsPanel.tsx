@@ -37,11 +37,11 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
   const duration = formatDuration(startedAt, finishedAt);
 
   const statusDotMap: Record<string, string> = {
-    running:   isDark ? 'bg-blue-500'   : 'bg-blue-500',
-    completed: isDark ? 'bg-emerald-500' : 'bg-emerald-500',
-    failed:   isDark ? 'bg-red-500'   : 'bg-red-500',
-    cancelled: isDark ? 'bg-amber-500' : 'bg-amber-500',
-    idle:     isDark ? 'bg-slate-500' : 'bg-gray-400',
+    running:   isDark ? 'bg-blue-400'   : 'bg-blue-500',
+    completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
+    failed:   isDark ? 'bg-red-400'   : 'bg-red-500',
+    cancelled: isDark ? 'bg-amber-400' : 'bg-amber-500',
+    idle:     isDark ? 'bg-slate-400' : 'bg-gray-400',
   };
 
   const statusTextMap: Record<string, string> = {
@@ -52,7 +52,7 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
     idle:     isDark ? 'text-slate-400' : 'text-gray-500',
   };
 
-  const dot = statusDotMap[status] ?? (isDark ? 'bg-slate-500' : 'bg-gray-400');
+  const dot = statusDotMap[status] ?? (isDark ? 'bg-slate-400' : 'bg-gray-400');
   const text = statusTextMap[status] ?? (isDark ? 'text-slate-400' : 'text-gray-500');
   const label = status.charAt(0).toUpperCase() + status.slice(1);
 
@@ -96,12 +96,12 @@ function StatCard({ label, value, sub, isDark }: {
   isDark: boolean;
 }) {
   return (
-    <div className={`rounded-lg p-4 border ${isDark
-      ? 'bg-slate-800 border-slate-700'
+    <div className={`rounded-2xl p-4 border ${isDark
+      ? 'bg-slate-900/60 border-slate-800/60'
       : 'bg-white border-gray-200'
     }`}>
-      <p className={`text-xs font-medium uppercase tracking-wider mb-2 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>{label}</p>
-      <p className={`text-2xl font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{value}</p>
+      <p className={`text-xs font-medium uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{label}</p>
+      <p className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{value}</p>
       {sub && <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{sub}</p>}
     </div>
   );

@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { startBatchCrawl, type CrawlRequest, detectSite, getNovelChapters, type NovelMetadata } from '../api/client';
-import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
 
 interface BatchPageProps {
@@ -41,7 +40,7 @@ function createEntry(id: number, url: string): BatchEntry {
   };
 }
 
-export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
+export function BatchPage({ themeMode }: BatchPageProps) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
   const [entries, setEntries] = useState<BatchEntry[]>([createEntry(1, ''), createEntry(2, '')]);
@@ -134,6 +133,7 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
           novel_name: e.storyTitle || undefined,
           completed: e.novelMetadata?.completed,
           chapter_range: e.chapterRange || undefined,
+          source_url: e.url,
         };
       });
 
@@ -150,58 +150,61 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
   const anyLoading = entries.some(e => e.isLoading);
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
-      <Header
-        themeMode={themeMode}
-        onThemeChange={onThemeChange}
-        title={"Batch Crawl"}
-        subtitle={"Crawl multiple novels at once"}
-      />
+    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
-      <main className="w-full xl:w-[70vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-4 sm:space-y-6">
+        {/* Page Header */}
+        <div className="mb-2">
+          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+            Batch Crawl
+          </h1>
+          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+            Crawl multiple novels at once
+          </p>
+        </div>
 
         {/* Summary bar */}
-        <div className={`flex flex-wrap items-center gap-3 p-3 rounded-xl ${isDark
-          ? 'bg-slate-800 border border-slate-700'
+        <div className={`flex flex-wrap items-center gap-4 p-4 rounded-2xl ${isDark
+          ? 'bg-slate-900/60 border border-slate-800/60'
           : 'bg-white border border-gray-200'
         }`}>
-          <div className="flex items-center gap-1.5 text-sm">
+          <div className="flex items-center gap-2 text-sm">
             <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>URLs:</span>
             <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{entries.length}</span>
           </div>
-          <div className={`w-px h-4 hidden sm:block ${isDark ? 'bg-slate-700' : 'bg-gray-300'}`} />
-          <div className="flex items-center gap-1.5 text-sm">
+          <div className={`w-px h-5 hidden sm:block ${isDark ? 'bg-slate-700' : 'bg-gray-300'}`} />
+          <div className="flex items-center gap-2 text-sm">
             <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>Valid:</span>
             <span className={`font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{validCount}</span>
           </div>
-          <div className={`w-px h-4 hidden sm:block ${isDark ? 'bg-slate-700' : 'bg-gray-300'}`} />
-          <div className="flex items-center gap-1.5 text-sm">
+          <div className={`w-px h-5 hidden sm:block ${isDark ? 'bg-slate-700' : 'bg-gray-300'}`} />
+          <div className="flex items-center gap-2 text-sm">
             <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>Total chapters:</span>
             <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{totalChapters.toLocaleString()}</span>
           </div>
-          <div className="w-full sm:w-auto flex items-center gap-2 text-xs sm:ml-auto">
+          <div className="flex items-center gap-2 text-xs ml-auto">
             <span className={isDark ? 'text-slate-500' : 'text-gray-400'}>Press Enter to detect</span>
           </div>
         </div>
 
         {/* URL entries */}
-        <section className={`rounded-xl p-4 sm:p-6 space-y-3 ${isDark
-          ? 'bg-slate-800 border border-slate-700'
+        <section className={`rounded-2xl p-5 sm:p-6 space-y-4 ${isDark
+          ? 'bg-slate-900/60 border border-slate-800/60'
           : 'bg-white border border-gray-200'
         }`}>
-          <h2 className={`text-base font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Novel URLs</h2>
+          <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Novel URLs</h2>
 
           {entries.map((entry, idx) => {
             const isPaywalled = entry.novelMetadata?.is_paywalled === true;
             return (
               <div key={entry.id}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   {/* Entry number */}
-                  <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${isDark
-                    ? 'bg-slate-700 border border-slate-600'
-                    : 'bg-gray-100 border border-gray-300'
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${isDark
+                    ? 'bg-slate-800/60 border border-slate-700/50'
+                    : 'bg-gray-100 border border-gray-200'
                   }`}>
-                    <span className={`text-xs font-bold ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>{idx + 1}</span>
+                    <span className={`text-sm font-bold ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>{idx + 1}</span>
                   </div>
 
                   {/* URL input */}
@@ -213,11 +216,11 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
                       onBlur={() => handleDetectEntry(entry)}
                       onKeyDown={e => handleUrlKeyDown(e, entry)}
                       placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
-                      className={`w-full px-4 py-2.5 border rounded-lg text-sm transition-colors
+                      className={`w-full px-4 py-3 border rounded-xl text-sm transition-all duration-200
                         focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                         ${isDark
-                          ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-500'
-                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                          ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
+                          : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
                         }`}
                     />
                     {entry.isLoading && (
@@ -232,7 +235,7 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
 
                   {/* Status icon */}
                   {!entry.isLoading && entry.isValid && !isPaywalled && (
-                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${isDark
+                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
                       ? 'bg-emerald-900/30 border border-emerald-800/40'
                       : 'bg-emerald-50 border border-emerald-200'
                     }`} title="Valid">
@@ -242,7 +245,7 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
                     </div>
                   )}
                   {!entry.isLoading && entry.isValid && entry.novelMetadata?.is_paywalled && (
-                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${isDark
+                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
                       ? 'bg-amber-900/30 border border-amber-800/40'
                       : 'bg-amber-50 border border-amber-200'
                     }`} title="Paywalled">
@@ -252,7 +255,7 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
                     </div>
                   )}
                   {!entry.isLoading && entry.error && (
-                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${isDark
+                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
                       ? 'bg-red-900/30 border border-red-800/40'
                       : 'bg-red-50 border border-red-200'
                     }`} title={entry.error}>
@@ -266,8 +269,8 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
                   {entries.length > 2 && (
                     <button
                       onClick={() => handleRemoveEntry(entry.id)}
-                      className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${isDark
-                        ? 'text-slate-500 hover:text-red-400 hover:bg-slate-700'
+                      className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${isDark
+                        ? 'text-slate-500 hover:text-red-400 hover:bg-red-900/20'
                         : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
                       }`}
                       title="Remove"
@@ -279,18 +282,18 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
                   )}
                 </div>
                 {entry.isValid && !isPaywalled && (
-                  <div className="ml-7 flex items-center gap-2 py-2">
+                  <div className="ml-11 flex items-center gap-3 py-2">
                     <label className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Range (optional):</label>
                     <input
                       type="text"
                       value={entry.chapterRange}
                       onChange={e => updateEntry(entry.id, { chapterRange: e.target.value })}
                       placeholder="e.g. 1-100 or 50-75"
-                      className={`px-2.5 py-1.5 border rounded-lg text-xs transition-colors
+                      className={`px-3 py-1.5 border rounded-xl text-xs transition-colors
                         focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                        w-32 ${isDark
-                          ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-500'
-                          : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                        w-36 ${isDark
+                          ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
+                          : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
                         }`}
                     />
                   </div>
@@ -301,7 +304,7 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
 
           <button
             onClick={handleAddEntry}
-            className={`flex items-center gap-2 text-sm transition-colors ${isDark
+            className={`flex items-center gap-2 text-sm font-medium transition-colors ${isDark
               ? 'text-indigo-400 hover:text-indigo-300'
               : 'text-indigo-600 hover:text-indigo-700'
             }`}
@@ -315,26 +318,26 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
 
         {/* Detection results */}
         {entries.some(e => e.isValid || e.error) && (
-          <section className={`rounded-xl p-4 sm:p-6 space-y-2 ${isDark
-            ? 'bg-slate-800 border border-slate-700'
+          <section className={`rounded-2xl p-5 sm:p-6 space-y-3 ${isDark
+            ? 'bg-slate-900/60 border border-slate-800/60'
             : 'bg-white border border-gray-200'
           }`}>
-            <h2 className={`text-sm font-medium mb-3 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Detection Results</h2>
+            <h2 className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Detection Results</h2>
             {entries.map((entry, idx) => {
               const isPaywalled = entry.novelMetadata?.is_paywalled === true;
               return (
-                <div key={entry.id} className={`flex items-center gap-3 text-sm py-1.5 border-b last:border-0 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+                <div key={entry.id} className={`flex items-center gap-3 text-sm py-2 border-b last:border-0 ${isDark ? 'border-slate-800/60' : 'border-gray-200'}`}>
                   <span className={`w-5 text-xs font-mono ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{idx + 1}.</span>
                   {entry.isValid ? (
                     <>
-                      <span className={`flex-shrink-0 w-2 h-2 rounded-full ${isPaywalled ? (isDark ? 'bg-amber-400' : 'bg-amber-500') : (isDark ? 'bg-emerald-400' : 'bg-emerald-500')}`} />
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isPaywalled ? (isDark ? 'bg-amber-400' : 'bg-amber-500') : (isDark ? 'bg-emerald-400' : 'bg-emerald-500')}`} />
                       <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{entry.siteInfo?.site_name}</span>
                       {entry.storyTitle && <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>— {entry.storyTitle}</span>}
                       {entry.totalChapterCount != null && (
                         <span className={`ml-auto text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.totalChapterCount.toLocaleString()} ch</span>
                       )}
                       {isPaywalled && (
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${isDark
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${isDark
                           ? 'bg-amber-900/40 text-amber-400 border-amber-800/40'
                           : 'bg-amber-100 text-amber-700 border-amber-200'
                         }`}>Paywalled</span>
@@ -342,7 +345,7 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
                     </>
                   ) : (
                     <>
-                      <span className={`flex-shrink-0 w-2 h-2 rounded-full ${isDark ? 'bg-red-400' : 'bg-red-500'}`} />
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDark ? 'bg-red-400' : 'bg-red-500'}`} />
                       <span className={`truncate flex-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{entry.url}</span>
                       <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>{entry.error}</span>
                     </>
@@ -354,25 +357,25 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
         )}
 
         {/* Output format */}
-        <section className={`rounded-xl p-4 sm:p-6 space-y-3 ${isDark
-          ? 'bg-slate-800 border border-slate-700'
+        <section className={`rounded-2xl p-5 sm:p-6 space-y-3 ${isDark
+          ? 'bg-slate-900/60 border border-slate-800/60'
           : 'bg-white border border-gray-200'
         }`}>
-          <h2 className={`text-base font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Output Format</h2>
+          <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Output Format</h2>
           <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Applied to all novels in this batch</p>
           <div className="flex items-center gap-3">
             <label className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Format:</label>
-            <span className="px-3 py-1 text-sm rounded-md bg-indigo-600 text-white">TXT</span>
+            <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">TXT</span>
           </div>
         </section>
 
         {/* Error */}
         {startError && (
-          <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${isDark
-            ? 'bg-red-900/30 border border-red-800 text-red-400'
+          <div className={`flex items-center gap-3 p-4 rounded-xl text-sm ${isDark
+            ? 'bg-red-900/20 border border-red-800/30 text-red-400'
             : 'bg-red-50 border border-red-200 text-red-600'
           }`}>
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             {startError}
@@ -383,11 +386,11 @@ export function BatchPage({ themeMode, onThemeChange }: BatchPageProps) {
         <button
           onClick={handleStart}
           disabled={isStarting || validCount === 0 || anyLoading}
-          className={`w-full py-3.5 font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 ${isStarting || validCount === 0 || anyLoading
+          className={`w-full py-4 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${isStarting || validCount === 0 || anyLoading
             ? isDark
-              ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
+              : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
+            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'
           }`}
         >
           {isStarting ? (

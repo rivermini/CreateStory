@@ -14,7 +14,6 @@ import {
   type CheckUpdatableResponse,
   type TrackedJob,
 } from '../api/client';
-import Header from '../components/Header';
 import { type ThemeMode } from '../components/ThemeToggle';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
@@ -24,12 +23,9 @@ interface DriveSyncPageProps {
   onThemeChange: (mode: ThemeMode) => void;
 }
 
-// ─── Job tracking types ─────────────────────────────────────────────────────────
-
-export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) {
+export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const isDark = themeMode === 'dark';
 
-  // ── Config ──────────────────────────────────────────────────────────────────
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState('');
@@ -46,28 +42,53 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingConfigError, setSavingConfigError] = useState('');
 
-  // ── Active jobs being tracked (job_id → folder info) ────────────────────────
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
 
-  // ── Tabs ─────────────────────────────────────────────────────────────────────
   const [activeSubTab, setActiveSubTab] = useState<StorySyncTab>('uploadable');
 
-  // ── Uploadable ────────────────────────────────────────────────────────────────
-  const [uploadableData, setUploadableData] = useState<CheckUploadableResponse | null>(null);
+  const [uploadableData, setUploadableData] = useState<CheckUploadableResponse | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('drivesync_uploadableData');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [uploadableLoading, setUploadableLoading] = useState(false);
-  const [uploadableError, setUploadableError] = useState('');
-  // ── Upload results (folderId → result) ─────────────────────────────────────
-  const [uploadResults, setUploadResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
+  const [uploadableError, setUploadableError] = useState(() => {
+    return sessionStorage.getItem('drivesync_uploadableError') ?? '';
+  });
+  const [uploadResults, setUploadResults] = useState<Map<string, { success: boolean; message: string }>>(() => {
+    try {
+      const stored = sessionStorage.getItem('drivesync_uploadResults');
+      return stored ? new Map(JSON.parse(stored)) : new Map();
+    } catch {
+      return new Map();
+    }
+  });
 
-  // ── Updatable ─────────────────────────────────────────────────────────────────
-  const [updatableData, setUpdatableData] = useState<CheckUpdatableResponse | null>(null);
+  const [updatableData, setUpdatableData] = useState<CheckUpdatableResponse | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('drivesync_updatableData');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [updatableLoading, setUpdatableLoading] = useState(false);
-  const [updatableError, setUpdatableError] = useState('');
-  const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
-  // ── Active update jobs being tracked (server story id → job id) ─────────────────
+  const [updatableError, setUpdatableError] = useState(() => {
+    return sessionStorage.getItem('drivesync_updatableError') ?? '';
+  });
+  const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(() => {
+    try {
+      const stored = sessionStorage.getItem('drivesync_updateResults');
+      return stored ? new Map(JSON.parse(stored)) : new Map();
+    } catch {
+      return new Map();
+    }
+  });
   const [updatingJobs, setUpdatingJobs] = useState<Map<string, string>>(new Map());
 
-  // ── Load config on mount ──────────────────────────────────────────────────────
   useEffect(() => {
     setConfigLoading(true);
     getDriveSyncConfig()
@@ -95,7 +116,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       .finally(() => setConfigLoading(false));
   }, []);
 
-  // ── Config form helpers ───────────────────────────────────────────────────────
   const handleConfigFormChange = (data: Partial<ConfigFormData>) => {
     setConfigForm(prev => ({ ...prev, ...data }));
   };
@@ -125,11 +145,8 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   };
 
-  // ─── Job polling ─────────────────────────────────────────────────────────────
-
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Poll active jobs every 4 seconds
   useEffect(() => {
     const doPoll = async () => {
       if (trackedJobs.length === 0) return;
@@ -147,18 +164,25 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
           completedIds.push(tracked.jobId);
 
           if (job.status === 'success') {
-            setUploadResults(prev => new Map(prev).set(tracked.folderId, {
-              success: true,
-              message: job.result_message ?? 'Done',
-            }));
+            setUploadResults(prev => {
+              const next = new Map(prev).set(tracked.folderId, {
+                success: true,
+                message: job.result_message ?? 'Done',
+              });
+              sessionStorage.setItem('drivesync_uploadResults', JSON.stringify([...next]));
+              return next;
+            });
           } else {
-            setUploadResults(prev => new Map(prev).set(tracked.folderId, {
-              success: false,
-              message: job.error ?? 'Upload failed',
-            }));
+            setUploadResults(prev => {
+              const next = new Map(prev).set(tracked.folderId, {
+                success: false,
+                message: job.error ?? 'Upload failed',
+              });
+              sessionStorage.setItem('drivesync_uploadResults', JSON.stringify([...next]));
+              return next;
+            });
           }
         } catch {
-          // Job might not be available yet, skip
         }
       }
 
@@ -177,7 +201,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     };
   }, []);
 
-  // ─── Enqueue helpers ────────────────────────────────────────────────────────
   const handleCheckUploadable = async () => {
     setUploadableLoading(true);
     setUploadableError('');
@@ -185,8 +208,13 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     try {
       const data = await checkUploadable();
       setUploadableData(data);
+      sessionStorage.setItem('drivesync_uploadableData', JSON.stringify(data));
+      sessionStorage.setItem('drivesync_uploadableError', '');
     } catch (e) {
-      setUploadableError(e instanceof Error ? e.message : 'Failed to check uploadable stories.');
+      const msg = e instanceof Error ? e.message : 'Failed to check uploadable stories.';
+      setUploadableError(msg);
+      sessionStorage.setItem('drivesync_uploadableError', msg);
+      sessionStorage.removeItem('drivesync_uploadableData');
     } finally {
       setUploadableLoading(false);
     }
@@ -221,10 +249,14 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
         });
         newJobs.push({ jobId: res.id, folderId: folder.id, displayName: folder.display_name });
       } catch (e) {
-        setUploadResults(prev => new Map(prev).set(folder.id, {
-          success: false,
-          message: e instanceof Error ? e.message : 'Failed to enqueue job',
-        }));
+        setUploadResults(prev => {
+          const next = new Map(prev).set(folder.id, {
+            success: false,
+            message: e instanceof Error ? e.message : 'Failed to enqueue job',
+          });
+          sessionStorage.setItem('drivesync_uploadResults', JSON.stringify([...next]));
+          return next;
+        });
       }
     }
 
@@ -233,7 +265,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   }, [uploadableData]);
 
-  // ── Updatable handlers ─────────────────────────────────────────────────────────
   const handleCheckUpdatable = async () => {
     setUpdatableLoading(true);
     setUpdatableError('');
@@ -241,8 +272,13 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     try {
       const data = await checkUpdatable();
       setUpdatableData(data);
+      sessionStorage.setItem('drivesync_updatableData', JSON.stringify(data));
+      sessionStorage.setItem('drivesync_updatableError', '');
     } catch (e) {
-      setUpdatableError(e instanceof Error ? e.message : 'Failed to check updatable stories.');
+      const msg = e instanceof Error ? e.message : 'Failed to check updatable stories.';
+      setUpdatableError(msg);
+      sessionStorage.setItem('drivesync_updatableError', msg);
+      sessionStorage.removeItem('drivesync_updatableData');
     } finally {
       setUpdatableLoading(false);
     }
@@ -251,7 +287,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
   const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry): Promise<string> => {
     const { server_story, folder } = entry;
 
-    // Create a sync job so it appears in the history page
     let jobId: string;
     try {
       const job = await createJob({
@@ -263,24 +298,31 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
       jobId = job.id;
       setUpdatingJobs(prev => new Map(prev).set(server_story.id, jobId));
     } catch (e) {
-      setUpdateResults(prev => new Map(prev).set(server_story.id, {
-        success: false,
-        message: e instanceof Error ? e.message : 'Failed to create update job',
-      }));
+      setUpdateResults(prev => {
+        const next = new Map(prev).set(server_story.id, {
+          success: false,
+          message: e instanceof Error ? e.message : 'Failed to create update job',
+        });
+        sessionStorage.setItem('drivesync_updateResults', JSON.stringify([...next]));
+        return next;
+      });
       return server_story.id;
     }
 
-    // Poll the job until it finishes
     const poll = async () => {
       while (true) {
         await new Promise(r => setTimeout(r, 3000));
         try {
           const { job } = await getJob(jobId);
           if (job.status !== 'queued' && job.status !== 'running') {
-            setUpdateResults(prev => new Map(prev).set(server_story.id, {
-              success: job.status === 'success',
-              message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
-            }));
+            setUpdateResults(prev => {
+              const next = new Map(prev).set(server_story.id, {
+                success: job.status === 'success',
+                message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
+              });
+              sessionStorage.setItem('drivesync_updateResults', JSON.stringify([...next]));
+              return next;
+            });
             setUpdatingJobs(prev => {
               const next = new Map(prev);
               next.delete(server_story.id);
@@ -289,7 +331,6 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
             return;
           }
         } catch {
-          // Keep polling
         }
       }
     };
@@ -307,105 +348,158 @@ export function DriveSyncPage({ themeMode, onThemeChange }: DriveSyncPageProps) 
     }
   }, [updatableData, handleUpdateSingle]);
 
+  const hasActiveJobs = trackedJobs.length > 0 || updatingJobs.size > 0;
+  const totalUploadable = uploadableData?.uploadable.length ?? 0;
+  const totalUpdatable = updatableData?.updatable.length ?? 0;
+  const successfulUploads = Array.from(uploadResults.values()).filter(r => r.success).length;
+
   return (
-    <div className={`min-h-screen w- flex flex-col ${isDark ? 'bg-slate-900' : 'bg-gray-50'}`}>
-      <Header
-        themeMode={themeMode}
-        onThemeChange={onThemeChange}
-        title="Drive Sync"
-        subtitle="Sync stories from Google Drive to main BE"
-      />
+    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+      {/* Hero Header */}
+      <header className={`relative overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Drive Sync
+                </h1>
+                <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                  Sync your crawled novels with Google Drive
+                </p>
+              </div>
+            </div>
 
-      <main className="xl:w-[70vw] px-4 sm:px-6 py-6 sm:py-8 flex flex-col flex-1 mx-auto">
+            {/* Settings Button */}
+            <button
+              onClick={() => setShowConfigModal(true)}
+              className={`self-start sm:self-auto px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                isDark
+                  ? 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/50'
+                  : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-sm'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Drive Config Settings
+            </button>
+          </div>
 
-        {/* ── Loading / Error states ───────────────────────────────── */}
+          {/* Status Bar */}
+          {config && !configLoading && (
+            <div className={`mt-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 p-4 rounded-2xl ${isDark ? 'bg-slate-900/60 backdrop-blur-sm border border-slate-800/60' : 'bg-white/80 backdrop-blur-sm border border-gray-200/80'}`}>
+              {/* Status indicator */}
+              <div className="flex items-center gap-2">
+                <div className={`w-2.5 h-2.5 rounded-full ${hasActiveJobs ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                  {hasActiveJobs ? 'Syncing...' : 'Ready'}
+                </span>
+              </div>
+
+              {/* Divider */}
+              <div className={`hidden sm:block w-px h-5 ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`} />
+
+              {/* Folder info */}
+              <div className="flex items-center gap-2 min-w-0">
+                <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span className={`text-xs sm:text-sm truncate ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                  {config.folder_id}
+                </span>
+              </div>
+
+              {/* Stats badges */}
+              <div className="flex items-center gap-2 sm:ml-auto">
+                <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-600'}`}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  {totalUploadable} ready to upload
+                </div>
+                <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-600'}`}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  {totalUpdatable} can update
+                </div>
+                {successfulUploads > 0 && (
+                  <div className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-500`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {successfulUploads} uploaded
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-2">
+        {/* Loading state */}
         {configLoading && (
-          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl ${isDark ? 'bg-slate-800/80 border border-slate-700' : 'bg-white border border-gray-200'}`}>
-            <svg className="w-5 h-5 animate-spin text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <div className={`flex items-center justify-center gap-4 p-8 rounded-2xl ${isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
+            <svg className="w-6 h-6 animate-spin text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>Loading Drive Sync config...</span>
+            <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>Loading Drive Sync...</span>
           </div>
         )}
 
+        {/* Error state */}
         {configError && (
-          <div className={`flex items-center gap-3 p-4 mb-6 rounded-2xl text-sm ${isDark ? 'bg-red-900/20 border border-red-800/50 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
+          <div className={`flex items-center gap-3 p-4 rounded-2xl text-sm ${isDark ? 'bg-red-900/20 border border-red-800/30 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
             <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             {configError}
           </div>
         )}
 
-        {/* ── Main content ─────────────────────────────────────── */}
+        {/* Main content */}
         {config && !configLoading && (
-          <>
-            {/* ── Config summary bar ─────────────────────────────── */}
-            <div className={`flex flex-wrap items-center gap-3 mb-6 px-4 py-3 rounded-xl text-sm ${isDark ? 'bg-slate-800/60 border border-slate-700/50' : 'bg-white border border-gray-200'}`}>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className={isDark ? 'text-slate-300' : 'text-gray-700'}>Drive Sync Active</span>
-              </div>
-              <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>|</span>
-              <span className={isDark ? 'text-slate-400' : 'text-gray-500'}>
-                Folder: <span className={`${isDark ? 'text-slate-300' : 'text-gray-700'} font-mono text-xs`}>{config.folder_id.slice(0, 20)}...</span>
-              </span>
-              <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>|</span>
-              <span className={isDark ? 'text-slate-400' : 'text-gray-500'}>Manual sync only</span>
-              <button
-                onClick={() => setShowConfigModal(true)}
-                className={`text-xs transition-colors flex items-center gap-1 ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Settings
-              </button>
-            </div>
-
-            {/* ── Story Sync ───────────────────────────────────── */}
-            <div className="min-h-[600px] flex-1">
-              <StorySyncTabs
-                config={config}
-                activeTab={activeSubTab}
-                onTabChange={setActiveSubTab}
-                themeMode={themeMode}
-                uploadableData={uploadableData}
-                uploadableLoading={uploadableLoading}
-                uploadableError={uploadableError}
-                uploadResults={uploadResults}
-                uploadingIds={(() => {
-                  const s = new Set<string>();
-                  for (const j of trackedJobs) s.add(j.folderId);
-                  return s;
-                })()}
-                onCheckUploadable={handleCheckUploadable}
-                onUploadSingle={handleUploadSingle}
-                onUploadAll={handleUploadAll}
-                updatableData={updatableData}
-                updatableLoading={updatableLoading}
-                updatableError={updatableError}
-                updateResults={updateResults}
-                updatingIds={new Set(updatingJobs.keys())}
-                onCheckUpdatable={handleCheckUpdatable}
-                onUpdateSingle={handleUpdateSingle}
-                onUpdateAll={handleUpdateAll}
-                updatableInvalid={updatableData?.invalid ?? []}
-              />
-            </div>
-          </>
+          <div className="mt-2">
+            <StorySyncTabs
+              config={config}
+              activeTab={activeSubTab}
+              onTabChange={setActiveSubTab}
+              themeMode={themeMode}
+              uploadableData={uploadableData}
+              uploadableLoading={uploadableLoading}
+              uploadableError={uploadableError}
+              uploadResults={uploadResults}
+              uploadingIds={(() => {
+                const s = new Set<string>();
+                for (const j of trackedJobs) s.add(j.folderId);
+                return s;
+              })()}
+              onCheckUploadable={handleCheckUploadable}
+              onUploadSingle={handleUploadSingle}
+              onUploadAll={handleUploadAll}
+              updatableData={updatableData}
+              updatableLoading={updatableLoading}
+              updatableError={updatableError}
+              updateResults={updateResults}
+              updatingIds={new Set(updatingJobs.keys())}
+              onCheckUpdatable={handleCheckUpdatable}
+              onUpdateSingle={handleUpdateSingle}
+              onUpdateAll={handleUpdateAll}
+              updatableInvalid={updatableData?.invalid ?? []}
+            />
+          </div>
         )}
       </main>
 
-      {/* ── Config Modal ──────────────────────────────────────────────── */}
+      {/* Config Modal */}
       <ConfigModal
         isOpen={showConfigModal}
         onClose={() => {
-          if (!config && !configLoading) return; // prevent closing during initial setup
+          if (!config && !configLoading) return;
           setShowConfigModal(false);
         }}
         config={config}

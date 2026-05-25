@@ -12,6 +12,7 @@ export interface UseCrawlStreamResult {
   progress: ProgressUpdate | null;
   status: string;
   error: string;
+  sourceUrl: string;
   close: () => void;
   reconnect: () => void;
 }
@@ -21,6 +22,7 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
   const [progress, setProgress] = useState<ProgressUpdate | null>(null);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -38,6 +40,9 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
       const data = await getCrawlStatusWithLogs(crawlId);
       setProgress(data.progress);
       setStatus(data.progress.status);
+      if (data.progress.source_url) {
+        setSourceUrl(data.progress.source_url);
+      }
       if (data.progress.error_message) {
         setError(data.progress.error_message);
       }
@@ -72,6 +77,7 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
     setProgress(null);
     setStatus('idle');
     setError('');
+    setSourceUrl('');
     fetchStatus();
   }, [stopPolling, fetchStatus]);
 
@@ -83,6 +89,7 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
     setProgress(null);
     setStatus('idle');
     setError('');
+    setSourceUrl('');
 
     // Initial fetch
     fetchStatus();
@@ -99,5 +106,5 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
     stopPolling();
   }, [stopPolling]);
 
-  return { logLines, progress, status, error, close, reconnect };
+  return { logLines, progress, status, error, sourceUrl, close, reconnect };
 }

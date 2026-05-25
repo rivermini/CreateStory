@@ -87,6 +87,7 @@ export interface CrawlRequest {
   novel_name?: string;
   completed?: boolean;
   combine_chapters?: boolean;
+  source_url?: string;
 }
 
 export interface ActiveCrawl {
@@ -117,6 +118,7 @@ export interface ProgressUpdate {
   current_title: string;
   status: string;
   error_message?: string;
+  source_url?: string | null;
 }
 
 export async function startCrawl(request: CrawlRequest): Promise<CrawlStartResponse> {
@@ -221,6 +223,8 @@ export interface CrawlResult {
   combined_txt_file?: string | null;
   /** Only present in combined result responses (TXT format) */
   txt_content?: string;
+  /** The original URL submitted for the crawl */
+  source_url?: string | null;
 }
 
 export async function getCrawlResult(crawlId: string, timeout?: number): Promise<CrawlResult> {
@@ -280,6 +284,7 @@ export interface CrawlSessionSummary {
   combined_file: string | null;
   combined_txt_file?: string | null;
   output_format?: string;
+  source_url?: string | null;
 }
 
 export async function listAllResults(): Promise<CrawlSessionSummary[]> {
@@ -317,6 +322,30 @@ export async function deleteCrawlSessions(crawlIds: string[]): Promise<{ deleted
       body: JSON.stringify({ crawl_ids: crawlIds }),
     }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export interface SettingsResponse {
+  theme: string;
+  crawl_mode: string;
+  crawl_default_count: number;
+  crawl_default_range_from: number;
+  crawl_default_range_to: number;
+}
+
+export async function getSettings(): Promise<SettingsResponse> {
+  return apiFetch<SettingsResponse>('/api/settings');
+}
+
+export async function updateSettings(patch: Partial<Omit<SettingsResponse, never>>): Promise<SettingsResponse> {
+  return apiFetch<SettingsResponse>('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
 }
 
 // ---------------------------------------------------------------------------
