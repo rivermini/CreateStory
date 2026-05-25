@@ -14,6 +14,9 @@ function navActive(locationPath: string, expect: string) {
         return locationPath.startsWith('/results');
     }
     if (expect === '/') return locationPath === '/';
+    // Prevent parent routes from matching their child routes
+    if (expect === '/bedread' && locationPath.startsWith('/bedread/')) return false;
+    if (expect === '/drive-sync' && locationPath.startsWith('/drive-sync/')) return false;
     return locationPath === expect || locationPath.startsWith(expect + '/') || locationPath.startsWith(expect + '?');
 }
 
