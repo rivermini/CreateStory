@@ -554,6 +554,8 @@ export interface UpdatableStoryEntry {
   new_chapters_count?: number;
   free_chapters_count?: number;
   tags?: string[];
+  has_free_md?: boolean;
+  has_tags_md?: boolean;
 }
 
 export interface CheckUpdatableResponse {

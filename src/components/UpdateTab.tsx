@@ -345,14 +345,14 @@ export function UpdateTab({
                                   +{newCount} ch
                                 </span>
                               )}
-                              {entry.free_chapters_count !== undefined && entry.free_chapters_count !== null && (
+                              {entry.has_free_md && (
                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-cyan-900/40 text-cyan-400' : 'bg-cyan-100 text-cyan-700'}`}>
-                                  Free: {entry.free_chapters_count}
+                                  Free: will update
                                 </span>
                               )}
-                              {entry.tags && entry.tags.length > 0 && (
+                              {entry.has_tags_md && (
                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-purple-900/40 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
-                                  Tags: {entry.tags.join(', ')}
+                                  Tags: will update
                                 </span>
                               )}
                             </div>
@@ -567,14 +567,14 @@ export function UpdateTab({
                             +{newCount} ch
                           </span>
                         )}
-                        {entry.free_chapters_count !== undefined && entry.free_chapters_count !== null && (
+                        {entry.has_free_md && (
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-cyan-900/40 text-cyan-400' : 'bg-cyan-100 text-cyan-700'}`}>
-                            Free: {entry.free_chapters_count}
+                            Free: will update
                           </span>
                         )}
-                        {entry.tags && entry.tags.length > 0 && (
+                        {entry.has_tags_md && (
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-purple-900/40 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
-                            Tags: {entry.tags.join(', ')}
+                            Tags: will update
                           </span>
                         )}
                       </div>
