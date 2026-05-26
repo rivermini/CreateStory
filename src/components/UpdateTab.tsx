@@ -345,6 +345,11 @@ export function UpdateTab({
                                   +{newCount} ch
                                 </span>
                               )}
+                              {entry.free_chapters_count !== undefined && entry.free_chapters_count !== null && (
+                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-cyan-900/40 text-cyan-400' : 'bg-cyan-100 text-cyan-700'}`}>
+                                  Free: {entry.free_chapters_count}
+                                </span>
+                              )}
                             </div>
                             <p className={`text-xs font-mono mb-2 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.folder.name}</p>
                             <div className="flex items-center gap-3 text-xs">
@@ -555,6 +560,11 @@ export function UpdateTab({
                         {newCount > 0 && (
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>
                             +{newCount} ch
+                          </span>
+                        )}
+                        {entry.free_chapters_count !== undefined && entry.free_chapters_count !== null && (
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-cyan-900/40 text-cyan-400' : 'bg-cyan-100 text-cyan-700'}`}>
+                            Free: {entry.free_chapters_count}
                           </span>
                         )}
                       </div>

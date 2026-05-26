@@ -552,6 +552,7 @@ export interface UpdatableStoryEntry {
   folder: DriveFolderEntry;
   server_story: ServerStoryRef;
   new_chapters_count?: number;
+  free_chapters_count?: number;
 }
 
 export interface CheckUpdatableResponse {
