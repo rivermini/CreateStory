@@ -553,6 +553,7 @@ export interface UpdatableStoryEntry {
   server_story: ServerStoryRef;
   new_chapters_count?: number;
   free_chapters_count?: number;
+  tags?: string[];
 }
 
 export interface CheckUpdatableResponse {
