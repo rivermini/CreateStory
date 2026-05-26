@@ -496,6 +496,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               updatableNoServerMatch={updatableData?.no_server_match ?? []}
               updatableEmptyExtended={updatableData?.empty_extended ?? []}
               storiesNeedingUpdate={storiesNeedingUpdate}
+              noDriveFolder={updatableData?.no_drive_folder ?? []}
             />
           </div>
         )}

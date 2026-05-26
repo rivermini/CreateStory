@@ -578,6 +578,11 @@ export interface CheckUpdatableResponse {
   no_server_match: DriveFolderEntry[];
   empty_extended: DriveFolderEntry[];
   invalid: UpdatableStoryEntry[];
+  no_drive_folder: ServerOnlyStoryEntry[];
+}
+
+export interface ServerOnlyStoryEntry {
+  server_story: ServerStoryRef;
 }
 
 export interface UpdateChapterCountResponse {

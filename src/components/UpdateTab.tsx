@@ -4,6 +4,7 @@ import {
   type UpdatableStoryEntry,
   type DriveFolderEntry,
   type StoriesNeedingUpdateEntry,
+  type ServerOnlyStoryEntry,
   getDriveFileContent,
   type DriveFileContentResponse,
 } from '../api/client';
@@ -26,6 +27,7 @@ interface UpdateTabProps {
   noServerMatch?: DriveFolderEntry[];
   emptyExtended?: DriveFolderEntry[];
   storiesNeedingUpdate?: StoriesNeedingUpdateEntry[];
+  noDriveFolder?: ServerOnlyStoryEntry[];
   themeMode: ThemeMode;
 }
 
@@ -45,11 +47,12 @@ export function UpdateTab({
   noServerMatch,
   emptyExtended,
   storiesNeedingUpdate,
+  noDriveFolder,
   themeMode,
 }: UpdateTabProps) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
-  const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uptodate' | 'noServerMatch' | 'emptyExtended'>('invalid');
+  const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uptodate' | 'noServerMatch' | 'emptyExtended' | 'noDriveFolder'>('invalid');
   const [chapterCountInputs, setChapterCountInputs] = useState<Map<string, number>>(new Map());
   const [chapterErrors, setChapterErrors] = useState<Map<string, string>>(new Map());
   const [openFilePanels, setOpenFilePanels] = useState<Map<string, { loading: boolean; data: DriveFileContentResponse | null }>>(new Map());
@@ -119,6 +122,9 @@ export function UpdateTab({
   ) ?? [];
   const filteredEmptyExtended = emptyExtended?.filter(e =>
     !q || e.display_name.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
+  ) ?? [];
+  const filteredNoDriveFolder = noDriveFolder?.filter(e =>
+    !q || e.server_story.title.toLowerCase().includes(q)
   ) ?? [];
 
   const updateCount = filteredUpdatable.length;
@@ -253,7 +259,7 @@ export function UpdateTab({
                 : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
               }`}
           >
-            All ({filteredUpdatable.length + filteredInvalid.length + filteredNoUpdate.length + filteredNoServerMatch.length + filteredEmptyExtended.length})
+            All ({filteredUpdatable.length + filteredInvalid.length + filteredNoUpdate.length + filteredNoServerMatch.length + filteredEmptyExtended.length + filteredNoDriveFolder.length})
           </button>
           <button
             onClick={() => setFilterSection('ready')}
@@ -302,6 +308,17 @@ export function UpdateTab({
                 }`}
             >
               Empty EXTENDED ({filteredEmptyExtended.length})
+            </button>
+          )}
+          {filteredNoDriveFolder.length > 0 && (
+            <button
+              onClick={() => setFilterSection('noDriveFolder')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'noDriveFolder'
+                  ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
+                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+                }`}
+            >
+              No Drive Folder ({filteredNoDriveFolder.length})
             </button>
           )}
         </div>
@@ -1069,12 +1086,38 @@ export function UpdateTab({
           </div>
         )}
 
+        {data && filterSection === 'noDriveFolder' && filteredNoDriveFolder.length > 0 && (
+          <div className="space-y-2">
+            {filteredNoDriveFolder.map(entry => (
+              <div key={entry.server_story.id} className={`p-4 rounded-xl ${isDark ? 'bg-slate-900/20 border border-slate-800/40' : 'bg-gray-50 border border-gray-200'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h4 className={`text-sm font-medium truncate ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.server_story.title}</h4>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-200 text-gray-500'}`}>
+                        Server: ch {entry.server_story.maxChapter}
+                      </span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 text-xs ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                      No matching EXTENDED_ folder found on Drive
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1 text-xs font-medium rounded-lg ${isDark ? 'text-slate-500 bg-slate-800/60' : 'text-gray-500 bg-gray-200'}`}>
+                    No Drive Folder
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {data && (
           ((filterSection === 'ready' && updateCount === 0) ||
             (filterSection === 'invalid' && filteredInvalid.length === 0) ||
             (filterSection === 'uptodate' && filteredNoUpdate.length === 0) ||
             (filterSection === 'noServerMatch' && filteredNoServerMatch.length === 0) ||
-            (filterSection === 'emptyExtended' && filteredEmptyExtended.length === 0)) && (
+            (filterSection === 'emptyExtended' && filteredEmptyExtended.length === 0) ||
+            (filterSection === 'noDriveFolder' && filteredNoDriveFolder.length === 0)) && (
             <div className={`text-center py-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
               <svg className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-700' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

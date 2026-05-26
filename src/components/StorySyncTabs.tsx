@@ -36,6 +36,7 @@ export interface StorySyncTabsProps {
   updatableNoServerMatch?: import('../api/client').DriveFolderEntry[];
   updatableEmptyExtended?: import('../api/client').DriveFolderEntry[];
   storiesNeedingUpdate?: import('../api/client').StoriesNeedingUpdateEntry[];
+  noDriveFolder?: import('../api/client').ServerOnlyStoryEntry[];
 }
 
 export function StorySyncTabs({
@@ -63,6 +64,7 @@ export function StorySyncTabs({
   updatableNoServerMatch,
   updatableEmptyExtended,
   storiesNeedingUpdate,
+  noDriveFolder,
 }: StorySyncTabsProps) {
   const isDark = themeMode === 'dark';
 
@@ -229,6 +231,7 @@ export function StorySyncTabs({
               noServerMatch={updatableNoServerMatch}
               emptyExtended={updatableEmptyExtended}
               storiesNeedingUpdate={storiesNeedingUpdate}
+              noDriveFolder={noDriveFolder}
               themeMode={themeMode}
             />
           )}
