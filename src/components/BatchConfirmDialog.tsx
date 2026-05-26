@@ -8,6 +8,7 @@ interface BatchConfirmDialogProps {
   confirmText: string;
   isDark: boolean;
   disabled?: boolean;
+  validationMessage?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -20,6 +21,7 @@ export function BatchConfirmDialog({
   confirmText,
   isDark,
   disabled = false,
+  validationMessage,
   onConfirm,
   onCancel,
 }: BatchConfirmDialogProps) {
@@ -93,6 +95,15 @@ export function BatchConfirmDialog({
         {/* Body */}
         <div className="px-6 py-5">
           <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>{message}</p>
+
+          {validationMessage && (
+            <div className={`p-3 rounded-xl mb-5 flex items-start gap-2 ${isDark ? 'bg-red-900/30 border border-red-800/50' : 'bg-red-50 border border-red-200'}`}>
+              <svg className={`w-4 h-4 mt-0.5 shrink-0 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className={`text-sm ${isDark ? 'text-red-300' : 'text-red-700'}`}>{validationMessage}</p>
+            </div>
+          )}
 
           {/* Warning checkbox */}
           <div className={`p-4 rounded-xl mb-5 ${isDark ? 'bg-slate-800/50' : 'bg-gray-50 border border-gray-200'}`}>

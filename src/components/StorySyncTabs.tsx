@@ -65,6 +65,7 @@ export function StorySyncTabs({
   const [showUploadConfirm, setShowUploadConfirm] = useState(false);
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
   const [chapterErrors, setChapterErrors] = useState(false);
+  const [pendingChapterErrors, setPendingChapterErrors] = useState<Map<string, string>>(new Map());
   const [pendingUpdateEntries, setPendingUpdateEntries] = useState<UpdatableStoryEntry[]>([]);
   const [pendingChapterInputs, setPendingChapterInputs] = useState<Map<string, number>>(new Map());
 
@@ -79,6 +80,7 @@ export function StorySyncTabs({
   const handleUpdateAll = () => {
     if (chapterErrors) return;
     setShowUpdateConfirm(false);
+    setPendingChapterErrors(new Map());
     onUpdateAll(pendingUpdateEntries, pendingChapterInputs);
   };
 
@@ -106,8 +108,15 @@ export function StorySyncTabs({
         confirmText="Start Update"
         isDark={isDark}
         disabled={chapterErrors}
+        validationMessage={pendingChapterErrors.size > 0
+          ? `${pendingChapterErrors.size} story(ies) exceed their available chapter count. Please fix these before updating.`
+          : undefined
+        }
         onConfirm={handleUpdateAll}
-        onCancel={() => setShowUpdateConfirm(false)}
+        onCancel={() => {
+          setShowUpdateConfirm(false);
+          setPendingChapterErrors(new Map());
+        }}
       />
 
       <div className={`rounded-2xl shadow-xl shadow-black/5 ${isDark ? 'bg-slate-900/80 backdrop-blur-sm border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
@@ -202,9 +211,11 @@ export function StorySyncTabs({
               updatingIds={updatingIds}
               onCheck={onCheckUpdatable}
               onUpdateSingle={onUpdateSingle}
-              onRequestUpdateAll={(entries, chapterInputs) => {
+              onRequestUpdateAll={(entries, chapterInputs, newErrors) => {
                 setPendingUpdateEntries(entries);
                 setPendingChapterInputs(chapterInputs);
+                setPendingChapterErrors(newErrors ?? new Map());
+                setChapterErrors(!!newErrors && newErrors.size > 0);
                 setShowUpdateConfirm(true);
               }}
               hasChapterErrors={chapterErrors}

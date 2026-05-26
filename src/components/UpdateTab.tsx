@@ -17,7 +17,7 @@ interface UpdateTabProps {
   updatingIds: Set<string>;
   onCheck: () => void;
   onUpdateSingle: (entry: UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
-  onRequestUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>) => void;
+  onRequestUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>, newErrors?: Map<string, string>) => void;
   hasChapterErrors: boolean;
   onChapterErrorsChange: (hasErrors: boolean) => void;
   invalid?: UpdatableStoryEntry[];
@@ -86,6 +86,17 @@ export function UpdateTab({
   const filteredUpdatable = data?.updatable.filter(e =>
     !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
   ) ?? [];
+
+  function revalidateAllErrors() {
+    const newErrors = new Map<string, string>();
+    for (const entry of filteredUpdatable) {
+      const count = chapterCountInputs.get(entry.server_story.id) ?? 1;
+      if (count > (entry.new_chapters_count ?? 0)) {
+        newErrors.set(entry.server_story.id, `Maximum ${entry.new_chapters_count ?? 0} chapters available`);
+      }
+    }
+    setChapterErrors(newErrors);
+  }
   const filteredInvalid = invalid?.filter(e =>
     !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
   ) ?? [];
@@ -164,7 +175,16 @@ export function UpdateTab({
 
           {data && updateCount > 0 && (
             <button
-              onClick={() => onRequestUpdateAll(filteredUpdatable, chapterCountInputs)}
+              onClick={() => {
+                const newErrors = new Map<string, string>();
+                for (const entry of filteredUpdatable) {
+                  const count = chapterCountInputs.get(entry.server_story.id) ?? 1;
+                  if (count > (entry.new_chapters_count ?? 0)) {
+                    newErrors.set(entry.server_story.id, `Maximum ${entry.new_chapters_count ?? 0} chapters available`);
+                  }
+                }
+                onRequestUpdateAll(filteredUpdatable, chapterCountInputs, newErrors);
+              }}
               disabled={isUpdatingAny || hasChapterErrors}
               className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdatingAny || hasChapterErrors
                   ? isDark
@@ -510,17 +530,13 @@ export function UpdateTab({
                                 defaultValue={1}
                                 onChange={e => {
                                   const val = parseInt(e.target.value, 10);
-                                  setChapterCountInputs(prev => {
-                                    const next = new Map(prev);
-                                    next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
-                                    return next;
-                                  });
-                                  setChapterErrors(prev => {
-                                    const next = new Map(prev);
-                                    next.delete(entry.server_story.id);
-                                    return next;
-                                  });
-                                }}
+                              setChapterCountInputs(prev => {
+                                const next = new Map(prev);
+                                next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
+                                return next;
+                              });
+                              setTimeout(revalidateAllErrors, 0);
+                            }}
                                 className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
                                     ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
                                     : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
@@ -814,21 +830,17 @@ export function UpdateTab({
                           defaultValue={1}
                           onChange={e => {
                             const val = parseInt(e.target.value, 10);
-                            setChapterCountInputs(prev => {
-                              const next = new Map(prev);
-                              next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
-                              return next;
-                            });
-                            setChapterErrors(prev => {
-                              const next = new Map(prev);
-                              next.delete(entry.server_story.id);
-                              return next;
-                            });
-                          }}
-                          className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
-                              ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
-                              : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
-                            }`}
+                              setChapterCountInputs(prev => {
+                                const next = new Map(prev);
+                                next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
+                                return next;
+                              });
+                              setTimeout(revalidateAllErrors, 0);
+                            }}
+                                className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
+                                    ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
+                                    : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
+                                  }`}
                         />
                       </div>
                       {(() => {
