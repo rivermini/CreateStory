@@ -3,6 +3,8 @@ import {
   type CheckUpdatableResponse,
   type UpdatableStoryEntry,
   type DriveFolderEntry,
+  getDriveFileContent,
+  type DriveFileContentResponse,
 } from '../api/client';
 import { type ThemeMode } from './ThemeToggle';
 import { ValidationErrorBadge, EmptyState } from './SyncTabShared';
@@ -40,6 +42,35 @@ export function UpdateTab({
   const [search, setSearch] = useState('');
   const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uptodate' | 'noServerMatch' | 'emptyExtended'>('invalid');
   const [chapterCountInputs, setChapterCountInputs] = useState<Map<string, number>>(new Map());
+  const [openFilePanels, setOpenFilePanels] = useState<Map<string, { loading: boolean; data: DriveFileContentResponse | null }>>(new Map());
+
+  async function toggleFilePanel(entryId: string, filename: 'free.md' | 'tags.md', folderId: string) {
+    const key = `${entryId}:${filename}`;
+    const current = openFilePanels.get(key);
+    if (current) {
+      setOpenFilePanels(prev => { const next = new Map(prev); next.delete(key); return next; });
+      return;
+    }
+    setOpenFilePanels(prev => {
+      const next = new Map(prev);
+      next.set(key, { loading: true, data: null });
+      return next;
+    });
+    try {
+      const result = await getDriveFileContent(folderId, filename);
+      setOpenFilePanels(prev => {
+        const next = new Map(prev);
+        next.set(key, { loading: false, data: result });
+        return next;
+      });
+    } catch {
+      setOpenFilePanels(prev => {
+        const next = new Map(prev);
+        next.set(key, { loading: false, data: { success: false, content: '', error: 'Network error' } });
+        return next;
+      });
+    }
+  }
 
   const q = search.toLowerCase().trim();
 
@@ -338,24 +369,94 @@ export function UpdateTab({
                       <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'}`}>
                         <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
                               <h4 className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{entry.folder.display_name}</h4>
                               {newCount > 0 && (
                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>
                                   +{newCount} ch
                                 </span>
                               )}
-                              {entry.has_free_md && (
-                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-cyan-900/40 text-cyan-400' : 'bg-cyan-100 text-cyan-700'}`}>
-                                  Free: will update
-                                </span>
-                              )}
-                              {entry.has_tags_md && (
-                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-purple-900/40 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
-                                  Tags: will update
-                                </span>
-                              )}
+                              {entry.has_free_md && (() => {
+                                const key = `${entry.server_story.id}:free.md`;
+                                const panel = openFilePanels.get(key);
+                                const isOpen = !!panel;
+                                return (
+                                  <button
+                                    onClick={() => toggleFilePanel(entry.server_story.id, 'free.md', entry.folder.id)}
+                                    className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
+                                        ? isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-white'
+                                        : isDark ? 'bg-cyan-900/40 text-cyan-400 hover:bg-cyan-800/50' : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                                      }`}
+                                  >
+                                    Free.md {isOpen ? '▲' : '▼'}
+                                  </button>
+                                );
+                              })()}
+                              {entry.has_tags_md && (() => {
+                                const key = `${entry.server_story.id}:tags.md`;
+                                const panel = openFilePanels.get(key);
+                                const isOpen = !!panel;
+                                return (
+                                  <button
+                                    onClick={() => toggleFilePanel(entry.server_story.id, 'tags.md', entry.folder.id)}
+                                    className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
+                                        ? isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                                        : isDark ? 'bg-purple-900/40 text-purple-400 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                      }`}
+                                  >
+                                    Tags.md {isOpen ? '▲' : '▼'}
+                                  </button>
+                                );
+                              })()}
                             </div>
+                            {entry.has_free_md && (() => {
+                              const key = `${entry.server_story.id}:free.md`;
+                              const panel = openFilePanels.get(key);
+                              if (!panel) return null;
+                              return (
+                                <div className="mb-1 flex items-center gap-1.5 flex-wrap">
+                                  {panel.loading ? (
+                                    <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Loading...</span>
+                                  ) : panel.data?.success ? (
+                                    panel.data.content ? (
+                                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${isDark ? 'bg-cyan-900/50 border-cyan-700/50 text-cyan-300' : 'bg-cyan-50 border-cyan-200 text-cyan-700'}`}>
+                                        Free chapters: {panel.data.content.trim()}
+                                      </span>
+                                    ) : (
+                                      <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Empty file</span>
+                                    )
+                                  ) : (
+                                    <span className="text-[10px] text-red-500">{panel.data?.error ?? 'Failed to load'}</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            {entry.has_tags_md && (() => {
+                              const key = `${entry.server_story.id}:tags.md`;
+                              const panel = openFilePanels.get(key);
+                              if (!panel) return null;
+                              const raw = panel.data?.success ? panel.data.content : '';
+                              const tagItems = raw
+                                ? raw.split(/[,\n]/)
+                                    .map(t => t.trim().replace(/^["']|["']$/g, ''))
+                                    .filter(t => t && !t.startsWith('#'))
+                                : [];
+                              return (
+                                <div className="mb-1 flex items-center gap-1.5 flex-wrap">
+                                  {panel.loading ? (
+                                    <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Loading...</span>
+                                  ) : tagItems.length > 0 ? (
+                                    tagItems.map((tag, i) => (
+                                      <span key={i} className={`px-2 py-0.5 text-[10px] font-medium rounded-full border ${isDark ? 'bg-purple-900/50 border-purple-700/50 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-700'}`}>
+                                        {tag}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Empty file</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             <p className={`text-xs font-mono mb-2 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.folder.name}</p>
                             <div className="flex items-center gap-3 text-xs">
                               <div className={`flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
@@ -560,24 +661,94 @@ export function UpdateTab({
                 <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'}`}>
                   <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
                         <h4 className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{entry.folder.display_name}</h4>
                         {newCount > 0 && (
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>
                             +{newCount} ch
                           </span>
                         )}
-                        {entry.has_free_md && (
-                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-cyan-900/40 text-cyan-400' : 'bg-cyan-100 text-cyan-700'}`}>
-                            Free: will update
-                          </span>
-                        )}
-                        {entry.has_tags_md && (
-                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-purple-900/40 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
-                            Tags: will update
-                          </span>
-                        )}
+                        {entry.has_free_md && (() => {
+                          const key = `${entry.server_story.id}:free.md`;
+                          const panel = openFilePanels.get(key);
+                          const isOpen = !!panel;
+                          return (
+                            <button
+                              onClick={() => toggleFilePanel(entry.server_story.id, 'free.md', entry.folder.id)}
+                              className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
+                                  ? isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-white'
+                                  : isDark ? 'bg-cyan-900/40 text-cyan-400 hover:bg-cyan-800/50' : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                                }`}
+                            >
+                              Free.md {isOpen ? '▲' : '▼'}
+                            </button>
+                          );
+                        })()}
+                        {entry.has_tags_md && (() => {
+                          const key = `${entry.server_story.id}:tags.md`;
+                          const panel = openFilePanels.get(key);
+                          const isOpen = !!panel;
+                          return (
+                            <button
+                              onClick={() => toggleFilePanel(entry.server_story.id, 'tags.md', entry.folder.id)}
+                              className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
+                                  ? isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                                  : isDark ? 'bg-purple-900/40 text-purple-400 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                }`}
+                            >
+                              Tags.md {isOpen ? '▲' : '▼'}
+                            </button>
+                          );
+                        })()}
                       </div>
+                      {entry.has_free_md && (() => {
+                        const key = `${entry.server_story.id}:free.md`;
+                        const panel = openFilePanels.get(key);
+                        if (!panel) return null;
+                        return (
+                          <div className="mb-1 flex items-center gap-1.5 flex-wrap">
+                            {panel.loading ? (
+                              <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Loading...</span>
+                            ) : panel.data?.success ? (
+                              panel.data.content ? (
+                                <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${isDark ? 'bg-cyan-900/50 border-cyan-700/50 text-cyan-300' : 'bg-cyan-50 border-cyan-200 text-cyan-700'}`}>
+                                  Free chapters: {panel.data.content.trim()}
+                                </span>
+                              ) : (
+                                <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Empty file</span>
+                              )
+                            ) : (
+                              <span className="text-[10px] text-red-500">{panel.data?.error ?? 'Failed to load'}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {entry.has_tags_md && (() => {
+                        const key = `${entry.server_story.id}:tags.md`;
+                        const panel = openFilePanels.get(key);
+                        if (!panel) return null;
+                        const raw = panel.data?.success ? panel.data.content : '';
+                        const tagItems = raw
+                          ? raw.split(/[,\n]/)
+                              .map(t => t.trim().replace(/^["']|["']$/g, ''))
+                              .filter(t => t && !t.startsWith('#'))
+                          : [];
+                        return (
+                          <div className="mb-1 flex items-center gap-1.5 flex-wrap">
+                            {panel.loading ? (
+                              <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Loading...</span>
+                            ) : tagItems.length > 0 ? (
+                              tagItems.map((tag, i) => (
+                                <span key={i} className={`px-2 py-0.5 text-[10px] font-medium rounded-full border ${isDark ? 'bg-purple-900/50 border-purple-700/50 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-700'}`}>
+                                  {tag}
+                                </span>
+                              ))
+                            ) : (
+                              <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Empty file</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <p className={`text-xs font-mono mb-2 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.folder.name}</p>
                       <div className="flex items-center gap-3 text-xs">
                         <div className={`flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>

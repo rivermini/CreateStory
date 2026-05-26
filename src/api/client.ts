@@ -534,6 +534,18 @@ export async function syncSingleDriveFolder(folderId: string): Promise<{ success
   );
 }
 
+export interface DriveFileContentResponse {
+  success: boolean;
+  content: string;
+  error?: string | null;
+}
+
+export async function getDriveFileContent(folderId: string, filename: string): Promise<DriveFileContentResponse> {
+  return apiFetch<DriveFileContentResponse>(
+    `/api/drive-sync/folders/${encodeURIComponent(folderId)}/file/${encodeURIComponent(filename)}`
+  );
+}
+
 export interface ServerStoryRef {
   id: string;
   title: string;
