@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   type DriveSyncConfig,
+  type UpdatableStoryEntry,
 } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
 import { BatchConfirmDialog } from './BatchConfirmDialog';
@@ -29,7 +30,7 @@ export interface StorySyncTabsProps {
   updatingIds: Set<string>;
   onCheckUpdatable: () => void;
   onUpdateSingle: (entry: import('../api/client').UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
-  onUpdateAll: () => void;
+  onUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>) => void;
   updatableInvalid: import('../api/client').UpdatableStoryEntry[];
   updatableNoServerMatch?: import('../api/client').DriveFolderEntry[];
   updatableEmptyExtended?: import('../api/client').DriveFolderEntry[];
@@ -63,6 +64,9 @@ export function StorySyncTabs({
 
   const [showUploadConfirm, setShowUploadConfirm] = useState(false);
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
+  const [chapterErrors, setChapterErrors] = useState(false);
+  const [pendingUpdateEntries, setPendingUpdateEntries] = useState<UpdatableStoryEntry[]>([]);
+  const [pendingChapterInputs, setPendingChapterInputs] = useState<Map<string, number>>(new Map());
 
   const uploadableCount = uploadableData?.uploadable.length ?? 0;
   const updatableCount = updatableData?.updatable.length ?? 0;
@@ -73,8 +77,9 @@ export function StorySyncTabs({
   };
 
   const handleUpdateAll = () => {
+    if (chapterErrors) return;
     setShowUpdateConfirm(false);
-    onUpdateAll();
+    onUpdateAll(pendingUpdateEntries, pendingChapterInputs);
   };
 
   return (
@@ -93,10 +98,14 @@ export function StorySyncTabs({
       <BatchConfirmDialog
         isOpen={showUpdateConfirm}
         title="Update All Stories"
-        message={`You are about to update ${updatableCount} stories with new chapters from Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of updates.`}
-        itemCount={updatableCount}
+        message={chapterErrors
+          ? `Cannot update: there are chapter count validation errors that must be resolved first. Please fix the errors in the Update tab before proceeding.`
+          : `You are about to update ${pendingUpdateEntries.length} stories with new chapters from Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of updates.`
+        }
+        itemCount={pendingUpdateEntries.length}
         confirmText="Start Update"
         isDark={isDark}
+        disabled={chapterErrors}
         onConfirm={handleUpdateAll}
         onCancel={() => setShowUpdateConfirm(false)}
       />
@@ -193,7 +202,13 @@ export function StorySyncTabs({
               updatingIds={updatingIds}
               onCheck={onCheckUpdatable}
               onUpdateSingle={onUpdateSingle}
-              onRequestUpdateAll={() => setShowUpdateConfirm(true)}
+              onRequestUpdateAll={(entries, chapterInputs) => {
+                setPendingUpdateEntries(entries);
+                setPendingChapterInputs(chapterInputs);
+                setShowUpdateConfirm(true);
+              }}
+              hasChapterErrors={chapterErrors}
+              onChapterErrorsChange={setChapterErrors}
               invalid={updatableInvalid}
               noServerMatch={updatableNoServerMatch}
               emptyExtended={updatableEmptyExtended}

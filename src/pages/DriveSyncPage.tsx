@@ -308,14 +308,13 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     return server_story.id;
   }, []);
 
-  const handleUpdateAll = useCallback(async () => {
-    if (!updatableData) return;
-    const entries = updatableData.updatable;
+  const handleUpdateAll = useCallback(async (entries: import('../api/client').UpdatableStoryEntry[], chapterInputs: Map<string, number>) => {
     if (entries.length === 0) return;
     for (const entry of entries) {
-      handleUpdateSingle(entry);
+      const count = chapterInputs.get(entry.server_story.id) ?? 1;
+      handleUpdateSingle(entry, count);
     }
-  }, [updatableData, handleUpdateSingle, config]);
+  }, [handleUpdateSingle, config]);
 
   const hasActiveJobs = trackedJobs.length > 0 || updatingJobs.size > 0;
   const totalUploadable = uploadableData?.uploadable.length ?? 0;

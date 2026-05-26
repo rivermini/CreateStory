@@ -7,6 +7,7 @@ interface BatchConfirmDialogProps {
   itemCount: number;
   confirmText: string;
   isDark: boolean;
+  disabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -18,6 +19,7 @@ export function BatchConfirmDialog({
   itemCount,
   confirmText,
   isDark,
+  disabled = false,
   onConfirm,
   onCancel,
 }: BatchConfirmDialogProps) {
@@ -43,7 +45,7 @@ export function BatchConfirmDialog({
 
   if (!isOpen) return null;
 
-  const isConfirmEnabled = inputValue.toLowerCase() === 'confirm' && checked;
+  const isConfirmEnabled = !disabled && inputValue.toLowerCase() === 'confirm' && checked;
 
   const handleConfirm = () => {
     if (isConfirmEnabled) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   type CheckUpdatableResponse,
   type UpdatableStoryEntry,
@@ -17,7 +17,9 @@ interface UpdateTabProps {
   updatingIds: Set<string>;
   onCheck: () => void;
   onUpdateSingle: (entry: UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
-  onRequestUpdateAll: () => void;
+  onRequestUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>) => void;
+  hasChapterErrors: boolean;
+  onChapterErrorsChange: (hasErrors: boolean) => void;
   invalid?: UpdatableStoryEntry[];
   noServerMatch?: DriveFolderEntry[];
   emptyExtended?: DriveFolderEntry[];
@@ -33,6 +35,8 @@ export function UpdateTab({
   onCheck,
   onUpdateSingle,
   onRequestUpdateAll,
+  hasChapterErrors,
+  onChapterErrorsChange,
   invalid,
   noServerMatch,
   emptyExtended,
@@ -42,7 +46,12 @@ export function UpdateTab({
   const [search, setSearch] = useState('');
   const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uptodate' | 'noServerMatch' | 'emptyExtended'>('invalid');
   const [chapterCountInputs, setChapterCountInputs] = useState<Map<string, number>>(new Map());
+  const [chapterErrors, setChapterErrors] = useState<Map<string, string>>(new Map());
   const [openFilePanels, setOpenFilePanels] = useState<Map<string, { loading: boolean; data: DriveFileContentResponse | null }>>(new Map());
+
+  useEffect(() => {
+    onChapterErrorsChange(chapterErrors.size > 0);
+  }, [chapterErrors.size, onChapterErrorsChange]);
 
   async function toggleFilePanel(entryId: string, filename: 'free.md' | 'tags.md', folderId: string) {
     const key = `${entryId}:${filename}`;
@@ -155,9 +164,9 @@ export function UpdateTab({
 
           {data && updateCount > 0 && (
             <button
-              onClick={onRequestUpdateAll}
-              disabled={isUpdatingAny}
-              className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdatingAny
+              onClick={() => onRequestUpdateAll(filteredUpdatable, chapterCountInputs)}
+              disabled={isUpdatingAny || hasChapterErrors}
+              className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdatingAny || hasChapterErrors
                   ? isDark
                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -498,25 +507,52 @@ export function UpdateTab({
                               <input
                                 type="number"
                                 min={1}
-                                max={newCount || undefined}
                                 defaultValue={1}
                                 onChange={e => {
                                   const val = parseInt(e.target.value, 10);
                                   setChapterCountInputs(prev => {
                                     const next = new Map(prev);
-                                    next.set(entry.server_story.id, isNaN(val) ? 1 : Math.max(1, val));
+                                    next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
+                                    return next;
+                                  });
+                                  setChapterErrors(prev => {
+                                    const next = new Map(prev);
+                                    next.delete(entry.server_story.id);
                                     return next;
                                   });
                                 }}
-                                className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center ${isDark
+                                className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
                                     ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
                                     : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
                                   }`}
                               />
                             </div>
+                            {(() => {
+                              const err = chapterErrors.get(entry.server_story.id);
+                              if (!err) return null;
+                              return (
+                                <p className="text-[10px] text-red-400 text-right">{err}</p>
+                              );
+                            })()}
                             <button
-                              onClick={() => onUpdateSingle(entry, chapterCountInputs.get(entry.server_story.id) ?? 1)}
-                            disabled={isUpdating || isSuccess}
+                              onClick={() => {
+                                const count = chapterCountInputs.get(entry.server_story.id) ?? 1;
+                                if (count > (entry.new_chapters_count ?? 0)) {
+                                  setChapterErrors(prev => {
+                                    const next = new Map(prev);
+                                    next.set(entry.server_story.id, `Maximum ${entry.new_chapters_count ?? 0} chapters available`);
+                                    return next;
+                                  });
+                                  return;
+                                }
+                                setChapterErrors(prev => {
+                                  const next = new Map(prev);
+                                  next.delete(entry.server_story.id);
+                                  return next;
+                                });
+                                onUpdateSingle(entry, count);
+                              }}
+                              disabled={isUpdating || isSuccess}
                             className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdating
                                 ? isDark
                                   ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
@@ -775,25 +811,52 @@ export function UpdateTab({
                         <input
                           type="number"
                           min={1}
-                          max={newCount || undefined}
                           defaultValue={1}
                           onChange={e => {
                             const val = parseInt(e.target.value, 10);
                             setChapterCountInputs(prev => {
                               const next = new Map(prev);
-                              next.set(entry.server_story.id, isNaN(val) ? 1 : Math.max(1, val));
+                              next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
+                              return next;
+                            });
+                            setChapterErrors(prev => {
+                              const next = new Map(prev);
+                              next.delete(entry.server_story.id);
                               return next;
                             });
                           }}
-                          className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center ${isDark
+                          className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
                               ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
                               : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
                             }`}
                         />
                       </div>
+                      {(() => {
+                        const err = chapterErrors.get(entry.server_story.id);
+                        if (!err) return null;
+                        return (
+                          <p className="text-[10px] text-red-400 text-right">{err}</p>
+                        );
+                      })()}
                       <button
-                        onClick={() => onUpdateSingle(entry, chapterCountInputs.get(entry.server_story.id) ?? 1)}
-                        disabled={isUpdating || isSuccess}
+                              onClick={() => {
+                                const count = chapterCountInputs.get(entry.server_story.id) ?? 1;
+                                if (count > (entry.new_chapters_count ?? 0)) {
+                                  setChapterErrors(prev => {
+                                    const next = new Map(prev);
+                                    next.set(entry.server_story.id, `Maximum ${entry.new_chapters_count ?? 0} chapters available`);
+                                    return next;
+                                  });
+                                  return;
+                                }
+                                setChapterErrors(prev => {
+                                  const next = new Map(prev);
+                                  next.delete(entry.server_story.id);
+                                  return next;
+                                });
+                                onUpdateSingle(entry, count);
+                              }}
+                              disabled={isUpdating || isSuccess}
                         className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdating
                             ? isDark
                               ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
