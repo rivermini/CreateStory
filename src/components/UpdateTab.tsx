@@ -17,6 +17,7 @@ interface UpdateTabProps {
   updateResults: Map<string, { success: boolean; message: string }>;
   updatingIds: Set<string>;
   onCheck: () => void;
+  onCheckReaderFinished: () => void;
   onUpdateSingle: (entry: UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
   onRequestUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>, newErrors?: Map<string, string>) => void;
   hasChapterErrors: boolean;
@@ -35,6 +36,7 @@ export function UpdateTab({
   updateResults,
   updatingIds,
   onCheck,
+  onCheckReaderFinished,
   onUpdateSingle,
   onRequestUpdateAll,
   hasChapterErrors,
@@ -180,6 +182,24 @@ export function UpdateTab({
                 Check Updates
               </>
             )}
+          </button>
+
+          <button
+            onClick={onCheckReaderFinished}
+            disabled={loading}
+            className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${loading
+                ? isDark
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                : isDark
+                  ? 'bg-rose-700 hover:bg-rose-600 text-white shadow-lg shadow-rose-700/20'
+                  : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20'
+              }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            Check Reader Finished
           </button>
 
           {data && updateCount > 0 && (

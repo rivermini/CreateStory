@@ -29,6 +29,7 @@ export interface StorySyncTabsProps {
   updateResults: Map<string, { success: boolean; message: string }>;
   updatingIds: Set<string>;
   onCheckUpdatable: () => void;
+  onCheckReaderFinished: () => void;
   onUpdateSingle: (entry: import('../api/client').UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
   onUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>) => void;
   updatableInvalid: import('../api/client').UpdatableStoryEntry[];
@@ -55,6 +56,7 @@ export function StorySyncTabs({
   updateResults,
   updatingIds,
   onCheckUpdatable,
+  onCheckReaderFinished,
   onUpdateSingle,
   onUpdateAll,
   updatableInvalid,
@@ -212,6 +214,7 @@ export function StorySyncTabs({
               updateResults={updateResults}
               updatingIds={updatingIds}
               onCheck={onCheckUpdatable}
+              onCheckReaderFinished={onCheckReaderFinished}
               onUpdateSingle={onUpdateSingle}
               onRequestUpdateAll={(entries, chapterInputs, newErrors) => {
                 setPendingUpdateEntries(entries);

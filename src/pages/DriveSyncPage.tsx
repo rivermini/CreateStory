@@ -4,6 +4,7 @@ import {
   initDriveSyncConfig,
   checkUploadable,
   checkUpdatable,
+  checkUpdatableReaderFinished,
   createJob,
   getJob,
   getStoriesNeedingUpdate,
@@ -261,6 +262,28 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     }
   };
 
+  const handleCheckReaderFinished = async () => {
+    setUpdatableData(null);
+    setUpdatableLoading(true);
+    setUpdatableError('');
+    setUpdateResults(new Map());
+    try {
+      const [data, storiesResp] = await Promise.all([
+        checkUpdatableReaderFinished(),
+        getStoriesNeedingUpdate(),
+      ]);
+      setUpdatableData(data);
+      setStoriesNeedingUpdate(storiesResp.success && storiesResp.data ? storiesResp.data.data : []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to check reader finished stories.';
+      setUpdatableError(msg);
+      setUpdatableData(null);
+      setStoriesNeedingUpdate([]);
+    } finally {
+      setUpdatableLoading(false);
+    }
+  };
+
   const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry, chaptersCount?: number): Promise<string> => {
     const { server_story, folder } = entry;
 
@@ -466,6 +489,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               updateResults={updateResults}
               updatingIds={new Set(updatingJobs.keys())}
               onCheckUpdatable={handleCheckUpdatable}
+              onCheckReaderFinished={handleCheckReaderFinished}
               onUpdateSingle={handleUpdateSingle}
               onUpdateAll={handleUpdateAll}
               updatableInvalid={updatableData?.invalid ?? []}

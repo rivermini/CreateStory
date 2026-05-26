@@ -593,6 +593,10 @@ export async function checkUpdatable(): Promise<CheckUpdatableResponse> {
   return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable', { timeout: 120000 });
 }
 
+export async function checkUpdatableReaderFinished(): Promise<CheckUpdatableResponse> {
+  return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable/reader-finished', { timeout: 60000 });
+}
+
 export interface StoriesNeedingUpdateEntry {
   storyId: string;
   title: string;
