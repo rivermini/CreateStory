@@ -593,6 +593,36 @@ export async function checkUpdatable(): Promise<CheckUpdatableResponse> {
   return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable', { timeout: 120000 });
 }
 
+export interface StoriesNeedingUpdateEntry {
+  storyId: string;
+  title: string;
+  referencePlatform: string;
+  totalChapters: number;
+  uniqueReaders: number;
+  completedUsers: number;
+  completionRate: number;
+  tags: string[];
+  categories: { id: string; name: string }[];
+  mainCategory: { id: string; name: string } | null;
+  completedUsersByCountry: { users: number; ipCountryCode: string }[];
+  latestCompletionDate: string;
+  latestCompletionUsers: number;
+}
+
+export interface StoriesNeedingUpdateResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    startDate: string;
+    endDate: string;
+    data: StoriesNeedingUpdateEntry[];
+  };
+}
+
+export async function getStoriesNeedingUpdate(): Promise<StoriesNeedingUpdateResponse> {
+  return apiFetch<StoriesNeedingUpdateResponse>('/api/drive-sync/dashboard/stories-needing-update', { timeout: 30000 });
+}
+
 export interface UpdateChapterCountResponse {
   success: boolean;
   message: string;

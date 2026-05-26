@@ -6,6 +6,7 @@ import {
   checkUpdatable,
   createJob,
   getJob,
+  getStoriesNeedingUpdate,
   FIXED_JSON_PREFIX,
   type DriveSyncConfig,
   type DriveFolderEntry,
@@ -13,6 +14,7 @@ import {
   type CheckUploadableResponse,
   type CheckUpdatableResponse,
   type TrackedJob,
+  type StoriesNeedingUpdateEntry,
 } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
@@ -58,6 +60,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [updatableError, setUpdatableError] = useState('');
   const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [updatingJobs, setUpdatingJobs] = useState<Map<string, string>>(new Map());
+  const [storiesNeedingUpdate, setStoriesNeedingUpdate] = useState<StoriesNeedingUpdateEntry[]>([]);
 
   useEffect(() => {
     setConfigLoading(true);
@@ -242,12 +245,17 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     setUpdatableError('');
     setUpdateResults(new Map());
     try {
-      const data = await checkUpdatable();
+      const [data, storiesResp] = await Promise.all([
+        checkUpdatable(),
+        getStoriesNeedingUpdate(),
+      ]);
       setUpdatableData(data);
+      setStoriesNeedingUpdate(storiesResp.success && storiesResp.data ? storiesResp.data.data : []);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to check updatable stories.';
       setUpdatableError(msg);
       setUpdatableData(null);
+      setStoriesNeedingUpdate([]);
     } finally {
       setUpdatableLoading(false);
     }
@@ -463,6 +471,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               updatableInvalid={updatableData?.invalid ?? []}
               updatableNoServerMatch={updatableData?.no_server_match ?? []}
               updatableEmptyExtended={updatableData?.empty_extended ?? []}
+              storiesNeedingUpdate={storiesNeedingUpdate}
             />
           </div>
         )}

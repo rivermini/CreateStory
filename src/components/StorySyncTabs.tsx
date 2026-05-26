@@ -34,6 +34,7 @@ export interface StorySyncTabsProps {
   updatableInvalid: import('../api/client').UpdatableStoryEntry[];
   updatableNoServerMatch?: import('../api/client').DriveFolderEntry[];
   updatableEmptyExtended?: import('../api/client').DriveFolderEntry[];
+  storiesNeedingUpdate?: import('../api/client').StoriesNeedingUpdateEntry[];
 }
 
 export function StorySyncTabs({
@@ -59,6 +60,7 @@ export function StorySyncTabs({
   updatableInvalid,
   updatableNoServerMatch,
   updatableEmptyExtended,
+  storiesNeedingUpdate,
 }: StorySyncTabsProps) {
   const isDark = themeMode === 'dark';
 
@@ -223,6 +225,7 @@ export function StorySyncTabs({
               invalid={updatableInvalid}
               noServerMatch={updatableNoServerMatch}
               emptyExtended={updatableEmptyExtended}
+              storiesNeedingUpdate={storiesNeedingUpdate}
               themeMode={themeMode}
             />
           )}

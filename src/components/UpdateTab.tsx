@@ -3,6 +3,7 @@ import {
   type CheckUpdatableResponse,
   type UpdatableStoryEntry,
   type DriveFolderEntry,
+  type StoriesNeedingUpdateEntry,
   getDriveFileContent,
   type DriveFileContentResponse,
 } from '../api/client';
@@ -23,6 +24,7 @@ interface UpdateTabProps {
   invalid?: UpdatableStoryEntry[];
   noServerMatch?: DriveFolderEntry[];
   emptyExtended?: DriveFolderEntry[];
+  storiesNeedingUpdate?: StoriesNeedingUpdateEntry[];
   themeMode: ThemeMode;
 }
 
@@ -40,6 +42,7 @@ export function UpdateTab({
   invalid,
   noServerMatch,
   emptyExtended,
+  storiesNeedingUpdate,
   themeMode,
 }: UpdateTabProps) {
   const isDark = themeMode === 'dark';
@@ -83,9 +86,15 @@ export function UpdateTab({
 
   const q = search.toLowerCase().trim();
 
-  const filteredUpdatable = data?.updatable.filter(e =>
+  const storiesNeedingUpdateIds = new Set(storiesNeedingUpdate?.map(s => s.storyId) ?? []);
+
+  const filteredUpdatable = (data?.updatable.filter(e =>
     !q || e.folder.display_name.toLowerCase().includes(q) || e.server_story.title.toLowerCase().includes(q)
-  ) ?? [];
+  ) ?? []).sort((a, b) => {
+    const aDone = storiesNeedingUpdateIds.has(a.server_story.id) ? 1 : 0;
+    const bDone = storiesNeedingUpdateIds.has(b.server_story.id) ? 1 : 0;
+    return bDone - aDone;
+  });
 
   function revalidateAllErrors() {
     const newErrors = new Map<string, string>();
@@ -393,9 +402,13 @@ export function UpdateTab({
                     const isUpdating = updatingIds.has(entry.server_story.id);
                     const isSuccess = result?.success;
                     const isFailed = result && !result.success;
+                    const isReadersFinished = storiesNeedingUpdateIds.has(entry.server_story.id);
 
                     return (
-                      <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'}`}>
+                      <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isReadersFinished
+                          ? isDark ? 'bg-amber-950/40 border-amber-700/50 shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'bg-amber-50 border-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.25)]'
+                          : isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'
+                        }`}>
                         <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -403,6 +416,11 @@ export function UpdateTab({
                               {newCount > 0 && (
                                 <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>
                                   +{newCount} ch
+                                </span>
+                              )}
+                              {isReadersFinished && (
+                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/50 text-amber-300 border border-amber-600/50' : 'bg-amber-200 text-amber-800 border border-amber-300'}`}>
+                                  Readers Finished
                                 </span>
                               )}
                               {entry.has_free_md && (() => {
@@ -708,9 +726,13 @@ export function UpdateTab({
               const result = updateResults.get(entry.server_story.id);
               const isUpdating = updatingIds.has(entry.server_story.id);
               const isSuccess = result?.success;
+              const isReadersFinished = storiesNeedingUpdateIds.has(entry.server_story.id);
 
               return (
-                <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'}`}>
+                <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isReadersFinished
+                    ? isDark ? 'bg-amber-950/40 border-amber-700/50 shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'bg-amber-50 border-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.25)]'
+                    : isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'
+                  }`}>
                   <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -718,6 +740,11 @@ export function UpdateTab({
                         {newCount > 0 && (
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700'}`}>
                             +{newCount} ch
+                          </span>
+                        )}
+                        {isReadersFinished && (
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-amber-900/50 text-amber-300 border border-amber-600/50' : 'bg-amber-200 text-amber-800 border border-amber-300'}`}>
+                            Readers Finished
                           </span>
                         )}
                         {entry.has_free_md && (() => {
