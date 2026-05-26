@@ -246,17 +246,12 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     setUpdatableError('');
     setUpdateResults(new Map());
     try {
-      const [data, storiesResp] = await Promise.all([
-        checkUpdatable(),
-        getStoriesNeedingUpdate(),
-      ]);
+      const data = await checkUpdatable();
       setUpdatableData(data);
-      setStoriesNeedingUpdate(storiesResp.success && storiesResp.data ? storiesResp.data.data : []);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to check updatable stories.';
       setUpdatableError(msg);
       setUpdatableData(null);
-      setStoriesNeedingUpdate([]);
     } finally {
       setUpdatableLoading(false);
     }

@@ -162,15 +162,32 @@ export function UpdateTab({
 
         <div className="flex items-center gap-2">
           <button
+            onClick={onCheckReaderFinished}
+            disabled={loading}
+            className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${loading
+              ? isDark
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              : isDark
+                ? 'bg-rose-700 hover:bg-rose-600 text-white shadow-lg shadow-rose-700/20'
+                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20'
+              }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            Check Reader Finished
+          </button>
+          <button
             onClick={onCheck}
             disabled={loading}
             className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${loading
-                ? isDark
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                : isDark
-                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+              ? isDark
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              : isDark
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
               }`}
           >
             {loading ? (
@@ -190,23 +207,6 @@ export function UpdateTab({
             )}
           </button>
 
-          <button
-            onClick={onCheckReaderFinished}
-            disabled={loading}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${loading
-                ? isDark
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                : isDark
-                  ? 'bg-rose-700 hover:bg-rose-600 text-white shadow-lg shadow-rose-700/20'
-                  : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20'
-              }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            Check Reader Finished
-          </button>
 
           {data && updateCount > 0 && (
             <button
@@ -222,12 +222,12 @@ export function UpdateTab({
               }}
               disabled={isUpdatingAny || hasChapterErrors}
               className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdatingAny || hasChapterErrors
-                  ? isDark
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                  : isDark
-                    ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
-                    : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
+                ? isDark
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                : isDark
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
+                  : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
                 }`}
             >
               {isUpdatingAny ? (
@@ -255,8 +255,8 @@ export function UpdateTab({
           <button
             onClick={() => setFilterSection('all')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'all'
-                ? isDark ? 'bg-slate-800 text-slate-200' : 'bg-white text-gray-700 shadow-sm'
-                : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+              ? isDark ? 'bg-slate-800 text-slate-200' : 'bg-white text-gray-700 shadow-sm'
+              : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
               }`}
           >
             All ({filteredUpdatable.length + filteredInvalid.length + filteredNoUpdate.length + filteredNoServerMatch.length + filteredEmptyExtended.length + filteredNoDriveFolder.length})
@@ -264,8 +264,8 @@ export function UpdateTab({
           <button
             onClick={() => setFilterSection('ready')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'ready'
-                ? isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-50 text-amber-700'
-                : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+              ? isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-50 text-amber-700'
+              : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
               }`}
           >
             Can Update ({updateCount})
@@ -273,8 +273,8 @@ export function UpdateTab({
           <button
             onClick={() => setFilterSection('invalid')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'invalid'
-                ? isDark ? 'bg-red-900/40 text-red-400' : 'bg-red-50 text-red-700'
-                : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+              ? isDark ? 'bg-red-900/40 text-red-400' : 'bg-red-50 text-red-700'
+              : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
               }`}
           >
             Invalid ({filteredInvalid.length})
@@ -282,8 +282,8 @@ export function UpdateTab({
           <button
             onClick={() => setFilterSection('uptodate')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'uptodate'
-                ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
-                : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+              ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
+              : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
               }`}
           >
             Up-to-date ({filteredNoUpdate.length})
@@ -292,8 +292,8 @@ export function UpdateTab({
             <button
               onClick={() => setFilterSection('noServerMatch')}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'noServerMatch'
-                  ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
-                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+                ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
+                : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
               No Server Match ({filteredNoServerMatch.length})
@@ -303,8 +303,8 @@ export function UpdateTab({
             <button
               onClick={() => setFilterSection('emptyExtended')}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'emptyExtended'
-                  ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
-                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+                ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
+                : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
               Empty EXTENDED ({filteredEmptyExtended.length})
@@ -314,8 +314,8 @@ export function UpdateTab({
             <button
               onClick={() => setFilterSection('noDriveFolder')}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filterSection === 'noDriveFolder'
-                  ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
-                  : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
+                ? isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'
+                : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
               No Drive Folder ({filteredNoDriveFolder.length})
@@ -443,8 +443,8 @@ export function UpdateTab({
 
                     return (
                       <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isReadersFinished
-                          ? isDark ? 'bg-amber-950/40 border-amber-700/50 shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'bg-amber-50 border-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.25)]'
-                          : isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'
+                        ? isDark ? 'bg-amber-950/40 border-amber-700/50 shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'bg-amber-50 border-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.25)]'
+                        : isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'
                         }`}>
                         <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                           <div className="flex-1 min-w-0">
@@ -468,8 +468,8 @@ export function UpdateTab({
                                   <button
                                     onClick={() => toggleFilePanel(entry.server_story.id, 'free.md', entry.folder.id)}
                                     className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
-                                        ? isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-white'
-                                        : isDark ? 'bg-cyan-900/40 text-cyan-400 hover:bg-cyan-800/50' : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                                      ? isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-white'
+                                      : isDark ? 'bg-cyan-900/40 text-cyan-400 hover:bg-cyan-800/50' : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
                                       }`}
                                   >
                                     Free.md {isOpen ? '▲' : '▼'}
@@ -484,8 +484,8 @@ export function UpdateTab({
                                   <button
                                     onClick={() => toggleFilePanel(entry.server_story.id, 'tags.md', entry.folder.id)}
                                     className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
-                                        ? isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
-                                        : isDark ? 'bg-purple-900/40 text-purple-400 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                      ? isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                                      : isDark ? 'bg-purple-900/40 text-purple-400 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                                       }`}
                                   >
                                     Tags.md {isOpen ? '▲' : '▼'}
@@ -522,8 +522,8 @@ export function UpdateTab({
                               const raw = panel.data?.success ? panel.data.content : '';
                               const tagItems = raw
                                 ? raw.split(/[,\n]/)
-                                    .map(t => t.trim().replace(/^["']|["']$/g, ''))
-                                    .filter(t => t && !t.startsWith('#'))
+                                  .map(t => t.trim().replace(/^["']|["']$/g, ''))
+                                  .filter(t => t && !t.startsWith('#'))
                                 : [];
                               return (
                                 <div className="mb-1 flex items-center gap-1.5 flex-wrap">
@@ -555,6 +555,23 @@ export function UpdateTab({
                                 <span className={`font-semibold ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{entry.folder.extended_chapter_count ?? 0}</span>
                               </div>
                             </div>
+                            <div className="text-xs mt-1">
+                              {entry.last_updated ? (
+                                <span className={`${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                                  Last updated: {(() => {
+                                    const d = new Date(entry.last_updated!);
+                                    const dd = String(d.getDate()).padStart(2, '0');
+                                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                    const yyyy = d.getFullYear();
+                                    const hh = String(d.getHours()).padStart(2, '0');
+                                    const min = String(d.getMinutes()).padStart(2, '0');
+                                    return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+                                  })()}
+                                </span>
+                              ) : (
+                                <span className={`${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Never updated</span>
+                              )}
+                            </div>
                             {result && (
                               <p className={`text-xs mt-1.5 flex items-center gap-1 ${isSuccess ? 'text-emerald-500' : isFailed ? 'text-red-500' : ''}`}>
                                 {isSuccess && (
@@ -585,16 +602,16 @@ export function UpdateTab({
                                 defaultValue={1}
                                 onChange={e => {
                                   const val = parseInt(e.target.value, 10);
-                              setChapterCountInputs(prev => {
-                                const next = new Map(prev);
-                                next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
-                                return next;
-                              });
-                              setTimeout(revalidateAllErrors, 0);
-                            }}
+                                  setChapterCountInputs(prev => {
+                                    const next = new Map(prev);
+                                    next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
+                                    return next;
+                                  });
+                                  setTimeout(revalidateAllErrors, 0);
+                                }}
                                 className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
-                                    ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
-                                    : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
+                                  ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
+                                  : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
                                   }`}
                               />
                             </div>
@@ -624,7 +641,7 @@ export function UpdateTab({
                                 onUpdateSingle(entry, count);
                               }}
                               disabled={isUpdating || isSuccess}
-                            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdating
+                              className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdating
                                 ? isDark
                                   ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
                                   : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -635,31 +652,31 @@ export function UpdateTab({
                                   : isDark
                                     ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
                                     : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
-                              }`}
-                          >
-                            {isUpdating ? (
-                              <>
-                                <svg className="w-4 h-4 animate-spin-ccw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                                Updating...
-                              </>
-                            ) : isSuccess ? (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Updated
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                </svg>
-                                Update
-                              </>
-                            )}
-                          </button>
+                                }`}
+                            >
+                              {isUpdating ? (
+                                <>
+                                  <svg className="w-4 h-4 animate-spin-ccw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                  Updating...
+                                </>
+                              ) : isSuccess ? (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Updated
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                  </svg>
+                                  Update
+                                </>
+                              )}
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -767,8 +784,8 @@ export function UpdateTab({
 
               return (
                 <div key={entry.server_story.id} className={`p-4 rounded-xl border ${isReadersFinished
-                    ? isDark ? 'bg-amber-950/40 border-amber-700/50 shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'bg-amber-50 border-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.25)]'
-                    : isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'
+                  ? isDark ? 'bg-amber-950/40 border-amber-700/50 shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'bg-amber-50 border-amber-300 shadow-[0_0_0_1px_rgba(245,158,11,0.25)]'
+                  : isDark ? 'bg-slate-900/40 border-slate-800/60' : 'bg-white border-gray-200'
                   }`}>
                   <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                     <div className="flex-1 min-w-0">
@@ -792,8 +809,8 @@ export function UpdateTab({
                             <button
                               onClick={() => toggleFilePanel(entry.server_story.id, 'free.md', entry.folder.id)}
                               className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
-                                  ? isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-white'
-                                  : isDark ? 'bg-cyan-900/40 text-cyan-400 hover:bg-cyan-800/50' : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
+                                ? isDark ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-white'
+                                : isDark ? 'bg-cyan-900/40 text-cyan-400 hover:bg-cyan-800/50' : 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200'
                                 }`}
                             >
                               Free.md {isOpen ? '▲' : '▼'}
@@ -808,8 +825,8 @@ export function UpdateTab({
                             <button
                               onClick={() => toggleFilePanel(entry.server_story.id, 'tags.md', entry.folder.id)}
                               className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${isOpen
-                                  ? isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
-                                  : isDark ? 'bg-purple-900/40 text-purple-400 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                ? isDark ? 'bg-purple-600 text-white' : 'bg-purple-500 text-white'
+                                : isDark ? 'bg-purple-900/40 text-purple-400 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                                 }`}
                             >
                               Tags.md {isOpen ? '▲' : '▼'}
@@ -846,8 +863,8 @@ export function UpdateTab({
                         const raw = panel.data?.success ? panel.data.content : '';
                         const tagItems = raw
                           ? raw.split(/[,\n]/)
-                              .map(t => t.trim().replace(/^["']|["']$/g, ''))
-                              .filter(t => t && !t.startsWith('#'))
+                            .map(t => t.trim().replace(/^["']|["']$/g, ''))
+                            .filter(t => t && !t.startsWith('#'))
                           : [];
                         return (
                           <div className="mb-1 flex items-center gap-1.5 flex-wrap">
@@ -879,6 +896,23 @@ export function UpdateTab({
                           <span className={`font-semibold ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{entry.folder.extended_chapter_count ?? 0}</span>
                         </div>
                       </div>
+                      <div className="text-xs">
+                        {entry.last_updated ? (
+                          <span className={`${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                            Last updated: {(() => {
+                              const d = new Date(entry.last_updated!);
+                              const dd = String(d.getDate()).padStart(2, '0');
+                              const mm = String(d.getMonth() + 1).padStart(2, '0');
+                              const yyyy = d.getFullYear();
+                              const hh = String(d.getHours()).padStart(2, '0');
+                              const min = String(d.getMinutes()).padStart(2, '0');
+                              return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+                            })()}
+                          </span>
+                        ) : (
+                          <span className={`${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Never updated</span>
+                        )}
+                      </div>
                       {result && (
                         <p className={`text-xs mt-1.5 ${isSuccess ? 'text-emerald-500' : 'text-red-500'}`}>
                           {result.message}
@@ -894,17 +928,17 @@ export function UpdateTab({
                           defaultValue={1}
                           onChange={e => {
                             const val = parseInt(e.target.value, 10);
-                              setChapterCountInputs(prev => {
-                                const next = new Map(prev);
-                                next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
-                                return next;
-                              });
-                              setTimeout(revalidateAllErrors, 0);
-                            }}
-                                className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
-                                    ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
-                                    : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
-                                  }`}
+                            setChapterCountInputs(prev => {
+                              const next = new Map(prev);
+                              next.set(entry.server_story.id, isNaN(val) || val < 1 ? 1 : val);
+                              return next;
+                            });
+                            setTimeout(revalidateAllErrors, 0);
+                          }}
+                          className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark
+                            ? 'bg-slate-800 border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500'
+                            : 'bg-white border-gray-300 text-gray-800 focus:outline-none focus:border-amber-500'
+                            }`}
                         />
                       </div>
                       {(() => {
@@ -915,60 +949,60 @@ export function UpdateTab({
                         );
                       })()}
                       <button
-                              onClick={() => {
-                                const count = chapterCountInputs.get(entry.server_story.id) ?? 1;
-                                if (count > (entry.new_chapters_count ?? 0)) {
-                                  setChapterErrors(prev => {
-                                    const next = new Map(prev);
-                                    next.set(entry.server_story.id, `Maximum ${entry.new_chapters_count ?? 0} chapters available`);
-                                    return next;
-                                  });
-                                  return;
-                                }
-                                setChapterErrors(prev => {
-                                  const next = new Map(prev);
-                                  next.delete(entry.server_story.id);
-                                  return next;
-                                });
-                                onUpdateSingle(entry, count);
-                              }}
-                              disabled={isUpdating || isSuccess}
+                        onClick={() => {
+                          const count = chapterCountInputs.get(entry.server_story.id) ?? 1;
+                          if (count > (entry.new_chapters_count ?? 0)) {
+                            setChapterErrors(prev => {
+                              const next = new Map(prev);
+                              next.set(entry.server_story.id, `Maximum ${entry.new_chapters_count ?? 0} chapters available`);
+                              return next;
+                            });
+                            return;
+                          }
+                          setChapterErrors(prev => {
+                            const next = new Map(prev);
+                            next.delete(entry.server_story.id);
+                            return next;
+                          });
+                          onUpdateSingle(entry, count);
+                        }}
+                        disabled={isUpdating || isSuccess}
                         className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 ${isUpdating
+                          ? isDark
+                            ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
+                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                          : isSuccess
                             ? isDark
-                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
-                              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                            : isSuccess
-                              ? isDark
-                                ? 'bg-emerald-900/40 text-emerald-400 cursor-default'
-                                : 'bg-emerald-50 text-emerald-600 cursor-default'
-                              : isDark
-                                ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
-                                : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
+                              ? 'bg-emerald-900/40 text-emerald-400 cursor-default'
+                              : 'bg-emerald-50 text-emerald-600 cursor-default'
+                            : isDark
+                              ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
+                              : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20'
                           }`}
                       >
-                      {isUpdating ? (
-                        <>
-                          <svg className="w-4 h-4 animate-spin-ccw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          Updating...
-                        </>
-                      ) : isSuccess ? (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Updated
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                          </svg>
-                          Update
-                        </>
-                      )}
-                    </button>
+                        {isUpdating ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin-ccw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Updating...
+                          </>
+                        ) : isSuccess ? (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Updated
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                            </svg>
+                            Update
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1003,6 +1037,23 @@ export function UpdateTab({
                         <span className={`font-semibold ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{entry.folder.extended_chapter_count ?? 0}</span>
                       </div>
                     </div>
+                    <div className="text-xs mt-1">
+                      {entry.last_updated ? (
+                        <span className={`${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                          Last updated: {(() => {
+                            const d = new Date(entry.last_updated!);
+                            const dd = String(d.getDate()).padStart(2, '0');
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const yyyy = d.getFullYear();
+                            const hh = String(d.getHours()).padStart(2, '0');
+                            const min = String(d.getMinutes()).padStart(2, '0');
+                            return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+                          })()}
+                        </span>
+                      ) : (
+                        <span className={`${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Never updated</span>
+                      )}
+                    </div>
                   </div>
                   <span className={`px-2.5 py-1 text-xs font-medium rounded-lg self-start ${isDark ? 'text-red-400 bg-red-900/40 border border-red-800/40' : 'text-red-600 bg-red-100 border border-red-200'}`}>
                     Cannot Update
@@ -1033,6 +1084,23 @@ export function UpdateTab({
                         <span>Drive:</span>
                         <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-gray-700'}`}>{entry.folder.extended_chapter_count ?? 0}</span>
                       </div>
+                    </div>
+                    <div className="text-xs mt-1">
+                      {entry.last_updated ? (
+                        <span className={`${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                          Last updated: {(() => {
+                            const d = new Date(entry.last_updated!);
+                            const dd = String(d.getDate()).padStart(2, '0');
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const yyyy = d.getFullYear();
+                            const hh = String(d.getHours()).padStart(2, '0');
+                            const min = String(d.getMinutes()).padStart(2, '0');
+                            return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+                          })()}
+                        </span>
+                      ) : (
+                        <span className={`${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Never updated</span>
+                      )}
                     </div>
                   </div>
                   <span className={`px-3 py-1 text-xs font-medium rounded-lg ${isDark ? 'text-slate-500 bg-slate-800/60' : 'text-gray-500 bg-gray-200'}`}>
@@ -1098,7 +1166,20 @@ export function UpdateTab({
                         Server: ch {entry.server_story.maxChapter}
                       </span>
                     </div>
-                    <div className={`flex items-center gap-1.5 text-xs ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                    <div className={`text-xs ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                      {entry.last_updated ? (
+                        <span>Last updated: {(() => {
+                          const d = new Date(entry.last_updated!);
+                          const dd = String(d.getDate()).padStart(2, '0');
+                          const mm = String(d.getMonth() + 1).padStart(2, '0');
+                          const yyyy = d.getFullYear();
+                          const hh = String(d.getHours()).padStart(2, '0');
+                          const min = String(d.getMinutes()).padStart(2, '0');
+                          return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+                        })()} · </span>
+                      ) : (
+                        <span>Never updated · </span>
+                      )}
                       No matching EXTENDED_ folder found on Drive
                     </div>
                   </div>

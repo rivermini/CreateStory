@@ -568,6 +568,7 @@ export interface UpdatableStoryEntry {
   tags?: string[];
   has_free_md?: boolean;
   has_tags_md?: boolean;
+  last_updated?: string;
 }
 
 export interface CheckUpdatableResponse {
@@ -583,6 +584,7 @@ export interface CheckUpdatableResponse {
 
 export interface ServerOnlyStoryEntry {
   server_story: ServerStoryRef;
+  last_updated?: string;
 }
 
 export interface UpdateChapterCountResponse {
@@ -591,15 +593,15 @@ export interface UpdateChapterCountResponse {
 }
 
 export async function checkUploadable(): Promise<CheckUploadableResponse> {
-  return apiFetch<CheckUploadableResponse>('/api/drive-sync/check-uploadable', { timeout: 120000 });
+  return apiFetch<CheckUploadableResponse>('/api/drive-sync/check-uploadable', { timeout: 600000 });
 }
 
 export async function checkUpdatable(): Promise<CheckUpdatableResponse> {
-  return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable', { timeout: 120000 });
+  return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable', { timeout: 600000 });
 }
 
 export async function checkUpdatableReaderFinished(): Promise<CheckUpdatableResponse> {
-  return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable/reader-finished', { timeout: 60000 });
+  return apiFetch<CheckUpdatableResponse>('/api/drive-sync/check-updatable/reader-finished', { timeout: 600000 });
 }
 
 export interface StoriesNeedingUpdateEntry {
@@ -629,7 +631,7 @@ export interface StoriesNeedingUpdateResponse {
 }
 
 export async function getStoriesNeedingUpdate(): Promise<StoriesNeedingUpdateResponse> {
-  return apiFetch<StoriesNeedingUpdateResponse>('/api/drive-sync/dashboard/stories-needing-update', { timeout: 30000 });
+  return apiFetch<StoriesNeedingUpdateResponse>('/api/drive-sync/dashboard/stories-needing-update', { timeout: 600000 });
 }
 
 export interface UpdateChapterCountResponse {
