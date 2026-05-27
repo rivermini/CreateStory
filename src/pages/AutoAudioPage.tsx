@@ -84,15 +84,6 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
     }
   };
 
-  const handleStop = async () => {
-    setError('');
-    try {
-      await stopAutoAudio();
-      await loadStatus();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to stop session.');
-    }
-  };
 
   const progressPct = session
     ? (session.progress.total > 0

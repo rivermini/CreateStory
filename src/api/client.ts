@@ -326,6 +326,10 @@ export interface SettingsResponse {
   crawl_default_count: number;
   crawl_default_range_from: number;
   crawl_default_range_to: number;
+  crawl_auto_max_chapters: boolean;
+  auto_audio_rest_seconds: number;
+  auto_audio_external_api_base: string;
+  auto_audio_test_story_ids: string[];
 }
 
 export async function getSettings(): Promise<SettingsResponse> {

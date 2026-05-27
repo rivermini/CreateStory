@@ -29,6 +29,7 @@ export function HomePage({ themeMode }: HomePageProps) {
   const [startError, setStartError] = useState('');
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [supportedSites, setSupportedSites] = useState<SiteInfoResponse[]>([]);
+  const [autoMaxChapters, setAutoMaxChapters] = useState(false);
   const outputFormat = 'txt' as const;
 
   // Load supported sites from backend on mount
@@ -46,6 +47,9 @@ export function HomePage({ themeMode }: HomePageProps) {
         setToChapter(s.crawl_default_count);
         setRangeFrom(s.crawl_default_range_from);
         setRangeTo(s.crawl_default_range_to);
+        if (s.crawl_auto_max_chapters) {
+          setAutoMaxChapters(s.crawl_auto_max_chapters);
+        }
       })
       .catch(() => {/* ignore — use local defaults */});
   }, []);
@@ -76,6 +80,13 @@ export function HomePage({ themeMode }: HomePageProps) {
       setSearchParams({});
     }
   }, []);
+
+  // Auto-fill to max available chapters when URL is detected and setting is enabled
+  useEffect(() => {
+    if (!autoMaxChapters || !totalChapterCount || totalChapterCount <= 0) return;
+    setToChapter(totalChapterCount);
+    setRangeTo(totalChapterCount);
+  }, [autoMaxChapters, totalChapterCount]);
 
   const inputsLocked = !isValid;
   const effectiveMax = totalChapterCount ?? 999999;

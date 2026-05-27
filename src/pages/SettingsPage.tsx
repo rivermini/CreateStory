@@ -29,6 +29,11 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [count, setCount] = useState(10);
   const [rangeFrom, setRangeFrom] = useState(1);
   const [rangeTo, setRangeTo] = useState(10);
+  const [crawlAutoMaxChapters, setCrawlAutoMaxChapters] = useState(false);
+  const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(30);
+  const [autoAudioExternalApiBase, setAutoAudioExternalApiBase] = useState('');
+  const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
+  const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
 
   // Drive Sync Config Modal
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
@@ -57,6 +62,11 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         setCount(s.crawl_default_count);
         setRangeFrom(s.crawl_default_range_from);
         setRangeTo(s.crawl_default_range_to);
+        setCrawlAutoMaxChapters(s.crawl_auto_max_chapters ?? false);
+        setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 30);
+        setAutoAudioExternalApiBase(s.auto_audio_external_api_base ?? '');
+        setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
+        setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
       })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
@@ -250,6 +260,10 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         crawl_default_count: count,
         crawl_default_range_from: rangeFrom,
         crawl_default_range_to: rangeTo,
+        crawl_auto_max_chapters: crawlAutoMaxChapters,
+        auto_audio_rest_seconds: autoAudioRestSeconds,
+        auto_audio_external_api_base: autoAudioExternalApiBase,
+        auto_audio_test_story_ids: autoAudioTestStoryIds,
       });
       setSettings(updated);
       onThemeChange(localTheme === 'dark' ? 'dark' : 'light');
@@ -607,6 +621,142 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               : `Default: crawl chapters ${rangeFrom} to ${rangeTo} (${Math.max(0, rangeTo - rangeFrom + 1)} total)`
             }
           </p>
+        </section>
+
+        {/* Auto Audio Settings Section */}
+        <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
+          ? 'bg-slate-900/60 border border-slate-800/60'
+          : 'bg-white border border-gray-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-slate-800 text-indigo-400' : 'bg-gray-100 text-indigo-600'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Auto Audio Settings</h2>
+              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Configure rest time, API base, and test story IDs</p>
+            </div>
+          </div>
+
+          {/* Rest time between stories */}
+          <div className="max-w-xs">
+            <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              Rest time between stories (seconds)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={600}
+              value={autoAudioRestSeconds}
+              onChange={e => setAutoAudioRestSeconds(Math.max(0, parseInt(e.target.value) || 0))}
+              className={`w-full px-4 py-3 border rounded-xl
+                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                ${isDark
+                  ? 'bg-slate-800/60 border-slate-700 text-slate-100'
+                  : 'bg-gray-50 border-gray-300 text-gray-900'
+                }`}
+            />
+            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+              Set to 0 to disable resting between stories
+            </p>
+          </div>
+
+          {/* External API Base URL */}
+          <div className="max-w-md">
+            <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              External API Base URL
+            </label>
+            <input
+              type="text"
+              value={autoAudioExternalApiBase}
+              onChange={e => setAutoAudioExternalApiBase(e.target.value)}
+              placeholder="https://api-novel.santngo.com"
+              className={`w-full px-4 py-3 border rounded-xl
+                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                ${isDark
+                  ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600'
+                  : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400'
+                }`}
+            />
+            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+              Leave empty to use the default API or Drive Sync configured URL
+            </p>
+          </div>
+
+          {/* Test Story IDs */}
+          <div className="max-w-lg">
+            <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              Test Story IDs
+            </label>
+            <textarea
+              value={autoAudioTestIdsText}
+              onChange={e => {
+                setAutoAudioTestIdsText(e.target.value);
+                const ids = e.target.value
+                  .split(/[\n,]/)
+                  .map(s => s.trim())
+                  .filter(s => s.length > 0);
+                setAutoAudioTestStoryIds(ids);
+              }}
+              placeholder={"ce6176c4-aeb5-4ee1-847f-ee56df64a386\n07d59e98-d693-429b-a9d1-53ce2fd89e55"}
+              rows={3}
+              className={`w-full px-4 py-3 border rounded-xl text-sm font-mono resize-none
+                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                ${isDark
+                  ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600'
+                  : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400'
+                }`}
+            />
+            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+              Comma or newline separated story IDs. Used in test mode.
+            </p>
+          </div>
+        </section>
+
+        {/* Crawl Auto Settings Section */}
+        <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
+          ? 'bg-slate-900/60 border border-slate-800/60'
+          : 'bg-white border border-gray-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-slate-800 text-indigo-400' : 'bg-gray-100 text-indigo-600'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            <div>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Crawl Auto Settings</h2>
+              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Auto-fill and range limits for crawl after URL detection</p>
+            </div>
+          </div>
+
+          {/* Auto fill full chapters toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                Auto-fill full available chapters
+              </p>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                Automatically fill the chapter count to the full number of available chapters after detecting a story URL
+              </p>
+            </div>
+            <button
+              onClick={() => setCrawlAutoMaxChapters(m => !m)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                crawlAutoMaxChapters
+                  ? 'bg-indigo-600'
+                  : isDark ? 'bg-slate-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                  crawlAutoMaxChapters ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
         </section>
 
         {/* Save Button */}
