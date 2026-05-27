@@ -17,6 +17,7 @@ function navActive(locationPath: string, expect: string) {
     // Prevent parent routes from matching their child routes
     if (expect === '/bedread' && locationPath.startsWith('/bedread/')) return false;
     if (expect === '/drive-sync' && locationPath.startsWith('/drive-sync/')) return false;
+    if (expect === '/auto-audio' && locationPath.startsWith('/auto-audio/')) return false;
     return locationPath === expect || locationPath.startsWith(expect + '/') || locationPath.startsWith(expect + '?');
 }
 
@@ -63,6 +64,16 @@ const navIcons: Record<string, React.ReactNode> = {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
     ),
+    '/auto-audio': (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+        </svg>
+    ),
+    '/auto-audio/history': (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+    ),
     '/supported-sites': (
         <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
@@ -86,6 +97,11 @@ const NAV_ITEMS_BEDREADS: NavItem[] = [
     { to: '/drive-sync/history', label: 'Sync History', icon: navIcons['/drive-sync/history'] },
 ];
 
+const NAV_ITEMS_AUTO_AUDIO: NavItem[] = [
+    { to: '/auto-audio', label: 'Auto Audio', icon: navIcons['/auto-audio'] },
+    { to: '/auto-audio/history', label: 'Audio History', icon: navIcons['/auto-audio/history'] },
+];
+
 const NAV_ITEMS_SYSTEM: NavItem[] = [
     { to: '/supported-sites', label: 'Supported Sites', icon: navIcons['/supported-sites'] },
     { to: '/settings', label: 'Settings', icon: (
@@ -100,6 +116,7 @@ const NAV_SECTIONS = [
     { label: 'Crawl', items: NAV_ITEMS_CRAWL },
     { label: 'Audio', items: NAV_ITEMS_AUDIO },
     { label: 'BedReads', items: NAV_ITEMS_BEDREADS },
+    { label: 'Auto Audio', items: NAV_ITEMS_AUTO_AUDIO },
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ] as const;
 

@@ -1003,3 +1003,84 @@ export function getChapterAudioUrl(batchId: string, chapterNum: number): string 
 export function getBatchZipUrl(batchId: string): string {
   return `${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/zip`;
 }
+
+// ---------------------------------------------------------------------------
+// Auto Audio — Session orchestration for auto-generating TTS across all stories
+// ---------------------------------------------------------------------------
+
+export interface AutoAudioLogEntry {
+  timestamp: string;
+  step: number;
+  message: string;
+  level: 'info' | 'error' | 'warning' | 'debug';
+}
+
+export interface AutoAudioStoryPreview {
+  storyId: string;
+  title: string;
+  missingCount: number;
+}
+
+export interface AutoAudioStoryResult {
+  story_id: string;
+  story_title: string;
+  chapters_generated: number;
+  chapters_uploaded: number;
+  upload_errors: string[];
+  error: string;
+}
+
+export interface AutoAudioSession {
+  session_id: string;
+  test_mode: boolean;
+  voice: string;
+  status: 'idle' | 'running' | 'stopping' | 'completed' | 'error';
+  current_step: number;
+  current_step_desc: string;
+  current_story: string;
+  progress: { done: number; total: number };
+  stories_missing_audio: AutoAudioStoryPreview[];
+  logs: AutoAudioLogEntry[];
+  started_at: string | null;
+  finished_at: string | null;
+  error: string;
+  story_results: AutoAudioStoryResult[];
+}
+
+export interface AutoAudioHistoryEntry {
+  session_id: string;
+  test_mode: boolean;
+  voice: string;
+  status: string;
+  current_step: number;
+  current_step_desc: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string;
+  total_stories: number;
+  total_chapters: number;
+}
+
+export async function startAutoAudio(cfg: { test_mode: boolean; voice: string }): Promise<{ session_id: string }> {
+  return apiFetch<{ session_id: string }>('/api/auto-audio/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  });
+}
+
+export async function getAutoAudioStatus(): Promise<AutoAudioSession | null> {
+  return apiFetch<AutoAudioSession | null>('/api/auto-audio/status');
+}
+
+export async function stopAutoAudio(): Promise<void> {
+  await apiFetch('/api/auto-audio/stop', { method: 'POST' });
+}
+
+export async function getAutoAudioHistory(): Promise<AutoAudioHistoryEntry[]> {
+  return apiFetch<AutoAudioHistoryEntry[]>('/api/auto-audio/history');
+}
+
+export async function getAutoAudioSession(sessionId: string): Promise<AutoAudioSession> {
+  return apiFetch<AutoAudioSession>(`/api/auto-audio/history/${encodeURIComponent(sessionId)}`);
+}
