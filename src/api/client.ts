@@ -1035,7 +1035,7 @@ export interface AutoAudioSession {
   session_id: string;
   test_mode: boolean;
   voice: string;
-  status: 'idle' | 'running' | 'stopping' | 'completed' | 'error';
+  status: 'idle' | 'running' | 'stopping' | 'completed' | 'error' | 'stopped';
   current_step: number;
   current_step_desc: string;
   current_story: string;
