@@ -39,7 +39,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
 
   const isRunning = session?.status === 'running';
   const isStopping = session?.status === 'stopping';
-  const isDone = session?.status === 'completed' || session?.status === 'error';
+  const isDone = session?.status === 'completed' || session?.status === 'error' || session?.status === 'stopped';
 
   const loadStatus = useCallback(async () => {
     try {
@@ -269,6 +269,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                     session.status === 'running' ? (isDark ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-100 text-blue-700') :
                     session.status === 'completed' ? (isDark ? 'bg-emerald-900/40 text-emerald-400' : 'bg-emerald-100 text-emerald-700') :
                     session.status === 'error' ? (isDark ? 'bg-red-900/40 text-red-400' : 'bg-red-100 text-red-700') :
+                    session.status === 'stopped' ? (isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700') :
                     session.status === 'stopping' ? (isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700') :
                     (isDark ? 'bg-slate-800/60 text-slate-400' : 'bg-gray-100 text-gray-600')
                   }`}>

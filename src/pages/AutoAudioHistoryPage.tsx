@@ -13,12 +13,13 @@ interface AutoAudioHistoryPageProps {
   onThemeChange: (mode: ThemeMode) => void;
 }
 
-type FilterStatus = 'all' | 'running' | 'stopping' | 'completed' | 'error';
+type FilterStatus = 'all' | 'running' | 'stopping' | 'stopped' | 'completed' | 'error';
 type FilterMode = 'all' | 'test' | 'prod';
 
 const STATUS_CONFIG_DARK: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
   completed: { label: 'Completed', dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-950/40', border: 'border-emerald-800/40' },
   error:     { label: 'Error', dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-950/40', border: 'border-red-800/40' },
+  stopped:   { label: 'Stopped', dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-950/40', border: 'border-amber-800/40' },
   running:   { label: 'Running', dot: 'bg-blue-400', text: 'text-blue-400', bg: 'bg-blue-950/40', border: 'border-blue-800/40' },
   stopping:  { label: 'Stopping', dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-950/40', border: 'border-amber-800/40' },
   idle:      { label: 'Idle', dot: 'bg-slate-500', text: 'text-slate-400', bg: 'bg-slate-800/40', border: 'border-slate-700/40' },
@@ -27,6 +28,7 @@ const STATUS_CONFIG_DARK: Record<string, { label: string; dot: string; text: str
 const STATUS_CONFIG_LIGHT: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
   completed: { label: 'Completed', dot: 'bg-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
   error:     { label: 'Error', dot: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
+  stopped:   { label: 'Stopped', dot: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
   running:   { label: 'Running', dot: 'bg-blue-500', text: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
   stopping:  { label: 'Stopping', dot: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
   idle:      { label: 'Idle', dot: 'bg-gray-400', text: 'text-gray-500', bg: 'bg-gray-100', border: 'border-gray-200' },
@@ -188,6 +190,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
             >
               <option value="all">All Status</option>
               <option value="running">Running</option>
+              <option value="stopped">Stopped</option>
               <option value="stopping">Stopping</option>
               <option value="completed">Completed</option>
               <option value="error">Error</option>
