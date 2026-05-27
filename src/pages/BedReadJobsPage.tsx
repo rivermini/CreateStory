@@ -160,7 +160,7 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                     Auto Mode — Files Deleted
                                 </span>
                             )}
-                            {(job.status === 'running' || job.status === 'queued') && !deleteMode && (
+                            {(job.status === 'running' || job.status === 'queued') && !deleteMode && !isAutoMode && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onCancel(job.batch_id, job.story_title); }}
                                     className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-500 rounded-xl transition-colors shadow-lg shadow-red-600/30"

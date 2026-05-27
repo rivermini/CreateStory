@@ -33,6 +33,8 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const [missingPreview, setMissingPreview] = useState<AutoAudioStoryPreview[]>([]);
   const [fetchingPreview, setFetchingPreview] = useState(false);
   const [showStartConfirm, setShowStartConfirm] = useState(false);
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
+  const [stopConfirmText, setStopConfirmText] = useState('');
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const prevLogLenRef = useRef(0);
@@ -248,7 +250,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                 )
               ) : (
                 <button
-                  onClick={handleStop}
+                  onClick={() => setShowStopConfirm(true)}
                   disabled={isStopping}
                   className="w-full px-6 py-3 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg bg-red-600 hover:bg-red-500 shadow-red-600/30 disabled:opacity-50"
                 >
@@ -467,6 +469,66 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
           </div>
         </div>
       </main>
+
+      {/* Stop Confirmation Modal */}
+      {showStopConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className={`rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-gray-200'}`}>
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+              Stop Auto Audio Session?
+            </h3>
+            <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+              Stopping will halt all audio generation immediately. Any chapters already generated will still be uploaded,
+              but remaining stories will not be processed.
+            </p>
+            <div className="space-y-2">
+              <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                Type <strong className={isDark ? 'text-red-400' : 'text-red-600'}>CONFIRM</strong> to stop:
+              </p>
+              <input
+                type="text"
+                value={stopConfirmText}
+                onChange={e => setStopConfirmText(e.target.value)}
+                placeholder="CONFIRM"
+                className={`w-full px-3 py-2 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-red-500 ${isDark
+                  ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-600'
+                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => { setShowStopConfirm(false); setStopConfirmText(''); }}
+                className={`px-4 py-2 text-sm rounded-xl transition-colors ${isDark
+                  ? 'text-slate-300 bg-slate-800 hover:bg-slate-700'
+                  : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (stopConfirmText !== 'CONFIRM') return;
+                  setShowStopConfirm(false);
+                  setStopConfirmText('');
+                  setError('');
+                  try {
+                    await stopAutoAudio();
+                    await loadStatus();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : 'Failed to stop session.');
+                  }
+                }}
+                disabled={stopConfirmText !== 'CONFIRM'}
+                className={`px-4 py-2 text-sm rounded-xl transition-colors ${stopConfirmText !== 'CONFIRM'
+                  ? (isDark ? 'bg-red-900/50 text-red-400 cursor-not-allowed' : 'bg-red-100 text-red-400 cursor-not-allowed')
+                  : 'text-white bg-red-600 hover:bg-red-500'} `}
+              >
+                Stop Session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
