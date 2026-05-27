@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { startBatchCrawl, type CrawlRequest, detectSite, getNovelChapters, type NovelMetadata } from '../api/client';
+import { startBatchCrawl, type CrawlRequest, detectSite, getNovelChapters, listSites, type NovelMetadata, type SiteInfoResponse } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
 
 interface BatchPageProps {
@@ -48,6 +48,13 @@ export function BatchPage({ themeMode }: BatchPageProps) {
   const outputFormat = 'txt' as const;
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState('');
+  const [supportedSites, setSupportedSites] = useState<SiteInfoResponse[]>([]);
+
+  useEffect(() => {
+    listSites()
+      .then(sites => setSupportedSites(sites))
+      .catch(() => {/* ignore */});
+  }, []);
 
   const updateEntry = useCallback((id: number, patch: Partial<BatchEntry>) => {
     setEntries(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e));
@@ -123,7 +130,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
       const requests: CrawlRequest[] = validEntries.map(e => {
         const crawlUrl = e.siteInfo!.config_name === 'wattpad'
           ? (e.resolvedUrl || e.slug)
-          : e.slug;
+          : e.url;
         return {
           spider_name: e.siteInfo!.config_name,
           site_name: e.siteInfo!.site_name,
@@ -215,7 +222,9 @@ export function BatchPage({ themeMode }: BatchPageProps) {
                       onChange={e => handleUrlChange(entry.id, e.target.value)}
                       onBlur={() => handleDetectEntry(entry)}
                       onKeyDown={e => handleUrlKeyDown(e, entry)}
-                      placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
+                      placeholder={supportedSites.length > 0
+                        ? `https://www.${supportedSites[0]?.base_url.replace('https://', '').replace('http://', '') || 'wattpad.com'}/...`
+                        : 'https://www.wattpad.com/... or https://www.novelworm.com/...'}
                       className={`w-full px-4 py-3 border rounded-xl text-sm transition-all duration-200
                         focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                         ${isDark

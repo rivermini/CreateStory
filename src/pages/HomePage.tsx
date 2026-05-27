@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { startCrawl, getSettings } from '../api/client';
+import { listSites, startCrawl, getSettings } from '../api/client';
+import type { SiteInfoResponse } from '../api/client';
 import { NovelInfoPanel } from '../components/NovelInfoPanel';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
 import { useSiteDetection } from '../hooks/useSiteDetection';
@@ -27,7 +28,15 @@ export function HomePage({ themeMode }: HomePageProps) {
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState('');
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [supportedSites, setSupportedSites] = useState<SiteInfoResponse[]>([]);
   const outputFormat = 'txt' as const;
+
+  // Load supported sites from backend on mount
+  useEffect(() => {
+    listSites()
+      .then(sites => setSupportedSites(sites))
+      .catch(() => {/* ignore — gracefully degrade */});
+  }, []);
 
   // Apply defaults loaded from backend settings on mount
   useEffect(() => {
@@ -106,13 +115,15 @@ export function HomePage({ themeMode }: HomePageProps) {
       return;
     }
     if (isPaywalled) {
-      setStartError('Crawling is disabled for Wattpad Original stories.');
+      setStartError('Crawling is disabled for this story (paywalled content).');
       return;
     }
     setIsStarting(true);
     setStartError('');
     try {
-      const crawlUrl = siteInfo.config_name === 'wattpad' ? (resolvedUrl || slug) : slug;
+      const crawlUrl = siteInfo.config_name === 'wattpad'
+        ? (resolvedUrl || slug)
+        : inputUrl;
       const limit = rangeMode === 'range' ? rangeTotal : toChapter;
       const res = await startCrawl({
         spider_name: siteInfo.config_name,
@@ -213,7 +224,9 @@ export function HomePage({ themeMode }: HomePageProps) {
                     </h2>
                   </div>
                   <p className={`text-xs sm:text-sm ml-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                    Supported: wattpad.com
+                    {supportedSites.length > 0
+                      ? `Supported: ${supportedSites.map(s => s.base_url.replace('https://', '').replace('http://', '')).join(', ')}`
+                      : 'Supported: wattpad.com'}
                   </p>
                 </div>
                 <button
@@ -242,7 +255,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     type="url"
                     value={inputUrl}
                     onChange={(e) => handleUrlChange(e.target.value)}
-                    placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
+                    placeholder="https://www.wattpad.com/... or https://www.novelworm.com/..."
                     className={`w-full px-4 py-3.5 border rounded-xl
                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200
                       ${isDark
