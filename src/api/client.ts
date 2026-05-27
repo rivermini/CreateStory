@@ -915,6 +915,7 @@ export interface BatchJob {
   error: string;
   chapters: BatchJobChapter[];
   queue_position?: number;
+  from_auto_mode?: boolean;
 }
 
 export interface BatchGenerateRequest {

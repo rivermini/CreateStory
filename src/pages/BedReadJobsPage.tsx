@@ -97,6 +97,7 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
     const totalCount = job.chapters.length;
     const progressPct = job.progress_pct;
     const allDone = completedCount === totalCount && totalCount > 0;
+    const isAutoMode = job.from_auto_mode === true;
 
     const cardBg = deleteMode && isSelected
         ? (isDark ? 'bg-red-950/30 border-red-800/50' : 'bg-red-50 border-red-200')
@@ -143,7 +144,7 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                         </div>
 
                         <div className="flex items-center gap-2 flex-shrink-0 flex-wrap mt-3">
-                            {allDone && !deleteMode && (
+                            {allDone && !deleteMode && !isAutoMode && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onDownloadZip(job.batch_id); }}
                                     className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors shadow-lg shadow-indigo-600/30 flex items-center gap-1.5"
@@ -153,6 +154,11 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                     </svg>
                                     Download ZIP
                                 </button>
+                            )}
+                            {allDone && isAutoMode && (
+                                <span className="px-3 py-1.5 text-xs font-medium text-amber-300 bg-amber-900/30 border border-amber-700/40 rounded-xl">
+                                    Auto Mode — Files Deleted
+                                </span>
                             )}
                             {(job.status === 'running' || job.status === 'queued') && !deleteMode && (
                                 <button
@@ -229,7 +235,7 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                             {ch.status === 'failed' && ch.error && (
                                                 <span className={`text-xs max-w-[150px] truncate ${isDark ? 'text-red-400' : 'text-red-600'}`}>{ch.error}</span>
                                             )}
-                                            {ch.status === 'completed' && !deleteMode && (
+                                            {ch.status === 'completed' && !deleteMode && !isAutoMode && (
                                                 <button onClick={() => onDownloadChapter(job.batch_id, ch.chapter_number)}
                                                     className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${isDark ? 'text-slate-300 bg-slate-800 hover:bg-slate-700' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}>
                                                     Download
