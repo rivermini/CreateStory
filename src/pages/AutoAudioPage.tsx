@@ -3,10 +3,8 @@ import {
   getAutoAudioStatus,
   startAutoAudio,
   stopAutoAudio,
-  getVoices,
   type AutoAudioSession,
   type AutoAudioStoryPreview,
-  type TTSVoice,
 } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
 
@@ -30,8 +28,6 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
 
   const [session, setSession] = useState<AutoAudioSession | null>(null);
   const [testMode, setTestMode] = useState(false);
-  const [selectedVoice, setSelectedVoice] = useState('af_heart');
-  const [voices, setVoices] = useState<TTSVoice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [missingPreview, setMissingPreview] = useState<AutoAudioStoryPreview[]>([]);
@@ -44,10 +40,6 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const isRunning = session?.status === 'running';
   const isStopping = session?.status === 'stopping';
   const isDone = session?.status === 'completed' || session?.status === 'error';
-
-  useEffect(() => {
-    getVoices().then(setVoices).catch(() => setVoices([]));
-  }, []);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -80,7 +72,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
     setError('');
     setLoading(true);
     try {
-      await startAutoAudio({ test_mode: testMode, voice: selectedVoice });
+      await startAutoAudio({ test_mode: testMode });
       await loadStatus();
       setShowStartConfirm(false);
     } catch (e) {
@@ -112,10 +104,6 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const cardClass = isDark
     ? 'rounded-2xl bg-slate-900/60 border border-slate-800/60'
     : 'rounded-2xl bg-white border border-gray-200';
-  const selectClass = isDark
-    ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-    : 'bg-gray-50 border-gray-300 text-gray-900';
-  const labelClass = isDark ? 'text-slate-400' : 'text-gray-700';
   const valueClass = isDark ? 'text-slate-100' : 'text-gray-900';
   const mutedClass = isDark ? 'text-slate-500' : 'text-gray-500';
   const mutedSmClass = isDark ? 'text-slate-500' : 'text-gray-400';
@@ -197,21 +185,6 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                   Make sure you understand the impact before proceeding.
                 </div>
               )}
-
-              {/* Voice Selector */}
-              <div>
-                <label className={`block text-sm ${labelClass} mb-1.5`}>Voice</label>
-                <select
-                  value={selectedVoice}
-                  onChange={e => setSelectedVoice(e.target.value)}
-                  disabled={isRunning || isStopping}
-                  className={`w-full px-3 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 ${selectClass}`}
-                >
-                  {voices.map(v => (
-                    <option key={v.id} value={v.id}>{v.label}</option>
-                  ))}
-                </select>
-              </div>
 
               {/* Action Button */}
               {!isRunning && !isStopping ? (
