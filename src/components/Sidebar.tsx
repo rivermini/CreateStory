@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
 import { ThemeToggle, type ThemeMode } from './ThemeToggle';
+import { type AutoAudioSession } from '../api/client';
 
 interface SidebarProps {
     themeMode: ThemeMode;
@@ -9,6 +10,7 @@ interface SidebarProps {
     rightActions?: React.ReactNode;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
+    autoAudioSession?: AutoAudioSession | null;
 }
 
 function navActive(locationPath: string, expect: string) {
@@ -122,12 +124,16 @@ const NAV_SECTIONS = [
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ] as const;
 
-export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = false, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = false, onToggleCollapse, autoAudioSession }: SidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
+    const autoAudioRunning = autoAudioSession?.status === 'running';
+    const autoAudioStopping = autoAudioSession?.status === 'stopping';
+
     const makeNavItem = (item: NavItem) => {
         const active = navActive(location.pathname, item.to);
+        const showAutoAudioBadge = item.to === '/auto-audio' && (autoAudioRunning || autoAudioStopping);
 
         return (
             <Link
@@ -138,20 +144,31 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                         ? isDark
                             ? 'bg-indigo-600/20 text-indigo-400'
                             : 'bg-indigo-50 text-indigo-700'
-                        : isDark
-                            ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
-                } ${isCollapsed ? 'justify-center px-2 py-2.5' : 'px-4 py-2.5'}`}
+                        : showAutoAudioBadge
+                            ? isDark
+                                ? 'bg-emerald-600/20 text-emerald-400'
+                                : 'bg-emerald-50 text-emerald-700'
+                            : isDark
+                                ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
+                } ${isCollapsed ? 'justify-center px-2 py-2.5 relative' : 'px-4 py-2.5'}`}
                 title={isCollapsed ? item.label : undefined}
             >
                 <span className="flex-shrink-0">{item.icon}</span>
                 {!isCollapsed && (
                     <>
                         <span className="text-sm font-medium truncate">{item.label}</span>
-                        {active && (
-                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                        )}
+                        <span className="ml-auto flex items-center gap-1.5">
+                            {showAutoAudioBadge ? (
+                                <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-emerald-400' : 'bg-emerald-600'} animate-pulse`} />
+                            ) : active ? (
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            ) : null}
+                        </span>
                     </>
+                )}
+                {isCollapsed && showAutoAudioBadge && (
+                    <span className={`absolute top-1 right-1 w-2.5 h-2.5 rounded-full ${isDark ? 'bg-emerald-400' : 'bg-emerald-600'} animate-pulse`} />
                 )}
             </Link>
         );

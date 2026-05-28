@@ -2,12 +2,14 @@ import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
 import { ThemeToggle, type ThemeMode } from './ThemeToggle';
+import { type AutoAudioSession } from '../api/client';
 
 interface MobileSidebarProps {
     themeMode: ThemeMode;
     onThemeChange: (mode: ThemeMode) => void;
     isOpen: boolean;
     onClose: () => void;
+    autoAudioSession?: AutoAudioSession | null;
 }
 
 function navActive(locationPath: string, expect: string) {
@@ -118,9 +120,12 @@ const NAV_SECTIONS = [
     },
 ] as const;
 
-export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose }: MobileSidebarProps) {
+export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoAudioSession }: MobileSidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
+
+    const autoAudioRunning = autoAudioSession?.status === 'running';
+    const autoAudioStopping = autoAudioSession?.status === 'stopping';
 
     return (
         <>
@@ -188,6 +193,7 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose }: Mob
                             <div className="space-y-1">
                                 {section.items.map((item) => {
                                     const active = navActive(location.pathname, item.to);
+                                    const showAutoAudioBadge = item.to === '/auto-audio' && (autoAudioRunning || autoAudioStopping);
                                     return (
                                         <Link
                                             key={item.to}
@@ -198,14 +204,23 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose }: Mob
                                                     ? isDark
                                                         ? 'bg-indigo-600/20 text-indigo-400'
                                                         : 'bg-indigo-50 text-indigo-700'
-                                                    : isDark
-                                                        ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                                                        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
+                                                    : showAutoAudioBadge
+                                                        ? isDark
+                                                            ? 'bg-emerald-600/20 text-emerald-400'
+                                                            : 'bg-emerald-50 text-emerald-700'
+                                                        : isDark
+                                                            ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                                                            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
                                             }`}
                                         >
                                             <span className="flex-shrink-0">{item.icon}</span>
                                             <span className="text-sm font-medium truncate">{item.label}</span>
-                                            {active && (
+                                            {showAutoAudioBadge && (
+                                                <span className="ml-auto flex items-center gap-1.5">
+                                                    <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-emerald-400' : 'bg-emerald-600'} animate-pulse`} />
+                                                </span>
+                                            )}
+                                            {active && !showAutoAudioBadge && (
                                                 <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500" />
                                             )}
                                         </Link>

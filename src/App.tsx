@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { MobileSidebar } from './components/MobileSidebar';
 import { ToastContainer } from './components/Toast';
+import { getAutoAudioStatus, type AutoAudioSession } from './api/client';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -65,6 +66,20 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
   const isDark = themeMode === 'dark';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [autoAudioSession, setAutoAudioSession] = useState<AutoAudioSession | null>(null);
+
+  const loadAutoAudioStatus = useCallback(async () => {
+    try {
+      const data = await getAutoAudioStatus();
+      setAutoAudioSession(data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    loadAutoAudioStatus();
+    const interval = setInterval(loadAutoAudioStatus, 3000);
+    return () => clearInterval(interval);
+  }, [loadAutoAudioStatus]);
 
   return (
     <>
@@ -73,6 +88,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
         onThemeChange={onThemeChange}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+        autoAudioSession={autoAudioSession}
       />
 
       <MobileSidebar
@@ -80,6 +96,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
         onThemeChange={onThemeChange}
         isOpen={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
+        autoAudioSession={autoAudioSession}
       />
 
       {/* Mobile header */}

@@ -48,6 +48,8 @@ interface PhaseCardProps {
   onConfirmStart: (phase: string) => void;
   onCancelConfirm: () => void;
   showStartConfirm: boolean;
+  phaseLimit?: number;
+  onPhaseLimitChange?: (limit: number) => void;
 }
 
 function PhaseCard({
@@ -55,6 +57,7 @@ function PhaseCard({
   isDark, cardClass, valueClass, mutedSmClass, mutedClass,
   isRunning, isStopping, loading, testMode, configLoading, config,
   session, onStart, onConfirmStart, onCancelConfirm, showStartConfirm,
+  phaseLimit, onPhaseLimitChange,
 }: PhaseCardProps) {
   const isCurrentPhase = session?.phase === phase;
   const disabled = isRunning || isStopping || loading;
@@ -79,6 +82,24 @@ function PhaseCard({
       {testMode && (
         <p className={`text-xs ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>Test mode active</p>
       )}
+      {phase === 'phase3' && phaseLimit !== undefined && onPhaseLimitChange && (
+        <div className="flex items-center gap-2">
+          <label className={`text-xs font-medium ${valueClass}`}>Stories to check:</label>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={phaseLimit}
+            onChange={e => onPhaseLimitChange(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+            disabled={isRunning || isStopping || loading}
+            className={`w-20 px-2 py-1 text-xs rounded-lg border focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+              isDark
+                ? 'bg-slate-800 border-slate-700 text-slate-100'
+                : 'bg-white border-gray-300 text-gray-900'
+            } disabled:opacity-50`}
+          />
+        </div>
+      )}
 
       {!isRunning && !isStopping ? (
         !showStartConfirm ? (
@@ -89,7 +110,9 @@ function PhaseCard({
             className={`w-full px-5 py-2.5 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-sm ${
               phase === 'phase1'
                 ? 'bg-blue-600 hover:bg-blue-500'
-                : 'bg-amber-600 hover:bg-amber-500'
+                : phase === 'phase2'
+                ? 'bg-amber-600 hover:bg-amber-500'
+                : 'bg-emerald-600 hover:bg-emerald-500'
             } disabled:opacity-40 disabled:cursor-not-allowed`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,7 +141,7 @@ function PhaseCard({
                 onClick={() => onConfirmStart(phase)}
                 disabled={loading}
                 className={`flex-1 px-3 py-2 text-sm text-white font-semibold rounded-xl transition-colors ${
-                  phase === 'phase1' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-amber-600 hover:bg-amber-500'
+                  phase === 'phase1' ? 'bg-blue-600 hover:bg-blue-500' : phase === 'phase2' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'
                 } disabled:opacity-50`}
               >
                 {loading ? 'Starting...' : 'Start'}
@@ -145,6 +168,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const [session, setSession] = useState<AutoAudioSession | null>(null);
   const [testMode, setTestMode] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState('phase1');
+  const [phase3Limit, setPhase3Limit] = useState(20);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [missingPreview, setMissingPreview] = useState<AutoAudioStoryPreview[]>([]);
@@ -200,7 +224,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
     setError('');
     setLoading(true);
     try {
-      await startAutoAudio({ phase, test_mode: testMode });
+      await startAutoAudio({ phase, test_mode: testMode, limit: phase === 'phase3' ? phase3Limit : undefined });
       await loadStatus();
       setShowStartConfirm(false);
     } catch (e) {
@@ -351,6 +375,33 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
               onConfirmStart={handlePhaseStart}
               onCancelConfirm={() => setShowStartConfirm(false)}
               showStartConfirm={showStartConfirm && selectedPhase === 'phase2'}
+            />
+
+            {/* Phase 3: Recently Updated */}
+            <PhaseCard
+              phase="phase3"
+              title="Phase 3"
+              subtitle="Recently Updated"
+              description="Check the most recently updated stories for missing audio. User selects the number of stories to scan."
+              badge={testMode ? undefined : 'Recent'}
+              isDark={isDark}
+              cardClass={cardClass}
+              valueClass={valueClass}
+              mutedSmClass={mutedSmClass}
+              mutedClass={mutedClass}
+              isRunning={isRunning}
+              isStopping={isStopping}
+              loading={loading}
+              testMode={testMode}
+              configLoading={configLoading}
+              config={config}
+              session={session}
+              onStart={(confirm) => { setSelectedPhase('phase3'); setShowStartConfirm(confirm); }}
+              onConfirmStart={handlePhaseStart}
+              onCancelConfirm={() => setShowStartConfirm(false)}
+              showStartConfirm={showStartConfirm && selectedPhase === 'phase3'}
+              phaseLimit={phase3Limit}
+              onPhaseLimitChange={setPhase3Limit}
             />
 
             {/* Stop Button (when running) */}
