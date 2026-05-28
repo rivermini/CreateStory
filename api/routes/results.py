@@ -107,6 +107,7 @@ async def list_all_results() -> list[dict]:
             ],
             "novel_metadata": novel_metadata,
             "combined_file": progress.combined_file or None,
+            "combined_txt_file": progress.combined_txt_file or None,
             "source_url": progress.source_url or None,
         })
 
@@ -160,6 +161,10 @@ async def download_all_files(crawl_id: str) -> StreamingResponse:
             combined_path = output_dir / progress.combined_file
             if combined_path.exists():
                 zf.write(combined_path, progress.combined_file)
+        if progress.combined_txt_file:
+            combined_txt_path = output_dir / progress.combined_txt_file
+            if combined_txt_path.exists():
+                zf.write(combined_txt_path, progress.combined_txt_file)
 
     buffer.seek(0)
     zip_bytes = buffer.getvalue()
@@ -293,7 +298,20 @@ async def combine_chapters(crawl_id: str) -> dict:
     chapters_data: list[dict] = []
     files_sorted = sorted(chapter_files, key=lambda f: f.chapter_number)
 
-    if fmt not in ("md", "txt"):
+    if fmt in ("md", "txt"):
+        chapters_data = []
+        for file_meta in files_sorted:
+            filepath = output_dir / file_meta.filename
+            try:
+                raw = filepath.read_text(encoding="utf-8").strip()
+                if raw:
+                    chapters_data.append({"content": raw, "chapter_number": file_meta.chapter_number})
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to read chapter file '{file_meta.filename}': {exc}",
+                )
+    else:
         for file_meta in files_sorted:
             filepath = output_dir / file_meta.filename
             try:
@@ -306,10 +324,11 @@ async def combine_chapters(crawl_id: str) -> dict:
                 )
 
     novel_metadata: Optional[dict] = None
-    for chapter in chapters_data:
-        if isinstance(chapter, dict) and chapter.get("novel_metadata"):
-            novel_metadata = chapter["novel_metadata"]
-            break
+    if fmt not in ("md", "txt"):
+        for chapter in chapters_data:
+            if isinstance(chapter, dict) and chapter.get("novel_metadata"):
+                novel_metadata = chapter["novel_metadata"]
+                break
 
     combined_payload = {
         "crawl_id": crawl_id,

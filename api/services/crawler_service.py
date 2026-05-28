@@ -527,23 +527,73 @@ class CrawlService:
         combined: list[dict] = []
         novel_metadata: Optional[dict] = None
         is_text = output_format in ("txt", "md")
-        for file_meta in chapter_files_sorted:
-            filepath = output_dir / file_meta.filename
-            if is_text:
+
+        if is_text:
+            # Write combined .txt — clean chapters separated by horizontal rules
+            txt_filename = f"{sanitize_filename(base_name)}.txt"
+            txt_path = output_dir / txt_filename
+            txt_parts: list[str] = []
+            chapters_data: list[dict] = []
+            for file_meta in chapter_files_sorted:
+                filepath = output_dir / file_meta.filename
                 try:
-                    raw = filepath.read_text(encoding="utf-8").strip()
-                    if raw:
-                        combined.append({"chapter": file_meta.chapter_number, "content": raw})
+                    raw = filepath.read_text(encoding="utf-8")
+                    # Strip header line "filename: chapter_title" before combining
+                    lines = raw.splitlines()
+                    content = "\n".join(lines[1:]).strip()
+                    if content:
+                        txt_parts.append(content)
+                    chapters_data.append({"content": raw.strip(), "chapter_number": file_meta.chapter_number})
                 except OSError:
                     continue
-            else:
-                chapters = self._read_chapter_file(filepath)
-                for obj in chapters:
-                    if "chapter" not in obj or obj["chapter"] == 0:
-                        obj["chapter"] = file_meta.chapter_number
-                    combined.append(obj)
-                    if novel_metadata is None and isinstance(obj, dict) and obj.get("novel_metadata"):
-                        novel_metadata = obj["novel_metadata"]
+            txt_text = "\n\n---\n\n".join(txt_parts).rstrip()
+            try:
+                with open(txt_path, "w", encoding="utf-8") as fh:
+                    fh.write(txt_text)
+            except Exception as exc:
+                with self._lock:
+                    p = self._sessions.get(crawl_id)
+                    if p:
+                        p.add_log(f"[COMBINE] Error writing TXT: {exc}", "error")
+                return
+
+            # Also write combined .json for the API
+            combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
+            combined_path = output_dir / combined_name
+            combined_payload = {
+                "crawl_id": crawl_id,
+                "chapter_count": len(chapter_files_sorted),
+                "chapters": chapters_data,
+            }
+            try:
+                with open(combined_path, "w", encoding="utf-8") as fh:
+                    _json.dump(combined_payload, fh, ensure_ascii=False, indent=2)
+            except Exception as exc:
+                with self._lock:
+                    p = self._sessions.get(crawl_id)
+                    if p:
+                        p.add_log(f"[COMBINE] Error writing JSON: {exc}", "error")
+                return
+
+            with self._lock:
+                p = self._sessions.get(crawl_id)
+                if p:
+                    p.combined_file = combined_name
+                    p.combined_txt_file = txt_filename
+                    p.add_log(f"[COMBINE] Created '{txt_filename}' with {len(chapter_files_sorted)} chapters.", "info")
+                    self._persist_index()
+            return
+
+        # jsonl/csv: read files as JSON and write combined .json
+        for file_meta in chapter_files_sorted:
+            filepath = output_dir / file_meta.filename
+            chapters = self._read_chapter_file(filepath)
+            for obj in chapters:
+                if "chapter" not in obj or obj["chapter"] == 0:
+                    obj["chapter"] = file_meta.chapter_number
+                combined.append(obj)
+                if novel_metadata is None and isinstance(obj, dict) and obj.get("novel_metadata"):
+                    novel_metadata = obj["novel_metadata"]
 
         combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
         combined_payload = {
