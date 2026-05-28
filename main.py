@@ -1,0 +1,29 @@
+"""
+BedReadVoices — TTS + Audio microservice entry point.
+Run with::
+
+    python main.py
+
+Uvicorn starts on port 8001.
+"""
+
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_project_root = Path(__file__).parent.resolve()
+load_dotenv(_project_root / ".env")
+
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "api.main:app",
+        host="0.0.0.0",
+        port=8001,
+        reload=False,
+    )
