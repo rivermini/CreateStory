@@ -72,12 +72,14 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const navigate = useNavigate();
 
   const [storiesLoading, setStoriesLoading] = useState(true);
-  const [, setAllStoriesLoaded] = useState(false);
+  const [isLoadingAll, setIsLoadingAll] = useState(false);
+  const [hasLoadedAll, setHasLoadedAll] = useState(false);
   const [storiesError, setStoriesError] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'release_date' | 'title' | 'chapter_count' | 'popular'>(loadStoredSort);
   const [pageLimit] = useState(20);
+  const [totalStories, setTotalStories] = useState(0);
   const [allLoadedStories, setAllLoadedStories] = useState<BedReadStory[]>(loadStoredStories);
 
   const [selectedStory, setSelectedStory] = useState<BedReadStory | null>(() => {
@@ -109,32 +111,46 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const fetchPage1 = () => {
     setStoriesLoading(true);
     setStoriesError('');
+    setHasLoadedAll(false);
 
     searchBedReadStories({ sort: sortBy, page: 1, limit: 20 })
       .then((res: BedReadStorySearchResponse) => {
         setAllLoadedStories(res.stories);
+        setTotalStories(res.total);
         saveStories(res.stories);
         setCurrentPage(1);
-        const totalPg = Math.max(1, Math.ceil(res.total / 20));
-        const pageRequests: Promise<BedReadStorySearchResponse>[] = [];
-        for (let p = 2; p <= totalPg; p++) {
-          pageRequests.push(searchBedReadStories({ sort: sortBy, page: p, limit: 20 }));
+        if (res.stories.length >= res.total) {
+          setHasLoadedAll(true);
         }
-        Promise.all(pageRequests).then(responses => {
-          const seen = new Set<string>();
-          const allStories: BedReadStory[] = [res, ...responses].flatMap(r => r.stories)
-            .filter(s => {
-              if (seen.has(s.storyId)) return false;
-              seen.add(s.storyId);
-              return true;
-            });
-          setAllLoadedStories(allStories);
-          saveStories(allStories);
-          setAllStoriesLoaded(true);
-        }).catch(() => {});
       })
       .catch(() => setStoriesError('Failed to load stories. Is the backend running?'))
       .finally(() => setStoriesLoading(false));
+  };
+
+  const loadAllStories = () => {
+    if (hasLoadedAll || isLoadingAll) return;
+    setIsLoadingAll(true);
+    const totalPg = Math.max(1, Math.ceil(totalStories / 20));
+    const pageRequests: Promise<BedReadStorySearchResponse>[] = [];
+    for (let p = 2; p <= totalPg; p++) {
+      pageRequests.push(searchBedReadStories({ sort: sortBy, page: p, limit: 20 }));
+    }
+    Promise.all(pageRequests)
+      .then(responses => {
+        const seen = new Set<string>();
+        const page1Stories = allLoadedStories;
+        const allStories: BedReadStory[] = [page1Stories, ...responses.map(r => r.stories)].flatMap(stories => stories)
+          .filter(s => {
+            if (seen.has(s.storyId)) return false;
+            seen.add(s.storyId);
+            return true;
+          });
+        setAllLoadedStories(allStories);
+        saveStories(allStories);
+        setHasLoadedAll(true);
+      })
+      .catch(() => setStoriesError('Failed to load all stories.'))
+      .finally(() => setIsLoadingAll(false));
   };
 
   const filteredStories = allLoadedStories.filter(s =>
@@ -156,7 +172,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   }, []);
 
   useEffect(() => {
-    setAllStoriesLoaded(false);
+    setHasLoadedAll(false);
     fetchPage1();
   }, [sortBy]);
 
@@ -364,10 +380,37 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                   </h2>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={'text-xs ' + mutedSmClass}>{filteredStories.length.toLocaleString()} stories</span>
+                  {!hasLoadedAll && (
+                    <button
+                      onClick={loadAllStories}
+                      disabled={isLoadingAll}
+                      className={'px-3 py-1.5 rounded-lg text-xs font-medium transition-all ' +
+                        (isDark
+                          ? 'bg-indigo-900/40 text-indigo-300 hover:bg-indigo-800/50 border border-indigo-800/40'
+                          : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200') +
+                        (isLoadingAll ? ' opacity-50 cursor-not-allowed' : '')}
+                    >
+                      {isLoadingAll ? (
+                        <span className="flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5 animate-spin-ccw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Loading...
+                        </span>
+                      ) : (
+                        `Load All (${totalStories.toLocaleString()})`
+                      )}
+                    </button>
+                  )}
+                  {hasLoadedAll && (
+                    <span className={'px-2.5 py-1 text-xs rounded-lg ' + subtleBgClass + ' ' + mutedSmClass}>
+                      All {totalStories.toLocaleString()} loaded
+                    </span>
+                  )}
                   <button
                     onClick={() => fetchPage1()}
-                    disabled={storiesLoading}
+                    disabled={storiesLoading || isLoadingAll}
                     className={'p-1.5 rounded-lg transition-colors ' + subtleBgClass + ' hover:' + (isDark ? 'bg-slate-700/60' : 'bg-gray-200') + ' disabled:opacity-50'}
                     title="Refresh story list"
                   >
