@@ -46,11 +46,11 @@ async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
         return JSONResponse(content=resp.json())
 
 
-async def _proxy_delete(path: str, json_body: dict | None = None) -> JSONResponse:
+async def _proxy_delete(path: str) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
     async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.delete(url, json=json_body or {})
+        resp = await client.delete(url)
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError:

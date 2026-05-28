@@ -63,11 +63,11 @@ async def _proxy_patch(path: str, json_body: dict | None = None) -> JSONResponse
         return JSONResponse(content=resp.json())
 
 
-async def _proxy_delete(path: str, json_body: dict | None = None) -> JSONResponse:
+async def _proxy_delete(path: str) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
     async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.delete(url, json=json_body or {})
+        resp = await client.delete(url)
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError:
@@ -94,6 +94,6 @@ async def update_history(entry_id: str, body: dict) -> JSONResponse:
     return await _proxy_patch(f"/api/drive-sync/history/{entry_id}", json_body=body)
 
 
-@router.delete("/history")
+@router.post("/history/clear")
 async def delete_history(body: dict) -> JSONResponse:
-    return await _proxy_delete("/api/drive-sync/history", json_body=body)
+    return await _proxy_post("/api/drive-sync/history/clear", json_body=body)
