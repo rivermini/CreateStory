@@ -1,0 +1,49 @@
+{
+  "session_id": "d1ed0f7c",
+  "phase": "phase3",
+  "test_mode": true,
+  "voice": null,
+  "status": "error",
+  "current_step": 1,
+  "current_step_desc": "Discovering stories with missing audio",
+  "current_story": "",
+  "progress": {
+    "done": 0,
+    "total": 0
+  },
+  "chapter_progress": {
+    "done": 0,
+    "total": 0
+  },
+  "stories_missing_audio": [],
+  "logs": [
+    {
+      "timestamp": "2026-05-28 23:47:44",
+      "step": 0,
+      "message": "Session d1ed0f7c started (phase=phase3, test_mode=True, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-28 23:47:44",
+      "step": 0,
+      "message": "Test mode: using 2 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-28 23:47:44",
+      "step": 1,
+      "message": "Test mode: checking 2 test story IDs (limit=20)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-28 23:47:44",
+      "step": 0,
+      "message": "Fatal error: cannot access local variable 'recent_stories' where it is not associated with a value",
+      "level": "error"
+    }
+  ],
+  "started_at": "2026-05-28 23:47:44",
+  "finished_at": "2026-05-28 23:47:44",
+  "error": "cannot access local variable 'recent_stories' where it is not associated with a value",
+  "story_results": []
+}
