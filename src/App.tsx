@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
-import { MobileNav, MobileHeader, MobileDrawer } from './components/MobileNav';
+import { MobileSidebar } from './components/MobileSidebar';
 import { ToastContainer } from './components/Toast';
 
 type ThemeMode = 'light' | 'dark';
@@ -63,34 +63,57 @@ function App() {
 
 function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChange: (mode: ThemeMode) => void }) {
   const isDark = themeMode === 'dark';
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <Sidebar themeMode={themeMode} onThemeChange={onThemeChange} />
-
-      {/* Mobile Header */}
-      <MobileHeader
-        isDark={isDark}
+      <Sidebar
+        themeMode={themeMode}
+        onThemeChange={onThemeChange}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
       />
 
-      {/* Mobile Bottom Navigation */}
-      <MobileNav isDark={isDark} />
-
-      {/* Mobile Drawer */}
-      <MobileDrawer
-        isOpen={mobileDrawerOpen}
-        onClose={() => setMobileDrawerOpen(false)}
-        isDark={isDark}
+      <MobileSidebar
+        themeMode={themeMode}
+        onThemeChange={onThemeChange}
+        isOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
       />
+
+      {/* Mobile header */}
+      <header className={`lg:hidden fixed top-0 left-0 right-0 z-30 safe-area-top ${
+        isDark
+          ? 'bg-slate-950/95 border-b border-slate-800/80 backdrop-blur-xl'
+          : 'bg-gray-50/95 border-b border-gray-200/80 backdrop-blur-xl shadow-sm'
+      }`}>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className={`p-2 rounded-lg transition-colors ${
+              isDark
+                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/80'
+            }`}
+            title="Open menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <h1 className={`text-base font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+            Novel Crawler
+          </h1>
+        </div>
+      </header>
 
       <div
         className={`min-h-screen transition-colors duration-300 ${
           isDark ? 'bg-slate-950' : 'bg-gray-50'
         }`}
       >
-        <div className="lg:pl-64 pt-14 lg:pt-0">
+        <div className={`pt-14 lg:pt-0 ${sidebarCollapsed ? 'pl-16 lg:pl-16' : 'pl-0 lg:pl-64'} min-h-screen transition-all duration-300`}>
           <Suspense fallback={
             <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
               Loading...

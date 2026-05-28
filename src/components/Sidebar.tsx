@@ -7,6 +7,8 @@ interface SidebarProps {
     themeMode: ThemeMode;
     onThemeChange: (mode: ThemeMode) => void;
     rightActions?: React.ReactNode;
+    isCollapsed?: boolean;
+    onToggleCollapse?: () => void;
 }
 
 function navActive(locationPath: string, expect: string) {
@@ -120,19 +122,18 @@ const NAV_SECTIONS = [
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ] as const;
 
-export function Sidebar({ themeMode, onThemeChange, rightActions }: SidebarProps) {
+export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = false, onToggleCollapse }: SidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
     const makeNavItem = (item: NavItem) => {
         const active = navActive(location.pathname, item.to);
-        const baseClass = 'group flex items-center gap-3 rounded-xl transition-all duration-200';
 
         return (
             <Link
                 key={item.to}
                 to={item.to}
-                className={`${baseClass} ${
+                className={`group flex items-center gap-3 rounded-xl transition-all duration-200 ${
                     active
                         ? isDark
                             ? 'bg-indigo-600/20 text-indigo-400'
@@ -140,13 +141,17 @@ export function Sidebar({ themeMode, onThemeChange, rightActions }: SidebarProps
                         : isDark
                             ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                             : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
-                } ${'px-4 py-2.5'}`}
-                title={undefined}
+                } ${isCollapsed ? 'justify-center px-2 py-2.5' : 'px-4 py-2.5'}`}
+                title={isCollapsed ? item.label : undefined}
             >
                 <span className="flex-shrink-0">{item.icon}</span>
-                <span className="text-sm font-medium truncate">{item.label}</span>
-                {active && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                {!isCollapsed && (
+                    <>
+                        <span className="text-sm font-medium truncate">{item.label}</span>
+                        {active && (
+                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                        )}
+                    </>
                 )}
             </Link>
         );
@@ -154,18 +159,21 @@ export function Sidebar({ themeMode, onThemeChange, rightActions }: SidebarProps
 
     return (
         <aside
-            className={`hidden lg:flex flex-col fixed left-0 top-0 h-screen z-50 transition-all duration-300 w-64 ${
+            className={`hidden lg:flex flex-col fixed left-0 top-0 h-screen z-50 transition-all duration-300 ${
+                isCollapsed ? 'w-16' : 'w-64'
+            } ${
                 isDark
                     ? 'bg-slate-900/80 border-r border-slate-800/80'
                     : 'bg-white/80 border-r border-gray-200/80 backdrop-blur-xl'
             }`}
         >
             {/* Brand */}
-            <div className={`flex items-center gap-3 px-4 py-5 border-b ${
+            <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center px-2 py-5' : 'px-4 py-5'} border-b ${
                 isDark ? 'border-slate-800' : 'border-gray-200'
             }`}>
-                <AppIcon size="xl" className="flex-shrink-0" />
-                <div className="min-w-0">
+                <AppIcon size={isCollapsed ? 'md' : 'xl'} className="flex-shrink-0" />
+                {!isCollapsed && (
+                    <div className="min-w-0">
                         <h1 className={`text-lg font-bold truncate ${
                             isDark ? 'text-slate-100' : 'text-gray-900'
                         }`}>
@@ -177,20 +185,36 @@ export function Sidebar({ themeMode, onThemeChange, rightActions }: SidebarProps
                             Content Fetcher
                         </p>
                     </div>
+                )}
+                <button
+                        onClick={onToggleCollapse ?? undefined}
+                        className={`ml-auto p-1.5 rounded-lg transition-colors ${
+                            isDark
+                                ? 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/60'
+                                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+                        }`}
+                        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    >
+                        <svg className={`w-4 h-4 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                        </svg>
+                    </button>
             </div>
 
             {/* Nav */}
-            <nav className={`flex-1 overflow-y-auto py-4 px-3 space-y-4 scrollbar-thin ${
+            <nav className={`flex-1 overflow-y-auto py-4 ${isCollapsed ? 'px-1' : 'px-3'} space-y-4 scrollbar-thin ${
                 isDark ? 'scrollbar-slate-700' : 'scrollbar-gray-300'
             }`}>
                 {NAV_SECTIONS.map((section) => (
                     <div key={section.label}>
-                        <p className={`px-4 pb-2 text-xs font-semibold uppercase tracking-wider ${
-                            isDark ? 'text-slate-600' : 'text-gray-400'
-                        }`}>
-                            {section.label}
-                        </p>
-                        <div className="space-y-1">
+                        {!isCollapsed && (
+                            <p className={`px-4 pb-2 text-xs font-semibold uppercase tracking-wider ${
+                                isDark ? 'text-slate-600' : 'text-gray-400'
+                            }`}>
+                                {section.label}
+                            </p>
+                        )}
+                        <div className={`${isCollapsed ? 'space-y-1' : 'space-y-1'}`}>
                             {section.items.map((item) => makeNavItem(item))}
                         </div>
                     </div>
@@ -198,10 +222,10 @@ export function Sidebar({ themeMode, onThemeChange, rightActions }: SidebarProps
             </nav>
 
             {/* Bottom: Theme */}
-            <div className={`border-t px-3 py-4 ${
+            <div className={`border-t ${isCollapsed ? 'px-1 py-4 flex justify-center' : 'px-3 py-4'} ${
                 isDark ? 'border-slate-800' : 'border-gray-200'
             }`}>
-                {rightActions && (
+                {rightActions && !isCollapsed && (
                     <div className="mb-2">{rightActions}</div>
                 )}
                 <ThemeToggle mode={themeMode} onChange={onThemeChange} />
