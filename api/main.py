@@ -1,0 +1,67 @@
+"""FastAPI application entry point for the NovelCrawler microservice."""
+
+import logging
+import sys
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
+logger = logging.getLogger("api.main")
+
+from dotenv import load_dotenv
+
+_project_root = Path(__file__).parent.parent.resolve()
+load_dotenv(_project_root / ".env")
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+_project_root = Path(__file__).parent.parent.resolve()
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from api.routes import crawl, crawl_stream, results, sites
+
+app = FastAPI(
+    title="Nova NovelCrawler API",
+    description="REST + SSE API for multi-site novel scraping. Handles site detection and Scrapy crawl execution.",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(sites.router)
+app.include_router(crawl.router)
+app.include_router(crawl_stream.router)
+app.include_router(results.router)
+
+
+@app.get("/", tags=["Health"])
+def root() -> dict:
+    return {"status": "ok", "service": "Nova NovelCrawler API", "version": "1.0.0"}
+
+
+@app.on_event("startup")
+async def on_startup():
+    try:
+        from handlers.selenium_handler import _get_browser
+        browser = _get_browser()
+        browser._resolve_chromedriver()
+    except Exception as exc:
+        logger.warning("Startup ChromeDriver preload failed: %s", exc)
+
+
+@app.get("/api", tags=["Health"])
+def api_info() -> dict:
+    return {
+        "title": "Nova NovelCrawler API",
+        "version": "1.0.0",
+        "features": ["crawling", "site-detection", "results"],
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+    }
