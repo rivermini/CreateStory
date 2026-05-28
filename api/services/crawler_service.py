@@ -526,15 +526,24 @@ class CrawlService:
 
         combined: list[dict] = []
         novel_metadata: Optional[dict] = None
+        is_text = output_format in ("txt", "md")
         for file_meta in chapter_files_sorted:
             filepath = output_dir / file_meta.filename
-            chapters = self._read_chapter_file(filepath)
-            for obj in chapters:
-                if "chapter" not in obj or obj["chapter"] == 0:
-                    obj["chapter"] = file_meta.chapter_number
-                combined.append(obj)
-                if novel_metadata is None and isinstance(obj, dict) and obj.get("novel_metadata"):
-                    novel_metadata = obj["novel_metadata"]
+            if is_text:
+                try:
+                    raw = filepath.read_text(encoding="utf-8").strip()
+                    if raw:
+                        combined.append({"chapter": file_meta.chapter_number, "content": raw})
+                except OSError:
+                    continue
+            else:
+                chapters = self._read_chapter_file(filepath)
+                for obj in chapters:
+                    if "chapter" not in obj or obj["chapter"] == 0:
+                        obj["chapter"] = file_meta.chapter_number
+                    combined.append(obj)
+                    if novel_metadata is None and isinstance(obj, dict) and obj.get("novel_metadata"):
+                        novel_metadata = obj["novel_metadata"]
 
         combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
         combined_payload = {
