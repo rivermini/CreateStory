@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   type DriveSyncConfig,
-  FIXED_JSON_PREFIX,
+  uploadDriveCredentials,
 } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
 
@@ -141,29 +141,58 @@ export function ConfigModal({
           {/* Service Account JSON */}
           <div>
             <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-              Service Account JSON{' '}
-              <span className={`font-normal ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>(credentials/ + filename)</span>
+              Service Account JSON File
             </label>
-            <div className="flex items-center gap-2">
-              <span className={`px-3 py-3 rounded-xl border text-sm whitespace-nowrap select-none flex-shrink-0 ${isDark
-                ? 'bg-slate-900/60 border-slate-700 text-slate-500'
-                : 'bg-gray-100 border-gray-300 text-gray-500'
-              }`}>
-                {FIXED_JSON_PREFIX}
-              </span>
-              <input
-                type="text"
-                value={configForm.service_account_json_name}
-                onChange={e => onFormChange({ service_account_json_name: e.target.value })}
-                placeholder="nova-crawler-drive-sync-445ff578305c.json"
-                className={`flex-1 min-w-0 px-4 py-3 rounded-xl border text-sm font-mono
-                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                  ${isDark
-                    ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600'
-                    : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400'
+            <div className={`flex items-center gap-3 p-4 rounded-xl border text-sm ${isDark
+              ? 'bg-slate-800/60 border-slate-700'
+              : 'bg-gray-50 border-gray-300'
+            }`}>
+              <div className="flex-1 min-w-0">
+                {configForm.service_account_json_name ? (
+                  <p className={`font-mono truncate ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                    {configForm.service_account_json_name}
+                  </p>
+                ) : (
+                  <p className={isDark ? 'text-slate-600' : 'text-gray-400'}>
+                    No file selected
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {configForm.service_account_json_name && (
+                  <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-emerald-900/40 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                    Ready
+                  </span>
+                )}
+                <label
+                  className={`px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
+                    isDark
+                      ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                   }`}
-              />
+                >
+                  Choose File
+                  <input
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const result = await uploadDriveCredentials(file);
+                        onFormChange({ service_account_json_name: result.filename });
+                      } catch {
+                        onFormChange({ service_account_json_name: file.name });
+                      }
+                    }}
+                  />
+                </label>
+              </div>
             </div>
+            <p className={`text-xs mt-1.5 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+              Upload your Google Drive service account JSON file. It will be saved to the server.
+            </p>
           </div>
           {/* Bearer token */}
           <div>

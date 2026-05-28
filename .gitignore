@@ -23,7 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment variables — keep local, never commit
+# Credentials — Google Drive service account JSONs
+credentials/
+
 .env
 .env.development
 .env.production

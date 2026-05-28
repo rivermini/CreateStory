@@ -493,6 +493,37 @@ export async function initDriveSyncConfig(req: InitDriveSyncRequest): Promise<Dr
   });
 }
 
+export interface UploadCredentialsResponse {
+  success: boolean;
+  filename: string;
+  path: string;
+}
+
+export async function uploadDriveCredentials(file: File): Promise<UploadCredentialsResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${BASE_URL}/api/drive-sync/credentials/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body.detail ?? message;
+    } catch { /* ignore */ }
+    throw new Error(message);
+  }
+  return res.json() as Promise<UploadCredentialsResponse>;
+}
+
+export async function checkCredentialsExists(filename: string): Promise<boolean> {
+  const res = await fetch(`${BASE_URL}/api/drive-sync/credentials/exists?filename=${encodeURIComponent(filename)}`);
+  if (!res.ok) return false;
+  const body = await res.json() as { exists: boolean };
+  return body.exists;
+}
+
 export async function updateDriveSyncConfig(req: DriveSyncUpdateRequest): Promise<DriveSyncConfig> {
   return apiFetch<DriveSyncConfig>('/api/drive-sync/config', {
     method: 'PUT',
