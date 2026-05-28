@@ -1,5 +1,1203 @@
 [
   {
+    "session_id": "a12bff3a",
+    "phase": "phase1",
+    "test_mode": true,
+    "voice": null,
+    "status": "completed",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "Test Story c0574ba6",
+    "progress": {
+      "done": 1,
+      "total": 1
+    },
+    "chapter_progress": {
+      "done": 2,
+      "total": 2
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+        "title": "Test Story c0574ba6",
+        "missingCount": 2,
+        "existingVoice": null
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 01:02:04",
+        "step": 0,
+        "message": "Session a12bff3a started (phase=phase1, test_mode=True, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:04",
+        "step": 0,
+        "message": "Test mode: using 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:04",
+        "step": 1,
+        "message": "Test mode: checking 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:04",
+        "step": 1,
+        "message": "Found 1 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:04",
+        "step": 2,
+        "message": "Test mode: checking 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:06",
+        "step": 2,
+        "message": "Found 1 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:07",
+        "step": 2,
+        "message": "Found 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:07",
+        "step": 1,
+        "message": "Phase 1: 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:07",
+        "step": 3,
+        "message": "[1/1] Test Story c0574ba6",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:07",
+        "step": 3,
+        "message": "Starting batch TTS for 'Test Story c0574ba6' \u2014 2 chapters, voice=af_heart (source=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:53",
+        "step": 6,
+        "message": "Compressed: 1321004 -> 162082 bytes (87.7% reduction, 48kbps opus)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:53",
+        "step": 6,
+        "message": "Compressed chapter 5ecd3485-d835-4d07-89f4-866a290a7c94: 1321004 -> 162082 bytes",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:56",
+        "step": 6,
+        "message": "Uploaded chapter 5ecd3485-d835-4d07-89f4-866a290a7c94 audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:56",
+        "step": 9,
+        "message": "Deleted 1 local audio file(s): ['D:\\\\Developer\\\\Nova\\\\CreateStoryMicroService\\\\BedReadVoices\\\\output\\\\bedread\\\\091b7fe8\\\\Test Story c0574ba6_Heart_001.wav']",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:57",
+        "step": 6,
+        "message": "Compressed: 535596 -> 66357 bytes (87.6% reduction, 48kbps opus)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:57",
+        "step": 6,
+        "message": "Compressed chapter 8b3e5504-c57a-41bc-ae49-bb751d585d1a: 535596 -> 66357 bytes",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:59",
+        "step": 6,
+        "message": "Uploaded chapter 8b3e5504-c57a-41bc-ae49-bb751d585d1a audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:59",
+        "step": 9,
+        "message": "Deleted 1 local audio file(s): ['D:\\\\Developer\\\\Nova\\\\CreateStoryMicroService\\\\BedReadVoices\\\\output\\\\bedread\\\\091b7fe8\\\\Test Story c0574ba6_Heart_002.wav']",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:59",
+        "step": 9,
+        "message": "Removed batch output directory: D:\\Developer\\Nova\\CreateStoryMicroService\\BedReadVoices\\output\\bedread\\091b7fe8 (batch_id=091b7fe8)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:59",
+        "step": 7,
+        "message": "Done: generated=2, uploaded=2",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 01:02:59",
+        "step": 11,
+        "message": "Auto audio session completed successfully",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 01:02:04",
+    "finished_at": "2026-05-29 01:02:59",
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+        "story_title": "Test Story c0574ba6",
+        "chapters_generated": 2,
+        "chapters_uploaded": 2,
+        "upload_errors": [],
+        "error": ""
+      }
+    ]
+  },
+  {
+    "session_id": "fb43387f",
+    "phase": "phase1",
+    "test_mode": true,
+    "voice": null,
+    "status": "completed",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "Test Story c0574ba6",
+    "progress": {
+      "done": 1,
+      "total": 1
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 2
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+        "title": "Test Story c0574ba6",
+        "missingCount": 2,
+        "existingVoice": null
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:58:52",
+        "step": 0,
+        "message": "Session fb43387f started (phase=phase1, test_mode=True, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:52",
+        "step": 0,
+        "message": "Test mode: using 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:52",
+        "step": 1,
+        "message": "Test mode: checking 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:52",
+        "step": 1,
+        "message": "Found 1 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:52",
+        "step": 2,
+        "message": "Test mode: checking 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:53",
+        "step": 2,
+        "message": "Found 1 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:53",
+        "step": 2,
+        "message": "Found 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:53",
+        "step": 1,
+        "message": "Phase 1: 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:53",
+        "step": 3,
+        "message": "[1/1] Test Story c0574ba6",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:58:53",
+        "step": 3,
+        "message": "Starting batch TTS for 'Test Story c0574ba6' \u2014 2 chapters, voice=af_bella (source=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:59:43",
+        "step": 7,
+        "message": "Done: generated=2, uploaded=0",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:59:43",
+        "step": 11,
+        "message": "Auto audio session completed successfully",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 00:58:52",
+    "finished_at": "2026-05-29 00:59:43",
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+        "story_title": "Test Story c0574ba6",
+        "chapters_generated": 2,
+        "chapters_uploaded": 0,
+        "upload_errors": [],
+        "error": ""
+      }
+    ]
+  },
+  {
+    "session_id": "60892802",
+    "phase": "phase1",
+    "test_mode": true,
+    "voice": null,
+    "status": "completed",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "Test Story c0574ba6",
+    "progress": {
+      "done": 1,
+      "total": 1
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 2
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+        "title": "Test Story c0574ba6",
+        "missingCount": 2,
+        "existingVoice": null
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:55:36",
+        "step": 0,
+        "message": "Session 60892802 started (phase=phase1, test_mode=True, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:36",
+        "step": 0,
+        "message": "Test mode: using 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:36",
+        "step": 1,
+        "message": "Test mode: checking 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:36",
+        "step": 1,
+        "message": "Found 1 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:36",
+        "step": 2,
+        "message": "Test mode: checking 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:37",
+        "step": 2,
+        "message": "Found 1 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:38",
+        "step": 2,
+        "message": "Found 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:38",
+        "step": 1,
+        "message": "Phase 1: 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:38",
+        "step": 3,
+        "message": "[1/1] Test Story c0574ba6",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:38",
+        "step": 3,
+        "message": "Processing 'Test Story c0574ba6' \u2014 2 chapters, voice=af_heart (source=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:55:42",
+        "step": 4,
+        "message": "Chapter 1: TTS job 95f945c9 started",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:56:07",
+        "step": 4,
+        "message": "Chapter 1: TTS job failed or timed out",
+        "level": "error"
+      },
+      {
+        "timestamp": "2026-05-29 00:56:10",
+        "step": 4,
+        "message": "Chapter 2: TTS job 5284ad0c started",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:56:17",
+        "step": 4,
+        "message": "Chapter 2: TTS job failed or timed out",
+        "level": "error"
+      },
+      {
+        "timestamp": "2026-05-29 00:56:17",
+        "step": 7,
+        "message": "Done: generated=0, uploaded=0",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:56:17",
+        "step": 11,
+        "message": "Auto audio session completed successfully",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 00:55:36",
+    "finished_at": "2026-05-29 00:56:17",
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+        "story_title": "Test Story c0574ba6",
+        "chapters_generated": 0,
+        "chapters_uploaded": 0,
+        "upload_errors": [
+          "Chapter 1: generation failed",
+          "Chapter 2: generation failed"
+        ],
+        "error": "2 chapter(s) failed"
+      }
+    ]
+  },
+  {
+    "session_id": "25429934",
+    "phase": "phase1",
+    "test_mode": true,
+    "voice": null,
+    "status": "error",
+    "current_step": 1,
+    "current_step_desc": "Discovering missing audio in stories needing update",
+    "current_story": "",
+    "progress": {
+      "done": 0,
+      "total": 0
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 0
+    },
+    "stories_missing_audio": [],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:53:41",
+        "step": 0,
+        "message": "Session 25429934 started (phase=phase1, test_mode=True, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:53:41",
+        "step": 0,
+        "message": "Test mode: using 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:53:41",
+        "step": 1,
+        "message": "Test mode: checking 1 test story IDs",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:53:41",
+        "step": 1,
+        "message": "Found 1 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:53:42",
+        "step": 0,
+        "message": "Fatal error: cannot access local variable 'needing_update_raw' where it is not associated with a value",
+        "level": "error"
+      }
+    ],
+    "started_at": "2026-05-29 00:53:41",
+    "finished_at": "2026-05-29 00:53:42",
+    "error": "cannot access local variable 'needing_update_raw' where it is not associated with a value",
+    "story_results": []
+  },
+  {
+    "session_id": "586c6d9d",
+    "phase": "phase1",
+    "test_mode": false,
+    "voice": null,
+    "status": "stopped",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "The Wife Who Wouldn't Cry",
+    "progress": {
+      "done": 1,
+      "total": 3
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 3
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "e045c3fa-039c-4e07-8af4-61e379541cf6",
+        "title": "The Wife Who Wouldn't Cry",
+        "missingCount": 1,
+        "existingVoice": "af_heart"
+      },
+      {
+        "storyId": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+        "title": "The Alpha's Accidental Surrogate",
+        "missingCount": 1,
+        "existingVoice": "af_heart"
+      },
+      {
+        "storyId": "bfd30e96-859b-4bd4-8f52-d9078dd4e14f",
+        "title": "My Sister's Husband, My Father's Lie",
+        "missingCount": 1,
+        "existingVoice": "af_bella"
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:39:53",
+        "step": 0,
+        "message": "Session 586c6d9d started (phase=phase1, test_mode=False, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:39:53",
+        "step": 1,
+        "message": "Phase 1: Fetching stories needing update...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:39:54",
+        "step": 1,
+        "message": "Found 5 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:39:54",
+        "step": 2,
+        "message": "Discovering stories with missing audio among 5 stories...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:39:59",
+        "step": 2,
+        "message": "Found 5 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:40:00",
+        "step": 2,
+        "message": "Found 3 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:40:00",
+        "step": 1,
+        "message": "Phase 1: 3 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:40:00",
+        "step": 3,
+        "message": "[1/3] The Wife Who Wouldn't Cry",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:40:00",
+        "step": 3,
+        "message": "Processing 'The Wife Who Wouldn't Cry' \u2014 1 chapters, voice=af_heart (source=existing)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:40:03",
+        "step": 4,
+        "message": "Chapter 15: TTS job 3d577438 started",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:46:24",
+        "step": 0,
+        "message": "Stop requested",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:49:10",
+        "step": 4,
+        "message": "Chapter 15: TTS job failed or timed out",
+        "level": "error"
+      },
+      {
+        "timestamp": "2026-05-29 00:49:10",
+        "step": 11,
+        "message": "Auto audio session stopped by user",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 00:39:53",
+    "finished_at": null,
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "e045c3fa-039c-4e07-8af4-61e379541cf6",
+        "story_title": "The Wife Who Wouldn't Cry",
+        "chapters_generated": 0,
+        "chapters_uploaded": 0,
+        "upload_errors": [
+          "Chapter 15: generation failed"
+        ],
+        "error": "1 chapter(s) failed"
+      }
+    ]
+  },
+  {
+    "session_id": "3be12ec8",
+    "phase": "phase1",
+    "test_mode": false,
+    "voice": null,
+    "status": "stopped",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "The Wife Who Wouldn't Cry",
+    "progress": {
+      "done": 2,
+      "total": 3
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 3
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "bfd30e96-859b-4bd4-8f52-d9078dd4e14f",
+        "title": "My Sister's Husband, My Father's Lie",
+        "missingCount": 1,
+        "existingVoice": "af_bella"
+      },
+      {
+        "storyId": "e045c3fa-039c-4e07-8af4-61e379541cf6",
+        "title": "The Wife Who Wouldn't Cry",
+        "missingCount": 1,
+        "existingVoice": "af_heart"
+      },
+      {
+        "storyId": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+        "title": "The Alpha's Accidental Surrogate",
+        "missingCount": 1,
+        "existingVoice": "af_heart"
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:38:01",
+        "step": 0,
+        "message": "Session 3be12ec8 started (phase=phase1, test_mode=False, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:01",
+        "step": 1,
+        "message": "Phase 1: Fetching stories needing update...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:02",
+        "step": 1,
+        "message": "Found 5 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:02",
+        "step": 2,
+        "message": "Discovering stories with missing audio among 5 stories...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:08",
+        "step": 2,
+        "message": "Found 5 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:10",
+        "step": 2,
+        "message": "Found 3 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:10",
+        "step": 1,
+        "message": "Phase 1: 3 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:10",
+        "step": 3,
+        "message": "[1/3] My Sister's Husband, My Father's Lie",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:10",
+        "step": 3,
+        "message": "Processing 'My Sister's Husband, My Father's Lie' \u2014 1 chapters, voice=af_bella (source=existing)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:11",
+        "step": 4,
+        "message": "Chapter 13: empty content",
+        "level": "error"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:11",
+        "step": 7,
+        "message": "Done: generated=0, uploaded=0",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:11",
+        "step": 10,
+        "message": "Resting 30s before next story",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:41",
+        "step": 3,
+        "message": "[2/3] The Wife Who Wouldn't Cry",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:41",
+        "step": 3,
+        "message": "Processing 'The Wife Who Wouldn't Cry' \u2014 1 chapters, voice=af_heart (source=existing)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:42",
+        "step": 4,
+        "message": "Chapter 15: empty content",
+        "level": "error"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:42",
+        "step": 7,
+        "message": "Done: generated=0, uploaded=0",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:42",
+        "step": 10,
+        "message": "Resting 30s before next story",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:51",
+        "step": 0,
+        "message": "Stop requested",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:51",
+        "step": 3,
+        "message": "Stop requested, halting before next story",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:38:51",
+        "step": 11,
+        "message": "Auto audio session stopped by user",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 00:38:01",
+    "finished_at": null,
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "bfd30e96-859b-4bd4-8f52-d9078dd4e14f",
+        "story_title": "My Sister's Husband, My Father's Lie",
+        "chapters_generated": 0,
+        "chapters_uploaded": 0,
+        "upload_errors": [
+          "Chapter 13: generation failed"
+        ],
+        "error": "1 chapter(s) failed"
+      },
+      {
+        "story_id": "e045c3fa-039c-4e07-8af4-61e379541cf6",
+        "story_title": "The Wife Who Wouldn't Cry",
+        "chapters_generated": 0,
+        "chapters_uploaded": 0,
+        "upload_errors": [
+          "Chapter 15: generation failed"
+        ],
+        "error": "1 chapter(s) failed"
+      }
+    ]
+  },
+  {
+    "session_id": "522f7a0b",
+    "phase": "phase1",
+    "test_mode": false,
+    "voice": null,
+    "status": "stopped",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "My Sister's Husband, My Father's Lie",
+    "progress": {
+      "done": 1,
+      "total": 2
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 2
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "bfd30e96-859b-4bd4-8f52-d9078dd4e14f",
+        "title": "My Sister's Husband, My Father's Lie",
+        "missingCount": 1,
+        "existingVoice": "af_bella"
+      },
+      {
+        "storyId": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+        "title": "The Alpha's Accidental Surrogate",
+        "missingCount": 1,
+        "existingVoice": "af_heart"
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:27:30",
+        "step": 0,
+        "message": "Session 522f7a0b started (phase=phase1, test_mode=False, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:30",
+        "step": 1,
+        "message": "Phase 1: Fetching stories needing update...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:31",
+        "step": 1,
+        "message": "Found 4 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:31",
+        "step": 2,
+        "message": "Discovering stories with missing audio among 4 stories...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:35",
+        "step": 2,
+        "message": "Found 4 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:36",
+        "step": 2,
+        "message": "Found 2 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:36",
+        "step": 1,
+        "message": "Phase 1: 2 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:36",
+        "step": 3,
+        "message": "[1/2] My Sister's Husband, My Father's Lie",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:27:36",
+        "step": 3,
+        "message": "Starting batch TTS for 'My Sister's Husband, My Father's Lie' \u2014 1 chapters, voice=af_bella (source=existing)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:28:01",
+        "step": 4,
+        "message": "Batch 3b5e67be server disconnected (will retry)",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:28:17",
+        "step": 4,
+        "message": "Error polling batch 3b5e67be: ",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:28:58",
+        "step": 4,
+        "message": "Batch 3b5e67be server disconnected (will retry)",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:29:13",
+        "step": 4,
+        "message": "Batch 3b5e67be server disconnected (will retry)",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:29:54",
+        "step": 4,
+        "message": "Error polling batch 3b5e67be: ",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:30:04",
+        "step": 0,
+        "message": "Stop requested",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:30:05",
+        "step": 4,
+        "message": "Batch polling interrupted \u2014 stop requested",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:30:05",
+        "step": 4,
+        "message": "Stopped mid-poll, 0 chapters already done",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:30:05",
+        "step": 11,
+        "message": "Auto audio session stopped by user",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 00:27:30",
+    "finished_at": null,
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "bfd30e96-859b-4bd4-8f52-d9078dd4e14f",
+        "story_title": "My Sister's Husband, My Father's Lie",
+        "chapters_generated": 0,
+        "chapters_uploaded": 0,
+        "upload_errors": [],
+        "error": ""
+      }
+    ]
+  },
+  {
+    "session_id": "3525b4cc",
+    "phase": "phase1",
+    "test_mode": false,
+    "voice": null,
+    "status": "completed",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "The Alpha's Accidental Surrogate",
+    "progress": {
+      "done": 1,
+      "total": 1
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 1
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+        "title": "The Alpha's Accidental Surrogate",
+        "missingCount": 1,
+        "existingVoice": "af_heart"
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:15:18",
+        "step": 0,
+        "message": "Session 3525b4cc started (phase=phase1, test_mode=False, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:18",
+        "step": 1,
+        "message": "Phase 1: Fetching stories needing update...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:18",
+        "step": 1,
+        "message": "Found 3 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:18",
+        "step": 2,
+        "message": "Discovering stories with missing audio among 3 stories...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:21",
+        "step": 2,
+        "message": "Found 3 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:22",
+        "step": 2,
+        "message": "Found 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:22",
+        "step": 1,
+        "message": "Phase 1: 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:22",
+        "step": 3,
+        "message": "[1/1] The Alpha's Accidental Surrogate",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:15:22",
+        "step": 3,
+        "message": "Starting batch TTS for 'The Alpha's Accidental Surrogate' \u2014 1 chapters, voice=af_heart (source=existing)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:16:08",
+        "step": 4,
+        "message": "Error polling batch eb77f8cc: ",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:16:44",
+        "step": 4,
+        "message": "Error polling batch eb77f8cc: ",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:17:52",
+        "step": 4,
+        "message": "Error polling batch eb77f8cc: Server disconnected without sending a response.",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:18:02",
+        "step": 4,
+        "message": "Error polling batch eb77f8cc: Server disconnected without sending a response.",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:18:54",
+        "step": 4,
+        "message": "Error polling batch eb77f8cc: Server disconnected without sending a response.",
+        "level": "warning"
+      },
+      {
+        "timestamp": "2026-05-29 00:19:25",
+        "step": 7,
+        "message": "Done: generated=1, uploaded=0",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:19:25",
+        "step": 11,
+        "message": "Auto audio session completed successfully",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 00:15:18",
+    "finished_at": "2026-05-29 00:19:25",
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+        "story_title": "The Alpha's Accidental Surrogate",
+        "chapters_generated": 1,
+        "chapters_uploaded": 0,
+        "upload_errors": [],
+        "error": ""
+      }
+    ]
+  },
+  {
+    "session_id": "b5afecd4",
+    "phase": "phase1",
+    "test_mode": false,
+    "voice": null,
+    "status": "completed",
+    "current_step": 11,
+    "current_step_desc": "Saving session log",
+    "current_story": "The Alpha's Accidental Surrogate",
+    "progress": {
+      "done": 1,
+      "total": 1
+    },
+    "chapter_progress": {
+      "done": 0,
+      "total": 1
+    },
+    "stories_missing_audio": [
+      {
+        "storyId": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+        "title": "The Alpha's Accidental Surrogate",
+        "missingCount": 1,
+        "existingVoice": "af_heart"
+      }
+    ],
+    "logs": [
+      {
+        "timestamp": "2026-05-29 00:08:23",
+        "step": 0,
+        "message": "Session b5afecd4 started (phase=phase1, test_mode=False, voice=random)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:23",
+        "step": 1,
+        "message": "Phase 1: Fetching stories needing update...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:24",
+        "step": 1,
+        "message": "Found 3 stories needing update",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:24",
+        "step": 2,
+        "message": "Discovering stories with missing audio among 3 stories...",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:26",
+        "step": 2,
+        "message": "Found 3 stories to check",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:27",
+        "step": 2,
+        "message": "Found 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:27",
+        "step": 1,
+        "message": "Phase 1: 1 stories with missing audio",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:27",
+        "step": 3,
+        "message": "[1/1] The Alpha's Accidental Surrogate",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:27",
+        "step": 3,
+        "message": "Starting batch TTS for 'The Alpha's Accidental Surrogate' \u2014 1 chapters, voice=af_heart (source=existing)",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:27",
+        "step": 4,
+        "message": "Failed to start batch job: 'AsyncClient' object does not support the context manager protocol",
+        "level": "error"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:27",
+        "step": 7,
+        "message": "Done: generated=0, uploaded=0",
+        "level": "info"
+      },
+      {
+        "timestamp": "2026-05-29 00:08:27",
+        "step": 11,
+        "message": "Auto audio session completed successfully",
+        "level": "info"
+      }
+    ],
+    "started_at": "2026-05-29 00:08:23",
+    "finished_at": "2026-05-29 00:08:27",
+    "error": "",
+    "story_results": [
+      {
+        "story_id": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+        "story_title": "The Alpha's Accidental Surrogate",
+        "chapters_generated": 0,
+        "chapters_uploaded": 0,
+        "upload_errors": [],
+        "error": "'AsyncClient' object does not support the context manager protocol"
+      }
+    ]
+  },
+  {
     "session_id": "9025c76a",
     "phase": "phase3",
     "test_mode": true,

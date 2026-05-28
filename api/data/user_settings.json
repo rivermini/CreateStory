@@ -5,10 +5,9 @@
   "crawl_default_range_from": 1,
   "crawl_default_range_to": 10,
   "crawl_auto_max_chapters": false,
-  "auto_audio_rest_seconds": 30,
+  "auto_audio_rest_seconds": 2,
   "auto_audio_external_api_base": "",
   "auto_audio_test_story_ids": [
-    "ce6176c4-aeb5-4ee1-847f-ee56df64a386",
-    "07d59e98-d693-429b-a9d1-53ce2fd89e55"
+    "c0574ba6-e46d-4086-8ef8-c413f3eac9aa"
   ]
 }

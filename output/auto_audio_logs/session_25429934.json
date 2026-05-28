@@ -1,0 +1,55 @@
+{
+  "session_id": "25429934",
+  "phase": "phase1",
+  "test_mode": true,
+  "voice": null,
+  "status": "error",
+  "current_step": 1,
+  "current_step_desc": "Discovering missing audio in stories needing update",
+  "current_story": "",
+  "progress": {
+    "done": 0,
+    "total": 0
+  },
+  "chapter_progress": {
+    "done": 0,
+    "total": 0
+  },
+  "stories_missing_audio": [],
+  "logs": [
+    {
+      "timestamp": "2026-05-29 00:53:41",
+      "step": 0,
+      "message": "Session 25429934 started (phase=phase1, test_mode=True, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:53:41",
+      "step": 0,
+      "message": "Test mode: using 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:53:41",
+      "step": 1,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:53:41",
+      "step": 1,
+      "message": "Found 1 stories needing update",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:53:42",
+      "step": 0,
+      "message": "Fatal error: cannot access local variable 'needing_update_raw' where it is not associated with a value",
+      "level": "error"
+    }
+  ],
+  "started_at": "2026-05-29 00:53:41",
+  "finished_at": "2026-05-29 00:53:42",
+  "error": "cannot access local variable 'needing_update_raw' where it is not associated with a value",
+  "story_results": []
+}

@@ -1,0 +1,155 @@
+{
+  "session_id": "522f7a0b",
+  "phase": "phase1",
+  "test_mode": false,
+  "voice": null,
+  "status": "stopped",
+  "current_step": 11,
+  "current_step_desc": "Saving session log",
+  "current_story": "My Sister's Husband, My Father's Lie",
+  "progress": {
+    "done": 1,
+    "total": 2
+  },
+  "chapter_progress": {
+    "done": 0,
+    "total": 2
+  },
+  "stories_missing_audio": [
+    {
+      "storyId": "bfd30e96-859b-4bd4-8f52-d9078dd4e14f",
+      "title": "My Sister's Husband, My Father's Lie",
+      "missingCount": 1,
+      "existingVoice": "af_bella"
+    },
+    {
+      "storyId": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+      "title": "The Alpha's Accidental Surrogate",
+      "missingCount": 1,
+      "existingVoice": "af_heart"
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-05-29 00:27:30",
+      "step": 0,
+      "message": "Session 522f7a0b started (phase=phase1, test_mode=False, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:30",
+      "step": 1,
+      "message": "Phase 1: Fetching stories needing update...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:31",
+      "step": 1,
+      "message": "Found 4 stories needing update",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:31",
+      "step": 2,
+      "message": "Discovering stories with missing audio among 4 stories...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:35",
+      "step": 2,
+      "message": "Found 4 stories to check",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:36",
+      "step": 2,
+      "message": "Found 2 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:36",
+      "step": 1,
+      "message": "Phase 1: 2 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:36",
+      "step": 3,
+      "message": "[1/2] My Sister's Husband, My Father's Lie",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:27:36",
+      "step": 3,
+      "message": "Starting batch TTS for 'My Sister's Husband, My Father's Lie' \u2014 1 chapters, voice=af_bella (source=existing)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:28:01",
+      "step": 4,
+      "message": "Batch 3b5e67be server disconnected (will retry)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:28:17",
+      "step": 4,
+      "message": "Error polling batch 3b5e67be: ",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:28:58",
+      "step": 4,
+      "message": "Batch 3b5e67be server disconnected (will retry)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:29:13",
+      "step": 4,
+      "message": "Batch 3b5e67be server disconnected (will retry)",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:29:54",
+      "step": 4,
+      "message": "Error polling batch 3b5e67be: ",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:30:04",
+      "step": 0,
+      "message": "Stop requested",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:30:05",
+      "step": 4,
+      "message": "Batch polling interrupted \u2014 stop requested",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:30:05",
+      "step": 4,
+      "message": "Stopped mid-poll, 0 chapters already done",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:30:05",
+      "step": 11,
+      "message": "Auto audio session stopped by user",
+      "level": "info"
+    }
+  ],
+  "started_at": "2026-05-29 00:27:30",
+  "finished_at": null,
+  "error": "",
+  "story_results": [
+    {
+      "story_id": "bfd30e96-859b-4bd4-8f52-d9078dd4e14f",
+      "story_title": "My Sister's Husband, My Father's Lie",
+      "chapters_generated": 0,
+      "chapters_uploaded": 0,
+      "upload_errors": [],
+      "error": ""
+    }
+  ]
+}

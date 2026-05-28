@@ -1,0 +1,140 @@
+{
+  "session_id": "60892802",
+  "phase": "phase1",
+  "test_mode": true,
+  "voice": null,
+  "status": "completed",
+  "current_step": 11,
+  "current_step_desc": "Saving session log",
+  "current_story": "Test Story c0574ba6",
+  "progress": {
+    "done": 1,
+    "total": 1
+  },
+  "chapter_progress": {
+    "done": 0,
+    "total": 2
+  },
+  "stories_missing_audio": [
+    {
+      "storyId": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+      "title": "Test Story c0574ba6",
+      "missingCount": 2,
+      "existingVoice": null
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-05-29 00:55:36",
+      "step": 0,
+      "message": "Session 60892802 started (phase=phase1, test_mode=True, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:36",
+      "step": 0,
+      "message": "Test mode: using 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:36",
+      "step": 1,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:36",
+      "step": 1,
+      "message": "Found 1 stories needing update",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:36",
+      "step": 2,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:37",
+      "step": 2,
+      "message": "Found 1 stories to check",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:38",
+      "step": 2,
+      "message": "Found 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:38",
+      "step": 1,
+      "message": "Phase 1: 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:38",
+      "step": 3,
+      "message": "[1/1] Test Story c0574ba6",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:38",
+      "step": 3,
+      "message": "Processing 'Test Story c0574ba6' \u2014 2 chapters, voice=af_heart (source=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:55:42",
+      "step": 4,
+      "message": "Chapter 1: TTS job 95f945c9 started",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:56:07",
+      "step": 4,
+      "message": "Chapter 1: TTS job failed or timed out",
+      "level": "error"
+    },
+    {
+      "timestamp": "2026-05-29 00:56:10",
+      "step": 4,
+      "message": "Chapter 2: TTS job 5284ad0c started",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:56:17",
+      "step": 4,
+      "message": "Chapter 2: TTS job failed or timed out",
+      "level": "error"
+    },
+    {
+      "timestamp": "2026-05-29 00:56:17",
+      "step": 7,
+      "message": "Done: generated=0, uploaded=0",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:56:17",
+      "step": 11,
+      "message": "Auto audio session completed successfully",
+      "level": "info"
+    }
+  ],
+  "started_at": "2026-05-29 00:55:36",
+  "finished_at": "2026-05-29 00:56:17",
+  "error": "",
+  "story_results": [
+    {
+      "story_id": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+      "story_title": "Test Story c0574ba6",
+      "chapters_generated": 0,
+      "chapters_uploaded": 0,
+      "upload_errors": [
+        "Chapter 1: generation failed",
+        "Chapter 2: generation failed"
+      ],
+      "error": "2 chapter(s) failed"
+    }
+  ]
+}

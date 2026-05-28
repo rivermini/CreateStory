@@ -1,0 +1,167 @@
+{
+  "session_id": "a12bff3a",
+  "phase": "phase1",
+  "test_mode": true,
+  "voice": null,
+  "status": "completed",
+  "current_step": 11,
+  "current_step_desc": "Saving session log",
+  "current_story": "Test Story c0574ba6",
+  "progress": {
+    "done": 1,
+    "total": 1
+  },
+  "chapter_progress": {
+    "done": 2,
+    "total": 2
+  },
+  "stories_missing_audio": [
+    {
+      "storyId": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+      "title": "Test Story c0574ba6",
+      "missingCount": 2,
+      "existingVoice": null
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-05-29 01:02:04",
+      "step": 0,
+      "message": "Session a12bff3a started (phase=phase1, test_mode=True, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:04",
+      "step": 0,
+      "message": "Test mode: using 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:04",
+      "step": 1,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:04",
+      "step": 1,
+      "message": "Found 1 stories needing update",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:04",
+      "step": 2,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:06",
+      "step": 2,
+      "message": "Found 1 stories to check",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:07",
+      "step": 2,
+      "message": "Found 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:07",
+      "step": 1,
+      "message": "Phase 1: 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:07",
+      "step": 3,
+      "message": "[1/1] Test Story c0574ba6",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:07",
+      "step": 3,
+      "message": "Starting batch TTS for 'Test Story c0574ba6' \u2014 2 chapters, voice=af_heart (source=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:53",
+      "step": 6,
+      "message": "Compressed: 1321004 -> 162082 bytes (87.7% reduction, 48kbps opus)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:53",
+      "step": 6,
+      "message": "Compressed chapter 5ecd3485-d835-4d07-89f4-866a290a7c94: 1321004 -> 162082 bytes",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:56",
+      "step": 6,
+      "message": "Uploaded chapter 5ecd3485-d835-4d07-89f4-866a290a7c94 audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:56",
+      "step": 9,
+      "message": "Deleted 1 local audio file(s): ['D:\\\\Developer\\\\Nova\\\\CreateStoryMicroService\\\\BedReadVoices\\\\output\\\\bedread\\\\091b7fe8\\\\Test Story c0574ba6_Heart_001.wav']",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:57",
+      "step": 6,
+      "message": "Compressed: 535596 -> 66357 bytes (87.6% reduction, 48kbps opus)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:57",
+      "step": 6,
+      "message": "Compressed chapter 8b3e5504-c57a-41bc-ae49-bb751d585d1a: 535596 -> 66357 bytes",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:59",
+      "step": 6,
+      "message": "Uploaded chapter 8b3e5504-c57a-41bc-ae49-bb751d585d1a audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:59",
+      "step": 9,
+      "message": "Deleted 1 local audio file(s): ['D:\\\\Developer\\\\Nova\\\\CreateStoryMicroService\\\\BedReadVoices\\\\output\\\\bedread\\\\091b7fe8\\\\Test Story c0574ba6_Heart_002.wav']",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:59",
+      "step": 9,
+      "message": "Removed batch output directory: D:\\Developer\\Nova\\CreateStoryMicroService\\BedReadVoices\\output\\bedread\\091b7fe8 (batch_id=091b7fe8)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:59",
+      "step": 7,
+      "message": "Done: generated=2, uploaded=2",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 01:02:59",
+      "step": 11,
+      "message": "Auto audio session completed successfully",
+      "level": "info"
+    }
+  ],
+  "started_at": "2026-05-29 01:02:04",
+  "finished_at": "2026-05-29 01:02:59",
+  "error": "",
+  "story_results": [
+    {
+      "story_id": "c0574ba6-e46d-4086-8ef8-c413f3eac9aa",
+      "story_title": "Test Story c0574ba6",
+      "chapters_generated": 2,
+      "chapters_uploaded": 2,
+      "upload_errors": [],
+      "error": ""
+    }
+  ]
+}

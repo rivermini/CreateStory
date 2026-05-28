@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import platform
+import random
+import shutil
+import subprocess
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -66,6 +71,12 @@ def _get_novelcrawler_url() -> str:
 def _get_bedreadvoices_url() -> str:
     import os
     return os.environ.get("SERVICE_URLS_BedReadVoices", "http://localhost:8001").rstrip("/")
+
+
+def _get_bedreadvoices_output_base() -> Path:
+    import os
+    base = os.environ.get("BEDREADVOICES_ROOT", "D:\\Developer\\Nova\\CreateStoryMicroService\\BedReadVoices")
+    return Path(base) / "output" / "bedread"
 
 
 def _get_drivesync_url() -> str:
@@ -275,7 +286,7 @@ class AutoAudioService:
     def _bedread_post(self, path: str, json_data: Optional[dict] = None) -> dict:
         """POST to BedReadVoices service."""
         url = f"{_get_bedreadvoices_url()}{path}"
-        with httpx.AsyncClient(timeout=300.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             resp = client.post(url, json=json_data or {})
             resp.raise_for_status()
             return resp.json()
@@ -283,7 +294,7 @@ class AutoAudioService:
     def _bedread_get(self, path: str, params: Optional[dict] = None) -> dict | None:
         """GET from BedReadVoices service."""
         url = f"{_get_bedreadvoices_url()}{path}"
-        with httpx.AsyncClient(timeout=30.0) as client:
+        with httpx.Client(timeout=30.0) as client:
             resp = client.get(url, params=params or {})
             if resp.status_code == 404:
                 return None
@@ -293,7 +304,7 @@ class AutoAudioService:
     def _drivesync_get(self, path: str, params: Optional[dict] = None) -> dict | None:
         """GET from BedReadDriveSync service."""
         url = f"{_get_drivesync_url()}{path}"
-        with httpx.AsyncClient(timeout=30.0) as client:
+        with httpx.Client(timeout=30.0) as client:
             resp = client.get(url, params=params or {})
             if resp.status_code == 404:
                 return None
@@ -303,10 +314,71 @@ class AutoAudioService:
     def _drivesync_post(self, path: str, json_data: Optional[dict] = None) -> dict:
         """POST to BedReadDriveSync service."""
         url = f"{_get_drivesync_url()}{path}"
-        with httpx.AsyncClient(timeout=300.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             resp = client.post(url, json=json_data or {})
             resp.raise_for_status()
             return resp.json()
+
+    def _fetch_chapter_content(self, story_id: str, chapter_num: int) -> Optional[tuple[str, str]]:
+        """
+        Fetch a single chapter's content from the external API.
+        Returns (title, plain_text) or None if not found.
+        """
+        try:
+            data = self._external_get(f"/api/v1/story/{story_id}/chapter/{chapter_num}")
+            if isinstance(data, dict):
+                data = data.get("data", data)
+                content = data.get("content") or data.get("plainContent") or data.get("plain_content") or ""
+                title = data.get("title", f"Chapter {chapter_num}")
+                return title, content
+            return None
+        except Exception:
+            return None
+
+    def _tts_speak(self, text: str, voice: str, lang: str, speed: float, format: str) -> Optional[str]:
+        """Call BedReadVoices /api/tts/speak to start a TTS job. Returns job_id or None."""
+        try:
+            resp = self._bedread_post("/api/tts/speak", {
+                "text": text,
+                "voice": voice,
+                "lang": lang,
+                "speed": speed,
+                "format": format,
+            })
+            return resp.get("job_id")
+        except Exception:
+            return None
+
+    def _tts_get_job(self, job_id: str) -> Optional[dict]:
+        """Get TTS job status from BedReadVoices. Returns job dict or None."""
+        try:
+            return self._bedread_get(f"/api/tts/jobs/{job_id}")
+        except Exception:
+            return None
+
+    def _tts_poll_until_done(self, job_id: str, timeout: int = 3600) -> tuple[bool, Optional[Path]]:
+        """
+        Poll a TTS job until completed or timeout.
+        Returns (success, output_path).
+        """
+        start = time.time()
+        while time.time() - start < timeout:
+            job = self._tts_get_job(job_id)
+            if job is None:
+                return False, None
+            status = job.get("status", "unknown")
+            if status == "completed":
+                output_dir_str = job.get("output_dir")
+                output_filename = job.get("output_filename", "")
+                if output_dir_str and output_filename:
+                    path = Path(output_dir_str) / output_filename
+                    if path.exists():
+                        return True, path
+                return False, None
+            elif status in ("failed", "cancelled"):
+                return False, None
+            time.sleep(2)
+        return False, None
 
     def _persist_sessions(self, sessions: list[dict]) -> None:
         try:
@@ -508,13 +580,48 @@ class AutoAudioService:
         session.add_log(2, f"Found {len(missing_audio_stories)} stories with missing audio{' (stopped early)' if stopped else ''}")
         return missing_audio_stories
 
+    def _generate_audio_for_chapter(
+        self,
+        session: AutoAudioSession,
+        story: StoryMissingAudio,
+        chapter: MissingChapterInfo,
+        voice: str,
+    ) -> tuple[bool, Optional[Path]]:
+        """
+        Generate audio for a single chapter: fetch content + TTS + poll.
+        Returns (success, local_file_path).
+        """
+        chapter_num = chapter.chapter_index
+        session.set_step(4, f"Generating chapter {chapter_num}: {chapter.title}", story=session.current_story)
+
+        chapter_data = self._fetch_chapter_content(story.story_id, chapter_num)
+        if chapter_data is None:
+            session.add_log(4, f"Chapter {chapter_num}: failed to fetch content", level="error")
+            return False, None
+        title, content = chapter_data
+        if not content or not content.strip():
+            session.add_log(4, f"Chapter {chapter_num}: empty content", level="error")
+            return False, None
+
+        job_id = self._tts_speak(content, voice, "en-us", 0.69, "wav")
+        if not job_id:
+            session.add_log(4, f"Chapter {chapter_num}: failed to start TTS job", level="error")
+            return False, None
+
+        session.add_log(4, f"Chapter {chapter_num}: TTS job {job_id} started")
+        success, output_path = self._tts_poll_until_done(job_id, timeout=3600)
+        if not success or output_path is None:
+            session.add_log(4, f"Chapter {chapter_num}: TTS job failed or timed out", level="error")
+            return False, None
+
+        session.add_log(4, f"Chapter {chapter_num}: audio generated ({output_path.name})")
+        return True, output_path
+
     def _start_batch_job_for_story(
         self,
         session: AutoAudioSession,
         story: StoryMissingAudio,
     ) -> tuple[Optional[str], Optional[str], str]:
-        import random
-
         chapter_numbers = [c.chapter_index for c in story.missing_chapters]
         if not chapter_numbers:
             return None, None, "No chapters to generate"
@@ -528,80 +635,150 @@ class AutoAudioService:
             resp = self._bedread_post("/api/bedread/generate", {
                 "story_id": story.story_id,
                 "story_title": story.story_title,
-                "chapter_start": min(chapter_numbers),
-                "chapter_end": max(chapter_numbers),
+                "chapter_numbers": sorted(chapter_numbers),
                 "voice": voice,
                 "lang": "en-us",
                 "speed": 0.69,
                 "format": "wav",
+                "from_auto_mode": True,
             })
-            batch_id = resp.get("batch_id")
+            batch_id = resp.get("batch_id", "")
             return batch_id, voice, ""
-        except httpx.HTTPStatusError as exc:
-            return None, None, f"HTTP {exc.response.status_code}: {exc.response.text}"
         except Exception as exc:
             return None, None, str(exc)
 
     def _poll_batch_until_done(self, session: AutoAudioSession, batch_id: str, timeout_seconds: int = 3600) -> tuple[bool, list[dict]]:
-        import asyncio
+        start = time.time()
+        completed_files: list[dict] = []
 
-        async def _poll():
-            start = time.time()
-            completed_files: list[dict] = []
+        while time.time() - start < timeout_seconds:
+            if session._stopping:
+                session.add_log(4, "Batch polling interrupted — stop requested, cancelling batch job", level="warning")
+                try:
+                    self._bedread_delete(f"/api/bedread/jobs/{batch_id}")
+                except Exception:
+                    pass
+                return False, completed_files
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                base = _get_bedreadvoices_url()
-                while time.time() - start < timeout_seconds:
-                    if session._stopping:
-                        session.add_log(4, "Batch polling interrupted — stop requested", level="warning")
-                        try:
-                            await client.delete(f"{base}/api/bedread/jobs/{batch_id}")
-                        except Exception:
-                            pass
-                        return False, completed_files
+            job = self._bedread_get(f"/api/bedread/jobs/{batch_id}")
+            if job is None:
+                session.add_log(4, f"Batch job {batch_id} not found", level="error")
+                return False, completed_files
 
-                    try:
-                        resp = await client.get(f"{base}/api/bedread/jobs/{batch_id}")
-                        if resp.status_code == 404:
-                            session.add_log(4, f"Batch job {batch_id} not found", level="error")
-                            return False, completed_files
-                        resp.raise_for_status()
-                        job = resp.json()
-                    except Exception as exc:
-                        session.add_log(4, f"Error polling batch {batch_id}: {exc}", level="warning")
-                        await asyncio.sleep(5)
-                        continue
+            statuses = [c.get("status") for c in job.get("chapters", [])]
+            done = sum(1 for s in statuses if s == "completed")
+            total = len(statuses)
 
-                    statuses = [c.get("status") for c in job.get("chapters", [])]
-                    done = sum(1 for s in statuses if s == "completed")
-                    total = len(statuses)
+            if all(s in ("completed", "failed") for s in statuses):
+                for ch in job.get("chapters", []):
+                    if ch.get("status") == "completed" and ch.get("output_filename"):
+                        completed_files.append({
+                            "chapter_id": ch.get("chapter_id", ""),
+                            "chapter_index": ch.get("chapter_number"),
+                            "filename": ch.get("output_filename"),
+                        })
+                return True, completed_files
 
-                    if all(s in ("completed", "failed") for s in statuses):
-                        for ch in job.get("chapters", []):
-                            if ch.get("status") == "completed" and ch.get("output_filename"):
-                                completed_files.append({
-                                    "chapter_id": ch.get("chapter_id", ""),
-                                    "chapter_index": ch.get("chapter_number"),
-                                    "filename": ch.get("output_filename"),
-                                })
-                        return True, completed_files
+            session.set_step(5, f"Generating audio ({done}/{total})", story=session.current_story)
+            time.sleep(5)
 
-                    session.set_step(5, f"Generating audio ({done}/{total})", story=session.current_story)
-                    await asyncio.sleep(5)
+        session.add_log(4, f"Batch job {batch_id} timed out after {timeout_seconds}s", level="error")
+        return False, completed_files
 
-            session.add_log(4, f"Batch job {batch_id} timed out after {timeout_seconds}s", level="error")
-            return False, completed_files
+    def _bedread_delete(self, path: str) -> dict:
+        url = f"{_get_bedreadvoices_url()}{path}"
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.delete(url)
+            if resp.status_code == 404:
+                return {}
+            resp.raise_for_status()
+            return resp.json()
 
+    def _get_batch_output_dir(self, batch_id: str) -> Optional[Path]:
+        base = _get_bedreadvoices_output_base()
+        output_dir = base / batch_id
+        if output_dir.exists():
+            return output_dir
+        return None
+
+    def _process_story(self, session: AutoAudioSession, story: StoryMissingAudio) -> StoryResult:
+        result = StoryResult(
+            story_id=story.story_id,
+            story_title=story.story_title,
+            chapters_generated=0,
+            chapters_uploaded=0,
+            upload_errors=[],
+        )
+
+        batch_id, voice, err = self._start_batch_job_for_story(session, story)
+        if not batch_id:
+            result.error = err
+            session.add_log(4, f"Failed to start batch job: {err}", level="error")
+            return result
+
+        session.set_step(5, f"Polling batch job for {story.story_title}", story=story.story_title)
+        success, completed_files = self._poll_batch_until_done(session, batch_id)
+
+        if session._stopping:
+            result.chapters_generated = len(completed_files)
+            session.add_log(4, f"Stopped mid-poll, {len(completed_files)} chapters already done", level="warning")
+            return result
+
+        result.chapters_generated = len(completed_files)
+
+        if not success and not completed_files:
+            result.error = "Batch job failed or timed out"
+            session.add_log(4, f"Batch job for '{story.story_title}' failed", level="error")
+            return result
+
+        output_dir = self._get_batch_output_dir(batch_id)
+
+        session.set_step(6, f"Uploading {len(completed_files)} audio files for {story.story_title}", story=story.story_title)
+
+        chapter_id_by_index: dict[int, str] = {
+            c.chapter_index: c.chapter_id for c in story.missing_chapters
+        }
+
+        for i, file_info in enumerate(completed_files):
+            if session._stopping:
+                break
+
+            session.set_step(6, f"Uploading ({i + 1}/{len(completed_files)}) {story.story_title}", story=story.story_title)
+
+            chapter_id = chapter_id_by_index.get(int(file_info.get("chapter_index", 0) or 0), "")
+
+            local_path: Optional[Path] = None
+            if output_dir:
+                local_path = output_dir / file_info["filename"]
+                if local_path is not None and not local_path.exists():
+                    local_path = None
+
+            if local_path and local_path.exists():
+                ok = self._upload_audio_to_story(
+                    session, story.story_id,
+                    chapter_id,
+                    local_path,
+                    voice,
+                )
+                if ok:
+                    result.chapters_uploaded += 1
+                    self._delete_local_audio_files(session, local_path)
+                else:
+                    result.upload_errors.append(f"Chapter {file_info['chapter_index']}: upload failed")
+
+        if output_dir:
+            self._delete_batch_output_dir(session, batch_id, output_dir)
+
+        return result
+
+    def _delete_batch_output_dir(self, session: AutoAudioSession, batch_id: str, output_dir: Path) -> None:
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(_poll())
-            finally:
-                loop.close()
+            if output_dir.exists():
+                shutil.rmtree(output_dir)
+                session.add_log(9, f"Removed batch output directory: {output_dir} (batch_id={batch_id})")
         except Exception as exc:
-            session.add_log(4, f"Batch poll error: {exc}", level="error")
-            return False, []
+            session.add_log(9, f"Failed to remove batch directory {output_dir}: {exc}", level="warning")
+
 
     def _upload_audio_to_story(
         self,
@@ -657,22 +834,48 @@ class AutoAudioService:
             session.add_log(6, f"Error uploading chapter {chapter_id}: {exc}", level="error")
             return False
 
+    MAX_AUDIO_SIZE_BYTES = 20 * 1024 * 1024
+    TARGET_BITRATE_KBPS = 48
+    OPUS_EXTENSION = "opus"
+
+    def _find_ffmpeg(self) -> Optional[Path]:
+        """Find FFmpeg binary. Checks vendor dir then system PATH."""
+        import shutil as _sh
+        # 1. Try vendor/ffmpeg bundled alongside this service
+        project_root = Path(__file__).parent.parent.parent.parent
+        vendor_ffmpeg = project_root / "vendor" / "ffmpeg" / "bin" / "ffmpeg.exe"
+        if vendor_ffmpeg.exists():
+            return vendor_ffmpeg
+        # 2. Try vendor/ffmpeg next to BedReadVoices
+        brv_root = project_root / "BedReadVoices"
+        brv_ffmpeg = brv_root / "vendor" / "ffmpeg" / "bin" / "ffmpeg.exe"
+        if brv_ffmpeg.exists():
+            return brv_ffmpeg
+        # 3. Try system PATH
+        path = _sh.which("ffmpeg")
+        if path:
+            return Path(path)
+        return None
+
     def _compress_audio_to_opus(
         self,
         session: AutoAudioSession,
         audio_path: Path,
     ) -> "_CompressedAudio":
-        """Compress a WAV file to Opus using FFmpeg bundled in CreateStory_BE."""
-        import subprocess
+        """
+        Compress a WAV file to Opus using FFmpeg — matches old BE behavior exactly.
 
+        Always converts to opus regardless of input size. Uses the same FFmpeg args
+        as CreateStory_BE/api/services/audio_compress_service.py:
+            -vn -map_metadata -1 -c:a libopus -b:a 48k -vbr on
+            -compression_level 10 -ac 1
+        """
         audio_bytes = audio_path.read_bytes()
         original_size = len(audio_bytes)
 
-        MAX_AUDIO_SIZE_BYTES = 20 * 1024 * 1024
-        TARGET_BITRATE_KBPS = 48
-        OPUS_EXTENSION = "opus"
-
-        if original_size <= MAX_AUDIO_SIZE_BYTES:
+        ffmpeg_path = self._find_ffmpeg()
+        if not ffmpeg_path:
+            session.add_log(6, "FFmpeg not found, uploading original audio as-is", level="warning")
             return _CompressedAudio(
                 data=audio_bytes,
                 name=audio_path.name,
@@ -681,25 +884,22 @@ class AutoAudioService:
                 size=original_size,
             )
 
-        project_root = Path(__file__).parent.parent.parent.parent / "BedReadVoices"
-        ffmpeg_path = project_root / "vendor" / "ffmpeg" / "bin" / "ffmpeg.exe"
-        if not ffmpeg_path.exists():
-            import shutil
-            ffmpeg_path = Path(shutil.which("ffmpeg") or "")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            output_path = tmp_path / f"{audio_path.stem}.{self.OPUS_EXTENSION}"
 
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".opus", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-
-        try:
             cmd = [
                 str(ffmpeg_path),
                 "-y",
                 "-i", str(audio_path),
+                "-vn",
+                "-map_metadata", "-1",
                 "-c:a", "libopus",
-                "-b:a", f"{TARGET_BITRATE_KBPS}k",
+                "-b:a", f"{self.TARGET_BITRATE_KBPS}k",
                 "-vbr", "on",
-                str(tmp_path),
+                "-compression_level", "10",
+                "-ac", "1",
+                str(output_path),
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
@@ -712,32 +912,51 @@ class AutoAudioService:
                     size=original_size,
                 )
 
-            opus_data = tmp_path.read_bytes()
-            opus_size = len(opus_data)
-            safe_name = audio_path.stem + ".opus"
-            session.add_log(6, f"Compressed: {original_size} -> {opus_size} bytes ({TARGET_BITRATE_KBPS}kbps opus)")
+            if not output_path.exists():
+                session.add_log(6, "FFmpeg did not produce output file", level="warning")
+                return _CompressedAudio(
+                    data=audio_bytes,
+                    name=audio_path.name,
+                    original=original_size,
+                    compressed=original_size,
+                    size=original_size,
+                )
+
+            compressed_size = output_path.stat().st_size
+
+            if compressed_size > self.MAX_AUDIO_SIZE_BYTES:
+                session.add_log(
+                    6,
+                    f"Compressed audio still exceeds {self.MAX_AUDIO_SIZE_BYTES} bytes "
+                    f"({compressed_size} bytes, original {original_size})",
+                    level="error",
+                )
+                return _CompressedAudio(
+                    data=audio_bytes,
+                    name=audio_path.name,
+                    original=original_size,
+                    compressed=original_size,
+                    size=original_size,
+                )
+
+            safe_name = audio_path.stem + f".{self.OPUS_EXTENSION}"
+            opus_data = output_path.read_bytes()
+            reduction_pct = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
+            session.add_log(
+                6,
+                f"Compressed: {original_size} -> {compressed_size} bytes "
+                f"({reduction_pct:.1f}% reduction, {self.TARGET_BITRATE_KBPS}kbps opus)",
+            )
             return _CompressedAudio(
                 data=opus_data,
                 name=safe_name,
                 original=original_size,
-                compressed=opus_size,
-                size=opus_size,
+                compressed=compressed_size,
+                size=compressed_size,
             )
-        finally:
-            try:
-                tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-
-    def _get_batch_output_dir(self, batch_id: str) -> Optional[Path]:
-        """Get batch output directory from BedReadVoices service."""
-        service_root = Path(__file__).parent.parent.parent.parent / "BedReadVoices"
-        output_dir = service_root / "output" / "tts" / batch_id
-        if output_dir.exists():
-            return output_dir
-        return None
 
     def _delete_local_audio_files(self, session: AutoAudioSession, generated_file: Path) -> None:
+        """Delete the local TTS output file after successful upload."""
         deleted = []
         try:
             if generated_file.exists():
@@ -747,99 +966,8 @@ class AutoAudioService:
             session.add_log(9, f"Failed to delete generated file {generated_file}: {exc}", level="warning")
             return
 
-        for temp_pattern in ("*.opus", "*.ogg", "*.compressed"):
-            for temp_file in generated_file.parent.glob(temp_pattern):
-                if temp_file.name in [Path(p).name for p in deleted]:
-                    continue
-                try:
-                    temp_file.unlink()
-                    deleted.append(str(temp_file))
-                except Exception as exc:
-                    session.add_log(9, f"Failed to delete temp file {temp_file}: {exc}", level="warning")
-
         if deleted:
-            session.add_log(9, f"Deleted {len(deleted)} local audio file(s)")
-
-    def _delete_batch_output_dir(self, session: AutoAudioSession, batch_id: str, output_dir: Path) -> None:
-        import shutil
-        try:
-            if output_dir.exists():
-                shutil.rmtree(output_dir)
-                session.add_log(9, f"Removed batch output directory: {output_dir}")
-        except Exception as exc:
-            session.add_log(9, f"Failed to remove batch directory {output_dir}: {exc}", level="warning")
-
-    def _process_story(self, session: AutoAudioSession, story: StoryMissingAudio) -> StoryResult:
-        from typing import cast
-
-        result = StoryResult(
-            story_id=story.story_id,
-            story_title=story.story_title,
-            chapters_generated=0,
-            chapters_uploaded=0,
-            upload_errors=[],
-        )
-
-        batch_id, voice, err = self._start_batch_job_for_story(session, story)
-        if not batch_id:
-            result.error = err
-            session.add_log(4, f"Failed to start batch job: {err}", level="error")
-            return result
-
-        session.set_step(5, f"Polling batch job for {story.story_title}", story=story.story_title)
-        success, completed_files = self._poll_batch_until_done(session, batch_id)
-
-        if session._stopping:
-            result.chapters_generated = len(completed_files)
-            session.add_log(4, f"Stopped mid-poll, {len(completed_files)} chapters already done", level="warning")
-            return result
-
-        result.chapters_generated = len(completed_files)
-
-        if not success and not completed_files:
-            result.error = "Batch job failed or timed out"
-            session.add_log(4, f"Batch job for '{story.story_title}' failed", level="error")
-            return result
-
-        output_dir = self._get_batch_output_dir(batch_id)
-
-        session.set_step(6, f"Uploading {len(completed_files)} audio files for {story.story_title}", story=story.story_title)
-
-        chapter_id_by_index: dict[int, str] = {
-            c.chapter_index: c.chapter_id for c in story.missing_chapters
-        }
-
-        for i, file_info in enumerate(completed_files):
-            if session._stopping:
-                break
-
-            session.set_step(6, f"Uploading ({i + 1}/{len(completed_files)}) {story.story_title}", story=story.story_title)
-
-            chapter_id = chapter_id_by_index.get(cast(int, file_info.get("chapter_index", 0) or 0), "")
-
-            local_path: Optional[Path] = None
-            if output_dir:
-                local_path = output_dir / file_info["filename"]
-                if local_path is not None and not local_path.exists():
-                    local_path = None
-
-            if local_path and local_path.exists():
-                ok = self._upload_audio_to_story(
-                    session, story.story_id,
-                    chapter_id,
-                    local_path,
-                    voice,
-                )
-                if ok:
-                    result.chapters_uploaded += 1
-                    self._delete_local_audio_files(session, local_path)
-                else:
-                    result.upload_errors.append(f"Chapter {file_info['chapter_index']}: upload failed")
-
-        if output_dir:
-            self._delete_batch_output_dir(session, batch_id, output_dir)
-
-        return result
+            session.add_log(9, f"Deleted {len(deleted)} local audio file(s): {deleted}")
 
     def _run_session(self, session: AutoAudioSession) -> None:
         session.started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -868,6 +996,7 @@ class AutoAudioService:
             if session.phase == "phase1":
                 if session.test_mode:
                     needing_update_ids = set(test_story_ids)
+                    needing_update_raw: list[dict] = []
                     session.add_log(1, f"Test mode: checking {len(needing_update_ids)} test story IDs")
                 else:
                     session.set_step(1, "Fetching stories needing update")
@@ -890,7 +1019,9 @@ class AutoAudioService:
                     return
 
                 session.set_step(1, "Discovering missing audio in stories needing update")
-                phase1_meta = {str(s.get("storyId") or s.get("story_id") or s.get("id")): s for s in needing_update_raw}
+                phase1_meta: dict[str, dict] = {}
+                if needing_update_raw:
+                    phase1_meta = {s.get("storyId") or s.get("story_id") or s.get("id"): s for s in needing_update_raw}
                 phase1_missing = self._discover_stories_missing_audio(session, list(needing_update_ids), phase1_meta)
                 session.add_log(1, f"Phase 1: {len(phase1_missing)} stories with missing audio")
 

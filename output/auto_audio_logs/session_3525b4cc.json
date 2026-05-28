@@ -1,0 +1,137 @@
+{
+  "session_id": "3525b4cc",
+  "phase": "phase1",
+  "test_mode": false,
+  "voice": null,
+  "status": "completed",
+  "current_step": 11,
+  "current_step_desc": "Saving session log",
+  "current_story": "The Alpha's Accidental Surrogate",
+  "progress": {
+    "done": 1,
+    "total": 1
+  },
+  "chapter_progress": {
+    "done": 0,
+    "total": 1
+  },
+  "stories_missing_audio": [
+    {
+      "storyId": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+      "title": "The Alpha's Accidental Surrogate",
+      "missingCount": 1,
+      "existingVoice": "af_heart"
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-05-29 00:15:18",
+      "step": 0,
+      "message": "Session 3525b4cc started (phase=phase1, test_mode=False, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:18",
+      "step": 1,
+      "message": "Phase 1: Fetching stories needing update...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:18",
+      "step": 1,
+      "message": "Found 3 stories needing update",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:18",
+      "step": 2,
+      "message": "Discovering stories with missing audio among 3 stories...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:21",
+      "step": 2,
+      "message": "Found 3 stories to check",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:22",
+      "step": 2,
+      "message": "Found 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:22",
+      "step": 1,
+      "message": "Phase 1: 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:22",
+      "step": 3,
+      "message": "[1/1] The Alpha's Accidental Surrogate",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:15:22",
+      "step": 3,
+      "message": "Starting batch TTS for 'The Alpha's Accidental Surrogate' \u2014 1 chapters, voice=af_heart (source=existing)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:16:08",
+      "step": 4,
+      "message": "Error polling batch eb77f8cc: ",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:16:44",
+      "step": 4,
+      "message": "Error polling batch eb77f8cc: ",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:17:52",
+      "step": 4,
+      "message": "Error polling batch eb77f8cc: Server disconnected without sending a response.",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:18:02",
+      "step": 4,
+      "message": "Error polling batch eb77f8cc: Server disconnected without sending a response.",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:18:54",
+      "step": 4,
+      "message": "Error polling batch eb77f8cc: Server disconnected without sending a response.",
+      "level": "warning"
+    },
+    {
+      "timestamp": "2026-05-29 00:19:25",
+      "step": 7,
+      "message": "Done: generated=1, uploaded=0",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-05-29 00:19:25",
+      "step": 11,
+      "message": "Auto audio session completed successfully",
+      "level": "info"
+    }
+  ],
+  "started_at": "2026-05-29 00:15:18",
+  "finished_at": "2026-05-29 00:19:25",
+  "error": "",
+  "story_results": [
+    {
+      "story_id": "a52391b5-7f91-41d5-90f1-1becb7c584f4",
+      "story_title": "The Alpha's Accidental Surrogate",
+      "chapters_generated": 1,
+      "chapters_uploaded": 0,
+      "upload_errors": [],
+      "error": ""
+    }
+  ]
+}
