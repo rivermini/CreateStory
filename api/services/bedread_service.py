@@ -27,14 +27,37 @@ class BedReadConfigError(Exception):
 
 def _get_external_api_config() -> tuple[str, dict]:
     """
-    Get the external API base URL and headers from environment variables.
-    Falls back to reading from .env-loaded environment.
+    Fetch the external API config from FastAPIServer at runtime.
+    The config is sourced from drive_sync_config.json (saved by the FE via FastAPIServer).
+
+    Falls back to reading EXTERNAL_API_BASE_URL from env for backward compatibility.
+    Raises BedReadConfigError if neither source provides a valid config.
     """
+    # Primary: fetch from FastAPIServer (config written by FE)
+    try:
+        import httpx
+        fastapi_base = os.environ.get("SERVICE_URLS_FastAPIServer", "http://localhost:8000").rstrip("/")
+        url = f"{fastapi_base}/api/bedread/config/external-api"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                api_base = data.get("external_api_base_url", "").strip()
+                if api_base:
+                    headers: dict[str, str] = {}
+                    token = data.get("external_api_token", "").strip()
+                    if token:
+                        headers["Authorization"] = f"Bearer {token}"
+                    return api_base.rstrip("/"), headers
+    except Exception:
+        pass
+
+    # Fallback: use env vars (for backward compatibility in dev environments)
     api_base = os.environ.get("EXTERNAL_API_BASE_URL", "").strip()
     if not api_base:
         raise BedReadConfigError(
-            "EXTERNAL_API_BASE_URL is not configured. "
-            "Set it in your .env file."
+            "External API Base URL is not configured. "
+            "Please configure your Drive Sync settings in the frontend."
         )
 
     headers: dict[str, str] = {}
@@ -442,9 +465,20 @@ class BedReadService:
             format = batch.format
             chapters = list(batch.chapters)
 
+        # Fetch all chapters at once — the /chapter endpoint includes content for each chapter
+        chapter_map: dict[int, dict] = {}
+        try:
+            all_chapters = self.fetch_chapters(story_id)
+            for ch in all_chapters:
+                idx = ch.get("index") or ch.get("chapterNumber") or ch.get("chapter_number")
+                if idx is not None:
+                    chapter_map[idx] = ch
+        except Exception:
+            logger.warning("Failed to fetch chapter list for batch %s", batch_id_for_tts)
+
         for ch in chapters:
             try:
-                chapter_data = self.fetch_chapter(story_id, ch.chapter_number)
+                chapter_data = chapter_map.get(ch.chapter_number, {})
                 plain_content = chapter_data.get("content") or chapter_data.get("plainContent", "")
                 if plain_content:
                     from api.services.tts_service import TTSService

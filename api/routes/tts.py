@@ -137,7 +137,7 @@ def cancel_job(job_id: str) -> dict:
     return {"job_id": job_id, "status": "cancelled"}
 
 
-@router.get("/jobs/{job_id}/audio")
+@router.api_route("/jobs/{job_id}/audio", methods=["GET", "HEAD"])
 def stream_audio(job_id: str) -> StreamingResponse:
     service = get_tts_service()
     job = service.get_job(job_id)

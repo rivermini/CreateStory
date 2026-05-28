@@ -349,7 +349,10 @@ class TTSService:
         with self._lock:
             items = []
             for job_id, job in self._jobs.items():
-                items.append(job.to_dict(queue_position=self._get_queue_position(job_id)))
+                try:
+                    items.append(job.to_dict(queue_position=self._get_queue_position(job_id)))
+                except Exception:
+                    pass
             return items
 
     def cancel_job(self, job_id: str) -> bool:
@@ -370,7 +373,13 @@ class TTSService:
             job = self._jobs.get(job_id)
         if job is None:
             return None
-        return Path(job.output_dir) / job.output_filename
+        try:
+            path = Path(job.output_dir) / job.output_filename
+            if path.exists():
+                return path
+            return None
+        except Exception:
+            return None
 
     def get_queue_size(self) -> int:
         with self._lock:
@@ -469,17 +478,20 @@ class TTSService:
                         else:
                             raise
 
-                import soundfile as sf
-                sf.write(str(chunk_file), samples, sr)
-                all_samples.append(samples)
+                    import soundfile as sf
+                    sf.write(str(chunk_file), samples, sr)
+                    all_samples.append(samples)
 
-                job.chunks_done = i + 1
-                job.progress_pct = int((i + 1) * 100 / len(chunks))
+                    with self._lock:
+                        j = self._jobs.get(job_id)
+                        if j:
+                            j.chunks_done = i + 1
+                            j.progress_pct = int((i + 1) * 100 / len(chunks))
 
-                with self._lock:
-                    j = self._jobs.get(job_id)
-                    if j and j.status == "cancelled":
-                        continue
+                    with self._lock:
+                        j = self._jobs.get(job_id)
+                        if j and j.status == "cancelled":
+                            continue
 
                 if not all_samples:
                     raise ValueError("No audio chunks were generated.")
