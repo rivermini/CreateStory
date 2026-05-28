@@ -10,10 +10,12 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from urllib.parse import quote
 
 from api.models.crawl_request import CrawlResult, OutputFile
 from api.services.crawler_service import get_crawl_service
 from api.services.file_service import get_file_service
+from utils.sanitize import sanitize_filename
 
 
 class DeleteRequest(BaseModel):
@@ -59,13 +61,15 @@ def _extract_novel_metadata_from_files(output_dir: Path, chapter_files: list) ->
     return None
 
 
-def _make_combined_filename(crawl_id: str, output_dir: Path, chapter_files: list, output_format: str = "jsonl") -> str:
+def _make_combined_filename(crawl_id: str, output_dir: Path, chapter_files: list, output_format: str = "jsonl", site_name: str = "") -> str:
     ext = "json"
     if chapter_files:
         first_file = chapter_files[0].filename
         m = re.match(r"(.*)_chapter_\d+", first_file)
         if m:
             prefix = m.group(1)
+            if site_name and prefix.startswith(f"{site_name}_"):
+                prefix = prefix[len(site_name) + 1:]
             return f"{prefix}_combined_{crawl_id}.{ext}"
     return f"combined_{crawl_id}.{ext}"
 
@@ -193,12 +197,6 @@ async def download_all_combined() -> StreamingResponse:
     )
 
 
-@router.get("/download-combined-all")
-async def download_combined_all() -> StreamingResponse:
-    """Alias for download-all-combined."""
-    return await download_all_combined()
-
-
 @router.get("/{crawl_id}/download-all")
 async def download_all_files(crawl_id: str) -> StreamingResponse:
     """Zip all output files from a crawl session and stream as a single download."""
@@ -302,7 +300,7 @@ async def download_file(crawl_id: str, filename: str) -> StreamingResponse:
         iter([content]),
         media_type=mime_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{filepath.name}"',
+            "Content-Disposition": f'attachment; filename="{quote(filepath.name)}"',
             "Content-Length": str(len(content)),
         },
     )
@@ -351,7 +349,10 @@ async def get_file_content(crawl_id: str, filename: str) -> dict:
 
 @router.post("/{crawl_id}/combine")
 async def combine_chapters(crawl_id: str) -> dict:
-    """Merge all individual chapter JSON files into a single combined JSON file."""
+    """
+    Merge all individual chapter files into a single combined TXT file.
+    Mirrors _run_combine naming exactly: {site_name}_{safe_novel_name}_Ongoing.txt
+    """
     crawl_service = get_crawl_service()
     file_service = get_file_service()
 
@@ -360,71 +361,98 @@ async def combine_chapters(crawl_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
 
     output_dir = file_service.get_output_dir(crawl_id)
-    fmt = progress.output_format or "jsonl"
-    chapter_files = file_service.list_output_files(crawl_id, fmt=fmt)
+    output_format = progress.output_format or "jsonl"
+    chapter_files = file_service.list_output_files(crawl_id, fmt=output_format)
 
     if not chapter_files:
         raise HTTPException(status_code=404, detail="No chapter files found to combine.")
 
-    combined_name = _make_combined_filename(crawl_id, output_dir, chapter_files, fmt)
-    combined_path = output_dir / combined_name
-
-    chapters_data: list[dict] = []
     files_sorted = sorted(chapter_files, key=lambda f: f.chapter_number)
 
-    if fmt in ("md", "txt"):
-        chapters_data = []
-        for file_meta in files_sorted:
-            filepath = output_dir / file_meta.filename
-            try:
-                raw = filepath.read_text(encoding="utf-8").strip()
-                if raw:
-                    chapters_data.append({"content": raw, "chapter_number": file_meta.chapter_number})
-            except OSError as exc:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to read chapter file '{file_meta.filename}': {exc}",
-                )
+    # Build base_name exactly like _run_combine does
+    site_name = progress.site_name
+    novel_name = progress.novel_name
+    completed = progress.completed
+
+    if site_name and novel_name:
+        status = "Completed" if completed else "Ongoing" if completed is not None else ""
+        safe_name = sanitize_filename(novel_name)
+        base_name = f"{site_name}_{safe_name}_{status}" if status else f"{site_name}_{safe_name}"
+    elif novel_name:
+        status = "Completed" if completed else "Ongoing" if completed is not None else ""
+        base_name = f"{sanitize_filename(novel_name)}_{status}" if status else sanitize_filename(novel_name)
     else:
-        for file_meta in files_sorted:
-            filepath = output_dir / file_meta.filename
+        base_name = crawl_id
+
+        if output_format == "txt":
+            txt_filename = f"{sanitize_filename(base_name)}.txt"
+            txt_path = output_dir / txt_filename
+            txt_parts: list[str] = []
+            for file_meta in files_sorted:
+                filepath = output_dir / file_meta.filename
+                try:
+                    raw = filepath.read_text(encoding="utf-8").strip()
+                    if raw:
+                        txt_parts.append(raw)
+                except OSError:
+                    continue
+            txt_text = "\n\n---\n\n".join(txt_parts).rstrip()
             try:
-                chapters = _read_chapter_file(filepath)
-                chapters_data.extend(chapters)
+                with open(txt_path, "w", encoding="utf-8") as fh:
+                    fh.write(txt_text)
             except Exception as exc:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to read chapter file '{file_meta.filename}': {exc}",
-                )
+                raise HTTPException(status_code=500, detail=f"Failed to write combined TXT: {exc}")
 
+            combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
+            try:
+                size_bytes = txt_path.stat().st_size
+            except OSError:
+                size_bytes = 0
+
+            p = crawl_service.get_progress(crawl_id)
+            if p:
+                p.combined_file = combined_name
+                p.combined_txt_file = txt_filename
+                crawl_service._persist_index()
+
+            return {
+                "crawl_id": crawl_id,
+                "combined_file": combined_name,
+                "combined_txt_file": txt_filename,
+                "size_bytes": size_bytes,
+                "chapter_count": len(files_sorted),
+            }
+
+        # jsonl: write combined .json
+    combined: list[dict] = []
     novel_metadata: Optional[dict] = None
-    if fmt not in ("md", "txt"):
-        for chapter in chapters_data:
-            if isinstance(chapter, dict) and chapter.get("novel_metadata"):
-                novel_metadata = chapter["novel_metadata"]
-                break
+    for file_meta in files_sorted:
+        filepath = output_dir / file_meta.filename
+        chapters = _read_chapter_file(filepath)
+        for obj in chapters:
+            if "chapter" not in obj or obj["chapter"] == 0:
+                obj["chapter"] = file_meta.chapter_number
+            combined.append(obj)
+            if novel_metadata is None and isinstance(obj, dict) and obj.get("novel_metadata"):
+                novel_metadata = obj["novel_metadata"]
 
+    combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
+    combined_path = output_dir / combined_name
     combined_payload = {
         "crawl_id": crawl_id,
-        "chapter_count": len(files_sorted),
+        "chapter_count": len(combined),
         "novel_metadata": novel_metadata,
-        "chapters": chapters_data,
+        "chapters": combined,
     }
-
     try:
         with open(combined_path, "w", encoding="utf-8") as fh:
             json.dump(combined_payload, fh, ensure_ascii=False, indent=2)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write combined file: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to write combined JSON: {exc}")
 
-    # Persist the combined file names into the session so the FE can see them
-    crawl_service = get_crawl_service()
     p = crawl_service.get_progress(crawl_id)
-    is_text = fmt in ("md", "txt")
     if p:
         p.combined_file = combined_name
-        if is_text:
-            p.combined_txt_file = f"{crawl_id}_combined.txt"
         crawl_service._persist_index()
 
     try:
@@ -435,7 +463,7 @@ async def combine_chapters(crawl_id: str) -> dict:
     return {
         "crawl_id": crawl_id,
         "combined_file": combined_name,
-        "combined_txt_file": p.combined_txt_file if is_text else None,
+        "combined_txt_file": None,
         "size_bytes": size_bytes,
         "chapter_count": len(files_sorted),
     }
@@ -443,7 +471,11 @@ async def combine_chapters(crawl_id: str) -> dict:
 
 @router.get("/{crawl_id}/combined")
 async def get_combined_result(crawl_id: str) -> dict:
-    """Return the combined result for a crawl, triggering combine inline if needed."""
+    """
+    Return the combined result for a crawl.
+    For TXT format: reads the combined .txt file directly (raw text).
+    For JSON format: reads and parses the combined .json file.
+    """
     crawl_service = get_crawl_service()
     file_service = get_file_service()
 
@@ -452,11 +484,63 @@ async def get_combined_result(crawl_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
 
     output_dir = file_service.get_output_dir(crawl_id)
-    fmt = progress.output_format or "jsonl"
-    chapter_files = file_service.list_output_files(crawl_id, fmt=fmt)
+    output_format = progress.output_format or "jsonl"
+    chapter_files = file_service.list_output_files(crawl_id, fmt=output_format)
     novel_slug = crawl_service.get_novel_slug_from_crawl_id(crawl_id)
 
-    combined_name = _make_combined_filename(crawl_id, output_dir, chapter_files, fmt)
+    is_text = output_format == "txt"
+
+    if is_text:
+        # Use the stored TXT filename from _run_combine
+        txt_filename = progress.combined_txt_file or ""
+        txt_path = output_dir / txt_filename if txt_filename else None
+
+        if not txt_path or not txt_path.exists():
+            # Trigger combine inline — mirrors _run_combine naming
+            try:
+                await combine_chapters(crawl_id)
+            except HTTPException:
+                pass
+            progress = crawl_service.get_progress(crawl_id)
+            if progress is None:
+                raise HTTPException(status_code=500, detail="Crawl session lost after combine.")
+            txt_filename = progress.combined_txt_file or ""
+            txt_path = output_dir / txt_filename
+
+        if not txt_path or not txt_path.exists():
+            raise HTTPException(status_code=404, detail="Combined TXT file not found.")
+
+        try:
+            with open(txt_path, "r", encoding="utf-8") as fh:
+                txt_content = fh.read()
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to read combined TXT: {exc}")
+
+        try:
+            size_bytes = txt_path.stat().st_size
+        except OSError:
+            size_bytes = len(txt_content.encode("utf-8"))
+
+        return {
+            "crawl_id": crawl_id,
+            "status": progress.status,
+            "spider_name": progress.site_name or "",
+            "novel_slug": novel_slug,
+            "novel_name": progress.novel_name or None,
+            "chapters_crawled": progress.chapters_crawled,
+            "chapters_total": progress.chapters_total,
+            "started_at": progress.started_at,
+            "finished_at": progress.finished_at,
+            "error_message": progress.error_message,
+            "output_files": [OutputFile(filename=txt_filename, size_bytes=size_bytes, chapter_number=0)],
+            "novel_metadata": None,
+            "chapter_count": progress.chapters_crawled,
+            "combined_txt_file": txt_filename,
+            "txt_content": txt_content,
+        }
+
+    # jsonl/json: use _make_combined_filename for the JSON file
+    combined_name = _make_combined_filename(crawl_id, output_dir, chapter_files, output_format=output_format, site_name=progress.site_name)
     combined_path = output_dir / combined_name
 
     if not combined_path.exists():
@@ -470,7 +554,7 @@ async def get_combined_result(crawl_id: str) -> dict:
         progress = crawl_service.get_progress(crawl_id)
         if progress is None:
             raise HTTPException(status_code=500, detail="Crawl session lost after combine.")
-        combined_name = _make_combined_filename(crawl_id, output_dir, chapter_files, fmt)
+        combined_name = _make_combined_filename(crawl_id, output_dir, chapter_files, output_format=output_format, site_name=progress.site_name)
         combined_path = output_dir / combined_name
 
     try:

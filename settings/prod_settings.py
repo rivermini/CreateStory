@@ -47,7 +47,6 @@ LOG_LEVEL = "DEBUG"
 ITEM_PIPELINES = {
     "pipelines.json_writer.JsonWriterPipeline": 300,
     "pipelines.csv_writer.CsvWriterPipeline": 400,
-    "pipelines.md_writer.MdWriterPipeline": 500,
 }
 
 OUTPUT_DIR = Path("output")

@@ -19,7 +19,7 @@ class FileService:
     def list_output_files(
         self,
         crawl_id: str,
-        fmt: Literal["jsonl", "csv", "md", "txt"],
+        fmt: Literal["jsonl", "csv", "txt"],
         custom_dir: Optional[str] = None,
     ) -> list[OutputFile]:
         output_dir = self.get_output_dir(crawl_id, custom_dir)
@@ -67,7 +67,6 @@ class FileService:
         mime_types = {
             ".json": "application/json",
             ".csv": "text/csv",
-            ".md": "text/markdown",
             ".txt": "text/plain",
         }
         mime = mime_types.get(filepath.suffix.lower(), "application/octet-stream")

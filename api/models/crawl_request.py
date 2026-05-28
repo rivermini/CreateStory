@@ -93,5 +93,5 @@ class CrawlResult(BaseModel):
     )
     combined_txt_file: Optional[str] = Field(
         default=None,
-        description="Filename of the combined TXT file, if created (txt/md output only).",
+        description="Filename of the combined TXT file, if created (txt output only).",
     )

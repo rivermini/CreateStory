@@ -1,0 +1,279 @@
+[
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1787764430,
+    "httpOnly": false,
+    "name": "_fbp",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "fb.1.1779988428558.76118342815926825"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1795756425,
+    "httpOnly": false,
+    "name": "adMetrics",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "0"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1779989029,
+    "httpOnly": false,
+    "name": "RT",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": ""
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1814548429,
+    "httpOnly": false,
+    "name": "_ga_FNDTZ0MZDQ",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GS2.1.s1779988427$o1$g1$t1779988429$j58$l0$h0"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1814548429,
+    "httpOnly": false,
+    "name": "_ga",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GA1.1.1508899619.1779988427"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1795756425,
+    "httpOnly": false,
+    "name": "wp-web-auth-cache-bust",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "0"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1814548429,
+    "httpOnly": false,
+    "name": "_col_uuid",
+    "path": "/",
+    "sameSite": "None",
+    "secure": true,
+    "value": "4ee9a8ca-c534-414f-b694-e8821d7b0e1c-616w"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1811524429,
+    "httpOnly": false,
+    "name": "X-Time-Zone",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "Asia%2FSaigon"
+  },
+  {
+    "domain": ".wattpad.com",
+    "httpOnly": false,
+    "name": "signupFrom",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "story_reading"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1782580429,
+    "httpOnly": false,
+    "name": "wp-web-migration-write-story-publish",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1787764428,
+    "httpOnly": false,
+    "name": "_gcl_au",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1.1.270520589.1779988428"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1785172425,
+    "httpOnly": false,
+    "name": "lang",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1811524426,
+    "httpOnly": false,
+    "name": "ff",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "1"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1795756425,
+    "httpOnly": false,
+    "name": "_rge30_",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": ".wattpad.com",
+    "httpOnly": false,
+    "name": "te_session_id",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "1779988426822"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1814548425,
+    "httpOnly": false,
+    "name": "fs__exp",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1814548425,
+    "httpOnly": false,
+    "name": "wp_id",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "e1dd718e-9dbf-4f27-81c8-9bfa652caea3"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1779990229,
+    "httpOnly": false,
+    "name": "sn__time",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "j%3Anull"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1811524429,
+    "httpOnly": false,
+    "name": "dpr",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "1"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1795756425,
+    "httpOnly": false,
+    "name": "_pbeb_",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1795756425,
+    "httpOnly": false,
+    "name": "_afp25f_",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "0"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1782580429,
+    "httpOnly": false,
+    "name": "wp-web-migration-write-story-edit",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "expiry": 1811524429,
+    "httpOnly": false,
+    "name": "tz",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "-7"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1782580429,
+    "httpOnly": false,
+    "name": "wp-web-write-stories-review",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1779992027,
+    "httpOnly": false,
+    "name": "AMP_TOKEN",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "%24NOT_FOUND"
+  },
+  {
+    "domain": "www.wattpad.com",
+    "httpOnly": false,
+    "name": "locale",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "en_US"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1780074829,
+    "httpOnly": false,
+    "name": "_gid",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GA1.2.1329614592.1779988428"
+  },
+  {
+    "domain": ".wattpad.com",
+    "expiry": 1782580429,
+    "httpOnly": false,
+    "name": "wp-web-migration-write-story-new",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  }
+]

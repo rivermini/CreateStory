@@ -436,7 +436,7 @@ class CrawlService:
         if not raw:
             return []
 
-        if filepath.suffix.lower() in (".txt", ".md"):
+        if filepath.suffix.lower() == ".txt":
             return []
 
         if "\n" in raw:
@@ -490,7 +490,7 @@ class CrawlService:
                         raw = fh.read().strip()
                     if not raw:
                         continue
-                    if filepath.suffix.lower() in (".txt", ".md"):
+                    if filepath.suffix.lower() == ".txt":
                         first_line = raw.split("\n", 1)[0].strip()
                         filename_part = first_line.split(": ", 1)[0].rstrip(":")
                         if filename_part and filename_part.endswith("_chapter_1"):
@@ -511,6 +511,11 @@ class CrawlService:
                 except OSError:
                     continue
 
+        # Strip site_name_ prefix from novel_name if it was derived from the URL
+        # and already contains the site prefix (e.g. "Wattpad_Misconduct_Ongoing" -> "Misconduct_Ongoing")
+        if site_name and novel_name and novel_name.startswith(f"{site_name}_"):
+            novel_name = novel_name[len(site_name) + 1:]
+
         if site_name and novel_name:
             status = "Completed" if completed else "Ongoing" if completed is not None else ""
             safe_name = sanitize_filename(novel_name)
@@ -526,10 +531,10 @@ class CrawlService:
 
         combined: list[dict] = []
         novel_metadata: Optional[dict] = None
-        is_text = output_format in ("txt", "md")
+        is_text = output_format == "txt"
 
         if is_text:
-            # Write combined .txt — clean chapters separated by horizontal rules
+            # Write combined .txt — full chapter content including header, separated by HR
             txt_filename = f"{sanitize_filename(base_name)}.txt"
             txt_path = output_dir / txt_filename
             txt_parts: list[str] = []
@@ -537,13 +542,10 @@ class CrawlService:
             for file_meta in chapter_files_sorted:
                 filepath = output_dir / file_meta.filename
                 try:
-                    raw = filepath.read_text(encoding="utf-8")
-                    # Strip header line "filename: chapter_title" before combining
-                    lines = raw.splitlines()
-                    content = "\n".join(lines[1:]).strip()
-                    if content:
-                        txt_parts.append(content)
-                    chapters_data.append({"content": raw.strip(), "chapter_number": file_meta.chapter_number})
+                    raw = filepath.read_text(encoding="utf-8").strip()
+                    if raw:
+                        txt_parts.append(raw)
+                    chapters_data.append({"content": raw, "chapter_number": file_meta.chapter_number})
                 except OSError:
                     continue
             txt_text = "\n\n---\n\n".join(txt_parts).rstrip()
