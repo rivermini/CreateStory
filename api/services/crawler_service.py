@@ -436,6 +436,9 @@ class CrawlService:
         if not raw:
             return []
 
+        if filepath.suffix.lower() in (".txt", ".md"):
+            return []
+
         if "\n" in raw:
             results: list[dict] = []
             for line in raw.splitlines():
@@ -445,10 +448,13 @@ class CrawlService:
                 try:
                     results.append(_json.loads(line))
                 except _json.JSONDecodeError:
-                    return [_json.loads(raw)]
+                    pass
             return results
         else:
-            return [_json.loads(raw)]
+            try:
+                return [_json.loads(raw)]
+            except _json.JSONDecodeError:
+                return []
 
     def _run_combine(self, crawl_id: str) -> None:
         import json as _json
