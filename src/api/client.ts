@@ -1037,6 +1037,7 @@ export interface AutoAudioStoryResult {
 
 export interface AutoAudioSession {
   session_id: string;
+  phase: string;
   test_mode: boolean;
   voice: string;
   status: 'idle' | 'running' | 'stopping' | 'completed' | 'error' | 'stopped';
@@ -1044,6 +1045,7 @@ export interface AutoAudioSession {
   current_step_desc: string;
   current_story: string;
   progress: { done: number; total: number };
+  chapter_progress: { done: number; total: number };
   stories_missing_audio: AutoAudioStoryPreview[];
   logs: AutoAudioLogEntry[];
   started_at: string | null;
@@ -1054,6 +1056,7 @@ export interface AutoAudioSession {
 
 export interface AutoAudioHistoryEntry {
   session_id: string;
+  phase: string;
   test_mode: boolean;
   voice: string;
   status: string;
@@ -1066,7 +1069,7 @@ export interface AutoAudioHistoryEntry {
   total_chapters: number;
 }
 
-export async function startAutoAudio(cfg: { test_mode: boolean; voice?: string }): Promise<{ session_id: string }> {
+export async function startAutoAudio(cfg: { phase: string; test_mode: boolean; voice?: string }): Promise<{ session_id: string }> {
   return apiFetch<{ session_id: string }>('/api/auto-audio/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

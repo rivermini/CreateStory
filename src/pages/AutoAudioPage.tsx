@@ -26,11 +26,125 @@ function formatTime(ts: string | null): string {
   }
 }
 
+interface PhaseCardProps {
+  phase: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  badge?: string;
+  isDark: boolean;
+  cardClass: string;
+  valueClass: string;
+  mutedSmClass: string;
+  mutedClass: string;
+  isRunning: boolean;
+  isStopping: boolean;
+  loading: boolean;
+  testMode: boolean;
+  configLoading: boolean;
+  config: DriveSyncConfig | null;
+  session: AutoAudioSession | null;
+  onStart: (confirm: boolean) => void;
+  onConfirmStart: (phase: string) => void;
+  onCancelConfirm: () => void;
+  showStartConfirm: boolean;
+}
+
+function PhaseCard({
+  phase, title, subtitle, description, badge,
+  isDark, cardClass, valueClass, mutedSmClass, mutedClass,
+  isRunning, isStopping, loading, testMode, configLoading, config,
+  session, onStart, onConfirmStart, onCancelConfirm, showStartConfirm,
+}: PhaseCardProps) {
+  const isCurrentPhase = session?.phase === phase;
+  const disabled = isRunning || isStopping || loading;
+  const needsConfig = !configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id);
+
+  return (
+    <section className={cardClass + ' p-5 sm:p-6 space-y-3' + (isCurrentPhase && isRunning ? ' ring-2 ring-indigo-500/50' : '')}>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className={`text-base font-semibold ${valueClass}`}>{title}</h2>
+          {badge && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-indigo-900/40 text-indigo-300' : 'bg-indigo-100 text-indigo-700'}`}>
+              {badge}
+            </span>
+          )}
+          {isCurrentPhase && isRunning && (
+            <span className={`w-2 h-2 rounded-full animate-pulse ${isDark ? 'bg-blue-400' : 'bg-blue-600'}`} />
+          )}
+        </div>
+      </div>
+      <p className={`text-xs ${mutedSmClass}`}>{description}</p>
+      {testMode && (
+        <p className={`text-xs ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>Test mode active</p>
+      )}
+
+      {!isRunning && !isStopping ? (
+        !showStartConfirm ? (
+          <button
+            onClick={() => onStart(true)}
+            disabled={disabled || needsConfig}
+            title={needsConfig ? 'Configure Drive Sync first' : undefined}
+            className={`w-full px-5 py-2.5 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-sm ${
+              phase === 'phase1'
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-amber-600 hover:bg-amber-500'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            {testMode ? 'Start (Test Mode)' : 'Start'}
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <p className={`text-xs text-center ${mutedClass}`}>
+              {testMode
+                ? `Start ${subtitle} in test mode?`
+                : `Start ${subtitle}? This will scan stories and generate audio.`}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={onCancelConfirm}
+                disabled={loading}
+                className={`flex-1 px-3 py-2 text-sm font-medium rounded-xl border transition-colors ${isDark
+                  ? 'border-slate-700 text-slate-400 hover:bg-slate-800/60'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => onConfirmStart(phase)}
+                disabled={loading}
+                className={`flex-1 px-3 py-2 text-sm text-white font-semibold rounded-xl transition-colors ${
+                  phase === 'phase1' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-amber-600 hover:bg-amber-500'
+                } disabled:opacity-50`}
+              >
+                {loading ? 'Starting...' : 'Start'}
+              </button>
+            </div>
+          </div>
+        )
+      ) : isCurrentPhase ? (
+        <div className={`text-xs text-center py-1.5 rounded-lg ${isDark ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-700'}`}>
+          Currently running
+        </div>
+      ) : (
+        <div className={`text-xs text-center py-1.5 rounded-lg ${isDark ? 'bg-slate-800/60 text-slate-500' : 'bg-gray-100 text-gray-400'}`}>
+          Another phase is running
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const isDark = themeMode === 'dark';
 
   const [session, setSession] = useState<AutoAudioSession | null>(null);
   const [testMode, setTestMode] = useState(false);
+  const [selectedPhase, setSelectedPhase] = useState('phase1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [missingPreview, setMissingPreview] = useState<AutoAudioStoryPreview[]>([]);
@@ -82,11 +196,11 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
     }
   }, [session?.logs]);
 
-  const handleStart = async () => {
+  const handlePhaseStart = async (phase: string) => {
     setError('');
     setLoading(true);
     try {
-      await startAutoAudio({ test_mode: testMode });
+      await startAutoAudio({ phase, test_mode: testMode });
       await loadStatus();
       setShowStartConfirm(false);
     } catch (e) {
@@ -105,6 +219,9 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
 
   const totalGenerated = session?.story_results?.reduce((acc, r) => acc + r.chapters_uploaded, 0) ?? 0;
   const totalStories = session?.story_results?.length ?? 0;
+  const chapterPct = session?.chapter_progress?.total
+    ? (Math.round((session.chapter_progress.done / session.chapter_progress.total) * 100))
+    : 0;
 
   const cardClass = isDark
     ? 'rounded-2xl bg-slate-900/60 border border-slate-800/60'
@@ -160,27 +277,21 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
           {/* Left Column: Controls */}
           <div className="space-y-4">
 
-            {/* Test Mode + Voice Card */}
-            <section className={cardClass + ' p-5 sm:p-6 space-y-4'}>
-              <h2 className={`text-base font-semibold ${valueClass}`}>Configuration</h2>
-
-              {/* Test Mode Toggle */}
+            {/* Shared Test Mode Toggle */}
+            <section className={cardClass + ' p-5 sm:p-6 space-y-3'}>
+              <h2 className={`text-base font-semibold ${valueClass}`}>Options</h2>
               <div className="flex items-center justify-between">
                 <div>
                   <p className={`text-sm font-medium ${valueClass}`}>Test Mode</p>
                   <p className={`text-xs ${mutedSmClass}`}>
-                    {testMode
-                      ? 'Uses 2 test story IDs only'
-                      : 'Processes ALL published stories — use with caution'}
+                    {testMode ? 'Uses hardcoded story IDs only' : 'Processes real stories'}
                   </p>
                 </div>
                 <button
                   onClick={() => setTestMode(m => !m)}
                   disabled={isRunning || isStopping}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                    testMode
-                      ? 'bg-indigo-600'
-                      : isDark ? 'bg-slate-600' : 'bg-gray-300'
+                    testMode ? 'bg-indigo-600' : isDark ? 'bg-slate-600' : 'bg-gray-300'
                   } disabled:opacity-50`}
                 >
                   <span
@@ -190,78 +301,61 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                   />
                 </button>
               </div>
+            </section>
 
-              {!testMode && (
-                <div className={`p-3 rounded-xl text-xs ${isDark
-                  ? 'bg-amber-900/20 border border-amber-800/30 text-amber-400'
-                  : 'bg-amber-50 border border-amber-200 text-amber-700'}`}>
-                  <strong>Warning:</strong> Production mode will process ALL published stories on the platform.
-                  Make sure you understand the impact before proceeding.
-                </div>
-              )}
+            {/* Phase 1: Needing Update */}
+            <PhaseCard
+              phase="phase1"
+              title="Phase 1"
+              subtitle="Needing Update"
+              description="Only stories marked as needing update in the dashboard."
+              badge={testMode ? undefined : 'Recommended'}
+              isDark={isDark}
+              cardClass={cardClass}
+              valueClass={valueClass}
+              mutedSmClass={mutedSmClass}
+              mutedClass={mutedClass}
+              isRunning={isRunning}
+              isStopping={isStopping}
+              loading={loading}
+              testMode={testMode}
+              configLoading={configLoading}
+              config={config}
+              session={session}
+              onStart={(confirm) => { setSelectedPhase('phase1'); setShowStartConfirm(confirm); }}
+              onConfirmStart={handlePhaseStart}
+              onCancelConfirm={() => setShowStartConfirm(false)}
+              showStartConfirm={showStartConfirm && selectedPhase === 'phase1'}
+            />
 
-              {/* Action Button */}
-              {!isRunning && !isStopping ? (
-                !showStartConfirm ? (
-                  <button
-                    onClick={() => {
-                      if (!testMode) {
-                        setShowStartConfirm(true);
-                      } else {
-                        handleStart();
-                      }
-                    }}
-                    disabled={loading || (!configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id))}
-                    title={!configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id) ? 'Configure Drive Sync first' : undefined}
-                    className={`w-full px-6 py-3 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${
-                      testMode
-                        ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'
-                        : 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/30'
-                    } disabled:opacity-50`}
-                  >
-                    {loading ? (
-                      <>
-                        <svg className="w-5 h-5 animate-spin-ccw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Starting...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        {testMode ? 'Start Test Session' : 'Start Production Session'}
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <p className={`text-sm text-center ${mutedClass}`}>
-                      Are you sure you want to run in <strong>production mode</strong>?
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowStartConfirm(false)}
-                        disabled={loading}
-                        className={`flex-1 px-4 py-2.5 font-medium rounded-xl border transition-colors ${isDark
-                          ? 'border-slate-700 text-slate-400 hover:bg-slate-800/60'
-                          : 'border-gray-300 text-gray-600 hover:bg-gray-100'} disabled:opacity-50`}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleStart}
-                        disabled={loading}
-                        className="flex-1 px-4 py-2.5 text-white font-semibold rounded-xl bg-amber-600 hover:bg-amber-500 transition-colors disabled:opacity-50"
-                      >
-                        {loading ? 'Starting...' : 'Yes, Start'}
-                      </button>
-                    </div>
-                  </div>
-                )
-              ) : (
+            {/* Phase 2: All Stories */}
+            <PhaseCard
+              phase="phase2"
+              title="Phase 2"
+              subtitle="All Stories"
+              description="Scans ALL published stories for missing audio. Takes longer."
+              badge={testMode ? undefined : 'Full Scan'}
+              isDark={isDark}
+              cardClass={cardClass}
+              valueClass={valueClass}
+              mutedSmClass={mutedSmClass}
+              mutedClass={mutedClass}
+              isRunning={isRunning}
+              isStopping={isStopping}
+              loading={loading}
+              testMode={testMode}
+              configLoading={configLoading}
+              config={config}
+              session={session}
+              onStart={(confirm) => { setSelectedPhase('phase2'); setShowStartConfirm(confirm); }}
+              onConfirmStart={handlePhaseStart}
+              onCancelConfirm={() => setShowStartConfirm(false)}
+              showStartConfirm={showStartConfirm && selectedPhase === 'phase2'}
+            />
+
+            {/* Stop Button (when running) */}
+            {isRunning && (
+              <section className={cardClass + ' p-5 sm:p-6'}>
                 <button
                   onClick={() => setShowStopConfirm(true)}
                   disabled={isStopping}
@@ -272,8 +366,8 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                   </svg>
                   {isStopping ? 'Stopping...' : 'Stop Session'}
                 </button>
-              )}
-            </section>
+              </section>
+            )}
 
             {/* Status Card */}
             {session && (
@@ -324,6 +418,24 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                       <div
                         className="h-full bg-indigo-500 rounded-full transition-all duration-500"
                         style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Chapter progress */}
+                {session.chapter_progress?.total > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className={mutedSmClass}>Chapters</span>
+                      <span className={`text-xs font-mono font-bold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                        {session.chapter_progress?.done}/{session.chapter_progress?.total}
+                      </span>
+                    </div>
+                    <div className={`h-3 rounded-full overflow-hidden ${subtleBgClass} ring-1 ring-inset ${isDark ? 'ring-slate-700' : 'ring-gray-200'}`}>
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
+                        style={{ width: `${chapterPct}%` }}
                       />
                     </div>
                   </div>
