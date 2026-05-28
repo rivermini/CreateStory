@@ -96,7 +96,8 @@ class MainBEClientMixin:
                         self._append_log("info", f"Story created: {title} (id={story_id})", title)
                         return story_id
                     else:
-                        self._append_log("error", f"Story creation failed: {data.get('message')}", title)
+                        err_msg = data.get("message") or "unknown error"
+                        self._append_log("error", f"Story creation failed: {err_msg}", title, job_id)
                 elif resp.status_code == 400:
                     resp_data = resp.json()
                     msg = resp_data.get("message", "")
@@ -112,11 +113,11 @@ class MainBEClientMixin:
                         else:
                             self._append_log("error", f"Story '{title}' reported as duplicate but not found", title)
                     else:
-                        self._append_log("error", f"Story POST failed {resp.status_code}: {resp.text[:200]}", title)
+                        self._append_log("error", f"Story POST failed {resp.status_code}: {resp.text[:200]}", title, job_id)
                 else:
-                    self._append_log("error", f"Story POST failed {resp.status_code}: {resp.text[:200]}", title)
+                    self._append_log("error", f"Story POST failed {resp.status_code}: {resp.text[:200]}", title, job_id)
         except Exception as exc:
-            self._append_log("error", f"Story POST exception: {exc}", title)
+            self._append_log("error", f"Story POST exception: {exc}", title, job_id)
         return None
 
     def _find_story_by_title(self, title: str) -> Optional[str]:
