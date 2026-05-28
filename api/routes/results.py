@@ -120,11 +120,83 @@ async def list_all_results() -> list[dict]:
 async def delete_crawl_sessions(request: DeleteRequest) -> dict:
     """Delete one or more crawl sessions and their associated output files."""
     if not request.crawl_ids:
-        raise HTTPException(status_code=400, detail="No crawl_ids provided")
+        raise HTTPException(status_code=400, detail="No crawl_ids provided.")
 
     crawl_service = get_crawl_service()
     deleted_count = crawl_service.delete_sessions(request.crawl_ids)
     return {"deleted_count": deleted_count}
+
+
+@router.get("/download-all")
+async def download_all_sessions() -> StreamingResponse:
+    """Zip all output files from every crawl session."""
+    crawl_service = get_crawl_service()
+    file_service = get_file_service()
+    sessions = crawl_service.get_all_sessions()
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for progress in sessions:
+            crawl_id = progress.crawl_id
+            output_dir = file_service.get_output_dir(crawl_id)
+            fmt = progress.output_format or "jsonl"
+            chapter_files = file_service.list_output_files(crawl_id, fmt=fmt)
+            for file_meta in sorted(chapter_files, key=lambda f: f.chapter_number):
+                fp = output_dir / file_meta.filename
+                if fp.exists():
+                    zf.write(fp, file_meta.filename)
+            if progress.combined_file:
+                cp = output_dir / progress.combined_file
+                if cp.exists():
+                    zf.write(cp, progress.combined_file)
+            if progress.combined_txt_file:
+                tp = output_dir / progress.combined_txt_file
+                if tp.exists():
+                    zf.write(tp, progress.combined_txt_file)
+
+    buffer.seek(0)
+    zip_bytes = buffer.getvalue()
+    return StreamingResponse(
+        iter([zip_bytes]),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=\"all_sessions.zip\"", "Content-Length": str(len(zip_bytes))},
+    )
+
+
+@router.get("/download-all-combined")
+async def download_all_combined() -> StreamingResponse:
+    """Zip the combined files from every crawl session."""
+    crawl_service = get_crawl_service()
+    file_service = get_file_service()
+    sessions = crawl_service.get_all_sessions()
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for progress in sessions:
+            crawl_id = progress.crawl_id
+            output_dir = file_service.get_output_dir(crawl_id)
+            if progress.combined_file:
+                cp = output_dir / progress.combined_file
+                if cp.exists():
+                    zf.write(cp, progress.combined_file)
+            if progress.combined_txt_file:
+                tp = output_dir / progress.combined_txt_file
+                if tp.exists():
+                    zf.write(tp, progress.combined_txt_file)
+
+    buffer.seek(0)
+    zip_bytes = buffer.getvalue()
+    return StreamingResponse(
+        iter([zip_bytes]),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=\"all_combined.zip\"", "Content-Length": str(len(zip_bytes))},
+    )
+
+
+@router.get("/download-combined-all")
+async def download_combined_all() -> StreamingResponse:
+    """Alias for download-all-combined."""
+    return await download_all_combined()
 
 
 @router.get("/{crawl_id}/download-all")
@@ -205,6 +277,8 @@ async def get_crawl_result(crawl_id: str) -> CrawlResult:
         output_files=files,
         novel_metadata=_extract_novel_metadata_from_files(output_dir, files),
         source_url=progress.source_url or None,
+        combined_file=progress.combined_file or None,
+        combined_txt_file=progress.combined_txt_file or None,
     )
 
 
@@ -343,6 +417,16 @@ async def combine_chapters(crawl_id: str) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to write combined file: {exc}")
 
+    # Persist the combined file names into the session so the FE can see them
+    crawl_service = get_crawl_service()
+    p = crawl_service.get_progress(crawl_id)
+    is_text = fmt in ("md", "txt")
+    if p:
+        p.combined_file = combined_name
+        if is_text:
+            p.combined_txt_file = f"{crawl_id}_combined.txt"
+        crawl_service._persist_index()
+
     try:
         size_bytes = combined_path.stat().st_size
     except OSError:
@@ -351,6 +435,7 @@ async def combine_chapters(crawl_id: str) -> dict:
     return {
         "crawl_id": crawl_id,
         "combined_file": combined_name,
+        "combined_txt_file": p.combined_txt_file if is_text else None,
         "size_bytes": size_bytes,
         "chapter_count": len(files_sorted),
     }

@@ -87,3 +87,11 @@ class CrawlResult(BaseModel):
         default=None,
         description="The original URL submitted for the crawl.",
     )
+    combined_file: Optional[str] = Field(
+        default=None,
+        description="Filename of the combined JSON file, if created.",
+    )
+    combined_txt_file: Optional[str] = Field(
+        default=None,
+        description="Filename of the combined TXT file, if created (txt/md output only).",
+    )
