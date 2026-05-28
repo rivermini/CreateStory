@@ -95,3 +95,16 @@ async def delete_history(body: HistoryDeleteRequest) -> HistoryDeleteResponse:
         return HistoryDeleteResponse(deleted_count=0)
     deleted_count = service.delete_history_entries(body.ids)
     return HistoryDeleteResponse(deleted_count=deleted_count)
+
+
+# POST /api/drive-sync/history/clear — same as DELETE /history but via POST
+# (httpx AsyncClient.delete() does not support json= body, so we proxy via POST)
+@router.post("/history/clear", response_model=HistoryDeleteResponse, tags=["Drive Sync"])
+async def clear_history(body: HistoryDeleteRequest) -> HistoryDeleteResponse:
+    """Delete one or more history entries. Empty ids = clear all. Proxied via POST."""
+    service = get_drive_sync_service()
+    if not body.ids:
+        service.clear_history()
+        return HistoryDeleteResponse(deleted_count=0)
+    deleted_count = service.delete_history_entries(body.ids)
+    return HistoryDeleteResponse(deleted_count=deleted_count)

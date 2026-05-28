@@ -21,6 +21,9 @@ from api.services.drive_service._paths import (
     _HISTORY_FILE,
     _JOBS_FILE,
     _JOBS_LOCK_FILE,
+    _MAX_HISTORY_ENTRIES,
+    _MAX_JOBS_ENTRIES,
+    _RANDOM_AUTHOR_IDS,
     _RE_STATUS_PREFIX,
 )
 
