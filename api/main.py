@@ -19,7 +19,7 @@ _project_root = Path(__file__).parent.parent.resolve()
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from api.routes import crawl, crawl_stream, results, sites
+from api.routes import crawl, results, sites
 
 app = FastAPI(
     title="Nova NovelCrawler API",
@@ -37,7 +37,6 @@ app.add_middleware(
 
 app.include_router(sites.router)
 app.include_router(crawl.router)
-app.include_router(crawl_stream.router)
 app.include_router(results.router)
 
 
