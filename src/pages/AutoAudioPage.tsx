@@ -3,9 +3,12 @@ import {
   getAutoAudioStatus,
   startAutoAudio,
   stopAutoAudio,
+  getDriveSyncConfig,
   type AutoAudioSession,
   type AutoAudioStoryPreview,
+  type DriveSyncConfig,
 } from '../api/client';
+import { ServerModeBanner } from '../components/ServerModeBanner';
 import { type ThemeMode } from '../components/ThemeToggle';
 
 interface AutoAudioPageProps {
@@ -35,6 +38,8 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [stopConfirmText, setStopConfirmText] = useState('');
+  const [config, setConfig] = useState<DriveSyncConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const prevLogLenRef = useRef(0);
@@ -59,6 +64,13 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
     const interval = setInterval(loadStatus, 2000);
     return () => clearInterval(interval);
   }, [loadStatus]);
+
+  useEffect(() => {
+    getDriveSyncConfig()
+      .then(cfg => setConfig(cfg))
+      .catch(() => {})
+      .finally(() => setConfigLoading(false));
+  }, []);
 
   useEffect(() => {
     if (logEndRef.current && session?.logs) {
@@ -125,6 +137,15 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
           </p>
         </div>
 
+        {/* Server Mode Banner */}
+        <ServerModeBanner
+          serverUrl={config?.main_be_api_base_url ?? null}
+          isDark={isDark}
+          isConfigLoading={configLoading}
+          isConfigValid={config ? Boolean(config.main_be_api_base_url && config.main_be_user_id) : undefined}
+          onConfigure={() => window.location.href = '/settings'}
+        />
+
         {/* Error Banner */}
         {error && (
           <div className={`mb-4 p-3 rounded-xl text-sm ${isDark
@@ -190,7 +211,8 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                         handleStart();
                       }
                     }}
-                    disabled={loading}
+                    disabled={loading || (!configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id))}
+                    title={!configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id) ? 'Configure Drive Sync first' : undefined}
                     className={`w-full px-6 py-3 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${
                       testMode
                         ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'

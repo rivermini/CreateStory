@@ -91,6 +91,8 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const [chaptersLoading, setChaptersLoading] = useState(false);
   const [bedReadUserId, setBedReadUserId] = useState<string | null>(null);
   const [mainBeApiUrl, setMainBeApiUrl] = useState<string | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
+  const [configInvalid, setConfigInvalid] = useState(false);
 
   const [allChapters, setAllChapters] = useState(true);
   const [rangeStart, setRangeStart] = useState(1);
@@ -198,7 +200,8 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
       if (cfg?.main_be_api_base_url) {
         setMainBeApiUrl(cfg.main_be_api_base_url);
       }
-    }).catch(() => {});
+      setConfigInvalid(!cfg?.main_be_api_base_url || !cfg?.main_be_user_id);
+    }).catch(() => setConfigInvalid(true)).finally(() => setConfigLoading(false));
   }, []);
 
   useEffect(() => {
@@ -359,7 +362,13 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
         </div>
 
         {/* Server Mode Banner */}
-        <ServerModeBanner serverUrl={mainBeApiUrl} isDark={isDark} />
+        <ServerModeBanner
+          serverUrl={mainBeApiUrl}
+          isDark={isDark}
+          isConfigLoading={configLoading}
+          isConfigValid={configInvalid ? false : (configLoading ? undefined : Boolean(mainBeApiUrl && bedReadUserId))}
+          onConfigure={() => window.location.href = '/settings/drive-sync'}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 items-start">
 

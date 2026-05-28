@@ -97,7 +97,7 @@ export function ConfigModal({
               type="text"
               value={configForm.main_be_user_id}
               onChange={e => onFormChange({ main_be_user_id: e.target.value })}
-              placeholder="3b2fae40-e482-4ea1-af7a-96e35ecfbf5f"
+              placeholder="Your user id..."
               className={`w-full px-4 py-3 rounded-xl border text-sm font-mono
                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                 ${isDark

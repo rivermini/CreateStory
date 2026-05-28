@@ -34,6 +34,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState('');
+  const [configInvalid, setConfigInvalid] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [isInitialSetup, setIsInitialSetup] = useState(false);
 
@@ -80,13 +81,18 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
             main_be_api_base_url: cfg.main_be_api_base_url,
             main_be_user_id: (cfg as DriveSyncConfig & { main_be_user_id?: string }).main_be_user_id ?? '',
           }));
+          setConfigInvalid(!cfg.main_be_api_base_url || !cfg.main_be_user_id);
           setShowConfigModal(false);
         } else {
           setIsInitialSetup(true);
+          setConfigInvalid(true);
           setShowConfigModal(true);
         }
       })
-      .catch(() => setConfigError('Failed to load config.'))
+      .catch(() => {
+        setConfigError('Failed to load config.');
+        setConfigInvalid(true);
+      })
       .finally(() => setConfigLoading(false));
   }, []);
 
@@ -363,27 +369,11 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
                 </p>
               </div>
             </div>
-
-            {/* Settings Button */}
-            <button
-              onClick={() => setShowConfigModal(true)}
-              className={`self-start sm:self-auto px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                isDark
-                  ? 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/50'
-                  : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-sm'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Drive Config Settings
-            </button>
           </div>
 
           {/* Status Bar */}
           {config && !configLoading && (
-            <div className={`mt-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 p-4 rounded-2xl ${isDark ? 'bg-slate-900/60 backdrop-blur-sm border border-slate-800/60' : 'bg-white/80 backdrop-blur-sm border border-gray-200/80'}`}>
+            <div className={`mt-6 mb-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 p-4 rounded-2xl ${isDark ? 'bg-slate-900/60 backdrop-blur-sm border border-slate-800/60' : 'bg-white/80 backdrop-blur-sm border border-gray-200/80'}`}>
               {/* Status indicator */}
               <div className="flex items-center gap-2">
                 <div className={`w-2.5 h-2.5 rounded-full ${hasActiveJobs ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
@@ -455,11 +445,18 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           </div>
         )}
 
+        {/* Server Mode Banner */}
+        <ServerModeBanner
+          serverUrl={config?.main_be_api_base_url ?? null}
+          isDark={isDark}
+          isConfigLoading={configLoading}
+          isConfigValid={configInvalid ? false : (configLoading ? undefined : Boolean(config?.main_be_api_base_url && config?.main_be_user_id))}
+          onConfigure={() => setShowConfigModal(true)}
+        />
+
         {/* Main content */}
         {config && !configLoading && (
           <div className="mt-2">
-            {/* Server Mode Banner */}
-            <ServerModeBanner serverUrl={config.main_be_api_base_url} isDark={isDark} />
 
             <StorySyncTabs
               config={config}

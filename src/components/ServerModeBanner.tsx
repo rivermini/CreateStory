@@ -1,12 +1,52 @@
 interface ServerModeBannerProps {
   serverUrl: string | null;
   isDark: boolean;
+  isConfigLoading?: boolean;
+  isConfigValid?: boolean;
+  onConfigure?: () => void;
 }
 
 const PRODUCTION_URL = 'https://api-novel.santngo.com/';
 const PRODUCTION_URL_V2 = 'https://api-novel.santngo.com';
 
-export function ServerModeBanner({ serverUrl, isDark }: ServerModeBannerProps) {
+export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigValid, onConfigure }: ServerModeBannerProps) {
+  if (isConfigLoading) return null;
+
+  if (isConfigValid === false) {
+    return (
+      <div className={`mb-4 px-4 py-3 rounded-xl border flex items-start gap-3 ${isDark
+          ? 'bg-red-900/20 border-red-800/40'
+          : 'bg-red-50 border-red-200'
+        }`}>
+        <div className="flex-shrink-0 mt-0.5">
+          <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold ${isDark ? 'text-red-400' : 'text-red-700'}`}>
+            Drive Sync Not Configured
+          </p>
+          <p className={`text-xs mt-0.5 ${isDark ? 'text-red-400/70' : 'text-red-600'}`}>
+            Auto Audio requires Drive Sync configuration to be set up before use.
+          </p>
+          {onConfigure && (
+            <button
+              onClick={onConfigure}
+              className={`mt-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                isDark
+                  ? 'bg-red-800/60 hover:bg-red-700/60 text-red-200'
+                  : 'bg-red-100 hover:bg-red-200 text-red-700'
+              }`}
+            >
+              Configure Drive Sync
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (!serverUrl) return null;
 
   const normalizedUrl = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl;

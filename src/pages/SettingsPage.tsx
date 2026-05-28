@@ -31,7 +31,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [rangeTo, setRangeTo] = useState(10);
   const [crawlAutoMaxChapters, setCrawlAutoMaxChapters] = useState(false);
   const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(30);
-  const [autoAudioExternalApiBase, setAutoAudioExternalApiBase] = useState('');
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
 
@@ -64,7 +63,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         setRangeTo(s.crawl_default_range_to);
         setCrawlAutoMaxChapters(s.crawl_auto_max_chapters ?? false);
         setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 30);
-        setAutoAudioExternalApiBase(s.auto_audio_external_api_base ?? '');
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
       })
@@ -262,12 +260,12 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         crawl_default_range_to: rangeTo,
         crawl_auto_max_chapters: crawlAutoMaxChapters,
         auto_audio_rest_seconds: autoAudioRestSeconds,
-        auto_audio_external_api_base: autoAudioExternalApiBase,
         auto_audio_test_story_ids: autoAudioTestStoryIds,
       });
       setSettings(updated);
       onThemeChange(localTheme === 'dark' ? 'dark' : 'light');
       setSaveState('saved');
+      showToast('Changes are saved.', 'success', 2000, 'top-center');
       setTimeout(() => setSaveState('idle'), 2000);
     } catch {
       setError('Failed to save settings.');
@@ -663,28 +661,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             </p>
           </div>
 
-          {/* External API Base URL */}
-          <div className="max-w-md">
-            <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-              External API Base URL
-            </label>
-            <input
-              type="text"
-              value={autoAudioExternalApiBase}
-              onChange={e => setAutoAudioExternalApiBase(e.target.value)}
-              placeholder="https://api-novel.santngo.com"
-              className={`w-full px-4 py-3 border rounded-xl
-                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                ${isDark
-                  ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600'
-                  : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400'
-                }`}
-            />
-            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
-              Leave empty to use the default API or Drive Sync configured URL
-            </p>
-          </div>
-
           {/* Test Story IDs */}
           <div className="max-w-lg">
             <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
@@ -700,7 +676,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                   .filter(s => s.length > 0);
                 setAutoAudioTestStoryIds(ids);
               }}
-              placeholder={"ce6176c4-aeb5-4ee1-847f-ee56df64a386\n07d59e98-d693-429b-a9d1-53ce2fd89e55"}
+              placeholder="ce6176c4-aeb5-4ee1-847f-ee56df64a386, 07d59e98-d693-429b-a9d1-53ce2fd89e55"
               rows={3}
               className={`w-full px-4 py-3 border rounded-xl text-sm font-mono resize-none
                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
