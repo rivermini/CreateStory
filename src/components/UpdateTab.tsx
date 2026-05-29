@@ -770,6 +770,110 @@ export function UpdateTab({
                 </div>
               </div>
             )}
+
+            {filteredNoServerMatch.length > 0 && (
+              <div className="mt-4">
+                <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  No Server Match ({filteredNoServerMatch.length})
+                </h3>
+                <div className="space-y-2">
+                  {filteredNoServerMatch.map(entry => (
+                    <div key={entry.id} className={`p-4 rounded-xl ${isDark ? 'bg-slate-900/20 border border-slate-800/40' : 'bg-gray-50 border border-gray-200'}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h4 className={`text-sm font-medium truncate mb-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.display_name}</h4>
+                          <p className={`text-xs font-mono ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>{entry.name}</p>
+                          <div className={`flex items-center gap-1.5 text-xs mt-1.5 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                            No matching story found on the server
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 text-xs font-medium rounded-lg ${isDark ? 'text-slate-500 bg-slate-800/60' : 'text-gray-500 bg-gray-200'}`}>
+                          No Server Match
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {filteredEmptyExtended.length > 0 && (
+              <div className="mt-4">
+                <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15v4c0 1.1.896 2 2 2h14a2 2 0 002-2v-4M17 9l-5 5-5-5M12 12.8V2.5" />
+                  </svg>
+                  Empty EXTENDED ({filteredEmptyExtended.length})
+                </h3>
+                <div className="space-y-2">
+                  {filteredEmptyExtended.map(entry => (
+                    <div key={entry.id} className={`p-4 rounded-xl ${isDark ? 'bg-slate-900/20 border border-slate-800/40' : 'bg-gray-50 border border-gray-200'}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h4 className={`text-sm font-medium truncate mb-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.display_name}</h4>
+                          <p className={`text-xs font-mono ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>{entry.name}</p>
+                          <div className={`flex items-center gap-1.5 text-xs mt-1.5 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                            EXTENDED subfolder is empty
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 text-xs font-medium rounded-lg ${isDark ? 'text-slate-500 bg-slate-800/60' : 'text-gray-500 bg-gray-200'}`}>
+                          Empty EXTENDED
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {filteredNoDriveFolder.length > 0 && (
+              <div className="mt-4">
+                <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-2 ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  No Drive Folder ({filteredNoDriveFolder.length})
+                </h3>
+                <div className="space-y-2">
+                  {filteredNoDriveFolder.map(entry => (
+                    <div key={entry.server_story.id} className={`p-4 rounded-xl ${isDark ? 'bg-rose-950/20 border border-rose-900/30' : 'bg-rose-50 border border-rose-200'}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h4 className={`text-sm font-medium truncate ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>{entry.server_story.title}</h4>
+                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${isDark ? 'bg-rose-900/40 text-rose-400 border border-rose-800/50' : 'bg-rose-100 text-rose-600 border border-rose-200'}`}>
+                              Server: ch {entry.server_story.maxChapter}
+                            </span>
+                          </div>
+                          <div className={`text-xs ${isDark ? 'text-rose-400/70' : 'text-rose-500'}`}>
+                            {entry.last_updated ? (
+                              <span>Last updated: {(() => {
+                                const d = new Date(entry.last_updated!);
+                                const dd = String(d.getDate()).padStart(2, '0');
+                                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                const yyyy = d.getFullYear();
+                                const hh = String(d.getHours()).padStart(2, '0');
+                                const min = String(d.getMinutes()).padStart(2, '0');
+                                return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+                              })()} · </span>
+                            ) : (
+                              <span>Never updated · </span>
+                            )}
+                            No matching EXTENDED_ folder found on Drive
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 text-xs font-medium rounded-lg ${isDark ? 'text-rose-400 bg-rose-900/40 border border-rose-800/50' : 'text-rose-600 bg-rose-100 border border-rose-200'}`}>
+                          No Drive Folder
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
