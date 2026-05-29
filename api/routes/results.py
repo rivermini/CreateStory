@@ -37,13 +37,13 @@ async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
         return JSONResponse(content=resp.json())
 
 
-async def _proxy_download(path: str) -> StreamingResponse:
+async def _proxy_download(path: str, params: dict | None = None) -> StreamingResponse:
     """Forward a download request to NovelCrawler and stream the response."""
     import httpx
 
     url = f"{_nc_url()}{path}"
     async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
-        resp = await client.get(url)
+        resp = await client.get(url, params=params or {})
         resp.raise_for_status()
         content_type = resp.headers.get("content-type", "application/octet-stream")
         headers = {k: v for k, v in resp.headers.items() if k.lower() not in ("host", "connection")}
@@ -81,7 +81,7 @@ async def delete_crawl_sessions(request: dict) -> JSONResponse:
 @router.get("/download-combined-all")
 async def download_combined_all() -> StreamingResponse:
     """Zip the combined files."""
-    return await _proxy_download("/api/results/download-combined-all")
+    return await _proxy_download("/api/results/download-all-combined")
 
 
 @router.get("/{crawl_id}/download-all")
@@ -99,7 +99,7 @@ async def get_crawl_result(crawl_id: str) -> JSONResponse:
 @router.get("/{crawl_id}/download")
 async def download_file(crawl_id: str, filename: str = Query(...)) -> StreamingResponse:
     """Stream a single output file for download."""
-    return await _proxy_download(f"/api/results/{crawl_id}/download?filename={filename}")
+    return await _proxy_download(f"/api/results/{crawl_id}/download", params={"filename": filename})
 
 
 @router.get("/{crawl_id}/preview")
