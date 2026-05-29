@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import ssl
+import threading
 import time
+from pathlib import Path
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,6 +20,7 @@ from api.services.drive_service._paths import (
     _DRIVE_CALL_RETRIES,
     _DRIVE_CALL_SEMAPHORE,
     _RE_STATUS_PREFIX,
+    _SHARED_CREDENTIALS_DIR,
 )
 
 
@@ -49,6 +52,7 @@ class DriveAPIMixin:
         """
         Build an authenticated Google Drive service object.
         Each thread gets its own httplib2 transport to prevent SSL session corruption.
+        Tries the configured path first, then falls back to the shared FastAPIServer/credentials folder.
         """
         service = getattr(self._tls, "drive_service", None)
         if service is not None:
@@ -59,7 +63,14 @@ class DriveAPIMixin:
                 return service
             if self._config is None:
                 raise RuntimeError("Drive sync config not set.")
-            creds, _ = load_credentials_from_file(self._config.service_account_json_path)
+            creds_path = Path(self._config.service_account_json_path)
+            if not creds_path.is_absolute():
+                creds_path = _SHARED_CREDENTIALS_DIR / creds_path.name
+            if not creds_path.is_file():
+                raise FileNotFoundError(
+                    f"Service account JSON not found at configured path or {_SHARED_CREDENTIALS_DIR}"
+                )
+            creds, _ = load_credentials_from_file(str(creds_path))
             self._tls.drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
             return self._tls.drive_service
 

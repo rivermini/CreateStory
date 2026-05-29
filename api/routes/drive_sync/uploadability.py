@@ -303,7 +303,9 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         raise HTTPException(status_code=400, detail=str(exc))
 
     inner = raw_result.get("data") or {}
-    reader_stories: list[dict] = inner.get("data") if isinstance(inner, dict) else inner or []
+    reader_stories: list[dict] = inner.get("data") if isinstance(inner, dict) else (inner or [])
+    if reader_stories is None:
+        reader_stories = []
     reader_titles_lower: set[str] = {_normalize(s.get("title", "")) for s in reader_stories if s.get("title")}
 
     server_by_title: dict[str, ServerStoryRef] = {}
@@ -514,7 +516,9 @@ async def check_updatable_reader_finished_debug() -> CheckUpdatableDebugResponse
         raise HTTPException(status_code=400, detail=str(exc))
 
     inner = raw_result.get("data") or {}
-    reader_stories: list[dict] = inner.get("data") if isinstance(inner, dict) else inner or []
+    reader_stories: list[dict] = inner.get("data") if isinstance(inner, dict) else (inner or [])
+    if reader_stories is None:
+        reader_stories = []
 
     try:
         drive_folders_raw, _ = await asyncio.to_thread(service.list_drive_folders, limit=10000, offset=0)
