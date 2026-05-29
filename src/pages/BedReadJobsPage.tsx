@@ -155,8 +155,11 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                     Download ZIP
                                 </button>
                             )}
-                            {allDone && isAutoMode && (
-                                <span className="px-3 py-1.5 text-xs font-medium text-amber-300 bg-amber-900/30 border border-amber-700/40 rounded-xl">
+                            {isAutoMode && (
+                                <span className={`px-3 py-1.5 text-xs font-medium rounded-xl ${isDark
+                                    ? 'text-amber-300 bg-amber-900/30 border border-amber-700/40'
+                                    : 'text-amber-700 bg-amber-50 border border-amber-200'
+                                }`}>
                                     Auto Mode — Files Deleted
                                 </span>
                             )}
