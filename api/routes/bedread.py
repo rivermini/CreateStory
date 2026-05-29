@@ -36,7 +36,11 @@ def _content_disposition(filename: str) -> str:
 class BatchGenerateRequest(BaseModel):
     story_id: str = Field(..., description="External story ID from the discover API.")
     story_title: str = Field(..., description="Display title for the story.")
-    chapter_start: int = Field(default=1, ge=1, description="Starting chapter number.")
+    chapter_numbers: Optional[list[int]] = Field(
+        default=None,
+        description="Specific chapter numbers to generate. When provided, chapter_start/end are ignored.",
+    )
+    chapter_start: int = Field(default=1, ge=1, description="Starting chapter number (used when chapter_numbers is not set).")
     chapter_end: Optional[int] = Field(default=None, ge=1, description="Ending chapter number. None = all chapters.")
     voice: str = Field(default="af_heart", description="Voice ID.")
     lang: str = Field(default="en-us", description="Language code.")
@@ -203,24 +207,29 @@ def start_batch_generate(
     if not chapter_list:
         raise HTTPException(status_code=404, detail="Story not found or has no chapters.")
 
-    all_chapter_nums = sorted([
-        ch.get("index") or ch.get("chapterNumber") or ch.get("chapter_number")
-        for ch in chapter_list
-        if ch.get("index") or ch.get("chapterNumber") or ch.get("chapter_number")
-    ])
-    if not all_chapter_nums:
-        raise HTTPException(status_code=404, detail="No valid chapter numbers found.")
-
-    start = max(request.chapter_start, min(all_chapter_nums))
-    if request.chapter_end is None:
-        end = max(all_chapter_nums)
+    if request.chapter_numbers is not None:
+        chapter_numbers = sorted(request.chapter_numbers)
+        if not chapter_numbers:
+            raise HTTPException(status_code=400, detail="chapter_numbers list is empty.")
     else:
-        end = min(request.chapter_end, max(all_chapter_nums))
+        all_chapter_nums = sorted([
+            ch.get("index") or ch.get("chapterNumber") or ch.get("chapter_number")
+            for ch in chapter_list
+            if ch.get("index") or ch.get("chapterNumber") or ch.get("chapter_number")
+        ])
+        if not all_chapter_nums:
+            raise HTTPException(status_code=404, detail="No valid chapter numbers found.")
 
-    chapter_numbers = [n for n in all_chapter_nums if start <= n <= end]
+        start = max(request.chapter_start, min(all_chapter_nums))
+        if request.chapter_end is None:
+            end = max(all_chapter_nums)
+        else:
+            end = min(request.chapter_end, max(all_chapter_nums))
 
-    if not chapter_numbers:
-        raise HTTPException(status_code=400, detail="No chapters in the specified range.")
+        chapter_numbers = [n for n in all_chapter_nums if start <= n <= end]
+
+        if not chapter_numbers:
+            raise HTTPException(status_code=400, detail="No chapters in the specified range.")
 
     if len(chapter_numbers) > 100:
         logger.warning("Batch generation for %d chapters (story: %s)", len(chapter_numbers), request.story_title)
