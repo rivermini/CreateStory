@@ -889,7 +889,7 @@ class AutoAudioService:
     OPUS_EXTENSION = "opus"
 
     def _find_ffmpeg(self) -> Optional[Path]:
-        """Find FFmpeg binary. Checks vendor dir then system PATH."""
+        """Find FFmpeg binary. Checks vendor dirs, system PATH, then imageio-ffmpeg package."""
         import shutil as _sh
         # 1. Try vendor/ffmpeg bundled alongside this service
         project_root = Path(__file__).parent.parent.parent.parent
@@ -905,6 +905,14 @@ class AutoAudioService:
         path = _sh.which("ffmpeg")
         if path:
             return Path(path)
+        # 4. Try imageio-ffmpeg (pip install imageio-ffmpeg)
+        try:
+            import imageio_ffmpeg as _imf
+            exe = _imf.get_ffmpeg_exe()
+            if exe and Path(exe).exists():
+                return Path(exe)
+        except Exception:
+            pass
         return None
 
     def _compress_audio_to_opus(
@@ -925,7 +933,7 @@ class AutoAudioService:
 
         ffmpeg_path = self._find_ffmpeg()
         if not ffmpeg_path:
-            session.add_log(6, "FFmpeg not found, uploading original audio as-is", level="warning")
+            session.add_log(6, "FFmpeg not found, uploading original audio as-is (pip install imageio-ffmpeg to enable Opus compression)", level="warning")
             return _CompressedAudio(
                 data=audio_bytes,
                 name=audio_path.name,
