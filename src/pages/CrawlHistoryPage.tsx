@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
     listAllResults,
     getDownloadUrl,
-    getDownloadAllSessionsUrl,
     getDownloadCombinedUrl,
     getDownloadAllUrl,
     getDownloadAllCombinedUrl,
@@ -368,7 +367,6 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
     const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month'>('all');
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-    const [downloadingAll, setDownloadingAll] = useState(false);
     const [downloadingAllCombined, setDownloadingAllCombined] = useState(false);
     const [selectedCrawlIds, setSelectedCrawlIds] = useState<Set<string>>(new Set());
     const [isDeleting, setIsDeleting] = useState(false);
@@ -534,24 +532,6 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-start gap-2">
-                    <button
-                        onClick={() => {
-                            setDownloadingAll(true);
-                            const a = document.createElement('a');
-                            a.href = getDownloadAllSessionsUrl();
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            setTimeout(() => setDownloadingAll(false), 2000);
-                        }}
-                        disabled={downloadingAll || sessions.length === 0}
-                        className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 shadow-lg ${downloadingAll || sessions.length === 0
-                            ? isDark ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none' : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
-                            : 'text-white bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'
-                        }`}
-                    >
-                        {downloadingAll ? 'Zipping...' : 'Download Everything'}
-                    </button>
                     <button
                         onClick={() => {
                             setDownloadingAllCombined(true);

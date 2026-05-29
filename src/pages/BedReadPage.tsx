@@ -55,10 +55,12 @@ function saveSelectedStoryId(id: string | null) {
   } catch { /* ignore */ }
 }
 
-function loadStoredSort(): 'release_date' | 'title' | 'chapter_count' | 'popular' {
+const VALID_SORT_VALUES = ['release_date', 'popular', 'recently_updated', 'recently_added'] as const;
+
+function loadStoredSort(): typeof VALID_SORT_VALUES[number] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_SORT);
-    if (stored === 'title' || stored === 'chapter_count' || stored === 'popular') return stored;
+    if (stored && VALID_SORT_VALUES.includes(stored as typeof VALID_SORT_VALUES[number])) return stored as typeof VALID_SORT_VALUES[number];
   } catch { /* ignore */ }
   return 'release_date';
 }
@@ -77,7 +79,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const [storiesError, setStoriesError] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'release_date' | 'title' | 'chapter_count' | 'popular'>(loadStoredSort);
+  const [sortBy, setSortBy] = useState<'release_date' | 'popular' | 'recently_updated' | 'recently_added'>(loadStoredSort);
   const [pageLimit] = useState(20);
   const [totalStories, setTotalStories] = useState(0);
   const [allLoadedStories, setAllLoadedStories] = useState<BedReadStory[]>(loadStoredStories);
@@ -178,7 +180,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     fetchPage1();
   }, [sortBy]);
 
-  const handleSortChange = (newSort: 'release_date' | 'title' | 'chapter_count' | 'popular') => {
+  const handleSortChange = (newSort: 'release_date' | 'popular' | 'recently_updated' | 'recently_added') => {
     setSortBy(newSort);
     saveSortBy(newSort);
   };
@@ -455,8 +457,8 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                   className={'flex-1 px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ' + selectClass}
                 >
                   <option value="release_date">Latest</option>
-                  <option value="title">Title A-Z</option>
-                  <option value="chapter_count">Most Chapters</option>
+                  <option value="recently_updated">Recently Updated</option>
+                  <option value="recently_added">Recently Added</option>
                   <option value="popular">Popular</option>
                 </select>
               </div>

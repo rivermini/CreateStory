@@ -905,7 +905,7 @@ export interface BedReadStorySearchParams {
   keyword?: string;
   categories?: string[];
   status?: 'all' | 'ongoing' | 'completed';
-  sort?: 'release_date' | 'title' | 'chapter_count' | 'popular';
+  sort?: 'release_date' | 'popular' | 'recently_updated' | 'recently_added';
   minChapters?: number;
   publishedWithin?: number;
   page?: number;
