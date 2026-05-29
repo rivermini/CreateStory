@@ -42,6 +42,7 @@ class BatchGenerateRequest(BaseModel):
     lang: str = Field(default="en-us", description="Language code.")
     speed: float = Field(default=0.69, ge=0.5, le=2.0, description="Speech speed.")
     format: str = Field(default="wav", pattern="^(wav|mp3)$", description="Output format.")
+    from_auto_mode: bool = Field(default=False, description="Whether this batch was triggered by auto audio mode.")
 
 
 class BatchGenerateResponse(BaseModel):
@@ -233,6 +234,7 @@ def start_batch_generate(
             lang=request.lang,
             speed=request.speed,
             format=request.format,
+            from_auto_mode=request.from_auto_mode,
         )
     except Exception as exc:
         logger.exception("Failed to start batch job")
