@@ -266,7 +266,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     type="url"
                     value={inputUrl}
                     onChange={(e) => handleUrlChange(e.target.value)}
-                    placeholder="https://www.wattpad.com/... or https://www.novelworm.com/..."
+                    placeholder="https://www.wattpad.com/... or https://www.inkitt.com/... or https://www.novelworm.com/..."
                     className={`w-full px-4 py-3.5 border rounded-xl
                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200
                       ${isDark

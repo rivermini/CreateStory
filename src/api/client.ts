@@ -28,6 +28,11 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     }
 
     return res.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Request timed out. The site may be slow or blocking automated requests.');
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -58,7 +63,7 @@ export interface SiteDetectResponse {
 }
 
 export async function detectSite(url: string): Promise<SiteDetectResponse> {
-  return apiFetch<SiteDetectResponse>(`/api/sites/detect?url=${encodeURIComponent(url)}`);
+  return apiFetch<SiteDetectResponse>(`/api/sites/detect?url=${encodeURIComponent(url)}`, { timeout: 90000 });
 }
 
 export async function listSites(): Promise<SiteInfoResponse[]> {
