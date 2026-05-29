@@ -8,6 +8,7 @@ import {
   createJob,
   getJob,
   getStoriesNeedingUpdate,
+  checkCredentialsExists,
   FIXED_JSON_PREFIX,
   type DriveSyncConfig,
   type DriveFolderEntry,
@@ -40,13 +41,14 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
   const [configForm, setConfigForm] = useState<ConfigFormData>({
     folder_id: '',
-    service_account_json_name: 'nova-crawler-drive-sync-445ff578305c.json',
+    service_account_json_name: 'google-service-account.json',
     main_be_api_base_url: '',
     main_be_bearer_token: '',
     main_be_user_id: '',
   });
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingConfigError, setSavingConfigError] = useState('');
+  const [credentialFileExists, setCredentialFileExists] = useState(true);
 
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
 
@@ -65,15 +67,16 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [storiesNeedingUpdate, setStoriesNeedingUpdate] = useState<StoriesNeedingUpdateEntry[]>([]);
 
   useEffect(() => {
-    setConfigLoading(true);
-    getDriveSyncConfig()
-      .then(cfg => {
+    async function loadConfig() {
+      setConfigLoading(true);
+      try {
+        const cfg = await getDriveSyncConfig();
         setConfig(cfg);
         if (cfg) {
           const fullCfg = cfg as DriveSyncConfig & { service_account_json_path?: string };
           const jsonName = fullCfg.service_account_json_path
             ? fullCfg.service_account_json_path.replace(FIXED_JSON_PREFIX, '')
-            : 'nova-crawler-drive-sync-445ff578305c.json';
+            : 'google-service-account.json';
           setConfigForm(f => ({
             ...f,
             folder_id: cfg.folder_id,
@@ -82,18 +85,24 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
             main_be_user_id: (cfg as DriveSyncConfig & { main_be_user_id?: string }).main_be_user_id ?? '',
           }));
           setConfigInvalid(!cfg.main_be_api_base_url || !cfg.main_be_user_id);
+          if (jsonName) {
+            const exists = await checkCredentialsExists(jsonName);
+            setCredentialFileExists(exists);
+          }
           setShowConfigModal(false);
         } else {
           setIsInitialSetup(true);
           setConfigInvalid(true);
           setShowConfigModal(true);
         }
-      })
-      .catch(() => {
+      } catch {
         setConfigError('Failed to load config.');
         setConfigInvalid(true);
-      })
-      .finally(() => setConfigLoading(false));
+      } finally {
+        setConfigLoading(false);
+      }
+    }
+    loadConfig();
   }, []);
 
   const handleConfigFormChange = (data: Partial<ConfigFormData>) => {
@@ -509,6 +518,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         savingConfigError={savingConfigError}
         isInitialSetup={isInitialSetup}
         themeMode={themeMode}
+        credentialFileExists={credentialFileExists}
+        onCredentialUploadSuccess={() => setCredentialFileExists(true)}
       />
     </div>
   );

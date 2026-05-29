@@ -4,6 +4,7 @@ import {
   updateSettings,
   getDriveSyncConfig,
   initDriveSyncConfig,
+  checkCredentialsExists,
   type SettingsResponse,
   type DriveSyncConfig,
   FIXED_JSON_PREFIX,
@@ -41,13 +42,14 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [isInitialSetup, setIsInitialSetup] = useState(false);
   const [configForm, setConfigForm] = useState<ConfigFormData>({
     folder_id: '',
-    service_account_json_name: 'nova-crawler-drive-sync-445ff578305c.json',
+    service_account_json_name: 'google-service-account.json',
     main_be_api_base_url: '',
     main_be_bearer_token: '',
     main_be_user_id: '',
   });
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingConfigError, setSavingConfigError] = useState('');
+  const [credentialFileExists, setCredentialFileExists] = useState(true);
   const [uploadError, setUploadError] = useState('');
   const [jsonText, setJsonText] = useState('');
 
@@ -72,24 +74,32 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
 
   // Load Drive Sync config
   useEffect(() => {
-    getDriveSyncConfig()
-      .then(cfg => {
+    async function loadConfig() {
+      try {
+        const cfg = await getDriveSyncConfig();
         setConfig(cfg);
         if (cfg) {
+          const jsonName = cfg.service_account_json_name || 'google-service-account.json';
           setConfigForm({
             folder_id: cfg.folder_id || '',
-            service_account_json_name: cfg.service_account_json_name || 'nova-crawler-drive-sync-445ff578305c.json',
+            service_account_json_name: jsonName,
             main_be_api_base_url: cfg.main_be_api_base_url || '',
             main_be_bearer_token: cfg.main_be_bearer_token || '',
             main_be_user_id: cfg.main_be_user_id || '',
           });
+          const exists = await checkCredentialsExists(jsonName);
+          setCredentialFileExists(exists);
         } else {
           setIsInitialSetup(true);
           setShowConfigModal(true);
         }
-      })
-      .catch(() => {})
-      .finally(() => setConfigLoading(false));
+      } catch {
+        // ignore
+      } finally {
+        setConfigLoading(false);
+      }
+    }
+    loadConfig();
   }, []);
 
   const handleConfigFormChange = (data: Partial<ConfigFormData>) => {
@@ -171,7 +181,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         
         setConfigForm({
           folder_id: folderId,
-          service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'nova-crawler-drive-sync-445ff578305c.json',
+          service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
           main_be_api_base_url: apiUrl,
           main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.token || '',
           main_be_user_id: json.main_be_user_id || json.userId || json.user_id || '',
@@ -235,7 +245,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
       
       setConfigForm({
         folder_id: folderId,
-        service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'nova-crawler-drive-sync-445ff578305c.json',
+        service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
         main_be_api_base_url: apiUrl,
         main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.token || '',
         main_be_user_id: json.main_be_user_id || json.userId || json.user_id || '',
@@ -790,6 +800,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         savingConfigError={savingConfigError}
         isInitialSetup={isInitialSetup}
         themeMode={themeMode}
+        credentialFileExists={credentialFileExists}
+        onCredentialUploadSuccess={() => setCredentialFileExists(true)}
       />
     </div>
   );

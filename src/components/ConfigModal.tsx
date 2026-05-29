@@ -24,6 +24,8 @@ export interface ConfigModalProps {
   savingConfigError: string;
   isInitialSetup?: boolean;
   themeMode?: ThemeMode;
+  credentialFileExists?: boolean;
+  onCredentialUploadSuccess?: (filename: string) => void;
 }
 
 export function ConfigModal({
@@ -36,6 +38,8 @@ export function ConfigModal({
   savingConfigError,
   isInitialSetup = false,
   themeMode,
+  credentialFileExists = true,
+  onCredentialUploadSuccess,
 }: ConfigModalProps) {
   const isDark = themeMode !== 'light';
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -160,8 +164,11 @@ export function ConfigModal({
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {configForm.service_account_json_name && (
-                  <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-emerald-900/40 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-                    Ready
+                  <span className={`text-xs px-2 py-1 rounded-full ${credentialFileExists
+                    ? isDark ? 'bg-emerald-900/40 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+                    : isDark ? 'bg-red-900/40 text-red-400' : 'bg-red-50 text-red-600'
+                  }`}>
+                    {credentialFileExists ? 'Ready' : 'Missing'}
                   </span>
                 )}
                 <label
@@ -182,6 +189,7 @@ export function ConfigModal({
                       try {
                         const result = await uploadDriveCredentials(file);
                         onFormChange({ service_account_json_name: result.filename });
+                        onCredentialUploadSuccess?.(result.filename);
                       } catch {
                         onFormChange({ service_account_json_name: file.name });
                       }
