@@ -140,6 +140,52 @@ async def get_folder_chapter_breakdown(folder_id: str) -> ChapterBreakdownRespon
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+class FolderCountDebug(BaseModel):
+    total_folders_in_drive: int
+    folders_by_prefix: dict[str, int]
+    sample_folders_by_prefix: dict[str, list[str]]
+    folder_id: str
+
+
+@router.get("/folders/count-debug", response_model=FolderCountDebug, tags=["Drive Sync"])
+async def folder_count_debug() -> FolderCountDebug:
+    """Debug endpoint: count folders by prefix (DONE_, EXTENDED_, ING_, INCOMPLETE_). Use to diagnose missing folders."""
+    import time as _time
+    from api.services.drive_service._paths import _RE_STATUS_PREFIX
+
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    try:
+        drive_service = service._build_drive_service()
+    except Exception as exc:
+        raise RuntimeError(f"Failed to authenticate with Google Drive: {exc}")
+
+    try:
+        raw_folders = service._list_folders(drive_service, service._config.folder_id)
+    except Exception as exc:
+        raise RuntimeError(f"Google Drive API error: {exc}")
+
+    counts: dict[str, int] = {}
+    samples: dict[str, list[str]] = {}
+    for f in raw_folders:
+        prefix_match = _RE_STATUS_PREFIX.match(f.get("name", ""))
+        prefix = prefix_match.group(1).rstrip("_") if prefix_match else "(no prefix)"
+        counts[prefix] = counts.get(prefix, 0) + 1
+        if prefix not in samples:
+            samples[prefix] = []
+        if len(samples[prefix]) < 3:
+            samples[prefix].append(f.get("name", ""))
+
+    return FolderCountDebug(
+        total_folders_in_drive=len(raw_folders),
+        folders_by_prefix=counts,
+        sample_folders_by_prefix=samples,
+        folder_id=service._config.folder_id,
+    )
+
+
 # POST /api/drive-sync/trigger
 class DriveSyncTriggerResponse(BaseModel):
     message: str

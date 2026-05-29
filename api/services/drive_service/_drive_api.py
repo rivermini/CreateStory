@@ -137,17 +137,18 @@ class DriveAPIMixin:
 
         subfolder_id: Optional[str] = None
         subfolder_name: Optional[str] = None
-        page_token = None
+        page_token: Optional[str] = None
         while True:
-            q = (
+            _pt = page_token
+            _q = (
                 f"'{folder_id}' in parents and "
                 f"mimeType='application/vnd.google-apps.folder' and "
                 f"name contains 'chapters-extended' and trashed=false"
             )
             try:
                 response = self._retry_drive_call(
-                    lambda _q=q, _pt=page_token: drive_service.files().list(
-                        q=_q, fields="files(id, name, parents)", pageSize=200, pageToken=_pt
+                    lambda: drive_service.files().list(
+                        q=_q, fields="files(id, name, parents)", pageSize=500, pageToken=_pt
                     ).execute()
                 )
             except (ssl.SSLError, TimeoutError):
@@ -175,12 +176,13 @@ class DriveAPIMixin:
         all_files: list[dict] = []
         page_token = None
         while True:
+            _pt = page_token
             try:
                 response = self._retry_drive_call(
-                    lambda _pt=page_token: drive_service.files().list(
+                    lambda: drive_service.files().list(
                         q=f"'{subfolder_id}' in parents and name contains '.md' and trashed=false",
                         fields="files(id, name, parents)",
-                        pageSize=200,
+                        pageSize=500,
                         pageToken=_pt,
                     ).execute()
                 )
@@ -257,14 +259,15 @@ class DriveAPIMixin:
     def _list_folders(self, drive_service: Any, parent_id: str) -> list[dict]:
         """List all folder children under a Drive folder ID."""
         results = []
-        page_token = None
+        page_token: Optional[str] = None
         while True:
+            _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
                     fields="files(id, name, modifiedTime)",
-                    pageSize=200,
-                    pageToken=page_token,
+                    pageSize=500,
+                    pageToken=_pt,
                 ).execute()
             response = self._retry_drive_call(_call)
             files = response.get("files", [])
@@ -278,14 +281,15 @@ class DriveAPIMixin:
     def _list_files_in_folder(self, drive_service: Any, folder_id: str) -> list[dict]:
         """List all file children (non-folders) under a Drive folder ID."""
         results = []
-        page_token = None
+        page_token: Optional[str] = None
         while True:
+            _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false",
                     fields="files(id, name, modifiedTime)",
-                    pageSize=200,
-                    pageToken=page_token,
+                    pageSize=500,
+                    pageToken=_pt,
                 ).execute()
             response = self._retry_drive_call(_call)
             results.extend(response.get("files", []))
@@ -388,15 +392,16 @@ class DriveAPIMixin:
 
         parents_clause = " or ".join(f'"{fid}" in parents' for fid in folder_ids)
         chapters_sub: dict[str, str] = {}
-        page_token = None
+        page_token: Optional[str] = None
         while True:
+            _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
                     f"and (name='chapters' or name='chapters-extended') and trashed=false",
                     fields="files(id, name, parents)",
-                    pageSize=200,
-                    pageToken=page_token,
+                    pageSize=500,
+                    pageToken=_pt,
                 ).execute()
             try:
                 response = self._retry_drive_call(_call)
@@ -427,12 +432,13 @@ class DriveAPIMixin:
         files_by_parent: dict[str, list[dict]] = {pid: [] for pid in all_parent_ids}
         page_token = None
         while True:
+            _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"({all_parents_clause}) and name contains '.md' and trashed=false",
                     fields="files(id, name, parents)",
-                    pageSize=200,
-                    pageToken=page_token,
+                    pageSize=500,
+                    pageToken=_pt,
                 ).execute()
             try:
                 response = self._retry_drive_call(_call)
@@ -477,15 +483,16 @@ class DriveAPIMixin:
 
         parents_clause = " or ".join(f'"{fid}" in parents' for fid in folder_ids)
         extended_map: dict[str, str] = {}
-        page_token = None
+        page_token: Optional[str] = None
         while True:
+            _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
                     f"and name='chapters-extended' and trashed=false",
                     fields="files(id, name, parents)",
-                    pageSize=200,
-                    pageToken=page_token,
+                    pageSize=500,
+                    pageToken=_pt,
                 ).execute()
             try:
                 response = self._retry_drive_call(_call)
@@ -508,12 +515,13 @@ class DriveAPIMixin:
         files_by_ext: dict[str, list[dict]] = {eid: [] for eid in ext_ids}
         page_token = None
         while True:
+            _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"({ext_clause}) and name contains '.md' and trashed=false",
                     fields="files(id, name, parents)",
-                    pageSize=200,
-                    pageToken=page_token,
+                    pageSize=500,
+                    pageToken=_pt,
                 ).execute()
             try:
                 response = self._retry_drive_call(_call)
@@ -617,11 +625,12 @@ class DriveAPIMixin:
                 )
                 page_token = None
                 while True:
-                    def _call(_q=q, _pt=page_token):
+                    _pt = page_token
+                    def _call() -> dict:
                         return drive_service.files().list(
-                            q=_q,
+                            q=q,
                             fields="files(id, name, parents)",
-                            pageSize=200,
+                            pageSize=500,
                             pageToken=_pt,
                         ).execute()
                     try:
@@ -646,11 +655,12 @@ class DriveAPIMixin:
                 )
                 page_token = None
                 while True:
-                    def _call(_q=q, _pt=page_token):
+                    _pt = page_token
+                    def _call() -> dict:
                         return drive_service.files().list(
-                            q=_q,
+                            q=q,
                             fields="files(id, name, parents)",
-                            pageSize=200,
+                            pageSize=500,
                             pageToken=_pt,
                         ).execute()
                     try:
@@ -680,15 +690,16 @@ class DriveAPIMixin:
         for sub_id in chapters_sub:
             page_token = None
             while True:
+                _pt = page_token
+                def _call() -> dict:
+                    return drive_service.files().list(
+                        q=f"'{sub_id}' in parents and name contains '.md' and trashed=false",
+                        fields="files(id, name, parents)",
+                        pageSize=500,
+                        pageToken=_pt,
+                    ).execute()
                 try:
-                    response = self._retry_drive_call(
-                        lambda _sid=sub_id, _pt=page_token: drive_service.files().list(
-                            q=f"'{_sid}' in parents and name contains '.md' and trashed=false",
-                            fields="files(id, name, parents)",
-                            pageSize=200,
-                            pageToken=_pt,
-                        ).execute()
-                    )
+                    response = self._retry_drive_call(_call)
                 except (ssl.SSLError, TimeoutError):
                     break
                 for f in response.get("files", []):
@@ -703,11 +714,12 @@ class DriveAPIMixin:
             for sid in empty_sub_ids:
                 page_token = None
                 while True:
-                    def _fallback_call(_q=f'"{sid}" in parents and name contains ".md" and trashed=false', _pt=page_token):
+                    _pt = page_token
+                    def _fallback_call() -> dict:
                         return drive_service.files().list(
-                            q=_q,
+                            q=f'"{sid}" in parents and name contains ".md" and trashed=false',
                             fields="files(id, name, parents)",
-                            pageSize=200,
+                            pageSize=500,
                             pageToken=_pt,
                         ).execute()
                     try:
@@ -800,11 +812,12 @@ class DriveAPIMixin:
             )
             page_token = None
             while True:
-                def _call(_q=q, _pt=page_token):
+                _pt = page_token
+                def _call() -> dict:
                     return drive_service.files().list(
-                        q=_q,
+                        q=q,
                         fields="files(id, name, parents)",
-                        pageSize=200,
+                        pageSize=500,
                         pageToken=_pt,
                     ).execute()
                 try:
