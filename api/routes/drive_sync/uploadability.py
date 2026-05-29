@@ -329,14 +329,25 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
     ]
 
     if not matched_extended_folders:
+        # Still detect no_drive_folder by comparing all reader titles against all EXTENDED_ folders
+        extended_display_names_lower = {_normalize(f.get("display_name", "")) for f in drive_folders_raw if f.get("prefix") == "EXTENDED"}
+        no_drive_folder: list[ServerOnlyStoryEntry] = []
+        for s in reader_stories:
+            title = _normalize(s.get("title", ""))
+            if title and title not in extended_display_names_lower:
+                server_ref = server_by_title.get(title)
+                if server_ref:
+                    last_updated = await asyncio.to_thread(service.get_last_update_time, server_ref.title)
+                    no_drive_folder.append(ServerOnlyStoryEntry(server_story=server_ref, last_updated=last_updated))
         return CheckUpdatableResponse(
             all_extended_folders=[],
-            server_stories=[],
+            server_stories=[ServerStoryRef(**s) for s in server_stories],
             updatable=[],
             no_update_needed=[],
             no_server_match=[],
             empty_extended=[],
             invalid=[],
+            no_drive_folder=no_drive_folder,
         )
 
     matched_ids = [f["id"] for f in matched_extended_folders]
