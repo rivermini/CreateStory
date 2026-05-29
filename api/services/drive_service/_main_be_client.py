@@ -429,7 +429,8 @@ class MainBEClientMixin:
 
         existing_indices = self._get_existing_chapter_indices(story_id)
         self._append_log("info", f"[update] Server has {len(existing_indices)} chapters: {sorted(existing_indices)}", display_name, job_id=job_id)
-        next_index = max(existing_indices) + 1 if existing_indices else 1
+        server_max = max(existing_indices) if existing_indices else 0
+        next_index = server_max + 1 if existing_indices else 1
 
         chapter_files_sorted = sorted(md_files, key=lambda f: _ns(f["name"]))
         chapters_added = 0
@@ -441,6 +442,12 @@ class MainBEClientMixin:
                 break
             file_id = file_info["id"]
             file_name = file_info["name"]
+
+            ch_idx = self._extract_chapter_index(file_name)
+            if ch_idx is not None and ch_idx <= server_max:
+                self._append_log("debug", f"[update] Skipped {file_name} — chapter {ch_idx} already on server", display_name, job_id=job_id)
+                chapters_skipped += 1
+                continue
 
             try:
                 content = self._get_file_content(drive_service, file_id)
@@ -456,15 +463,7 @@ class MainBEClientMixin:
                 chapters_skipped += 1
                 continue
 
-            posting_index = self._extract_chapter_index(file_name) if self._extract_chapter_index(file_name) else next_index
-
-            if posting_index in existing_indices:
-                self._append_log("info", f"[update] Chapter index {posting_index} already on server", display_name, job_id=job_id)
-                chapters_skipped += 1
-                ch_idx = self._extract_chapter_index(file_name)
-                if ch_idx:
-                    next_index = max(next_index, posting_index + 1)
-                continue
+            posting_index = ch_idx if ch_idx is not None else next_index
 
             while posting_index in existing_indices:
                 posting_index += 1
@@ -477,8 +476,7 @@ class MainBEClientMixin:
             else:
                 self._append_log("warning", f"[update] Chapter {posting_index} ({file_name}) failed to post", display_name, job_id=job_id)
 
-            ch_idx = self._extract_chapter_index(file_name)
-            if ch_idx:
+            if ch_idx is not None:
                 next_index = max(next_index, posting_index + 1)
 
         self._append_log("info", f"[update] Done. Added={chapters_added} Skipped={chapters_skipped}", display_name, job_id=job_id)
