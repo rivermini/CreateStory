@@ -1,430 +1,624 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  getAutoAudioHistory,
-  getAutoAudioSession,
-  type AutoAudioHistoryEntry,
-  type AutoAudioSession,
-  type AutoAudioLogEntry,
+    getAutoAudioHistory,
+    getAutoAudioSession,
+    type AutoAudioHistoryEntry,
+    type AutoAudioSession,
+    type AutoAudioLogEntry,
 } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
+import { DatePicker } from '../components/DatePicker';
 
 interface AutoAudioHistoryPageProps {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
+    themeMode: ThemeMode;
+    onThemeChange: (mode: ThemeMode) => void;
 }
 
 type FilterStatus = 'all' | 'running' | 'stopping' | 'stopped' | 'completed' | 'error';
 type FilterMode = 'all' | 'test' | 'prod';
 
-const STATUS_CONFIG_DARK: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
-  completed: { label: 'Completed', dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-950/40', border: 'border-emerald-800/40' },
-  error:     { label: 'Error', dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-950/40', border: 'border-red-800/40' },
-  stopped:   { label: 'Stopped', dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-950/40', border: 'border-amber-800/40' },
-  running:   { label: 'Running', dot: 'bg-blue-400', text: 'text-blue-400', bg: 'bg-blue-950/40', border: 'border-blue-800/40' },
-  stopping:  { label: 'Stopping', dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-950/40', border: 'border-amber-800/40' },
-  idle:      { label: 'Idle', dot: 'bg-slate-500', text: 'text-slate-400', bg: 'bg-slate-800/40', border: 'border-slate-700/40' },
+const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
+    completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
+    error:     (d) => d ? 'bg-red-400'    : 'bg-red-500',
+    stopped:   (d) => d ? 'bg-amber-400'  : 'bg-amber-500',
+    running:   (d) => d ? 'bg-blue-400'   : 'bg-blue-500',
+    stopping:  (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-500 animate-pulse',
+    idle:      (d) => d ? 'bg-slate-500'  : 'bg-gray-400',
 };
 
-const STATUS_CONFIG_LIGHT: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
-  completed: { label: 'Completed', dot: 'bg-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  error:     { label: 'Error', dot: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
-  stopped:   { label: 'Stopped', dot: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
-  running:   { label: 'Running', dot: 'bg-blue-500', text: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
-  stopping:  { label: 'Stopping', dot: 'bg-amber-500', text: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
-  idle:      { label: 'Idle', dot: 'bg-gray-400', text: 'text-gray-500', bg: 'bg-gray-100', border: 'border-gray-200' },
+const STATUS_LABEL_MAP: Record<string, string> = {
+    completed: 'Completed',
+    error:     'Error',
+    stopped:   'Stopped',
+    running:   'Running',
+    stopping:  'Stopping',
+    idle:      'Idle',
 };
 
-function formatTime(ts: string | null): string {
-  if (!ts) return '—';
-  try {
-    const d = new Date(ts);
-    return d.toLocaleString();
-  } catch {
-    return ts;
-  }
+function formatTime(iso: string | null): string {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString(); } catch { return iso; }
 }
 
 function formatDuration(startedAt: string | null, finishedAt: string | null): string {
-  if (!startedAt || !finishedAt) return '—';
-  try {
-    const start = new Date(startedAt).getTime();
-    const end = new Date(finishedAt).getTime();
-    const diffMs = end - start;
-    if (diffMs <= 0) return '—';
-    const totalSeconds = Math.floor(diffMs / 1000);
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-  } catch {
-    return '—';
-  }
+    if (!startedAt || !finishedAt) return '—';
+    try {
+        const totalSeconds = Math.floor((new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000);
+        if (totalSeconds <= 0) return '—';
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    } catch { return '—'; }
 }
 
-export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
-  const isDark = themeMode === 'dark';
-  const [sessions, setSessions] = useState<AutoAudioHistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
-  const [search, setSearch] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedSession, setExpandedSession] = useState<AutoAudioSession | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+interface SessionCardProps {
+    session: AutoAudioHistoryEntry;
+    order: number;
+    isExpanded: boolean;
+    expandedSession: AutoAudioSession | null;
+    loadingDetail: boolean;
+    deleteMode: boolean;
+    isSelected: boolean;
+    isDark: boolean;
+    onToggleExpand: (sessionId: string) => void;
+    onToggleSelect: (sessionId: string) => void;
+}
 
-  const statusConfig = isDark ? STATUS_CONFIG_DARK : STATUS_CONFIG_LIGHT;
+function SessionCard({
+    session, order, isExpanded, expandedSession, loadingDetail,
+    deleteMode, isSelected, isDark,
+    onToggleExpand, onToggleSelect,
+}: SessionCardProps) {
+    const dotFn = STATUS_DOT_MAP[session.status] ?? STATUS_DOT_MAP.idle;
+    const dot = dotFn(isDark);
+    const label = STATUS_LABEL_MAP[session.status] ?? session.status;
 
-  const loadHistory = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await getAutoAudioHistory();
-      setSessions(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load history.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    const cardBg = deleteMode && isSelected
+        ? (isDark ? 'bg-red-950/30 border-red-800/50' : 'bg-red-50 border-red-200')
+        : (isDark ? 'bg-slate-900/60 border-slate-800/60' : 'bg-white border-gray-200');
 
-  useEffect(() => { loadHistory(); }, [loadHistory]); // eslint-disable-line react-hooks/set-state-in-effect -- matches pre-existing DriveSyncHistoryPage pattern
+    const rootClasses = `${cardBg} rounded-2xl border overflow-hidden flex transition-all duration-200 ${deleteMode ? 'cursor-pointer select-none' : ''}`;
 
-  useEffect(() => {
-    const hasRunning = sessions.some(s => s.status === 'running' || s.status === 'stopping');
-    if (!hasRunning) return;
-    const interval = setInterval(loadHistory, 10000);
-    return () => clearInterval(interval);
-  }, [sessions, loadHistory]);
+    const orderBg = deleteMode && isSelected
+        ? (isDark ? 'bg-red-900/40 border-red-800/40 text-red-300' : 'bg-red-100 border-red-200 text-red-700')
+        : (isDark ? 'bg-indigo-900/20 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700');
 
-  const handleExpand = async (sessionId: string) => {
-    if (expandedId === sessionId) {
-      setExpandedId(null);
-      setExpandedSession(null);
-      return;
-    }
-    setExpandedId(sessionId);
-    setLoadingDetail(true);
-    try {
-      const data = await getAutoAudioSession(sessionId);
-      setExpandedSession(data);
-    } catch {
-      setExpandedSession(null);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
+    const logLevelColor = (level: string) => {
+        if (level === 'error') return isDark ? 'text-red-400' : 'text-red-600';
+        if (level === 'warning') return isDark ? 'text-amber-400' : 'text-amber-600';
+        return isDark ? 'text-slate-300' : 'text-gray-700';
+    };
 
-  const filteredSessions = sessions.filter(s => {
-    if (filterStatus !== 'all' && s.status !== filterStatus) return false;
-    if (filterMode === 'test' && !s.test_mode) return false;
-    if (filterMode === 'prod' && s.test_mode) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (!s.session_id.toLowerCase().includes(q) && !s.error.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
+    return (
+        <div
+            className={rootClasses}
+            onClick={deleteMode ? () => onToggleSelect(session.session_id) : undefined}
+        >
+            {order != null && (
+                <div className={`w-12 flex-shrink-0 border-r flex flex-col items-center justify-center rounded-l-2xl transition-colors duration-200 ${orderBg}`}>
+                    <span className="text-base font-bold select-none">#{order}</span>
+                </div>
+            )}
 
-  const cardClass = isDark
-    ? 'rounded-2xl bg-slate-900/60 border border-slate-800/60'
-    : 'rounded-2xl bg-white border border-gray-200';
-  const inputClass = isDark
-    ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
-    : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400';
-  const selectClass = isDark
-    ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-    : 'bg-gray-50 border-gray-300 text-gray-900';
-  const labelClass = isDark ? 'text-slate-400' : 'text-gray-700';
-  const valueClass = isDark ? 'text-slate-100' : 'text-gray-900';
-  const mutedClass = isDark ? 'text-slate-500' : 'text-gray-500';
-  const mutedSmClass = isDark ? 'text-slate-500' : 'text-gray-400';
-  const subtleClass = isDark ? 'text-slate-600' : 'text-gray-300';
-  const borderClass = isDark ? 'border-slate-800' : 'border-gray-200';
-  const subtleBgClass = isDark ? 'bg-slate-800/60' : 'bg-gray-100';
-  const subtleBg2Class = isDark ? 'bg-slate-800/40' : 'bg-gray-50';
-
-  const logLevelColor = (level: string) => {
-    switch (level) {
-      case 'error': return isDark ? 'text-red-400' : 'text-red-600';
-      case 'warning': return isDark ? 'text-amber-400' : 'text-amber-600';
-      default: return isDark ? 'text-slate-300' : 'text-gray-700';
-    }
-  };
-
-  return (
-    <div className={`min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8">
-
-        {/* Page Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className={`text-2xl sm:text-3xl font-bold ${valueClass}`}>Audio History</h1>
-            <p className={`mt-1 text-sm sm:text-base ${mutedClass}`}>Past auto audio sessions</p>
-          </div>
-          <button
-            onClick={() => loadHistory()}
-            disabled={loading}
-            className={`p-2 rounded-xl transition-colors ${subtleBgClass} hover:${isDark ? 'bg-slate-700/60' : 'bg-gray-200'} disabled:opacity-50`}
-            title="Refresh"
-          >
-            <svg className={`w-5 h-5 ${mutedClass}${loading ? ' animate-spin-ccw' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-        </div>
-
-        {error && (
-          <div className={`mb-4 p-3 rounded-xl text-sm ${isDark
-            ? 'bg-red-900/20 border border-red-800/30 text-red-400'
-            : 'bg-red-50 border border-red-200 text-red-600'}`}>
-            {error}
-          </div>
-        )}
-
-        {/* Filters */}
-        <section className={`${cardClass} px-5 py-4 mb-4`}>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${mutedSmClass}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search by session ID..."
-                  className={`w-full pl-10 pr-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${inputClass}`}
-                />
-              </div>
-            </div>
-
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value as FilterStatus)}
-              className={`px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ${selectClass}`}
-            >
-              <option value="all">All Status</option>
-              <option value="running">Running</option>
-              <option value="stopped">Stopped</option>
-              <option value="stopping">Stopping</option>
-              <option value="completed">Completed</option>
-              <option value="error">Error</option>
-            </select>
-
-            <select
-              value={filterMode}
-              onChange={e => setFilterMode(e.target.value as FilterMode)}
-              className={`px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ${selectClass}`}
-            >
-              <option value="all">All Modes</option>
-              <option value="test">Test Mode</option>
-              <option value="prod">Production</option>
-            </select>
-
-            <span className={`text-xs ${mutedSmClass}`}>
-              {filteredSessions.length} session{filteredSessions.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        </section>
-
-        {/* Session List */}
-        {loading && (
-          <div className={`flex flex-col items-center justify-center py-16 ${mutedClass} text-sm`}>
-            <svg className={`w-8 h-8 mb-3 animate-spin-ccw ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Loading sessions...
-          </div>
-        )}
-
-        {!loading && !error && filteredSessions.length === 0 && (
-          <section className={cardClass + ' p-8 text-center'}>
-            <svg className={`w-12 h-12 mx-auto mb-4 ${subtleClass}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className={`text-sm ${mutedClass}`}>No sessions found.</p>
-          </section>
-        )}
-
-        <div className="space-y-3">
-          {filteredSessions.map(session => {
-            const status = session.status;
-            const cfg = statusConfig[status] ?? statusConfig['idle'];
-            const isExpanded = expandedId === session.session_id;
-
-            return (
-              <div key={session.session_id} className={cardClass + ' overflow-hidden'}>
-                {/* Session Card Header */}
-                <button
-                  className={`w-full px-5 py-4 text-left transition-colors ${isDark ? 'hover:bg-slate-800/20' : 'hover:bg-gray-50'}`}
-                  onClick={() => handleExpand(session.session_id)}
+            <div className="flex-1 min-w-0 flex flex-col">
+                <div
+                    className={`px-5 py-4 flex flex-col sm:flex-row items-start gap-4 ${!deleteMode ? 'cursor-pointer' : ''}`}
+                    onClick={!deleteMode ? () => onToggleExpand(session.session_id) : undefined}
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* Status badge */}
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-semibold rounded-full ${cfg.bg} ${cfg.text}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                          {cfg.label}
-                        </span>
-
-                        {/* Mode badge */}
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${session.test_mode
-                          ? (isDark ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-100 text-amber-700')
-                          : (isDark ? 'bg-slate-800/60 text-slate-400' : 'bg-gray-100 text-gray-600')}`}>
-                          {session.test_mode ? 'Test' : 'Production'}
-                        </span>
-
-                        {/* Session ID */}
-                        <span className={`text-xs font-mono ${mutedSmClass}`}>{session.session_id}</span>
-                      </div>
-
-                      <div className={`mt-1 text-sm ${valueClass}`}>
-                        Step {session.current_step}: {session.current_step_desc || '—'}
-                      </div>
-
-                      <div className={`mt-1 flex items-center gap-4 text-xs ${mutedSmClass}`}>
-                        <span>{session.total_stories} stories</span>
-                        <span>{session.total_chapters} chapters</span>
-                      </div>
+                    <div className="flex-shrink-0 mt-1 flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />
                     </div>
 
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <svg
-                        className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''} ${mutedClass}`}
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                      <div className={`text-xs ${mutedSmClass}`}>
-                        {formatTime(session.started_at)}
-                      </div>
-                      {/* Make the duration more attrative design */}
-                      <div className={`text-xs ${mutedSmClass} font-medium`}>
-                        <span className={`text-xs ${valueClass} font-medium`}>
-                          {formatDuration(session.started_at, session.finished_at)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                    <div className="flex-1 min-w-0 w-full">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${isDark
+                                ? 'bg-slate-800/60 text-slate-300'
+                                : 'bg-gray-100 text-gray-700'}`}>
+                                {label}
+                            </span>
+                            <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${session.test_mode
+                                ? (isDark ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-100 text-amber-700')
+                                : (isDark ? 'bg-slate-800/60 text-slate-400' : 'bg-gray-100 text-gray-600')}`}>
+                                {session.test_mode ? 'Test' : 'Production'}
+                            </span>
+                            <span className={`text-xs font-mono ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{session.session_id}</span>
+                        </div>
 
-                  {session.error && (
-                    <div className={`mt-2 text-xs ${isDark ? 'text-red-400' : 'text-red-600'} truncate`}>
-                      Error: {session.error}
+                        <div className={`mt-1.5 text-sm font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                            Step {session.current_step}: {session.current_step_desc || '—'}
+                        </div>
+
+                        <div className={`mt-1 flex items-center gap-4 text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                            <span>{session.total_stories} stories</span>
+                            <span>{session.total_chapters} chapters</span>
+                        </div>
                     </div>
-                  )}
-                </button>
+
+                    <div className={`flex flex-col sm:items-end gap-1 text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                        <div className="flex items-center gap-2">
+                            <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''} ${isDark ? 'text-slate-400' : 'text-gray-400'}`}
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                            <span>Started {formatTime(session.started_at)}</span>
+                        </div>
+                        {session.finished_at && (
+                            <>
+                                <span>Finished {formatTime(session.finished_at)}</span>
+                                <span className={`text-xs font-medium ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                                    {formatDuration(session.started_at, session.finished_at)}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {session.error && (
+                    <div className={`px-5 pb-3 text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                        Error: {session.error}
+                    </div>
+                )}
 
                 {/* Expanded Detail */}
                 {isExpanded && (
-                  <div className={`border-t ${borderClass}`}>
-                    {loadingDetail ? (
-                      <div className={`p-5 flex items-center gap-2 text-sm ${mutedSmClass}`}>
-                        <svg className={`w-4 h-4 animate-spin-ccw ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Loading session detail...
-                      </div>
-                    ) : expandedSession ? (
-                      <div className="p-5 space-y-4">
-                        {/* Session meta */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div>
-                            <p className={`text-xs ${mutedSmClass}`}>Session ID</p>
-                            <p className={`text-sm font-mono ${valueClass}`}>{expandedSession.session_id}</p>
-                          </div>  
-                          <div>
-                            <p className={`text-xs ${mutedSmClass}`}>Started</p>
-                            <p className={`text-sm ${valueClass}`}>{formatTime(expandedSession.started_at)}</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs ${mutedSmClass}`}>Finished</p>
-                            <p className={`text-sm ${valueClass}`}>{formatTime(expandedSession.finished_at)}</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs ${mutedSmClass}`}>Duration</p>
-                            <p className={`text-sm ${valueClass}`}>{formatDuration(expandedSession.started_at, expandedSession.finished_at)}</p>
-                          </div>
-                        </div>
-
-                        {/* Stories preview */}
-                        {expandedSession.stories_missing_audio.length > 0 && (
-                          <div>
-                            <p className={`text-xs font-medium ${labelClass} mb-2`}>Stories with missing audio:</p>
-                            <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                              {expandedSession.stories_missing_audio.map((s, i) => (
-                                <div key={i} className={`p-2 rounded-lg text-xs flex justify-between ${subtleBg2Class}`}>
-                                  <span className={valueClass}>{s.title}</span>
-                                  <span className={mutedSmClass}>{s.missingCount} missing</span>
-                                </div>
-                              ))}
+                    <div className={`border-t px-5 py-4 ${isDark
+                        ? 'border-slate-800/60 bg-slate-900/40'
+                        : 'border-gray-200 bg-gray-50/50'}`}>
+                        {loadingDetail ? (
+                            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Loading session detail...
                             </div>
-                          </div>
-                        )}
-
-                        {/* Story Results */}
-                        {expandedSession.story_results.length > 0 && (
-                          <div>
-                            <p className={`text-xs font-medium ${labelClass} mb-2`}>Story Results:</p>
-                            <div className="space-y-1">
-                              {expandedSession.story_results.map((r, i) => (
-                                <div key={i} className={`p-2 rounded-lg text-xs ${subtleBg2Class}`}>
-                                  <div className="flex justify-between">
-                                    <span className={`font-medium ${valueClass}`}>{r.story_title}</span>
-                                    <span className={mutedSmClass}>
-                                      {r.chapters_uploaded}/{r.chapters_generated} uploaded
-                                    </span>
-                                  </div>
-                                  {r.upload_errors.length > 0 && (
-                                    <p className={`text-xs mt-0.5 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                                      {r.upload_errors.slice(0, 2).join(', ')}
-                                    </p>
-                                  )}
-                                  {r.error && (
-                                    <p className={`text-xs mt-0.5 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{r.error}</p>
-                                  )}
+                        ) : expandedSession ? (
+                            <div className="space-y-4">
+                                {/* Session meta grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    {[
+                                        ['Session ID', expandedSession.session_id, true],
+                                        ['Started', formatTime(expandedSession.started_at), false],
+                                        ['Finished', formatTime(expandedSession.finished_at), false],
+                                        ['Duration', formatDuration(expandedSession.started_at, expandedSession.finished_at), false],
+                                    ].map(([label, value, mono]) => (
+                                        <div key={String(label)}>
+                                            <p className={`text-[10px] uppercase tracking-wider font-semibold ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>{label}</p>
+                                            <p className={`text-sm mt-0.5 ${mono ? 'font-mono' : ''} ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{value || '—'}</p>
+                                        </div>
+                                    ))}
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
 
-                        {/* Logs */}
-                        {expandedSession.logs.length > 0 && (
-                          <div>
-                            <p className={`text-xs font-medium ${labelClass} mb-2`}>Session Log:</p>
-                            <div className={`rounded-xl p-3 font-mono max-h-[400px] overflow-y-auto ${isDark ? 'bg-slate-950/60' : 'bg-gray-50'}`}
-                              style={{ fontSize: '0.7rem', lineHeight: '1.5' }}>
-                              {expandedSession.logs.map((log: AutoAudioLogEntry, i: number) => (
-                                <div key={i} className="flex gap-2">
-                                  <span className={`flex-shrink-0 ${mutedSmClass}`}>[{log.timestamp}]</span>
-                                  <span className={`flex-shrink-0 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>S{log.step}</span>
-                                  <span className={logLevelColor(log.level)}>{log.message}</span>
-                                </div>
-                              ))}
+                                {/* Stories missing audio */}
+                                {expandedSession.stories_missing_audio.length > 0 && (
+                                    <div>
+                                        <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                                            Stories with Missing Audio
+                                        </p>
+                                        <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                                            {expandedSession.stories_missing_audio.map((s, i) => (
+                                                <div key={i} className={`flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-white/50'}`}>
+                                                    <span className={`text-sm truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{s.title}</span>
+                                                    <span className={`text-xs flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{s.missingCount} missing</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Story Results */}
+                                {expandedSession.story_results.length > 0 && (
+                                    <div>
+                                        <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                                            Story Results
+                                        </p>
+                                        <div className="space-y-1 max-h-[250px] overflow-y-auto">
+                                            {expandedSession.story_results.map((r, i) => (
+                                                <div key={i} className={`py-2 px-2 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-white/50'}`}>
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <span className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{r.story_title}</span>
+                                                        <span className={`text-xs flex-shrink-0 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                            {r.chapters_uploaded}/{r.chapters_generated} uploaded
+                                                        </span>
+                                                    </div>
+                                                    {r.upload_errors.length > 0 && (
+                                                        <p className={`text-xs mt-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                                            {r.upload_errors.slice(0, 2).join(', ')}
+                                                        </p>
+                                                    )}
+                                                    {r.error && (
+                                                        <p className={`text-xs mt-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{r.error}</p>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Logs */}
+                                {expandedSession.logs.length > 0 && (
+                                    <div>
+                                        <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
+                                            Session Log
+                                        </p>
+                                        <div className={`rounded-xl p-3 font-mono max-h-[300px] overflow-y-auto ${isDark ? 'bg-slate-950/60' : 'bg-gray-100'}`}
+                                            style={{ fontSize: '0.7rem', lineHeight: '1.6' }}>
+                                            {expandedSession.logs.map((log: AutoAudioLogEntry, i: number) => (
+                                                <div key={i} className="flex gap-2">
+                                                    <span className={`flex-shrink-0 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>[{log.timestamp}]</span>
+                                                    <span className={`flex-shrink-0 font-bold ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>S{log.step}</span>
+                                                    <span className={logLevelColor(log.level)}>{log.message}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                          </div>
+                        ) : (
+                            <div className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Session detail unavailable.</div>
                         )}
-                      </div>
-                    ) : (
-                      <div className={`p-5 text-sm ${mutedSmClass}`}>Session detail unavailable.</div>
-                    )}
-                  </div>
+                    </div>
                 )}
-              </div>
-            );
-          })}
+            </div>
         </div>
+    );
+}
 
-      </main>
-    </div>
-  );
+export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
+    const isDark = themeMode === 'dark';
+    const PAGE_SIZE = 15;
+    const [sessions, setSessions] = useState<AutoAudioHistoryEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+    const [filterMode, setFilterMode] = useState<FilterMode>('all');
+    const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+    const [specificDate, setSpecificDate] = useState('');
+    const [search, setSearch] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [expandedSession, setExpandedSession] = useState<AutoAudioSession | null>(null);
+    const [loadingDetail, setLoadingDetail] = useState(false);
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [deleteMode, setDeleteMode] = useState(false);
+    const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+    const loadHistory = useCallback(async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const data = await getAutoAudioHistory();
+            setSessions(data);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Failed to load history.');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { loadHistory(); }, [loadHistory]);
+
+    useEffect(() => {
+        const hasRunning = sessions.some(s => s.status === 'running' || s.status === 'stopping');
+        if (!hasRunning) return;
+        const interval = setInterval(loadHistory, 10000);
+        return () => clearInterval(interval);
+    }, [sessions, loadHistory]);
+
+    const dateCutoff = specificDate ? (() => {
+        const start = new Date(specificDate + 'T00:00:00');
+        const end = new Date(specificDate + 'T23:59:59');
+        return { start, end };
+    })() : null;
+
+    const filtered = sessions
+        .filter(s => {
+            if (filterStatus !== 'all' && s.status !== filterStatus) return false;
+            if (filterMode === 'test' && !s.test_mode) return false;
+            if (filterMode === 'prod' && s.test_mode) return false;
+            if (search) {
+                const q = search.toLowerCase();
+                if (!s.session_id.toLowerCase().includes(q) && !s.error?.toLowerCase().includes(q)) return false;
+            }
+            return true;
+        })
+        .filter(s => {
+            if (!dateCutoff || !s.started_at) return true;
+            const sessionTime = new Date(s.started_at).getTime();
+            return sessionTime >= dateCutoff.start.getTime() && sessionTime <= dateCutoff.end.getTime();
+        })
+        .sort((a, b) => {
+            const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
+            const bTime = b.started_at ? new Date(b.started_at).getTime() : 0;
+            return sortOrder === 'newest' ? bTime - aTime : aTime - bTime;
+        });
+
+    const visibleSessions = filtered.slice(0, visibleCount);
+    const hasMore = visibleCount < filtered.length;
+
+    useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filterStatus, filterMode, sortOrder, specificDate, search]);
+
+    useEffect(() => {
+        if (!hasMore) return;
+        const node = loadMoreRef.current;
+        if (!node) return;
+        const observer = new IntersectionObserver(
+            entries => { if (entries[0]?.isIntersecting) setVisibleCount(prev => Math.min(prev + PAGE_SIZE, filtered.length)); },
+            { rootMargin: '300px 0px' }
+        );
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [hasMore, filtered.length]);
+
+    const handleToggleExpand = async (sessionId: string) => {
+        if (expandedId === sessionId) {
+            setExpandedId(null);
+            setExpandedSession(null);
+            return;
+        }
+        setExpandedId(sessionId);
+        setLoadingDetail(true);
+        try {
+            const data = await getAutoAudioSession(sessionId);
+            setExpandedSession(data);
+        } catch {
+            setExpandedSession(null);
+        } finally {
+            setLoadingDetail(false);
+        }
+    };
+
+    const handleToggleSelect = (sessionId: string) => {
+        const s = new Set(selectedIds);
+        s.has(sessionId) ? s.delete(sessionId) : s.add(sessionId);
+        setSelectedIds(s);
+    };
+
+    const toggleDeleteMode = () => {
+        if (deleteMode) { setDeleteMode(false); setSelectedIds(new Set()); }
+        else { setDeleteMode(true); }
+    };
+
+    const filteredCounts = {
+        all: filtered.length,
+        running: filtered.filter(s => s.status === 'running' || s.status === 'stopping').length,
+        completed: filtered.filter(s => s.status === 'completed').length,
+        error: filtered.filter(s => s.status === 'error').length,
+        stopped: filtered.filter(s => s.status === 'stopped').length,
+    };
+
+    const filterBarBase = isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200';
+    const filterBtnActive = 'bg-indigo-600 text-white';
+    const filterBtnInactive = isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-500 hover:text-gray-700';
+
+    const allVisibleSelected = visibleSessions.length > 0 && visibleSessions.every(s => selectedIds.has(s.session_id));
+
+    return (
+        <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
+            <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+
+                {/* Page Header */}
+                <div className="mb-2">
+                    <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                        Audio History
+                    </h1>
+                    <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                        {filtered.length} of {sessions.length} sessions
+                        {filterStatus !== 'all' && ` · ${filterStatus}`}
+                        {filterMode !== 'all' && ` · ${filterMode}`}
+                        {specificDate && ` · ${specificDate}`}
+                    </p>
+                </div>
+
+                {/* Running Banner */}
+                {filtered.filter(s => s.status === 'running').length > 0 && (
+                    <div className={`rounded-2xl p-4 flex items-center gap-3 ${isDark ? 'bg-blue-950/30 border border-blue-900/40' : 'bg-blue-50 border border-blue-200'}`}>
+                        <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+                        <span className={`text-sm ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                            <span className="font-medium">{filtered.filter(s => s.status === 'running').length} session(s)</span>
+                            {' '}currently running
+                        </span>
+                    </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center justify-start gap-2">
+                    <button
+                        onClick={toggleDeleteMode}
+                        className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${deleteMode
+                            ? (isDark ? 'text-red-300 border border-red-700 bg-red-900/20 hover:bg-red-900/40' : 'text-red-600 border border-red-300 bg-red-50 hover:bg-red-100')
+                            : (isDark ? 'text-slate-300 border border-slate-700 hover:bg-slate-800' : 'text-gray-600 border border-gray-300 hover:bg-gray-100')}`}
+                    >
+                        {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
+                    </button>
+                    {deleteMode && (
+                        <button
+                            onClick={() => allVisibleSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(visibleSessions.map(s => s.session_id)))}
+                            className={`px-3 py-1.5 text-sm rounded-xl transition-colors ${isDark ? 'text-slate-300 border border-slate-700 hover:bg-slate-800' : 'text-gray-600 border border-gray-300 hover:bg-gray-100'}`}
+                        >
+                            {allVisibleSelected ? 'Unselect All' : 'Select All'}
+                        </button>
+                    )}
+                </div>
+
+                {/* Delete Mode Banner */}
+                {deleteMode && (
+                    <div className={`rounded-2xl p-3 flex items-center justify-between gap-3 ${isDark
+                        ? 'bg-red-900/20 border border-red-800/30'
+                        : 'bg-red-50 border border-red-200'}`}>
+                        <div className="flex items-center gap-2">
+                            <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Delete Mode Active</span>
+                            {selectedIds.size > 0 && <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-500'}`}>({selectedIds.size} selected)</span>}
+                        </div>
+                        <button onClick={toggleDeleteMode} className={`text-xs underline ${isDark ? 'text-red-300 hover:text-white' : 'text-red-500 hover:text-red-700'}`}>Exit Delete Mode</button>
+                    </div>
+                )}
+
+                {/* Filter Bar */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+                    {/* Status filter */}
+                    <div className={`flex items-center gap-1 p-1 rounded-xl ${filterBarBase}`}>
+                        {([
+                            ['all', `All (${filteredCounts.all})`],
+                            ['running', `Running (${filteredCounts.running})`],
+                            ['stopped', `Stopped (${filteredCounts.stopped})`],
+                            ['completed', `Done (${filteredCounts.completed})`],
+                            ['error', `Error (${filteredCounts.error})`],
+                        ] as const).map(([value, label]) => (
+                            <button
+                                key={value}
+                                onClick={() => setFilterStatus(value)}
+                                className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${filterStatus === value ? filterBtnActive : filterBtnInactive}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Mode filter */}
+                    <div className={`flex items-center gap-1 p-1 rounded-xl ${filterBarBase}`}>
+                        <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Mode:</span>
+                        {([['all', 'All'], ['test', 'Test'], ['prod', 'Prod']] as const).map(([value, label]) => (
+                            <button
+                                key={value}
+                                onClick={() => setFilterMode(value)}
+                                className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${filterMode === value ? filterBtnActive : filterBtnInactive}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Sort */}
+                    <div className={`flex items-center gap-1 p-1 rounded-xl ${filterBarBase}`}>
+                        <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Sort:</span>
+                        <button
+                            onClick={() => setSortOrder('newest')}
+                            className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${sortOrder === 'newest' ? filterBtnActive : filterBtnInactive}`}
+                        >
+                            Newest
+                        </button>
+                        <button
+                            onClick={() => setSortOrder('oldest')}
+                            className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${sortOrder === 'oldest' ? filterBtnActive : filterBtnInactive}`}
+                        >
+                            Oldest
+                        </button>
+                    </div>
+
+                    <DatePicker
+                        value={specificDate}
+                        onDateChange={setSpecificDate}
+                        isDark={isDark}
+                    />
+
+                    {/* Refresh */}
+                    <button
+                        onClick={() => loadHistory()}
+                        className={`px-3 py-1 text-xs border rounded-xl transition-colors flex items-center gap-1.5 ${isDark
+                            ? 'text-slate-400 hover:text-slate-200 border-slate-800 hover:bg-slate-900'
+                            : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                        title="Refresh now"
+                    >
+                        <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative">
+                    <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search by session ID..."
+                        className={`w-full pl-10 pr-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                            ? 'bg-slate-900/60 border-slate-800 text-slate-100 placeholder-slate-500'
+                            : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400'}`}
+                    />
+                </div>
+
+                {/* Loading */}
+                {loading && sessions.length === 0 && (
+                    <div className={`flex items-center justify-center py-16 gap-3 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                        <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span>Loading...</span>
+                    </div>
+                )}
+
+                {/* Error */}
+                {error && (
+                    <div className={`flex items-center justify-between gap-3 p-4 rounded-2xl text-sm ${isDark
+                        ? 'bg-red-900/20 border border-red-800/30 text-red-400'
+                        : 'bg-red-50 border border-red-200 text-red-600'}`}>
+                        <span>{error}</span>
+                        <button onClick={loadHistory} className="underline hover:no-underline">Retry</button>
+                    </div>
+                )}
+
+                {/* Empty State */}
+                {!loading && filtered.length === 0 && (
+                    <div className={`text-center py-20 space-y-3 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                        <div className="flex justify-center">
+                            <svg className={`w-12 h-12 ${isDark ? 'text-slate-700' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                            </svg>
+                        </div>
+                        <p className={isDark ? 'text-slate-400' : 'text-gray-500'}>
+                            {filterStatus === 'all' && filterMode === 'all' && !search ? 'No sessions yet.' : 'No matching sessions.'}
+                        </p>
+                    </div>
+                )}
+
+                {/* Session List */}
+                <div className="space-y-3">
+                    {visibleSessions.map((session, index) => (
+                        <SessionCard
+                            key={session.session_id}
+                            session={session}
+                            order={index + 1}
+                            isExpanded={expandedId === session.session_id}
+                            expandedSession={expandedId === session.session_id ? expandedSession : null}
+                            loadingDetail={expandedId === session.session_id && loadingDetail}
+                            deleteMode={deleteMode}
+                            isSelected={selectedIds.has(session.session_id)}
+                            isDark={isDark}
+                            onToggleExpand={handleToggleExpand}
+                            onToggleSelect={handleToggleSelect}
+                        />
+                    ))}
+                    {hasMore && <div ref={loadMoreRef} className={`py-6 text-center text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Loading more sessions...</div>}
+                </div>
+
+                {/* Bottom Refresh */}
+                {!loading && filtered.length > 0 && (
+                    <div className="flex justify-center pt-2">
+                        <button
+                            onClick={loadHistory}
+                            className={`px-4 py-2 text-sm border rounded-xl transition-colors ${isDark
+                                ? 'text-slate-400 hover:text-slate-200 border-slate-800 hover:bg-slate-900'
+                                : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                )}
+            </main>
+        </div>
+    );
 }
 
 export default AutoAudioHistoryPage;

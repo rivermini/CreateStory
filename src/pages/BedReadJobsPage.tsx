@@ -8,6 +8,7 @@ import {
     removeBatchJob,
     type BatchJob,
 } from '../api/client';
+import { DatePicker } from '../components/DatePicker';
 
 interface BedReadJobsPageProps {
     themeMode: 'light' | 'dark';
@@ -27,6 +28,8 @@ function formatDuration(start: string | null, finish: string | null): string {
         return `${Math.floor(secs / 60)}m ${secs % 60}s`;
     } catch { return '—'; }
 }
+
+
 
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
     pending:   (d) => d ? 'bg-slate-400' : 'bg-gray-400',
@@ -517,30 +520,19 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                         {(['all', 'today', 'week', 'month'] as const).map(val => (
                             <button
                                 key={val}
-                                onClick={() => setTimeRange(val)}
-                                className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === val && !specificDate ? filterBtnActive : filterBtnInactive}`}
+                                onClick={() => { setTimeRange(val); setSpecificDate(''); }}
+                                className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === val ? filterBtnActive : filterBtnInactive}`}
                             >
                                 {val === 'all' ? 'All' : val === 'today' ? 'Today' : val === 'week' ? '7d' : '30d'}
                             </button>
                         ))}
-                        <button
-                            onClick={() => setTimeRange('specific')}
-                            className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === 'specific' ? filterBtnActive : filterBtnInactive}`}
-                        >
-                            Day
-                        </button>
                     </div>
 
-                    {timeRange === 'specific' && (
-                        <input
-                            type="date"
-                            value={specificDate}
-                            onChange={e => setSpecificDate(e.target.value)}
-                            className={`px-3 py-1 text-xs sm:text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
-                                ? 'bg-slate-800 border-slate-700 text-slate-100'
-                                : 'bg-gray-50 border-gray-300 text-gray-900'}`}
-                        />
-                    )}
+                    <DatePicker
+                        value={specificDate}
+                        onDateChange={setSpecificDate}
+                        isDark={isDark}
+                    />
 
                     <button
                         onClick={() => { setIsLoading(true); fetchJobs().finally(() => setIsLoading(false)); }}

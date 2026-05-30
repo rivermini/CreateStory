@@ -10,6 +10,7 @@ import {
     type CrawlSessionSummary,
 } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
+import { DatePicker } from '../components/DatePicker';
 
 interface ResultsAllPageProps {
     themeMode: ThemeMode;
@@ -365,7 +366,8 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
     const [error, setError] = useState('');
     const [filter, setFilter] = useState<'all' | 'completed' | 'failed' | 'running'>('all');
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
-    const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month'>('all');
+    const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'specific'>('all');
+    const [specificDate, setSpecificDate] = useState('');
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const [downloadingAllCombined, setDownloadingAllCombined] = useState(false);
     const [selectedCrawlIds, setSelectedCrawlIds] = useState<Set<string>>(new Set());
@@ -407,6 +409,11 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
             d.setMonth(d.getMonth() - 1);
             return d;
         }
+        if (timeRange === 'specific' && specificDate) {
+            const start = new Date(specificDate + 'T00:00:00');
+            const end = new Date(specificDate + 'T23:59:59');
+            return { start, end };
+        }
         return null;
     })();
 
@@ -418,7 +425,11 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
         })
         .filter(s => {
             if (!timeCutoff || !s.started_at) return true;
-            return new Date(s.started_at) >= timeCutoff;
+            const sessionTime = new Date(s.started_at).getTime();
+            if ('start' in timeCutoff && 'end' in timeCutoff) {
+                return sessionTime >= timeCutoff.start.getTime() && sessionTime <= timeCutoff.end.getTime();
+            }
+            return sessionTime >= (timeCutoff as Date).getTime();
         })
         .sort((a, b) => {
             const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
@@ -432,7 +443,7 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
 
     useEffect(() => {
         setVisibleCount(PAGE_SIZE);
-    }, [filter, sortOrder, timeRange]);
+    }, [filter, sortOrder, timeRange, specificDate]);
 
     useEffect(() => {
         if (!hasMore) return;
@@ -527,7 +538,10 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
                         All Results
                     </h1>
                     <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                        View and manage all crawl sessions
+                        {filtered.length} of {sessions.length} sessions
+                        {filter !== 'all' && ` · ${filter}`}
+                        {timeRange === 'specific' && specificDate && ` · ${specificDate}`}
+                        {timeRange !== 'all' && timeRange !== 'specific' && ` · ${timeRange === 'today' ? 'today' : timeRange === 'week' ? '7 days' : '30 days'}`}
                     </p>
                 </div>
 
@@ -631,21 +645,22 @@ export default function ResultsAllPage({ themeMode }: ResultsAllPageProps) {
 
                     <div className={`flex items-center gap-1 p-1 rounded-xl ${filterBarBase}`}>
                         <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Time:</span>
-                        {([
-                            ['all', 'All time'],
-                            ['today', 'Today'],
-                            ['week', '7 days'],
-                            ['month', '30 days'],
-                        ] as const).map(([value, label]) => (
+                        {(['all', 'today', 'week', 'month'] as const).map(val => (
                             <button
-                                key={value}
-                                onClick={() => setTimeRange(value)}
-                                className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === value ? filterBtnActive : filterBtnInactive}`}
+                                key={val}
+                                onClick={() => { setTimeRange(val); setSpecificDate(''); }}
+                                className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === val ? filterBtnActive : filterBtnInactive}`}
                             >
-                                {label}
+                                {val === 'all' ? 'All' : val === 'today' ? 'Today' : val === 'week' ? '7d' : '30d'}
                             </button>
                         ))}
                     </div>
+
+                    <DatePicker
+                        value={specificDate}
+                        onDateChange={setSpecificDate}
+                        isDark={isDark}
+                    />
 
                     <button
                         onClick={() => { setIsLoading(true); fetchSessions().finally(() => setIsLoading(false)); }}
