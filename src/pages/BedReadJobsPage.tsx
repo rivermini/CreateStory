@@ -265,7 +265,8 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     const [error, setError] = useState('');
     const [filter, setFilter] = useState<'all' | 'running' | 'queued' | 'completed' | 'failed'>('all');
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
-    const [timeRange] = useState<'all' | 'today' | 'week' | 'month'>('all');
+    const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'specific'>('all');
+    const [specificDate, setSpecificDate] = useState<string>('');
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const [lastRefresh, setLastRefresh] = useState(new Date());
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -297,6 +298,11 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
         if (timeRange === 'today') { const d = new Date(now); d.setHours(0, 0, 0, 0); return d; }
         if (timeRange === 'week') { const d = new Date(now); d.setDate(d.getDate() - 7); return d; }
         if (timeRange === 'month') { const d = new Date(now); d.setMonth(d.getMonth() - 1); return d; }
+        if (timeRange === 'specific' && specificDate) {
+            const d = new Date(specificDate + 'T00:00:00');
+            const end = new Date(specificDate + 'T23:59:59');
+            return { start: d, end };
+        }
         return null;
     })();
 
@@ -308,7 +314,14 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
             if (filter === 'failed') return j.status === 'failed' || j.status === 'cancelled';
             return j.status === filter;
         })
-        .filter(j => { if (!timeCutoff || !j.started_at) return true; return new Date(j.started_at) >= timeCutoff; })
+        .filter(j => {
+            if (!timeCutoff || !j.started_at) return true;
+            const jobTime = new Date(j.started_at).getTime();
+            if ('start' in timeCutoff && 'end' in timeCutoff) {
+                return jobTime >= timeCutoff.start.getTime() && jobTime <= timeCutoff.end.getTime();
+            }
+            return jobTime >= (timeCutoff as Date).getTime();
+        })
         .sort((a, b) => {
             const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
             const bTime = b.started_at ? new Date(b.started_at).getTime() : 0;
@@ -319,7 +332,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     const hasMore = visibleCount < filtered.length;
     const allVisibleSelected = visibleJobs.length > 0 && visibleJobs.every(j => selectedIds.has(j.batch_id));
 
-    useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filter, sortOrder, timeRange]);
+    useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filter, sortOrder, timeRange, specificDate]);
 
     useEffect(() => {
         if (!hasMore) return;
@@ -367,7 +380,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                     <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
                         {filtered.length} of {jobs.length} jobs
                         {filter !== 'all' && ` · ${filter}`}
-                        {timeRange !== 'all' && ` · ${timeRange === 'today' ? 'today' : timeRange === 'week' ? '7 days' : '30 days'}`}
+                        {timeRange !== 'all' && ` · ${timeRange === 'today' ? 'today' : timeRange === 'week' ? '7 days' : timeRange === 'month' ? '30 days' : specificDate ? specificDate : ''}`}
                         {` · refreshed ${lastRefresh.toLocaleTimeString()}`}
                     </p>
                 </div>
@@ -498,6 +511,36 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                             Oldest
                         </button>
                     </div>
+
+                    <div className={`flex items-center gap-1 p-1 rounded-xl ${filterBarBase}`}>
+                        <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Time:</span>
+                        {(['all', 'today', 'week', 'month'] as const).map(val => (
+                            <button
+                                key={val}
+                                onClick={() => setTimeRange(val)}
+                                className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === val && !specificDate ? filterBtnActive : filterBtnInactive}`}
+                            >
+                                {val === 'all' ? 'All' : val === 'today' ? 'Today' : val === 'week' ? '7d' : '30d'}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setTimeRange('specific')}
+                            className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === 'specific' ? filterBtnActive : filterBtnInactive}`}
+                        >
+                            Day
+                        </button>
+                    </div>
+
+                    {timeRange === 'specific' && (
+                        <input
+                            type="date"
+                            value={specificDate}
+                            onChange={e => setSpecificDate(e.target.value)}
+                            className={`px-3 py-1 text-xs sm:text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                                ? 'bg-slate-800 border-slate-700 text-slate-100'
+                                : 'bg-gray-50 border-gray-300 text-gray-900'}`}
+                        />
+                    )}
 
                     <button
                         onClick={() => { setIsLoading(true); fetchJobs().finally(() => setIsLoading(false)); }}

@@ -44,6 +44,25 @@ function formatTime(ts: string | null): string {
   }
 }
 
+function formatDuration(startedAt: string | null, finishedAt: string | null): string {
+  if (!startedAt || !finishedAt) return '—';
+  try {
+    const start = new Date(startedAt).getTime();
+    const end = new Date(finishedAt).getTime();
+    const diffMs = end - start;
+    if (diffMs <= 0) return '—';
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  } catch {
+    return '—';
+  }
+}
+
 export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
   const isDark = themeMode === 'dark';
   const [sessions, setSessions] = useState<AutoAudioHistoryEntry[]>([]);
@@ -270,7 +289,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                       </div>
 
                       <div className={`mt-1 flex items-center gap-4 text-xs ${mutedSmClass}`}>
-                        <span>Voice: {session.voice}</span>
                         <span>{session.total_stories} stories</span>
                         <span>{session.total_chapters} chapters</span>
                       </div>
@@ -285,6 +303,12 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                       </svg>
                       <div className={`text-xs ${mutedSmClass}`}>
                         {formatTime(session.started_at)}
+                      </div>
+                      {/* Make the duration more attrative design */}
+                      <div className={`text-xs ${mutedSmClass} font-medium`}>
+                        <span className={`text-xs ${valueClass} font-medium`}>
+                          {formatDuration(session.started_at, session.finished_at)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -314,11 +338,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                           <div>
                             <p className={`text-xs ${mutedSmClass}`}>Session ID</p>
                             <p className={`text-sm font-mono ${valueClass}`}>{expandedSession.session_id}</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs ${mutedSmClass}`}>Voice</p>
-                            <p className={`text-sm ${valueClass}`}>{expandedSession.voice}</p>
-                          </div>
+                          </div>  
                           <div>
                             <p className={`text-xs ${mutedSmClass}`}>Started</p>
                             <p className={`text-sm ${valueClass}`}>{formatTime(expandedSession.started_at)}</p>
@@ -326,6 +346,10 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                           <div>
                             <p className={`text-xs ${mutedSmClass}`}>Finished</p>
                             <p className={`text-sm ${valueClass}`}>{formatTime(expandedSession.finished_at)}</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs ${mutedSmClass}`}>Duration</p>
+                            <p className={`text-sm ${valueClass}`}>{formatDuration(expandedSession.started_at, expandedSession.finished_at)}</p>
                           </div>
                         </div>
 
