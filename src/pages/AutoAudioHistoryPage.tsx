@@ -60,31 +60,21 @@ interface SessionCardProps {
     isExpanded: boolean;
     expandedSession: AutoAudioSession | null;
     loadingDetail: boolean;
-    deleteMode: boolean;
-    isSelected: boolean;
     isDark: boolean;
     onToggleExpand: (sessionId: string) => void;
-    onToggleSelect: (sessionId: string) => void;
 }
 
 function SessionCard({
     session, order, isExpanded, expandedSession, loadingDetail,
-    deleteMode, isSelected, isDark,
-    onToggleExpand, onToggleSelect,
+    isDark, onToggleExpand,
 }: SessionCardProps) {
     const dotFn = STATUS_DOT_MAP[session.status] ?? STATUS_DOT_MAP.idle;
     const dot = dotFn(isDark);
     const label = STATUS_LABEL_MAP[session.status] ?? session.status;
 
-    const cardBg = deleteMode && isSelected
-        ? (isDark ? 'bg-red-950/30 border-red-800/50' : 'bg-red-50 border-red-200')
-        : (isDark ? 'bg-slate-900/60 border-slate-800/60' : 'bg-white border-gray-200');
-
-    const rootClasses = `${cardBg} rounded-2xl border overflow-hidden flex transition-all duration-200 ${deleteMode ? 'cursor-pointer select-none' : ''}`;
-
-    const orderBg = deleteMode && isSelected
-        ? (isDark ? 'bg-red-900/40 border-red-800/40 text-red-300' : 'bg-red-100 border-red-200 text-red-700')
-        : (isDark ? 'bg-indigo-900/20 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700');
+    const cardBg = isDark ? 'bg-slate-900/60 border-slate-800/60' : 'bg-white border-gray-200';
+    const rootClasses = `${cardBg} rounded-2xl border overflow-hidden flex transition-all duration-200`;
+    const orderBg = isDark ? 'bg-indigo-900/20 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
 
     const logLevelColor = (level: string) => {
         if (level === 'error') return isDark ? 'text-red-400' : 'text-red-600';
@@ -93,10 +83,7 @@ function SessionCard({
     };
 
     return (
-        <div
-            className={rootClasses}
-            onClick={deleteMode ? () => onToggleSelect(session.session_id) : undefined}
-        >
+        <div className={rootClasses}>
             {order != null && (
                 <div className={`w-12 flex-shrink-0 border-r flex flex-col items-center justify-center rounded-l-2xl transition-colors duration-200 ${orderBg}`}>
                     <span className="text-base font-bold select-none">#{order}</span>
@@ -105,8 +92,8 @@ function SessionCard({
 
             <div className="flex-1 min-w-0 flex flex-col">
                 <div
-                    className={`px-5 py-4 flex flex-col sm:flex-row items-start gap-4 ${!deleteMode ? 'cursor-pointer' : ''}`}
-                    onClick={!deleteMode ? () => onToggleExpand(session.session_id) : undefined}
+                    className={`px-5 py-4 flex flex-col sm:flex-row items-start gap-4 cursor-pointer`}
+                    onClick={() => onToggleExpand(session.session_id)}
                 >
                     <div className="flex-shrink-0 mt-1 flex items-center gap-2">
                         <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />
@@ -131,9 +118,13 @@ function SessionCard({
                             Step {session.current_step}: {session.current_step_desc || '—'}
                         </div>
 
-                        <div className={`mt-1 flex items-center gap-4 text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                            <span>{session.total_stories} stories</span>
-                            <span>{session.total_chapters} chapters</span>
+                        <div className="mt-1.5 flex items-center gap-3">
+                            <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-emerald-900/30 text-emerald-300 border border-emerald-800/50' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                                {session.total_stories} stories
+                            </span>
+                            <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-amber-900/30 text-amber-300 border border-amber-800/50' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                                {session.total_chapters} chapters
+                            </span>
                         </div>
                     </div>
 
@@ -282,8 +273,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     const [expandedSession, setExpandedSession] = useState<AutoAudioSession | null>(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [deleteMode, setDeleteMode] = useState(false);
     const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
     const loadHistory = useCallback(async () => {
@@ -371,17 +360,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
         }
     };
 
-    const handleToggleSelect = (sessionId: string) => {
-        const s = new Set(selectedIds);
-        s.has(sessionId) ? s.delete(sessionId) : s.add(sessionId);
-        setSelectedIds(s);
-    };
-
-    const toggleDeleteMode = () => {
-        if (deleteMode) { setDeleteMode(false); setSelectedIds(new Set()); }
-        else { setDeleteMode(true); }
-    };
-
     const filteredCounts = {
         all: filtered.length,
         running: filtered.filter(s => s.status === 'running' || s.status === 'stopping').length,
@@ -393,8 +371,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     const filterBarBase = isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200';
     const filterBtnActive = 'bg-indigo-600 text-white';
     const filterBtnInactive = isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-500 hover:text-gray-700';
-
-    const allVisibleSelected = visibleSessions.length > 0 && visibleSessions.every(s => selectedIds.has(s.session_id));
 
     return (
         <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
@@ -421,42 +397,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                             <span className="font-medium">{filtered.filter(s => s.status === 'running').length} session(s)</span>
                             {' '}currently running
                         </span>
-                    </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex flex-wrap items-center justify-start gap-2">
-                    <button
-                        onClick={toggleDeleteMode}
-                        className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${deleteMode
-                            ? (isDark ? 'text-red-300 border border-red-700 bg-red-900/20 hover:bg-red-900/40' : 'text-red-600 border border-red-300 bg-red-50 hover:bg-red-100')
-                            : (isDark ? 'text-slate-300 border border-slate-700 hover:bg-slate-800' : 'text-gray-600 border border-gray-300 hover:bg-gray-100')}`}
-                    >
-                        {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
-                    </button>
-                    {deleteMode && (
-                        <button
-                            onClick={() => allVisibleSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(visibleSessions.map(s => s.session_id)))}
-                            className={`px-3 py-1.5 text-sm rounded-xl transition-colors ${isDark ? 'text-slate-300 border border-slate-700 hover:bg-slate-800' : 'text-gray-600 border border-gray-300 hover:bg-gray-100'}`}
-                        >
-                            {allVisibleSelected ? 'Unselect All' : 'Select All'}
-                        </button>
-                    )}
-                </div>
-
-                {/* Delete Mode Banner */}
-                {deleteMode && (
-                    <div className={`rounded-2xl p-3 flex items-center justify-between gap-3 ${isDark
-                        ? 'bg-red-900/20 border border-red-800/30'
-                        : 'bg-red-50 border border-red-200'}`}>
-                        <div className="flex items-center gap-2">
-                            <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            <span className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Delete Mode Active</span>
-                            {selectedIds.size > 0 && <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-500'}`}>({selectedIds.size} selected)</span>}
-                        </div>
-                        <button onClick={toggleDeleteMode} className={`text-xs underline ${isDark ? 'text-red-300 hover:text-white' : 'text-red-500 hover:text-red-700'}`}>Exit Delete Mode</button>
                     </div>
                 )}
 
@@ -593,11 +533,8 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                             isExpanded={expandedId === session.session_id}
                             expandedSession={expandedId === session.session_id ? expandedSession : null}
                             loadingDetail={expandedId === session.session_id && loadingDetail}
-                            deleteMode={deleteMode}
-                            isSelected={selectedIds.has(session.session_id)}
                             isDark={isDark}
                             onToggleExpand={handleToggleExpand}
-                            onToggleSelect={handleToggleSelect}
                         />
                     ))}
                     {hasMore && <div ref={loadMoreRef} className={`py-6 text-center text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Loading more sessions...</div>}
