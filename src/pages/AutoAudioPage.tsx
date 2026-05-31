@@ -88,9 +88,9 @@ function PhaseCard({
           <input
             type="number"
             min={1}
-            max={100}
+            max={500}
             value={phaseLimit}
-            onChange={e => onPhaseLimitChange(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+            onChange={e => onPhaseLimitChange(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
             disabled={isRunning || isStopping || loading}
             className={`w-20 px-2 py-1 text-xs rounded-lg border focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
               isDark

@@ -49,6 +49,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
   const [sessions, setSessions] = useState<CrawlSessionSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showIndividualFiles, setShowIndividualFiles] = useState(false);
 
   const fetchResult = useCallback(() => {
     if (!crawlId) return;
@@ -242,6 +243,48 @@ export function ResultPage({ themeMode }: ResultPageProps) {
           </button>
         </div>
 
+        {/* Primary Combined File */}
+        {combinedFilename && (
+          <section className={`rounded-2xl border-2 p-5 sm:p-6 shadow-xl ${isDark
+            ? 'bg-emerald-500/10 border-emerald-400/40 shadow-emerald-950/40'
+            : 'bg-emerald-50 border-emerald-300 shadow-emerald-100'
+          }`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>
+                  Main output
+                </p>
+                <h2 className={`mt-1 text-xl sm:text-2xl font-bold ${isDark ? 'text-emerald-100' : 'text-emerald-900'}`}>
+                  Combined File
+                </h2>
+                <p className={`mt-1 text-sm ${isDark ? 'text-emerald-100/80' : 'text-emerald-800'}`}>
+                  This is the complete output file. Download or preview this first.
+                </p>
+              </div>
+              <button
+                onClick={handleDownloadCombined}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${isDark
+                  ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-400/40 hover:bg-emerald-500/30'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-200'
+                }`}
+              >
+                Download Combined
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <FilePreview
+                crawlId={result.crawl_id}
+                filename={combinedFilename}
+                sizeBytes={files.find(f => f.filename === combinedFilename)?.size_bytes || 0}
+                onDownload={handleDownloadCombined}
+                accent="emerald"
+                isDark={isDark}
+              />
+            </div>
+          </section>
+        )}
+
         {/* Session History Panel */}
         {showHistory && (
           <section className={`rounded-2xl overflow-hidden border ${isDark
@@ -426,54 +469,58 @@ export function ResultPage({ themeMode }: ResultPageProps) {
           )}
         </section>
 
-        {/* File List */}
-        {nonCombinedFiles.length > 0 || combinedFilename ? (
-          <section className="space-y-4">
-            <h2 className={`text-lg font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
-              Chapters ({nonCombinedFiles.length})
-            </h2>
+        {/* Individual Files */}
+        {nonCombinedFiles.length > 0 ? (
+          <section className={`rounded-2xl border p-4 sm:p-5 ${isDark
+            ? 'bg-slate-900/60 border-slate-800/60'
+            : 'bg-white border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className={`text-base sm:text-lg font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
+                Individual Chapters ({nonCombinedFiles.length})
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowIndividualFiles(v => !v)}
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${isDark
+                  ? 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {showIndividualFiles ? 'Hide files' : 'Show files'}
+                <svg className={`h-3.5 w-3.5 transition-transform ${showIndividualFiles ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
 
-            {combinedFilename && (
-              <FilePreview
-                crawlId={result.crawl_id}
-                filename={combinedFilename}
-                sizeBytes={files.find(f => f.filename === combinedFilename)?.size_bytes || 0}
-                onDownload={handleDownloadCombined}
-                accent="emerald"
-                isDark={isDark}
-              />
-            )}
-
-            {nonCombinedFiles.length > 0 && (
-              <>
-                {combinedFilename && (
-                  <p className={`text-xs uppercase tracking-wider font-semibold pt-2 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                    Individual Chapters
-                  </p>
-                )}
-                <div className="space-y-3">
-                  {nonCombinedFiles.map(file => (
-                    <FilePreview
-                      key={file.filename}
-                      crawlId={result.crawl_id}
-                      filename={file.filename}
-                      sizeBytes={file.size_bytes}
-                      onDownload={() => handleDownload(file.filename)}
-                      isDark={isDark}
-                    />
-                  ))}
-                </div>
-              </>
+            {showIndividualFiles ? (
+              <div className="mt-4 space-y-3">
+                {nonCombinedFiles.map(file => (
+                  <FilePreview
+                    key={file.filename}
+                    crawlId={result.crawl_id}
+                    filename={file.filename}
+                    sizeBytes={file.size_bytes}
+                    onDownload={() => handleDownload(file.filename)}
+                    isDark={isDark}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className={`mt-3 text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                Individual chapter files are hidden. Expand to view and download.
+              </p>
             )}
           </section>
-        ) : (
+        ) : !combinedFilename ? (
           <section className={`rounded-2xl p-8 text-center ${isDark
             ? 'bg-slate-900/60 border border-slate-800/60 text-slate-500'
             : 'bg-white border border-gray-200 text-gray-400'
           }`}>
             No output files found for this crawl session.
           </section>
-        )}
+        ) : null}
 
         {/* Phase 2 placeholder */}
         <section className={`rounded-2xl p-6 space-y-3 ${isDark

@@ -2,26 +2,26 @@
 REM FE UPDATE
 
 echo.
-echo [Backend] Checking status
+echo [FE] Checking status
 echo.
 
 git status
 
 echo.
-echo [Backend] Staging changes...
+echo [FE] Staging changes...
 echo.
 
 git add .
 git status
 
 echo.
-echo [Backend] Committing...
+echo [FE] Committing...
 echo.
 
 git commit -m "update FE"
 
 echo.
-echo [Backend] Pushing...
+echo [FE] Pushing...
 echo.
 
 git push
