@@ -18,7 +18,7 @@ if str(_project_root) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import tts, bedread
+from api.routes import tts, bedread, auto_audio
 
 app = FastAPI(
     title="BedReadVoices API",
@@ -40,6 +40,7 @@ app.add_middleware(
 
 app.include_router(tts.router)
 app.include_router(bedread.router)
+app.include_router(auto_audio.router)
 
 
 @app.get("/", tags=["Health"])

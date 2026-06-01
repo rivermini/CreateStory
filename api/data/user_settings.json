@@ -1,0 +1,13 @@
+{
+  "theme": "light",
+  "crawl_mode": "count",
+  "crawl_default_count": 10,
+  "crawl_default_range_from": 1,
+  "crawl_default_range_to": 10,
+  "crawl_auto_max_chapters": false,
+  "auto_audio_rest_seconds": 2,
+  "auto_audio_external_api_base": "",
+  "auto_audio_test_story_ids": [
+    "2f1bb97e-efbc-4c84-9104-a28b0a511b29"
+  ]
+}

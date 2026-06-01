@@ -1,0 +1,80 @@
+{
+  "session_id": "db9333d0",
+  "phase": "phase3",
+  "test_mode": false,
+  "voice": null,
+  "status": "completed",
+  "current_step": 11,
+  "current_step_desc": "Saving session log",
+  "current_story": "The Highland Alpha's Stolen Boy",
+  "progress": {
+    "done": 0,
+    "total": 0
+  },
+  "chapter_progress": {
+    "done": 0,
+    "total": 0
+  },
+  "stories_missing_audio": [],
+  "logs": [
+    {
+      "timestamp": "2026-06-01 18:41:21",
+      "step": 0,
+      "message": "Session db9333d0 started (phase=phase3, test_mode=False, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:21",
+      "step": 1,
+      "message": "Phase 3: Fetching 20 most recently updated stories...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:22",
+      "step": 1,
+      "message": "Found 20 recently updated stories",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:22",
+      "step": 2,
+      "message": "Discovering stories with missing audio among 20 stories...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:46",
+      "step": 2,
+      "message": "Found 20 stories to check",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:46",
+      "step": 2,
+      "message": "Found 0 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:46",
+      "step": 1,
+      "message": "Phase 3: 0 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:46",
+      "step": 1,
+      "message": "No stories with missing audio found",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 18:41:46",
+      "step": 11,
+      "message": "Auto audio session completed successfully",
+      "level": "info"
+    }
+  ],
+  "started_at": "2026-06-01 18:41:21",
+  "finished_at": "2026-06-01 18:41:46",
+  "error": "",
+  "story_results": [],
+  "completed_stories": []
+}
