@@ -20,7 +20,12 @@ import threading
 # Resolve from _paths.py location:
 #   _paths.py lives at: BedReadDriveSync/api/services/drive_service/_paths.py
 #   parents[0]=drive_service/, [1]=services/, [2]=api/, [3]=BedReadDriveSync/, [4]=Services/
-_DATA_DIR = Path(__file__).parent.parent.parent.parent.resolve() / "FastAPIServer" / "api" / "data"
+_DATA_DIR = (
+    Path(__file__).parent.parent.parent.parent.resolve()
+    / "FastAPIServer"
+    / "api"
+    / "data"
+)
 _CONFIG_FILE = _DATA_DIR / "drive_sync_config.json"
 _STATUS_FILE = _DATA_DIR / "drive_sync_status.json"
 _HISTORY_FILE = _DATA_DIR / "drive_sync_history.json"
@@ -29,7 +34,9 @@ _JOBS_LOCK_FILE = _DATA_DIR / "sync_jobs.lock"
 
 # Shared credentials folder (Services/FastAPIServer/credentials/) — fallback when
 # the configured service_account_json_path is not found locally.
-_SHARED_CREDENTIALS_DIR = Path(__file__).resolve().parents[4] / "FastAPIServer" / "credentials"
+_SHARED_CREDENTIALS_DIR = (
+    Path(__file__).resolve().parents[4] / "FastAPIServer" / "credentials"
+)
 
 # -------------------------------------------------------------------------
 # Regex patterns (used by _parsers, _history_jobs, drive_service)
@@ -56,12 +63,30 @@ _CATEGORY_MAP: dict[str, tuple[str, str | None]] = {
     "romance": ("17c9779b-7107-4b24-a020-df735e1dd6cb", None),
     "billionaire": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", None),
     "billionair": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", None),
-    "billionaireromance": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", "17c9779b-7107-4b24-a020-df735e1dd6cb"),
-    "billionairromance": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", "17c9779b-7107-4b24-a020-df735e1dd6cb"),
-    "billionairelgbtq": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf"),
-    "billionairelgbt": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf"),
-    "billionairlgbtq": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf"),
-    "billionairlgbt": ("1550cd02-d20b-4fc3-9dce-6c8c5ccaba11", "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf"),
+    "billionaireromance": (
+        "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11",
+        "17c9779b-7107-4b24-a020-df735e1dd6cb",
+    ),
+    "billionairromance": (
+        "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11",
+        "17c9779b-7107-4b24-a020-df735e1dd6cb",
+    ),
+    "billionairelgbtq": (
+        "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11",
+        "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf",
+    ),
+    "billionairelgbt": (
+        "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11",
+        "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf",
+    ),
+    "billionairlgbtq": (
+        "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11",
+        "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf",
+    ),
+    "billionairlgbt": (
+        "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11",
+        "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf",
+    ),
     "lgbtq": ("8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf", None),
     "lgbt": ("8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf", None),
 }
@@ -73,7 +98,6 @@ _MAX_HISTORY_ENTRIES = 200
 _MAX_JOBS_ENTRIES = 500
 
 _RANDOM_AUTHOR_IDS = [
-    "07cb1c25-e232-47a2-9ac9-367135936d2e",
     "0a00de42-0bde-4457-8f78-e91ecc64b066",
     "10e57755-f3fe-4e47-8f63-899124775a78",
     "1cdd39cc-50ae-4ba2-8942-426ca1a6bc51",
@@ -89,8 +113,8 @@ _RANDOM_AUTHOR_IDS = [
     "85ae7bda-3366-4d16-a5a6-737738291363",
     "9d183206-1be9-4662-a69b-51ed09bf2933",
     "ab5204f4-1562-499b-bf7b-64d8ab23b7b1",
-    "ab877079-a188-44d8-af6f-2055744b2fa9",
-    "d3a4effb-7b5a-490a-9616-12a8524fa9b8",
+    "ab877079-a188-44d8-af6f-2055742b2fa9",
+    "d3a4effb-7b5a-490a-9616-12a8524fa9a8",
     "d757060a-3a79-428c-8ab5-beeceec3e130",
     "df79558c-f2e8-4597-8aa8-cacd0d8bfff8",
 ]
@@ -105,7 +129,14 @@ _DRIVE_CALL_SEMAPHORE = threading.Semaphore(1)
 # -------------------------------------------------------------------------
 # Misc
 # -------------------------------------------------------------------------
-_ACTION_KINDS = {"upload_single", "upload_batch", "update_single", "update_batch", "test_sync", "config_save"}
+_ACTION_KINDS = {
+    "upload_single",
+    "upload_batch",
+    "update_single",
+    "update_batch",
+    "test_sync",
+    "config_save",
+}
 _ACTION_STATUSES = {"running", "success", "error", "cancelled"}
 _SYSTEM_FOLDERS = {".tmp", ".workdir", ".cowork-trash"}
 
