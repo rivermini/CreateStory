@@ -54,6 +54,16 @@ function formatDuration(startedAt: string | null, finishedAt: string | null): st
     } catch { return '—'; }
 }
 
+function formatTotalDuration(totalSeconds: number): string {
+    if (totalSeconds <= 0) return '—';
+    const d = Math.floor(totalSeconds / 86400);
+    const h = Math.floor((totalSeconds % 86400) / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+}
+
 interface SessionCardProps {
     session: AutoAudioHistoryEntry;
     order: number;
@@ -368,6 +378,14 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
         stopped: filtered.filter(s => s.status === 'stopped').length,
     };
 
+    const totalChapters = filtered.reduce((sum, s) => sum + (s.total_chapters || 0), 0);
+    const totalSeconds = filtered.reduce((sum, s) => {
+        if (!s.started_at || !s.finished_at) return sum;
+        try {
+            return sum + Math.floor((new Date(s.finished_at).getTime() - new Date(s.started_at).getTime()) / 1000);
+        } catch { return sum; }
+    }, 0);
+
     const filterBarBase = isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200';
     const filterBtnActive = 'bg-indigo-600 text-white';
     const filterBtnInactive = isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-500 hover:text-gray-700';
@@ -388,6 +406,39 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                         {specificDate && ` · ${specificDate}`}
                     </p>
                 </div>
+
+                {/* Totals Banner */}
+                {totalChapters > 0 && (
+                    <div className={`rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${isDark ? 'bg-indigo-950/30 border border-indigo-900/40' : 'bg-indigo-50 border border-indigo-200'}`}>
+                        <div className="flex items-center gap-3 flex-1">
+                            <div className={`flex items-center justify-center w-10 h-10 rounded-xl ${isDark ? 'bg-indigo-900/40' : 'bg-indigo-100'}`}>
+                                <svg className={`w-5 h-5 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div className={`text-xs font-medium uppercase tracking-wide ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>Filtered Totals</div>
+                                <div className={`text-2xl font-bold ${isDark ? 'text-indigo-200' : 'text-indigo-800'}`}>
+                                    {totalChapters.toLocaleString()} <span className={`text-sm font-normal ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>chapters</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`h-10 w-px hidden sm:block ${isDark ? 'bg-indigo-800/50' : 'bg-indigo-200'}`} />
+                        <div className="flex items-center gap-3">
+                            <div className={`flex items-center justify-center w-10 h-10 rounded-xl ${isDark ? 'bg-indigo-900/40' : 'bg-indigo-100'}`}>
+                                <svg className={`w-5 h-5 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <div className={`text-xs font-medium uppercase tracking-wide ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>Total Time</div>
+                                <div className={`text-2xl font-bold ${isDark ? 'text-indigo-200' : 'text-indigo-800'}`}>
+                                    {formatTotalDuration(totalSeconds)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Running Banner */}
                 {filtered.filter(s => s.status === 'running').length > 0 && (
