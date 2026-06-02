@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from scrapy.core.downloader.handlers.http11 import HTTP11DownloadHandler
 from scrapy.http import Request, Response, TextResponse
@@ -296,6 +297,63 @@ class _SeleniumBrowser:
         except Exception:
             return False
 
+    def _dismiss_overlays(self) -> None:
+        if self._driver is None:
+            return
+        try:
+            overlay_patterns = [
+                ("[class*='popup']", "[class*='close']"),
+                ("[class*='overlay']", "[class*='close']"),
+                ("[class*='modal']", "[class*='close']"),
+                ("[id*='popup']", "[id*='close']"),
+                ("[id*='overlay']", "[id*='close']"),
+                ("[id*='modal']", "[id*='close']"),
+                (".ad-overlay", ".ad-overlay"),
+                (".cookie-banner", ".cookie-banner button"),
+                ("[class*='consent']", "[class*='consent'] button"),
+                ("[class*='gdpr']", "[class*='gdpr'] button"),
+                ("[class*='notice']", "[class*='notice'] [class*='close']"),
+                (".adsbygoogle", ".adsbygoogle"),
+            ]
+            dismissed = False
+            for overlay_sel, close_sel in overlay_patterns:
+                overlays = self._driver.find_elements("css selector", overlay_sel)
+                for overlay in overlays:
+                    try:
+                        rect = overlay.rect
+                        if rect["width"] < 50 or rect["height"] < 50:
+                            continue
+                        style = self._driver.execute_script(
+                            "return window.getComputedStyle(arguments[0]).display", overlay
+                        )
+                        if style == "none":
+                            continue
+                        close_btns = overlay.find_elements("css selector", close_sel)
+                        for btn in close_btns:
+                            try:
+                                btn.click()
+                                dismissed = True
+                                break
+                            except Exception:
+                                pass
+                        if not dismissed:
+                            try:
+                                overlay.click()
+                                dismissed = True
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    if dismissed:
+                        break
+                if dismissed:
+                    break
+
+            if dismissed:
+                time.sleep(0.5)
+        except Exception:
+            pass
+
     def scroll_and_extract(
         self,
         paragraph_selector: str = "p[data-p-id]",
@@ -308,6 +366,7 @@ class _SeleniumBrowser:
             build_paragraph_count_script,
             build_extract_script,
             build_scroll_to_top_script,
+            is_garbage_text,
         )
 
         driver = self._driver
@@ -315,69 +374,163 @@ class _SeleniumBrowser:
         stable_count = 0
         step = 0
 
-        while step < max_steps:
-            metrics = driver.execute_script(build_scroll_script())
-            time.sleep(wait_ms / 1000.0)
-
-            current_count = driver.execute_script(
-                build_paragraph_count_script(paragraph_selector)
-            )
-
-            step += 1
-
-            if current_count == prev_count:
-                stable_count += 1
-            else:
-                stable_count = 0
-            prev_count = current_count
-
-            if step >= min_steps:
-                if metrics["atBottom"] and stable_count >= 2:
+        try:
+            while step < max_steps:
+                result = driver.execute_script(build_scroll_script())
+                if result is None:
                     break
-                if stable_count >= 3:
-                    break
+                metrics = result
+                time.sleep(wait_ms / 1000.0)
 
-        logger.debug("Scroll complete: %d steps, %d paragraphs in DOM", step, prev_count)
+                count_result = driver.execute_script(
+                    build_paragraph_count_script(paragraph_selector)
+                )
+                current_count = count_result if count_result is not None else 0
 
-        paragraphs: list[str] = driver.execute_script(
-            build_extract_script(paragraph_selector)
-        )
+                step += 1
 
-        driver.execute_script(build_scroll_to_top_script())
+                if current_count == prev_count:
+                    stable_count += 1
+                else:
+                    stable_count = 0
+                prev_count = current_count
+
+                if step >= min_steps:
+                    if metrics.get("atBottom") and stable_count >= 2:
+                        break
+                    if stable_count >= 3:
+                        break
+
+            logger.debug("Scroll complete: %d steps, %d paragraphs in DOM", step, prev_count)
+
+            raw_result = driver.execute_script(build_extract_script(paragraph_selector))
+            raw_paragraphs = raw_result if raw_result is not None else []
+            paragraphs = [p for p in raw_paragraphs if not is_garbage_text(p)]
+        except Exception as exc:
+            logger.warning("scroll_and_extract failed: %s", exc)
+            paragraphs = []
+            step = 0
+
+        try:
+            driver.execute_script(build_scroll_to_top_script())
+        except Exception:
+            pass
 
         return paragraphs, step
 
     def _scroll_page(self, driver, domain: str) -> list[str] | None:
-        from core.scroll_utils import PARAGRAPH_SELECTORS
+        from core.scroll_utils import (
+            PARAGRAPH_SELECTORS,
+            build_wait_for_container_script,
+            build_scroll_to_element_script,
+            build_extract_script,
+            is_garbage_text,
+        )
+
+        def is_novelworm(d: str) -> bool:
+            return d == "novelworm.com" or d.endswith(".novelworm.com")
+
+        if is_novelworm(domain):
+            # NovelWorm: content is in the initial HTML — no scrolling needed.
+            # The chapter text lives in direct children of .content (title + body paragraphs).
+            # Sidebar recommendations use separate .content containers — exclude them.
+            novelworm_selectors = [
+                ".content > .content-font",
+                ".read-pc-body",
+                ".read-pc-body-center",
+                ".chapter-content",
+            ]
+            for sel in novelworm_selectors:
+                try:
+                    count = driver.execute_script(
+                        f"return document.querySelectorAll('{sel}').length;"
+                    )
+                except Exception as e:
+                    logger.debug("NovelWorm selector '%s' error: %s", sel, e)
+                    count = 0
+                if not count:
+                    continue
+                try:
+                    raw = driver.execute_script(build_extract_script(sel))
+                    paragraphs = [p for p in (raw or []) if not is_garbage_text(p)]
+                except Exception:
+                    paragraphs = []
+                if paragraphs:
+                    logger.debug(
+                        "NovelWorm: extracted %d paragraphs from '%s' (count=%d, no scroll needed)",
+                        len(paragraphs), sel, count,
+                    )
+                    return paragraphs
+            # Fallback: if no selectors found content, try scrolling anyway
+            logger.debug("NovelWorm: no selectors matched — falling back to scroll")
+            for sel in novelworm_selectors:
+                try:
+                    count = driver.execute_script(
+                        f"return document.querySelectorAll('{sel}').length;"
+                    )
+                except Exception:
+                    count = 0
+                if not count:
+                    continue
+                paragraphs, _ = self.scroll_and_extract(
+                    paragraph_selector=sel,
+                    wait_ms=800,
+                    max_steps=50,
+                    min_steps=3,
+                )
+                if paragraphs:
+                    return paragraphs
+            return None
 
         preferred_by_domain: dict[str, str] = {
             "wattpad": "p[data-p-id]",
-            "novelworm": ".chapter-content p",
         }
-
         preferred = preferred_by_domain.get(domain, "p")
         all_selectors = [preferred] + [s for s in PARAGRAPH_SELECTORS if s != preferred]
-        chosen = preferred
 
         for sel in all_selectors:
-            count = driver.execute_script(f"return document.querySelectorAll('{sel}').length;")
-            if count > 0:
-                chosen = sel
-                break
+            try:
+                count = driver.execute_script(
+                    f"return document.querySelectorAll('{sel}').length;"
+                )
+            except Exception:
+                count = 0
+            if count and count > 0:
+                paragraphs, _ = self.scroll_and_extract(
+                    paragraph_selector=sel,
+                    wait_ms=800,
+                    max_steps=50,
+                    min_steps=3,
+                )
+                if paragraphs:
+                    return paragraphs
+        return None
 
-        logger.debug("Scroll: using selector '%s' (domain=%s)", chosen, domain)
-
-        paragraphs, _ = self.scroll_and_extract(
-            paragraph_selector=chosen,
-            wait_ms=800,
-            max_steps=50,
-            min_steps=3,
-        )
-        return paragraphs if paragraphs else None
+    def fetch_with_retry(
+        self,
+        url: str,
+        timeout: int = 60,
+        skip_scroll: bool = False,
+        max_retries: int = 2,
+    ) -> tuple[str, int, bytes, dict, list | None]:
+        last_exc: Exception | None = None
+        for attempt in range(max_retries + 1):
+            try:
+                result = self.fetch(url, timeout=timeout, skip_scroll=skip_scroll)
+                return result
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    wait = (attempt + 1) * 3
+                    logger.info("Fetch attempt %d failed for %s — waiting %ds before retry", attempt + 1, url, wait)
+                    time.sleep(wait)
+                    try:
+                        self._start(urlparse(url).netloc)
+                    except Exception:
+                        pass
+        raise last_exc if last_exc else RuntimeError(f"All {max_retries + 1} fetch attempts failed for {url}")
 
     def fetch(self, url: str, timeout: int = 60, skip_scroll: bool = False) -> tuple[str, int, bytes, dict, list | None]:
-        from urllib.parse import urlparse
-
         domain = urlparse(url).netloc
 
         with self._lock:
@@ -402,6 +555,11 @@ class _SeleniumBrowser:
                 self._start(domain)
                 driver = self._driver
             driver.get(url)
+
+        try:
+            self._dismiss_overlays()
+        except Exception:
+            pass
 
         scroll_result: list | None = None
         if not skip_scroll:

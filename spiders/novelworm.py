@@ -6,17 +6,20 @@ Supports:
   Chapter URL: scrapy crawl novelworm -a novel="https://www.novelworm.com/.../000001" -a limit=5
 """
 
+import json
 import logging
 import re
 import time
 import urllib.parse
+from pathlib import Path
 from typing import Generator
 
 import scrapy
 from bs4 import BeautifulSoup
-from scrapy.http import Response
+from scrapy.http import Response, TextResponse
 
 from configs.base_config import load_site_config
+from handlers.selenium_handler import _site_cookie_file as _get_cookie_file
 from models.chapter import Chapter
 from spiders.base_spider import BaseSpider, SelectorConfig
 from utils.cleaner import clean_chapter_content
@@ -168,16 +171,15 @@ class NovelWormSpider(BaseSpider):
             if num > 0 and num not in all_links:
                 all_links[num] = link
 
-        scan_limit = min(limit, total) if limit > 0 else total
-        batch_size = 50
-        for start in range(1, scan_limit + 1, batch_size):
-            end = min(start + batch_size - 1, scan_limit)
-            for ch in range(start, end + 1):
-                url = f"{story_url.rstrip('/')}/{str(ch).zfill(6)}"
-                title = self._fetch_chapter_title_via_selenium(browser, url)
-                if title:
-                    all_links[ch] = {"url": url, "title": title, "chapter_number": ch}
-                time.sleep(0.1)
+        # Fill in any missing chapters with sequential URLs (titles are re-discovered during actual crawl).
+        scan_limit = min(limit, total) if total > 0 else limit
+        for ch in range(1, scan_limit + 1):
+            if ch in all_links:
+                continue
+            url = f"{story_url.rstrip('/')}/{str(ch).zfill(6)}"
+            # Skip title scan — Cloudflare blocks each fetch and it is slow.
+            # Chapter title will be discovered from the actual chapter page during crawling.
+            all_links[ch] = {"url": url, "title": "", "chapter_number": ch}
 
         sorted_links = sorted(all_links.values(), key=lambda x: x.get("chapter_number") or 0)
 
@@ -227,6 +229,33 @@ class NovelWormSpider(BaseSpider):
             return self._extract_chapter_title_from_html(html)
         except Exception:
             return ""
+
+    def _fetch_chapter_via_selenium_with_retry(self, chapter_url: str) -> Response | None:
+        try:
+            from handlers.selenium_handler import _get_browser
+            browser = _get_browser()
+        except Exception as exc:
+            self.logger.warning("[novelworm] Could not get Selenium browser for retry: %s", exc)
+            return None
+
+        try:
+            final_url, status, body, headers, scroll_result = browser.fetch_with_retry(
+                chapter_url, timeout=90, skip_scroll=False, max_retries=1
+            )
+            resp = TextResponse(
+                url=final_url,
+                status=status,
+                headers=headers,
+                body=body,
+                request=None,
+                encoding="utf-8",
+            )
+            if scroll_result:
+                resp._scroll_paragraphs = scroll_result
+            return resp
+        except Exception as exc:
+            self.logger.warning("[novelworm] Retry fetch failed for %s: %s", chapter_url, exc)
+            return None
 
     def _extract_chapter_title_from_html(self, html: str) -> str:
         soup = BeautifulSoup(html, "html.parser")
@@ -388,6 +417,23 @@ class NovelWormSpider(BaseSpider):
         cleaned_content = clean_chapter_content(content)
 
         word_count = len(cleaned_content.split())
+
+        # Retry with fresh Selenium session if content is missing or very short
+        if word_count < 50 and response.meta.get("selenium") and response.meta.get("retry_count", 0) == 0:
+            self.logger.warning(
+                "Chapter %d '%s' has only %d words — retrying with fresh browser session.",
+                chapter_number, chapter_title or "(untitled)", word_count
+            )
+            retry_result = self._fetch_chapter_via_selenium_with_retry(response.url)
+            if retry_result:
+                content = self._extract_chapter_content(retry_result)
+                cleaned_content = clean_chapter_content(content)
+                word_count = len(cleaned_content.split())
+                self.logger.warning(
+                    "Retry: chapter %d now has %d words.",
+                    chapter_number, word_count
+                )
+
         if word_count < 100:
             self.logger.warning("Chapter %d '%s' has only %d words.", chapter_number, chapter_title or "(untitled)", word_count)
 
@@ -447,45 +493,82 @@ class NovelWormSpider(BaseSpider):
             self.logger.debug("[novelworm] Using %d pre-scrolled paragraphs", len(paragraphs))
             return "\n\n".join(paragraphs)
 
-        paragraphs = self._extract_via_beautifulsoup(response.text)
+        paragraphs = self._extract_via_beautifulsoup(response.text, response.url)
         if paragraphs:
             self.logger.debug("[novelworm] BeautifulSoup parsed %d paragraphs", len(paragraphs))
             return "\n\n".join(paragraphs)
 
-        selectors = [
-            ".read-pc-body", ".read-pc-body p", ".read-pc-body-center", ".read-pc-body-center p",
-            ".chapter-content p", ".reading-content p", ".chapter-text p", ".story-text p",
-            "[class*='content'] p", "article p", "main p",
-        ]
+        # Scroll returned empty or failed — try additional selectors as last resort
         seen: set[str] = set()
         paragraphs: list[str] = []
 
-        for sel in selectors:
-            for p in response.css(f"{sel}::text").getall():
+        from core.scroll_utils import is_garbage_text
+
+        fallback_selectors = [
+            ".read-pc-body", ".read-pc-body-center", ".reading-content",
+            ".chapter-text", ".story-text", ".chapter-content",
+            "article", "main",
+        ]
+        for sel in fallback_selectors:
+            container = response.css(sel)
+            if not container:
+                continue
+            for p in container.css("p::text, span::text, div::text").getall():
                 text = p.strip()
                 if text and len(text) > 10 and text not in seen:
+                    if is_garbage_text(text):
+                        continue
                     if not any(pattern.lower() in text.lower() for pattern in _PROMO_PATTERNS):
                         seen.add(text)
                         paragraphs.append(text)
 
-        if not paragraphs:
-            self.logger.warning("[novelworm] No chapter content found on %s", response.url)
-            for t in response.css("p::text").getall():
-                t = t.strip()
-                if len(t) > 50 and t not in seen:
-                    seen.add(t)
-                    paragraphs.append(t)
+        if paragraphs:
+            if len(paragraphs) < 3:
+                self.logger.debug(
+                    "[novelworm] Fallback selectors: only %d paragraph(s) — likely TOC/sidebar, skipping",
+                    len(paragraphs),
+                )
+            else:
+                self.logger.debug("[novelworm] Fallback selectors parsed %d paragraphs", len(paragraphs))
+                return "\n\n".join(paragraphs)
+        paragraphs = []
 
-        return "\n\n".join(paragraphs)
+        self.logger.warning("[novelworm] No chapter content found on %s", response.url)
+        return ""
 
-    def _extract_via_beautifulsoup(self, html: str) -> list[str]:
+    def _extract_via_beautifulsoup(self, html: str, url: str = "") -> list[str]:
         soup = BeautifulSoup(html, "html.parser")
+
+        # NovelWorm: chapter text lives in .content > .content-font elements.
+        # Sidebar recommendations use separate .content containers — exclude them.
+        content_containers = soup.select(".content > .content-font")
+        if content_containers:
+            paragraphs = [el.get_text(separator="\n", strip=True) for el in content_containers]
+            paragraphs = [p for p in paragraphs if p]
+            if paragraphs:
+                self.logger.debug(
+                    "[novelworm] BeautifulSoup: extracted %d paragraphs from .content > .content-font",
+                    len(paragraphs),
+                )
+                return paragraphs
+
+        # Generic fallback
         body_container = (
             soup.select_one(".read-pc-body")
             or soup.select_one(".read-pc-body-center")
             or soup.find("div", class_=re.compile(r"read-pc-body"))
         )
         if body_container is None:
+            self.logger.debug("[novelworm] BeautifulSoup: no content container found")
+            return []
+
+        # Detect TOC/sidebar: look for links that are chapter titles (many "Chapter N" links)
+        toc_links = body_container.select("a[href*='/0000']")
+        if len(toc_links) > 5:
+            self.logger.debug(
+                "[novelworm] BeautifulSoup: detected TOC page (%d chapter links) — skipping body",
+                len(toc_links),
+            )
             return []
 
         prose_indicators = {
@@ -542,6 +625,15 @@ class NovelWormSpider(BaseSpider):
             if text not in seen:
                 seen.add(text)
                 paragraphs.append(text)
+
+        if not paragraphs:
+            self.logger.debug("[novelworm] BeautifulSoup: 0 paragraphs extracted from .read-pc-body")
+        elif len(paragraphs) < 3:
+            self.logger.debug(
+                "[novelworm] BeautifulSoup: only %d paragraph(s) — likely TOC/sidebar, skipping",
+                len(paragraphs),
+            )
+            return []
 
         return paragraphs
 
