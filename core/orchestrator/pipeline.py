@@ -72,7 +72,7 @@ class StoryPipeline:
             session.add_log(4, f"Batch job for '{story.story_title}' failed", level="error")
             return result
 
-        self.upload_completed_batch(session, story, batch_id, voice, completed_files, result)
+        self.upload_completed_batch(session, story, batch_id, voice, completed_files, result, [story])
         return result
 
     def upload_completed_batch(
@@ -83,6 +83,7 @@ class StoryPipeline:
         voice: Optional[str],
         completed_files: list[dict],
         result: StoryResult,
+        all_stories: list[StoryMissingAudio],
     ) -> None:
         session.set_step(
             6,
@@ -140,6 +141,8 @@ class StoryPipeline:
             )
             if ok:
                 result.chapters_uploaded += 1
+                # Update chapter progress after each chapter so the UI reflects real-time progress
+                self._update_chapter_progress(session, result, all_stories)
                 self._upload.delete_local_audio_files(session, local_path)
             else:
                 result.upload_errors.append(f"Chapter {chapter_index}: upload failed")
@@ -253,7 +256,7 @@ class StoryPipeline:
                 bg.start()
                 started_next = True
 
-            self.upload_completed_batch(session, story, batch_id, voice, completed_files, result)
+            self.upload_completed_batch(session, story, batch_id, voice, completed_files, result, stories)
             self._finalize_story(session, result, story, stories)
 
             if started_next and not session._stopping:
@@ -329,7 +332,7 @@ class StoryPipeline:
                         )
                         self.upload_completed_batch(
                             session, next_story, next_batch_id, next_voice,
-                            completed_files2, result2,
+                            completed_files2, result2, stories,
                         )
                         self._finalize_story(session, result2, next_story, stories)
 
@@ -349,6 +352,16 @@ class StoryPipeline:
 
             i += 1
 
+    def _update_chapter_progress(
+        self,
+        session: AutoAudioSession,
+        result: StoryResult,
+        all_stories: list[StoryMissingAudio],
+    ) -> None:
+        total_ch = sum(len(s.missing_chapters) for s in all_stories) if all_stories else 0
+        done_ch = sum(r.get("chapters_uploaded", 0) for r in session.story_results) + result.chapters_uploaded
+        session.update_chapter_progress(done_ch, total_ch)
+
     def _finalize_story(
         self,
         session: AutoAudioSession,
@@ -362,9 +375,6 @@ class StoryPipeline:
             self._session_mgr.save_completed_stories(
                 session.phase, session.completed_stories
             )
-        total_ch = sum(len(s.missing_chapters) for s in all_stories)
-        done_ch = sum(r.get("chapters_uploaded", 0) for r in session.story_results)
-        session.update_chapter_progress(done_ch, total_ch)
         session.set_step(7, f"Completed: {story.story_title}", story=story.story_title)
         session.add_log(
             7,

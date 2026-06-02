@@ -50,7 +50,7 @@ class SessionManager:
         session: AutoAudioSession,
         stories: list,
     ) -> list:
-        if session.phase not in ("phase1", "phase2", "phase3"):
+        if session.phase not in ("phase1", "phase2"):
             return stories
         completed = self.load_completed_stories(session.phase)
         if not completed:

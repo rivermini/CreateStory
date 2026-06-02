@@ -90,10 +90,6 @@ def get_session(session_id: str) -> AutoAudioSessionResponse:
     return AutoAudioSessionResponse(**session_data)
 
 
-class BatchDeleteRequest(BaseModel):
-    session_ids: list[str]
-
-
 @router.post("/history/batch-delete")
 def delete_sessions_batch(request: BatchDeleteRequest) -> dict:
     """Delete multiple sessions from history in a single operation."""
