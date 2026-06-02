@@ -18,7 +18,7 @@ export function HomePage({ themeMode }: HomePageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { siteInfo, slug, storyTitle, resolvedUrl, isValid, isLoading, error, detect, novelMetadata } = useSiteDetection();
-  const { chapters, chapterCount, totalChapterCount, storyTitle: panelTitle, isLoadingChapters, chaptersError, warning, isChapterUrl, refresh } = useNovelInfo();
+  const { chapters, chapterCount, totalChapterCount, storyTitle: panelTitle, isLoadingChapters, chaptersError, warning, isChapterUrl, isResolvingTotal, refresh } = useNovelInfo();
 
   const [inputUrl, setInputUrl] = useState('');
   const [toChapter, setToChapter] = useState(10);
@@ -548,6 +548,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                 novelMetadata={novelMetadata}
                 onCrawlNovel={handleCrawlNovel}
                 isDark={isDark}
+                isResolvingTotal={isResolvingTotal}
               />
             )}
           </div>

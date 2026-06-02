@@ -16,6 +16,7 @@ export interface NovelInfoPanelProps {
   novelMetadata: NovelMetadata | null | undefined;
   onCrawlNovel: (toChapter: number) => void;
   isDark?: boolean;
+  isResolvingTotal?: boolean;
 }
 
 export function NovelInfoPanel({
@@ -32,6 +33,7 @@ export function NovelInfoPanel({
   novelMetadata,
   onCrawlNovel,
   isDark = true,
+  isResolvingTotal = false,
 }: NovelInfoPanelProps) {
   const tocRef = useRef<HTMLDivElement>(null);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -66,6 +68,7 @@ export function NovelInfoPanel({
   const estimatedMax = totalChapterCount ?? displayedTotal;
   const showPartial = totalChapterCount != null && chapterCount < totalChapterCount;
   const panelTitle = novelMetadata?.title || storyTitle || 'Novel Info';
+  const showSpinner = showPartial || isResolvingTotal;
 
   return (
     <div className={`rounded-2xl overflow-hidden flex flex-col max-h-[calc(100vh-6rem)] lg:max-h-[calc(100vh-5rem)] border ${isDark
@@ -124,10 +127,13 @@ export function NovelInfoPanel({
                 ? 'bg-indigo-900/30 border-indigo-800/40'
                 : 'bg-indigo-50 border-indigo-200'
               }`}>
-                <p className={`text-sm font-bold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                <p className={`text-sm font-bold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'} flex items-center justify-end gap-1.5`}>
                   {showPartial
                     ? `${chapterCount} / ${totalChapterCount?.toLocaleString()}`
                     : displayedTotal.toLocaleString()}
+                  {showSpinner && (
+                    <span className="inline-block w-3 h-3 border-2 rounded-full border-indigo-400 border-t-transparent animate-spin" />
+                  )}
                 </p>
                 <p className={`text-[10px] mt-0.5 leading-none ${isDark ? 'text-indigo-400/70' : 'text-indigo-500/70'}`}>chapters</p>
               </div>

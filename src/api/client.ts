@@ -377,10 +377,24 @@ export interface ChapterListResponse {
   warning?: string | null;
 }
 
+export interface BinarySearchTotalResponse {
+  url: string;
+  total?: number | null;
+  done: boolean;
+  fetching: boolean;
+}
+
 export async function getNovelChapters(url: string): Promise<ChapterListResponse> {
   return apiFetch<ChapterListResponse>(
     `/api/sites/chapters?url=${encodeURIComponent(url)}`,
     { timeout: 90000 }
+  );
+}
+
+export async function getBinarySearchTotal(url: string): Promise<BinarySearchTotalResponse> {
+  return apiFetch<BinarySearchTotalResponse>(
+    `/api/sites/chapters/total?url=${encodeURIComponent(url)}`,
+    { timeout: 15000 }
   );
 }
 

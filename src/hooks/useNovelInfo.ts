@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getNovelChapters } from '../api/client';
-import type { ChapterEntry, ChapterListResponse } from '../api/client';
+import { getBinarySearchTotal, getNovelChapters } from '../api/client';
+import type { BinarySearchTotalResponse, ChapterEntry, ChapterListResponse } from '../api/client';
 
 export interface UseNovelInfoResult {
   chapters: ChapterEntry[];
@@ -11,6 +11,7 @@ export interface UseNovelInfoResult {
   chaptersError: string;
   warning: string | null;
   isChapterUrl: boolean;
+  isResolvingTotal: boolean;
   refresh: (url: string) => Promise<void>;
   reset: () => void;
 }
@@ -24,10 +25,21 @@ export function useNovelInfo(): UseNovelInfoResult {
   const [chaptersError, setChaptersError] = useState('');
   const [warning, setWarning] = useState<string | null>(null);
   const [isChapterUrl, setIsChapterUrl] = useState(false);
+  const [isResolvingTotal, setIsResolvingTotal] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const currentUrlRef = useRef<string>('');
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current !== null) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    setIsResolvingTotal(false);
+  }, []);
 
   const reset = useCallback(() => {
+    stopPolling();
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
@@ -41,13 +53,39 @@ export function useNovelInfo(): UseNovelInfoResult {
     setWarning(null);
     setIsChapterUrl(false);
     currentUrlRef.current = '';
-  }, []);
+  }, [stopPolling]);
+
+  const pollTotal = useCallback((url: string, abortSignal: AbortSignal) => {
+    stopPolling();
+    setIsResolvingTotal(true);
+    pollIntervalRef.current = setInterval(async () => {
+      if (abortSignal.aborted || currentUrlRef.current !== url) {
+        stopPolling();
+        return;
+      }
+      try {
+        const result: BinarySearchTotalResponse = await getBinarySearchTotal(url);
+        if (abortSignal.aborted || currentUrlRef.current !== url) {
+          stopPolling();
+          return;
+        }
+        if (result.done && result.total !== null && result.total !== undefined) {
+          setTotalChapterCount(result.total);
+          stopPolling();
+        }
+      } catch {
+        // Silently ignore polling errors — will retry on next interval
+      }
+    }, 2000);
+  }, [stopPolling]);
 
   const refresh = useCallback(async (url: string) => {
     if (!url.trim()) {
       reset();
       return;
     }
+
+    stopPolling();
 
     if (abortRef.current) {
       abortRef.current.abort();
@@ -60,6 +98,8 @@ export function useNovelInfo(): UseNovelInfoResult {
     setChaptersError('');
     setWarning(null);
     setIsChapterUrl(false);
+    // Keep the old total visible until a new one arrives — don't clear it
+    // so the panel doesn't flicker between "2262" and blank when re-visiting a story
 
     try {
       const result: ChapterListResponse = await getNovelChapters(url);
@@ -78,6 +118,7 @@ export function useNovelInfo(): UseNovelInfoResult {
           setChapterCount(0);
           setTotalChapterCount(null);
         }
+        stopPolling();
         return;
       }
 
@@ -87,6 +128,11 @@ export function useNovelInfo(): UseNovelInfoResult {
       setStoryTitle(result.story_title ?? null);
       setWarning(result.warning ?? null);
       setIsChapterUrl(false);
+
+      // If total_chapter_count is null, kick off background polling for NovelWorm
+      if (result.total_chapter_count === null || result.total_chapter_count === undefined) {
+        pollTotal(url, abort.signal);
+      }
     } catch (e) {
       if (abort.signal.aborted) return;
       setChaptersError(e instanceof Error ? e.message : 'Failed to fetch chapter list');
@@ -98,15 +144,16 @@ export function useNovelInfo(): UseNovelInfoResult {
         setIsLoadingChapters(false);
       }
     }
-  }, [reset]);
+  }, [reset, stopPolling, pollTotal]);
 
   useEffect(() => {
     return () => {
+      stopPolling();
       if (abortRef.current) {
         abortRef.current.abort();
       }
     };
-  }, []);
+  }, [stopPolling]);
 
   return {
     chapters,
@@ -117,6 +164,7 @@ export function useNovelInfo(): UseNovelInfoResult {
     chaptersError,
     warning,
     isChapterUrl,
+    isResolvingTotal,
     refresh,
     reset,
   };
