@@ -11,6 +11,7 @@ __pycache__/
 *.py[cod]
 *.so
 .env
+.venv/
 
 # IDE
 .vscode/
