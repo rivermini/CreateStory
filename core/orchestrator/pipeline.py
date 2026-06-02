@@ -158,6 +158,9 @@ class StoryPipeline:
         if temp_batch_dir.exists():
             self._upload.delete_batch_output_dir(session, batch_id, temp_batch_dir)
 
+        self._br.delete_batch_output(batch_id)
+        session.add_log(9, f"Deleted BedReadVoices batch {batch_id} output directory")
+
     def run(
         self,
         session: AutoAudioSession,

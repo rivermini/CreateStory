@@ -64,6 +64,15 @@ class BedReadClient:
                 return
             resp.raise_for_status()
 
+    def delete_batch_output(self, batch_id: str) -> bool:
+        url = f"{self._bedread_url}/api/bedread/jobs/{batch_id}/output"
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.delete(url)
+                return resp.status_code == 200
+        except Exception:
+            return False
+
     def download_chapter(self, batch_id: str, chapter_num: int) -> Optional[Path]:
         url = f"{self._bedread_url}/api/bedread/jobs/{batch_id}/download?chapter={chapter_num}"
         try:
