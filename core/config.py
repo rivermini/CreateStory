@@ -1,0 +1,130 @@
+"""Configuration helpers for the AutoAudio service."""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from pathlib import Path
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+_OUTPUT_BASE_NAME = "output"
+_AUTO_AUDIO_LOGS_DIR_NAME = "auto_audio_logs"
+
+_settings_cache: dict | None = None
+_settings_cache_time: float = 0
+_SETTINGS_CACHE_TTL = 5.0
+
+
+def _resolve_path(env_var: str, fallback: Path) -> Path:
+    raw = env_var.strip() if env_var else ""
+    if raw:
+        p = Path(raw)
+        if p.is_absolute():
+            return p
+        return (Path(__file__).parent.parent.parent / p).resolve()
+    return fallback
+
+
+def _get_data_dir() -> Path:
+    """Return the AutoAudio data directory (self-contained)."""
+    return Path(__file__).parent.parent.parent / "data"
+
+
+def _get_user_settings_path() -> Path:
+    env_path = os_environ().get("USER_SETTINGS_PATH", "")
+    return _resolve_path(env_path, _get_data_dir() / "user_settings.json")
+
+
+def _get_drive_sync_config_path() -> Path:
+    env_path = os_environ().get("DRIVE_SYNC_CONFIG_PATH", "")
+    return _resolve_path(env_path, _get_data_dir() / "drive_sync_config.json")
+
+
+def _get_settings_file() -> Path:
+    return _get_user_settings_path()
+
+
+def _get_settings() -> dict:
+    global _settings_cache, _settings_cache_time
+    now = time.time()
+    if _settings_cache is not None and (now - _settings_cache_time) < _SETTINGS_CACHE_TTL:
+        return _settings_cache
+    settings_file = _get_settings_file()
+    try:
+        if settings_file.exists():
+            with open(settings_file, "r", encoding="utf-8") as f:
+                _settings_cache = json.load(f)
+                _settings_cache_time = now
+                return _settings_cache
+    except Exception:
+        pass
+    _settings_cache = {}
+    return _settings_cache
+
+
+def _get_bedreadvoices_url() -> str:
+    return os_environ().get("SERVICE_URLS_BedReadVoices", "http://localhost:8001").rstrip("/")
+
+
+def _get_drivesync_url() -> str:
+    return os_environ().get("SERVICE_URLS_BedReadDriveSync", "http://localhost:8003").rstrip("/")
+
+
+def os_environ() -> dict:
+    import os as _os
+    return _os.environ
+
+
+class AutoAudioConfigError(Exception):
+    pass
+
+
+def _get_external_api_config() -> tuple[str, dict]:
+    """
+    Load external API config from drive_sync_config.json.
+
+    Returns (api_base_url, auth_headers).
+    Raises AutoAudioConfigError if the file is missing or required fields are absent.
+    """
+    config_path = _get_drive_sync_config_path()
+
+    if not config_path.exists():
+        raise AutoAudioConfigError(
+            f"Drive sync config not found at {config_path}. "
+            "Please configure your Drive Sync settings in Settings > Drive Sync Configuration."
+        )
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except Exception as exc:
+        raise AutoAudioConfigError(f"Failed to read drive sync config: {exc}") from exc
+
+    if not config:
+        raise AutoAudioConfigError(
+            "Drive sync config is empty. "
+            "Please configure your Drive Sync settings in Settings > Drive Sync Configuration."
+        )
+
+    api_url = config.get("main_be_api_base_url", "").strip()
+    if not api_url:
+        raise AutoAudioConfigError(
+            "External API Base URL is not configured. "
+            "Please set it in Settings > Drive Sync Configuration."
+        )
+
+    user_id = config.get("main_be_user_id", "").strip()
+    if not user_id:
+        raise AutoAudioConfigError(
+            "User ID is not configured. "
+            "Please set it in Settings > Drive Sync Configuration."
+        )
+
+    headers = {"x-user-id": user_id}
+    if config.get("main_be_bearer_token"):
+        headers["Authorization"] = f"Bearer {config['main_be_bearer_token']}"
+
+    return api_url.rstrip("/"), headers
