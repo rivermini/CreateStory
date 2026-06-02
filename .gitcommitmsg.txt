@@ -1,0 +1,9 @@
+perf: batch delete sessions, in-memory session index, and fallback log file lookup
+
+- Add SessionManager.delete_sessions_batch() to delete multiple sessions in one
+  file write operation instead of N sequential read+write cycles.
+- Add in-memory _by_id dict to index sessions by ID, populated on load_history().
+  get_session() now does O(1) dict lookup instead of O(n) linear scan.
+- get_session() falls back to reading individual session_{id}.json log files for
+  running sessions not yet persisted to sessions.json.
+- Add POST /api/auto-audio/history/batch-delete endpoint.

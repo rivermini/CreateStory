@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from api.models.auto_audio import (
     AutoAudioHistoryEntry,
     AutoAudioSessionResponse,
+    BatchDeleteRequest,
     StartSessionRequest,
     StartSessionResponse,
 )
@@ -87,6 +88,18 @@ def get_session(session_id: str) -> AutoAudioSessionResponse:
     if session_data is None:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
     return AutoAudioSessionResponse(**session_data)
+
+
+class BatchDeleteRequest(BaseModel):
+    session_ids: list[str]
+
+
+@router.post("/history/batch-delete")
+def delete_sessions_batch(request: BatchDeleteRequest) -> dict:
+    """Delete multiple sessions from history in a single operation."""
+    service = get_auto_audio_service()
+    deleted = service.delete_sessions_batch(request.session_ids)
+    return {"deleted": deleted, "requested": len(request.session_ids)}
 
 
 @router.delete("/history/{session_id}")

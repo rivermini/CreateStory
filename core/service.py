@@ -374,16 +374,17 @@ class AutoAudioService:
         return self._session_mgr.load_history()
 
     def get_session(self, session_id: str) -> Optional[dict]:
-        for session_data in self._session_mgr.load_history():
-            if session_data.get("session_id") == session_id:
-                return session_data
+        # Check in-memory active session first (avoids file I/O)
         active = self._active_session
         if active and active.session_id == session_id:
             return active.to_dict()
-        return None
+        return self._session_mgr.get_session(session_id)
 
     def delete_session(self, session_id: str) -> bool:
         return self._session_mgr.delete_session(session_id)
+
+    def delete_sessions_batch(self, session_ids: list[str]) -> int:
+        return self._session_mgr.delete_sessions_batch(session_ids)
 
 
 _auto_audio_service: Optional[AutoAudioService] = None

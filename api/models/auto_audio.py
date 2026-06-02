@@ -56,3 +56,7 @@ class AutoAudioHistoryEntry(BaseModel):
     error: str
     total_stories: int = 0
     total_chapters: int = 0
+
+
+class BatchDeleteRequest(BaseModel):
+    session_ids: list[str]
