@@ -87,6 +87,15 @@ class BedReadClient:
             return output_dir
         return None
 
+    def delete_batch_output(self, batch_id: str) -> bool:
+        url = f"{self._bedread_url}/api/bedread/jobs/{batch_id}/output"
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.delete(url)
+                return resp.status_code == 200
+        except Exception:
+            return False
+
     def _post(self, path: str, json_data: dict) -> dict:
         url = f"{self._bedread_url}{path}"
         with httpx.Client(timeout=300.0) as client:

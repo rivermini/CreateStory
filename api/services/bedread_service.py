@@ -743,6 +743,23 @@ class BedReadService:
         logger.info("BedRead batch %s cancelled", batch_id)
         return True
 
+    def delete_batch_output(self, batch_id: str) -> bool:
+        with self._lock:
+            batch = self._batch_jobs.get(batch_id)
+            if batch is None:
+                return False
+            output_dir = batch.output_dir
+        if output_dir is None or not output_dir.exists():
+            return True
+        try:
+            import shutil
+            shutil.rmtree(output_dir)
+            logger.info("Deleted batch %s output directory: %s", batch_id, output_dir)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to delete batch %s output directory: %s", batch_id, exc)
+            return False
+
     def remove_batch_job(self, batch_id: str) -> bool:
         with self._lock:
             if batch_id not in self._batch_jobs:

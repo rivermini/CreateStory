@@ -289,6 +289,22 @@ def cancel_batch(batch_id: str) -> dict:
     return {"batch_id": batch_id, "status": "cancelled"}
 
 
+@router.delete("/jobs/{batch_id}/output")
+def delete_batch_output(batch_id: str) -> dict:
+    """Delete the output directory for a batch job after all chapters have been uploaded by the consumer."""
+    service = get_bedread_service()
+    deleted = service.delete_batch_output(batch_id)
+    if not deleted:
+        job = service.get_batch_job(batch_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Batch output for '{batch_id}' could not be deleted (status={job['status']}).",
+        )
+    return {"batch_id": batch_id, "status": "output_deleted"}
+
+
 @router.post("/jobs/{batch_id}/remove")
 def remove_batch(batch_id: str) -> dict:
     """Remove a batch job from tracking (does not cancel active TTS jobs)."""

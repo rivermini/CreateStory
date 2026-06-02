@@ -807,6 +807,13 @@ class AutoAudioService:
             resp.raise_for_status()
             return resp.json()
 
+    def _bedread_delete_output(self, session: AutoAudioSession, batch_id: str) -> None:
+        try:
+            self._bedread_delete(f"/api/bedread/jobs/{batch_id}/output")
+            session.add_log(9, f"Deleted BedReadVoices batch {batch_id} output directory")
+        except Exception as exc:
+            session.add_log(9, f"Failed to delete BedReadVoices batch {batch_id} output: {exc}", level="warning")
+
     def _bedread_download_chapter(self, batch_id: str, chapter_num: int) -> Optional[Path]:
         """Download a single chapter's audio file from BedReadVoices. Returns local temp path."""
         url = f"{_get_bedreadvoices_url()}/api/bedread/jobs/{batch_id}/download?chapter={chapter_num}"
@@ -919,6 +926,9 @@ class AutoAudioService:
         temp_batch_dir = Path(tempfile.gettempdir()) / f"bedread_auto_{batch_id}"
         if temp_batch_dir.exists():
             self._delete_batch_output_dir(session, batch_id, temp_batch_dir)
+
+        self._bedread_delete_output(session, batch_id)
+        session.add_log(9, f"Deleted BedReadVoices batch {batch_id} output directory")
 
     def _delete_batch_output_dir(self, session: AutoAudioSession, batch_id: str, output_dir: Path) -> None:
         """Remove the temp batch download directory after all chapters are processed."""
