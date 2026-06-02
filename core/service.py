@@ -108,7 +108,8 @@ class AutoAudioService:
                     session.add_log(1, "No stories needing update found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed (no stories to process)")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -125,7 +126,8 @@ class AutoAudioService:
                     session.add_log(1, "No stories with missing audio found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -143,7 +145,8 @@ class AutoAudioService:
                     session.add_log(3, "All phase 1 stories already processed — nothing to do")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -171,7 +174,8 @@ class AutoAudioService:
                     session.add_log(1, "No recently updated stories found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed (no stories to process)")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -192,7 +196,8 @@ class AutoAudioService:
                     session.add_log(1, "No stories with missing audio found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -210,7 +215,8 @@ class AutoAudioService:
                     session.add_log(3, "All phase 2 stories already processed — nothing to do")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -240,7 +246,8 @@ class AutoAudioService:
                     session.add_log(1, "No test stories found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed (no stories to process)")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -257,7 +264,8 @@ class AutoAudioService:
                     session.add_log(1, "No test stories with missing audio found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -275,7 +283,8 @@ class AutoAudioService:
                     session.add_log(3, "All phase 3 test stories already processed — nothing to do")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
-                    session.set_step(11, "Saving session log")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
                     self._session_mgr.save_session_log(session)
                     self._session_mgr.persist_history(session)
                     return
@@ -291,7 +300,8 @@ class AutoAudioService:
                 session.set_status("completed")
                 session.add_log(11, "Auto audio session completed successfully")
 
-            session.set_step(11, "Saving session log")
+            session.set_step(11, "Auto audio session completed successfully")
+            session.current_story = ""
             self._session_mgr.save_session_log(session)
             self._session_mgr.persist_history(session)
 
@@ -301,6 +311,7 @@ class AutoAudioService:
             logger.exception("Auto audio session error")
             session.set_status("error", error=str(exc))
             session.add_log(0, f"Fatal error: {exc}", level="error")
+            session.current_story = ""
             self._session_mgr.save_session_log(session)
             self._session_mgr.persist_history(session)
             self._active_session = None
@@ -357,8 +368,12 @@ class AutoAudioService:
         session.set_status("running")
         return session_id
 
-    def get_status(self) -> Optional[AutoAudioSession]:
-        return self._active_session
+    def get_status(self) -> Optional[dict]:
+        if self._active_session is not None:
+            return self._active_session.to_dict()
+        # No active session — return the most recent completed session from history
+        latest = self._session_mgr.get_latest_session()
+        return latest
 
     def stop_session(self) -> None:
         if self._active_session is None:

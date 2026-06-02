@@ -103,6 +103,13 @@ class SessionManager:
                 return session_data
         return None
 
+    def get_latest_session(self) -> Optional[dict]:
+        """Return the most recent completed session, or None if history is empty."""
+        history = self.load_history()
+        if history:
+            return history[0]
+        return None
+
     def persist_history(self, session: AutoAudioSession) -> None:
         try:
             history = self.load_history()

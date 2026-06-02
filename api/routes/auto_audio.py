@@ -34,12 +34,11 @@ def start_session(request: StartSessionRequest) -> StartSessionResponse:
 
 @router.get("/status", response_model=AutoAudioSessionResponse | None)
 def get_status() -> AutoAudioSessionResponse | None:
-    """Return the current active session state. Returns null if no session is running."""
+    """Return the current active session state, or the most recent completed session if none is running."""
     service = get_auto_audio_service()
-    session = service.get_status()
-    if session is None:
+    data = service.get_status()
+    if data is None:
         return None
-    data = session.to_dict()
     return AutoAudioSessionResponse(**data)
 
 
