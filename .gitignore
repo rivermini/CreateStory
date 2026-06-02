@@ -3,8 +3,7 @@ api/models/kokoro-v1.0.onnx
 api/models/voices-v1.0.bin
 
 # TTS output
-output/tts/
-output/bedread/
+output/
 
 # Python
 __pycache__/

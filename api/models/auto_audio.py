@@ -10,14 +10,14 @@ from pydantic import BaseModel, Field
 class StartSessionRequest(BaseModel):
     phase: str = Field(
         default="phase1",
-        description="Which phase to run: 'phase1' (needing-update stories only), 'phase2' (all stories), or 'phase3' (N most recently updated stories).",
+        description="Which phase to run: 'phase1' (needing-update stories), 'phase2' (N most recently updated stories), or 'phase3' (test story IDs).",
     )
     test_mode: bool = Field(default=False, description="Use test mode with hardcoded story IDs.")
     voice: Optional[str] | None = Field(
         default=None,
         description="Voice ID for TTS generation. If omitted, randomly picks between af_heart and af_bella per story.",
     )
-    limit: int = Field(default=20, description="For phase3: number of most recently updated stories to process.")
+    limit: int = Field(default=20, description="For phase2: number of most recently updated stories to process.")
 
 
 class StartSessionResponse(BaseModel):

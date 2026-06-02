@@ -153,29 +153,22 @@ class AutoAudioService:
                 self._run_story_pipeline(session, phase1_missing)
 
             elif session.phase == "phase2":
-                if session.test_mode:
-                    all_story_ids = list(test_story_ids)
-                    session.add_log(
-                        1, f"Test mode: checking {len(all_story_ids)} test story IDs"
-                    )
-                    all_stories = [{"storyId": sid} for sid in test_story_ids]
-                    for s in all_stories:
-                        meta = self._api.fetch_story_metadata(s["storyId"])
-                        if meta:
-                            s.update(meta)
-                else:
-                    session.set_step(1, "Fetching all published stories")
-                    session.add_log(1, "Phase 2: Fetching all published stories...")
-                    all_stories = self._api.fetch_all_stories()
-                    all_story_ids = [
-                        str(s.get("storyId") or s.get("story_id") or s.get("id"))
-                        for s in all_stories
-                        if (s.get("storyId") or s.get("story_id") or s.get("id"))
-                    ]
-                    session.add_log(1, f"Found {len(all_story_ids)} published stories total")
+                phase_limit = session.limit
+                session.set_step(1, f"Fetching {phase_limit} most recently updated stories")
+                session.add_log(
+                    1,
+                    f"Phase 2: Fetching {phase_limit} most recently updated stories...",
+                )
+                recent_stories = self._api.fetch_recent_stories(limit=phase_limit)
+                recent_story_ids = [
+                    str(s.get("storyId") or s.get("story_id") or s.get("id"))
+                    for s in recent_stories
+                    if (s.get("storyId") or s.get("story_id") or s.get("id"))
+                ]
+                session.add_log(1, f"Found {len(recent_story_ids)} recently updated stories")
 
-                if not all_story_ids:
-                    session.add_log(1, "No published stories found", level="info")
+                if not recent_story_ids:
+                    session.add_log(1, "No recently updated stories found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed (no stories to process)")
                     session.set_step(11, "Saving session log")
@@ -185,10 +178,12 @@ class AutoAudioService:
 
                 phase2_meta = {
                     str(s.get("storyId") or s.get("story_id") or s.get("id")): s
-                    for s in all_stories
+                    for s in recent_stories
                 }
                 session.set_step(1, "Discovering stories with missing audio")
-                phase2_missing = self._discovery.discover(session, all_story_ids, phase2_meta)
+                phase2_missing = self._discovery.discover(
+                    session, recent_story_ids, phase2_meta
+                )
                 session.add_log(
                     1, f"Phase 2: {len(phase2_missing)} stories with missing audio"
                 )
@@ -220,40 +215,29 @@ class AutoAudioService:
                     self._session_mgr.persist_history(session)
                     return
 
-                session.set_step(3, "Processing stories with missing audio")
+                session.set_step(3, "Processing recently updated stories with missing audio")
                 session.update_progress(0, len(phase2_missing))
                 self._run_story_pipeline(session, phase2_missing)
 
             elif session.phase == "phase3":
-                phase_limit = session.limit
-                if session.test_mode:
-                    recent_story_ids = list(test_story_ids[:phase_limit])
-                    session.add_log(
-                        1,
-                        f"Test mode: checking {len(recent_story_ids)} test story IDs "
-                        f"(limit={phase_limit})",
+                if not test_story_ids:
+                    from .config import AutoAudioConfigError
+                    raise AutoAudioConfigError(
+                        "Test Story IDs are not configured. "
+                        "Please set them in Settings > Auto Audio Settings."
                     )
-                    recent_stories = [{"storyId": sid} for sid in test_story_ids[:phase_limit]]
-                    for s in recent_stories:
-                        meta = self._api.fetch_story_metadata(s["storyId"])
-                        if meta:
-                            s.update(meta)
-                else:
-                    session.set_step(1, f"Fetching {phase_limit} most recently updated stories")
-                    session.add_log(
-                        1,
-                        f"Phase 3: Fetching {phase_limit} most recently updated stories...",
-                    )
-                    recent_stories = self._api.fetch_recent_stories(limit=phase_limit)
-                    recent_story_ids = [
-                        str(s.get("storyId") or s.get("story_id") or s.get("id"))
-                        for s in recent_stories
-                        if (s.get("storyId") or s.get("story_id") or s.get("id"))
-                    ]
-                    session.add_log(1, f"Found {len(recent_story_ids)} recently updated stories")
+                session.add_log(0, f"Phase 3: using {len(test_story_ids)} test story IDs")
+                session.set_step(1, "Fetching test story metadata")
+                phase3_meta: dict[str, dict] = {}
+                for sid in test_story_ids:
+                    meta = self._api.fetch_story_metadata(sid)
+                    if meta:
+                        phase3_meta[sid] = meta
+                phase3_ids = list(test_story_ids)
+                session.add_log(1, f"Found {len(phase3_ids)} test story IDs")
 
-                if not recent_story_ids:
-                    session.add_log(1, "No recently updated stories found", level="info")
+                if not phase3_ids:
+                    session.add_log(1, "No test stories found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed (no stories to process)")
                     session.set_step(11, "Saving session log")
@@ -261,20 +245,16 @@ class AutoAudioService:
                     self._session_mgr.persist_history(session)
                     return
 
-                phase3_meta = {
-                    str(s.get("storyId") or s.get("story_id") or s.get("id")): s
-                    for s in recent_stories
-                }
-                session.set_step(1, "Discovering stories with missing audio")
+                session.set_step(1, "Discovering test stories with missing audio")
                 phase3_missing = self._discovery.discover(
-                    session, recent_story_ids, phase3_meta
+                    session, phase3_ids, phase3_meta
                 )
                 session.add_log(
-                    1, f"Phase 3: {len(phase3_missing)} stories with missing audio"
+                    1, f"Phase 3: {len(phase3_missing)} test stories with missing audio"
                 )
 
                 if not phase3_missing:
-                    session.add_log(1, "No stories with missing audio found", level="info")
+                    session.add_log(1, "No test stories with missing audio found", level="info")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
                     session.set_step(11, "Saving session log")
@@ -292,7 +272,7 @@ class AutoAudioService:
 
                 phase3_missing = self._session_mgr.skip_completed_stories(session, phase3_missing)
                 if not phase3_missing:
-                    session.add_log(3, "All phase 3 stories already processed — nothing to do")
+                    session.add_log(3, "All phase 3 test stories already processed — nothing to do")
                     session.set_status("completed")
                     session.add_log(11, "Auto audio session completed successfully")
                     session.set_step(11, "Saving session log")
@@ -300,7 +280,7 @@ class AutoAudioService:
                     self._session_mgr.persist_history(session)
                     return
 
-                session.set_step(3, "Processing recently updated stories with missing audio")
+                session.set_step(3, "Processing test stories with missing audio")
                 session.update_progress(0, len(phase3_missing))
                 self._run_story_pipeline(session, phase3_missing)
 
