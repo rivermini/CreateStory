@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -18,33 +19,35 @@ _settings_cache_time: float = 0
 _SETTINGS_CACHE_TTL = 5.0
 
 
-def _resolve_path(env_var: str, fallback: Path) -> Path:
-    raw = env_var.strip() if env_var else ""
-    if raw:
-        p = Path(raw)
-        if p.is_absolute():
-            return p
-        return (Path(__file__).parent.parent.parent / p).resolve()
-    return fallback
+def _get_service_urls() -> dict:
+    raw = os.environ.get("SERVICE_URLS", "{}")
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
 
 
-def _get_data_dir() -> Path:
-    """Return the AutoAudio data directory (self-contained)."""
-    return Path(__file__).parent.parent.parent / "data"
-
-
-def _get_user_settings_path() -> Path:
-    env_path = os_environ().get("USER_SETTINGS_PATH", "")
-    return _resolve_path(env_path, _get_data_dir() / "user_settings.json")
-
-
-def _get_drive_sync_config_path() -> Path:
-    env_path = os_environ().get("DRIVE_SYNC_CONFIG_PATH", "")
-    return _resolve_path(env_path, _get_data_dir() / "drive_sync_config.json")
+def _get_service_url(key: str, fallback: str) -> str:
+    urls = _get_service_urls()
+    return urls.get(key, fallback).rstrip("/")
 
 
 def _get_settings_file() -> Path:
-    return _get_user_settings_path()
+    """Path to the user settings file. Falls back to FastAPIServer/data/user_settings.json."""
+    env_path = os.environ.get("USER_SETTINGS_PATH", "").strip()
+    if env_path:
+        p = Path(env_path)
+        return p if p.is_absolute() else (Path(__file__).parent.parent.parent / p).resolve()
+    return Path(__file__).parent.parent.parent / "FastAPIServer" / "data" / "user_settings.json"
+
+
+def _get_drive_sync_config_path() -> Path:
+    """Path to the drive sync config. Falls back to FastAPIServer/data/drive_sync_config.json."""
+    env_path = os.environ.get("DRIVE_SYNC_CONFIG_PATH", "").strip()
+    if env_path:
+        p = Path(env_path)
+        return p if p.is_absolute() else (Path(__file__).parent.parent.parent / p).resolve()
+    return Path(__file__).parent.parent.parent / "FastAPIServer" / "data" / "drive_sync_config.json"
 
 
 def _get_settings() -> dict:
@@ -66,16 +69,11 @@ def _get_settings() -> dict:
 
 
 def _get_bedreadvoices_url() -> str:
-    return os_environ().get("SERVICE_URLS_BedReadVoices", "http://localhost:8001").rstrip("/")
+    return _get_service_url("BedReadVoices", "http://localhost:8001")
 
 
 def _get_drivesync_url() -> str:
-    return os_environ().get("SERVICE_URLS_BedReadDriveSync", "http://localhost:8003").rstrip("/")
-
-
-def os_environ() -> dict:
-    import os as _os
-    return _os.environ
+    return _get_service_url("BedReadDriveSync", "http://localhost:8003")
 
 
 class AutoAudioConfigError(Exception):
