@@ -6,7 +6,6 @@ import { type ThemeMode } from '../components/ThemeToggle';
 
 interface ResultPageProps {
   themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
 }
 
 function formatDate(iso: string | null): string {
@@ -129,15 +128,24 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
   if (!crawlId) return null;
 
+  const pageBg = isDark
+    ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
+    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
+
   if (isLoading) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
-        <div className="flex items-center gap-3">
-          <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span>Loading results...</span>
+  return (
+    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
+      <div className="lg-orb lg-orb-1" />
+      <div className="lg-orb lg-orb-2" />
+      <div className="lg-orb lg-orb-3" />
+      <div className="relative z-10 min-h-screen flex items-center justify-center">
+        <div className="lg-glass-card px-6 py-5 flex items-center gap-3">
+            <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24" style={{ color: isDark ? 'rgba(129,140,248,0.8)' : 'rgba(99,102,241,0.8)' }}>
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className={isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}>Loading results...</span>
+          </div>
         </div>
       </div>
     );
@@ -145,20 +153,25 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
   if (error || !result) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-        <div className="text-center space-y-4">
-          <div className={`flex items-center justify-center gap-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>{error || 'Results not found'}</span>
+      <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
+        <div className="lg-orb lg-orb-1" />
+        <div className="lg-orb lg-orb-2" />
+        <div className="lg-orb lg-orb-3" />
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          <div className="lg-glass-card p-8 text-center space-y-4 max-w-sm">
+            <div className="flex items-center justify-center gap-2" style={{ color: isDark ? '#f87171' : '#ef4444' }}>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{error || 'Results not found'}</span>
+            </div>
+            <button
+              onClick={() => navigate('/')}
+              className="lg-btn-primary"
+            >
+              Start New Crawl
+            </button>
           </div>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors text-sm font-medium shadow-lg shadow-indigo-600/30"
-          >
-            Start New Crawl
-          </button>
         </div>
       </div>
     );
@@ -184,6 +197,15 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     cancelled: isDark ? 'bg-amber-400'  : 'bg-amber-500',
     running:   isDark ? 'bg-blue-400'   : 'bg-blue-500',
     idle:      isDark ? 'bg-slate-500'  : 'bg-gray-400',
+  };
+
+  const statusChipClass = () => {
+    const status = result.status;
+    if (status === 'completed') return 'lg-chip lg-chip-green';
+    if (status === 'failed') return 'lg-chip lg-chip-red';
+    if (status === 'cancelled') return 'lg-chip lg-chip-amber';
+    if (status === 'running') return 'lg-chip lg-chip-blue';
+    return 'lg-chip lg-chip-neutral';
   };
 
   const meta = result.novel_metadata;
@@ -212,56 +234,71 @@ export function ResultPage({ themeMode }: ResultPageProps) {
   const otherSessions = sessions.filter(s => s.crawl_id !== crawlId);
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
+      <div className="lg-orb lg-orb-1" />
+      <div className="lg-orb lg-orb-2" />
+      <div className="lg-orb lg-orb-3" />
+
+      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
+        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
 
         {/* Page Header */}
-        <div className="mb-2 flex items-start justify-between gap-4">
+        <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
           <div>
-            <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+            <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
               Crawl Results
             </h1>
-            <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+            <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
               {result.novel_name || 'Crawl Session'}
             </p>
           </div>
-          <button
-            onClick={() => {
-              setShowHistory(v => !v);
-              if (!sessions.length) fetchHistory();
-            }}
-            className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors flex items-center gap-1.5 ${
-              showHistory
-                ? isDark ? 'bg-indigo-900/40 border-indigo-700 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                : isDark ? 'text-slate-400 border-slate-700 hover:bg-slate-800' : 'text-gray-600 border-gray-300 hover:bg-gray-100'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {showHistory ? 'Hide History' : 'Session History'}
-          </button>
+          <div className="flex-shrink-0 flex items-center gap-2">
+            <span className={statusChipClass()}>
+              {result.status === 'running' && (
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              )}
+              {result.status.charAt(0).toUpperCase() + result.status.slice(1)}
+            </span>
+            <button
+              onClick={() => {
+                setShowHistory(v => !v);
+                if (!sessions.length) fetchHistory();
+              }}
+              className="lg-icon-btn"
+              style={showHistory ? { background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8' } : {}}
+              title={showHistory ? 'Hide History' : 'Session History'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Primary Combined File */}
         {combinedFilename && (
-          <section className={`rounded-2xl border-2 p-5 sm:p-6 shadow-xl ${isDark
-            ? 'bg-emerald-500/10 border-emerald-400/40 shadow-emerald-950/40'
-            : 'bg-emerald-50 border-emerald-300 shadow-emerald-100'
-          }`}>
+          <section className="lg-glass p-5 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className={`mt-1 text-xl sm:text-2xl font-bold ${isDark ? 'text-emerald-100' : 'text-emerald-900'}`}>
-                  Combined File
-                </h2>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)' }}>
+                  <svg width="16" height="16" fill="none" stroke="#34d399" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
+                    Combined File
+                  </h2>
+                  <p className={`text-xs ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>All chapters merged into a single file</p>
+                </div>
               </div>
               <button
                 onClick={handleDownloadCombined}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${isDark
-                  ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-400/40 hover:bg-emerald-500/30'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-200'
-                }`}
+                className="lg-btn-primary"
               >
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
                 Download Combined
               </button>
             </div>
@@ -281,22 +318,16 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
         {/* Session History Panel */}
         {showHistory && (
-          <section className={`rounded-2xl overflow-hidden border ${isDark
-            ? 'bg-slate-900/60 border-slate-800/60'
-            : 'bg-white border-gray-200'
-          }`}>
-            <div className="px-5 py-3 border-b border-inherit">
+          <section className="lg-glass overflow-hidden">
+            <div className="px-5 py-3 border-b" style={{ borderColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
               <div className="flex items-center justify-between">
-                <h2 className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                <h2 className={`text-sm font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
                   Recent Sessions ({otherSessions.length})
                 </h2>
                 <button
                   onClick={fetchHistory}
                   disabled={historyLoading}
-                  className={`p-1.5 rounded-lg transition-colors ${isDark
-                    ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                  }`}
+                  className="lg-icon-btn"
                   title="Refresh"
                 >
                   <svg className={`w-4 h-4 ${historyLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -307,7 +338,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
             </div>
 
             {historyLoading && otherSessions.length === 0 ? (
-              <div className={`flex items-center justify-center gap-2 py-8 text-sm ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+              <div className={`flex items-center justify-center gap-2 py-8 text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
                 <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -315,31 +346,30 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 Loading history...
               </div>
             ) : otherSessions.length === 0 ? (
-              <div className={`py-8 text-center text-sm ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+              <div className={`py-8 text-center text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
                 No other sessions yet.
               </div>
             ) : (
               <div className="divide-y divide-inherit">
                 {otherSessions.slice(0, 8).map(session => {
-                  const dot = statusDotMap[session.status] ?? (isDark ? 'bg-slate-500' : 'bg-gray-400');
+                  const dot = statusDotMap[session.status] ?? (isDark ? 'bg-white/30' : 'bg-black/30');
                   const label = statusLabels[session.status] ?? session.status;
-                  const textColor = statusColors[session.status] ?? (isDark ? 'text-slate-400' : 'text-gray-500');
+                  const textColor = statusColors[session.status] ?? (isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]');
                   const displayTitle = session.novel_name || session.crawl_id;
 
                   return (
                     <div
                       key={session.crawl_id}
-                      className={`flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors ${
-                        isDark ? 'hover:bg-slate-800/50' : 'hover:bg-gray-50'
-                      }`}
+                      className={`flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors ${isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-[rgba(0,0,0,0.02)]'}`}
+                      style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}
                       onClick={() => navigate(`/results?session=${session.crawl_id}`)}
                     >
                       <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                        <p className={`text-sm font-medium truncate ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.8)]'}`}>
                           {displayTitle}
                         </p>
-                        <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                        <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
                           <span className={textColor}>{label}</span>
                           <span>·</span>
                           <span>{session.chapters_crawled} ch</span>
@@ -353,7 +383,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                           )}
                         </div>
                       </div>
-                      <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-slate-600' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
@@ -363,10 +393,11 @@ export function ResultPage({ themeMode }: ResultPageProps) {
             )}
 
             {otherSessions.length > 8 && (
-              <div className="px-5 py-3 border-t border-inherit">
+              <div className="px-5 py-3 border-t" style={{ borderColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
                 <button
                   onClick={() => navigate('/results/all')}
-                  className={`text-xs font-medium transition-colors ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
+                  className="text-xs font-medium transition-colors"
+                  style={{ color: isDark ? '#818cf8' : '#6366f1' }}
                 >
                   View all {otherSessions.length} sessions →
                 </button>
@@ -376,18 +407,15 @@ export function ResultPage({ themeMode }: ResultPageProps) {
         )}
 
         {/* Summary Card */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-4 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
+        <section className="lg-glass p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="space-y-1">
               {meta?.author_fullname && (
-                <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>by {meta.author_fullname}</p>
+                <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>by {meta.author_fullname}</p>
               )}
-              <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              <p className={`text-sm ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
                 {result.spider_name || 'Unknown site'} &middot;{' '}
-                <span className={statusColors[result.status] ?? (isDark ? 'text-slate-400' : 'text-gray-600')}>
+                <span className={statusColors[result.status] ?? (isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]')}>
                   {statusLabels[result.status] ?? result.status}
                 </span>
                 {result.chapters_crawled > 0 && (
@@ -395,13 +423,14 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 )}
               </p>
               {result.source_url && (
-                <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
                   <span className="font-medium">Source:</span>{' '}
                   <a
                     href={result.source_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`underline hover:no-underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
+                    className="underline hover:no-underline"
+                    style={{ color: isDark ? '#818cf8' : '#6366f1' }}
                   >
                     {result.source_url}
                   </a>
@@ -417,26 +446,29 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                   a.click();
                   document.body.removeChild(a);
                 }}
-                className="px-4 py-2 text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all text-sm font-medium shadow-lg shadow-indigo-600/30"
+                className="lg-btn-primary"
               >
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
                 Download All
               </button>
             )}
           </div>
 
           {meta && (
-            <div className={`flex flex-wrap gap-2 items-center text-xs ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+            <div className={`flex flex-wrap gap-2 items-center text-xs ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
               {meta.views != null && <span>{meta.views.toLocaleString()} views</span>}
               {meta.stars != null && <span>{meta.stars.toLocaleString()} stars</span>}
               {meta.chapter_count != null && <span>{meta.chapter_count} parts</span>}
               {meta.completed === true && (
-                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Completed</span>
+                <span className="lg-chip lg-chip-green">Completed</span>
               )}
               {meta.mature === true && (
-                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium border ${isDark ? 'bg-amber-900/40 text-amber-400 border-amber-800/40' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>18+</span>
+                <span className="lg-chip lg-chip-amber">18+</span>
               )}
               {meta.is_paywalled === true && (
-                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium border ${isDark ? 'bg-red-900/40 text-red-400 border-red-800/40' : 'bg-red-100 text-red-700 border-red-200'}`}>Locked chapters present</span>
+                <span className="lg-chip lg-chip-red">Locked chapters present</span>
               )}
             </div>
           )}
@@ -444,20 +476,21 @@ export function ResultPage({ themeMode }: ResultPageProps) {
           {meta?.tags && meta.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {meta.tags.map(tag => (
-                <span key={tag} className={`px-2 py-0.5 text-xs rounded-lg ${isDark ? 'bg-slate-800/60 text-slate-300 border border-slate-700/50' : 'bg-gray-100 text-gray-700'}`}>{tag}</span>
+                <span key={tag} className="lg-chip lg-chip-neutral">{tag}</span>
               ))}
             </div>
           )}
 
           {meta?.description && (
-            <p className={`text-sm line-clamp-2 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>{meta.description}</p>
+            <p className={`text-sm line-clamp-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>{meta.description}</p>
           )}
 
           {result.error_message && (
-            <div className={`p-3 rounded-xl text-sm ${isDark
-              ? 'bg-red-900/20 border border-red-800/30 text-red-400'
-              : 'bg-red-50 border border-red-200 text-red-600'
-            }`}>
+            <div className="p-3 rounded-xl text-sm" style={{
+              background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
+              border: isDark ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(239,68,68,0.15)',
+              color: isDark ? '#f87171' : '#ef4444'
+            }}>
               <strong>Error:</strong> {result.error_message}
             </div>
           )}
@@ -465,23 +498,17 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
         {/* Individual Files */}
         {nonCombinedFiles.length > 0 ? (
-          <section className={`rounded-2xl border p-4 sm:p-5 ${isDark
-            ? 'bg-slate-900/60 border-slate-800/60'
-            : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center justify-between gap-3">
-              <h2 className={`text-base sm:text-lg font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
+          <section className="lg-glass p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className={`text-base sm:text-lg font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
                 Individual Chapters ({nonCombinedFiles.length})
               </h2>
               <button
                 type="button"
                 onClick={() => setShowIndividualFiles(v => !v)}
-                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${isDark
-                  ? 'border-slate-700 text-slate-300 hover:bg-slate-800'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                }`}
+                className="lg-icon-btn"
               >
-                {showIndividualFiles ? 'Hide files' : 'Show files'}
+                {showIndividualFiles ? 'Hide' : 'Show'}
                 <svg className={`h-3.5 w-3.5 transition-transform ${showIndividualFiles ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -489,7 +516,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
             </div>
 
             {showIndividualFiles ? (
-              <div className="mt-4 space-y-3">
+              <div className="space-y-3">
                 {nonCombinedFiles.map(file => (
                   <FilePreview
                     key={file.filename}
@@ -502,48 +529,48 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 ))}
               </div>
             ) : (
-              <p className={`mt-3 text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
                 Individual chapter files are hidden. Expand to view and download.
               </p>
             )}
           </section>
         ) : !combinedFilename ? (
-          <section className={`rounded-2xl p-8 text-center ${isDark
-            ? 'bg-slate-900/60 border border-slate-800/60 text-slate-500'
-            : 'bg-white border border-gray-200 text-gray-400'
-          }`}>
-            No output files found for this crawl session.
+          <section className="lg-glass p-8 text-center">
+            <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>No output files found for this crawl session.</p>
           </section>
         ) : null}
 
         {/* Phase 2 placeholder */}
-        <section className={`rounded-2xl p-6 space-y-3 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
+        <section className="lg-glass p-6 space-y-3">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl ${isDark ? 'bg-slate-800 text-slate-500' : 'bg-gray-100 text-gray-400'}`}>
+            <div className="p-2 rounded-xl" style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
               </svg>
             </div>
-            <h2 className={`text-base font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Send to Company Backend</h2>
+            <h2 className={`text-base font-medium ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Send to Company Backend</h2>
           </div>
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+          <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
             This feature will POST crawled chapter content to the company NestJS/Java backend.
             It will be enabled in Phase 2 once the API endpoint details are confirmed.
           </p>
           <button
             disabled
-            className={`px-4 py-2 text-sm rounded-xl cursor-not-allowed ${isDark
-              ? 'text-slate-400 bg-slate-800 border border-slate-700'
-              : 'text-gray-400 bg-gray-100 border border-gray-300'
-            }`}
+            className="lg-btn-primary"
+            style={{ opacity: 0.4, cursor: 'not-allowed' }}
           >
             Send to Company BE (Phase 2)
           </button>
         </section>
       </main>
+      </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+      `}</style>
     </div>
   );
 }

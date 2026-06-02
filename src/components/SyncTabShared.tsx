@@ -31,8 +31,8 @@ function StatusBadge({ prefix, isDark }: { prefix: string; isDark: boolean }) {
             ? 'bg-amber-900/40 text-amber-400 border-amber-800/40'
             : 'bg-amber-50 text-amber-700 border-amber-200'
           : isDark
-            ? 'bg-slate-700/50 text-slate-400 border-slate-600/40'
-            : 'bg-gray-100 text-gray-600 border-gray-300'
+            ? 'bg-white/6 text-white/70 border-white/8'
+            : 'bg-black/5 text-black/45 border-black/8'
       }`}>
       {prefix}
     </span>
@@ -41,11 +41,11 @@ function StatusBadge({ prefix, isDark }: { prefix: string; isDark: boolean }) {
 
 function EmptyState({ message, icon, isDark }: { message: string; icon: React.ReactNode; isDark: boolean }) {
   return (
-    <div className={`flex flex-col items-center justify-center py-16 px-4 rounded-2xl ${isDark ? 'bg-slate-900/40' : 'bg-gray-50'}`}>
-      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${isDark ? 'bg-slate-800/60' : 'bg-white border border-gray-200'}`}>
+    <div className={`flex flex-col items-center justify-center py-16 px-4 lg-glass-card`}>
+      <div className="lg-glass w-16 h-16 rounded-2xl flex items-center justify-center mb-4">
         {icon}
       </div>
-      <p className={`text-sm text-center max-w-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{message}</p>
+      <p className={`text-sm text-center max-w-xs ${isDark ? 'text-white/75' : 'text-black/35'}`}>{message}</p>
     </div>
   );
 }

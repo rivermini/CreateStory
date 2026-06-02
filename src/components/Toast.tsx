@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 export type ToastPosition = 'bottom-right' | 'top-center';
 
-export interface Toast {
+export interface toast {
   id: string;
   message: string;
   type: ToastType;
@@ -12,29 +12,29 @@ export interface Toast {
 }
 
 let toastCounter = 0;
-const listeners = new Set<(toast: Toast) => void>();
+const listeners = new Set<(toast: toast) => void>();
 
 export function showToast(message: string, type: ToastType = 'success', duration = 2000, position: ToastPosition = 'bottom-right') {
-  const toast: Toast = {
+  const t: toast = {
     id: `toast-${++toastCounter}`,
     message,
     type,
     duration,
     position,
   };
-  listeners.forEach(listener => listener(toast));
+  listeners.forEach(listener => listener(t));
 }
 
 export function ToastContainer() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<toast[]>([]);
 
   useEffect(() => {
-    const handler = (toast: Toast) => {
-      setToasts(prev => [...prev, toast]);
+    const handler = (t: toast) => {
+      setToasts(prev => [...prev, t]);
 
       setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== toast.id));
-      }, toast.duration ?? 2000);
+        setToasts(prev => prev.filter(x => x.id !== t.id));
+      }, t.duration ?? 2000);
     };
 
     listeners.add(handler);
@@ -50,20 +50,18 @@ export function ToastContainer() {
 
   return (
     <>
-      {/* Top center toasts */}
       {topCenterToasts.length > 0 && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-3 pointer-events-none">
-          {topCenterToasts.map(toast => (
-            <ToastItem key={toast.id} toast={toast} />
+          {topCenterToasts.map(t => (
+            <ToastItem key={t.id} toast={t} />
           ))}
         </div>
       )}
 
-      {/* Bottom right toasts */}
       {bottomRightToasts.length > 0 && (
         <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
-          {bottomRightToasts.map(toast => (
-            <ToastItem key={toast.id} toast={toast} />
+          {bottomRightToasts.map(t => (
+            <ToastItem key={t.id} toast={t} />
           ))}
         </div>
       )}
@@ -71,7 +69,7 @@ export function ToastContainer() {
   );
 }
 
-function ToastItem({ toast }: { toast: Toast }) {
+function ToastItem({ toast }: { toast: toast }) {
   const isDark = document.documentElement.dataset.theme !== 'light';
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -93,43 +91,43 @@ function ToastItem({ toast }: { toast: Toast }) {
     setExiting(true);
   }, []);
 
-  const config = {
+  const config: Record<ToastType, { bg: string; border: string; text: string; icon: React.ReactNode }> = {
     success: {
-      bg: isDark ? 'bg-emerald-900/95' : 'bg-emerald-50',
-      border: isDark ? 'border-emerald-700' : 'border-emerald-200',
-      text: isDark ? 'text-emerald-100' : 'text-emerald-800',
+      bg: isDark ? 'rgba(5,150,105,0.9)' : 'rgba(255,255,255,0.95)',
+      border: isDark ? 'rgba(52,211,153,0.4)' : 'rgba(52,211,153,0.3)',
+      text: isDark ? 'rgba(209,250,229,1)' : 'rgba(5,46,22,0.9)',
       icon: (
-        <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" style={{ color: '#34d399' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       ),
     },
     error: {
-      bg: isDark ? 'bg-red-900/95' : 'bg-red-50',
-      border: isDark ? 'border-red-700' : 'border-red-200',
-      text: isDark ? 'text-red-100' : 'text-red-800',
+      bg: isDark ? 'rgba(127,29,29,0.9)' : 'rgba(255,255,255,0.95)',
+      border: isDark ? 'rgba(248,113,113,0.4)' : 'rgba(248,113,113,0.3)',
+      text: isDark ? 'rgba(254,215,215,1)' : 'rgba(39,5,5,0.9)',
       icon: (
-        <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" style={{ color: '#f87171' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       ),
     },
     warning: {
-      bg: isDark ? 'bg-amber-900/95' : 'bg-amber-50',
-      border: isDark ? 'border-amber-700' : 'border-amber-200',
-      text: isDark ? 'text-amber-100' : 'text-amber-800',
+      bg: isDark ? 'rgba(113,63,18,0.9)' : 'rgba(255,255,255,0.95)',
+      border: isDark ? 'rgba(251,191,36,0.4)' : 'rgba(251,191,36,0.3)',
+      text: isDark ? 'rgba(254,243,199,1)' : 'rgba(40,21,0,0.9)',
       icon: (
-        <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" style={{ color: '#fbbf24' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
       ),
     },
     info: {
-      bg: isDark ? 'bg-blue-900/95' : 'bg-blue-50',
-      border: isDark ? 'border-blue-700' : 'border-blue-200',
-      text: isDark ? 'text-blue-100' : 'text-blue-800',
+      bg: isDark ? 'rgba(30,58,138,0.9)' : 'rgba(255,255,255,0.95)',
+      border: isDark ? 'rgba(96,165,250,0.4)' : 'rgba(96,165,250,0.3)',
+      text: isDark ? 'rgba(219,234,254,1)' : 'rgba(8,25,55,0.9)',
       icon: (
-        <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" style={{ color: '#60a5fa' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
@@ -140,28 +138,22 @@ function ToastItem({ toast }: { toast: Toast }) {
   const { bg, border, text, icon } = config[toast.type];
 
   const animationClass = isTopCenter
-    ? visible && !exiting
-      ? 'opacity-100 translate-y-0'
-      : 'opacity-0 -translate-y-4'
-    : visible && !exiting
-      ? 'opacity-100 translate-y-0 translate-x-0'
-      : 'opacity-0 translate-y-2 translate-x-4';
+    ? visible && !exiting ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+    : visible && !exiting ? 'opacity-100 translate-y-0 translate-x-0' : 'opacity-0 translate-y-2 translate-x-4';
 
   return (
     <div
-      className={`
-        flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl backdrop-blur-sm
-        pointer-events-auto min-w-72 max-w-md
-        transition-all duration-300 ease-out
-        ${bg} ${border}
-        ${animationClass}
-      `}
+      className={`lg-glass flex items-center gap-3 px-4 py-3 pointer-events-auto min-w-72 max-w-md transition-all duration-300 ease-out ${animationClass}`}
+      style={{ background: bg, border: `1px solid ${border}` }}
     >
       <div className="flex-shrink-0">{icon}</div>
-      <p className={`flex-1 text-sm font-medium ${text}`}>{toast.message}</p>
+      <p className="flex-1 text-sm font-medium" style={{ color: text }}>{toast.message}</p>
       <button
         onClick={handleClose}
-        className={`flex-shrink-0 p-1 rounded-lg transition-colors ${text} hover:opacity-70`}
+        className="flex-shrink-0 p-1 rounded-lg transition-colors"
+        style={{ color: text, opacity: 0.6 }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+        onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

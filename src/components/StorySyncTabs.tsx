@@ -125,71 +125,59 @@ export function StorySyncTabs({
         }}
       />
 
-      <div className={`rounded-2xl shadow-xl shadow-black/5 ${isDark ? 'bg-slate-900/80 backdrop-blur-sm border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
-        <div className={`flex items-stretch ${isDark ? 'bg-slate-900/40 border-b border-slate-800/60' : 'bg-gray-50/80 border-b border-gray-200'}`}>
+      <div className="lg-glass-card overflow-hidden" style={{ borderRadius: 24 }}>
+        <div className={`flex items-stretch ${isDark ? 'lg-border-divider' : 'lg-border-divider'}`}>
           <button
             onClick={() => onTabChange('uploadable')}
-            className={`flex-1 flex items-center justify-center gap-2.5 px-4 sm:px-6 py-4 text-sm font-semibold transition-all duration-200 relative ${activeTab === 'uploadable'
-                ? isDark
-                  ? 'text-indigo-400'
-                  : 'text-indigo-600'
-                : isDark
-                  ? 'text-slate-500 hover:text-slate-300'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+            className="flex-1 flex items-center justify-center gap-2.5 px-4 sm:px-6 py-4 text-sm font-semibold transition-all duration-200 relative"
+            style={{
+              color: activeTab === 'uploadable' ? (isDark ? '#818cf8' : '#6366f1') : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'),
+              background: activeTab === 'uploadable' ? (isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)') : 'transparent',
+            }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
             <span>Upload to Drive</span>
             {uploadableCount > 0 ? (
-              <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${activeTab === 'uploadable'
-                  ? isDark ? 'bg-indigo-500/30 text-indigo-300' : 'bg-indigo-100 text-indigo-600'
-                  : isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-200 text-gray-500'
-                }`}>
+              <span className="lg-chip lg-chip-blue" style={activeTab !== 'uploadable' ? (isDark ? { background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.05)', borderColor: 'rgba(0,0,0,0.1)', color: 'rgba(0,0,0,0.35)' }) : undefined}>
                 {uploadableCount}
               </span>
             ) : uploadableData ? (
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-slate-800 text-slate-500' : 'bg-gray-200 text-gray-500'}`}>
+              <span className="lg-chip" style={isDark ? { background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.04)', borderColor: 'rgba(0,0,0,0.08)', color: 'rgba(0,0,0,0.35)' }}>
                 0
               </span>
             ) : null}
             {activeTab === 'uploadable' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
             )}
           </button>
 
-          <div className={`w-px ${isDark ? 'bg-slate-800/60' : 'bg-gray-200'}`} />
+          <div className="w-px" style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
 
           <button
             onClick={() => onTabChange('updatable')}
-            className={`flex-1 flex items-center justify-center gap-2.5 px-4 sm:px-6 py-4 text-sm font-semibold transition-all duration-200 relative ${activeTab === 'updatable'
-                ? isDark
-                  ? 'text-amber-400'
-                  : 'text-amber-600'
-                : isDark
-                  ? 'text-slate-500 hover:text-slate-300'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+            className="flex-1 flex items-center justify-center gap-2.5 px-4 sm:px-6 py-4 text-sm font-semibold transition-all duration-200 relative"
+            style={{
+              color: activeTab === 'updatable' ? (isDark ? '#fbbf24' : '#d97706') : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'),
+              background: activeTab === 'updatable' ? (isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)') : 'transparent',
+            }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
             <span>Update Chapters</span>
             {updatableCount > 0 ? (
-              <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${activeTab === 'updatable'
-                  ? isDark ? 'bg-amber-500/30 text-amber-300' : 'bg-amber-100 text-amber-600'
-                  : isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-200 text-gray-500'
-                }`}>
+              <span className="lg-chip lg-chip-amber" style={activeTab !== 'updatable' ? (isDark ? { background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.05)', borderColor: 'rgba(0,0,0,0.1)', color: 'rgba(0,0,0,0.35)' }) : undefined}>
                 {updatableCount}
               </span>
             ) : updatableData ? (
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDark ? 'bg-slate-800 text-slate-500' : 'bg-gray-200 text-gray-500'}`}>
+              <span className="lg-chip" style={isDark ? { background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.04)', borderColor: 'rgba(0,0,0,0.08)', color: 'rgba(0,0,0,0.35)' }}>
                 0
               </span>
             ) : null}
             {activeTab === 'updatable' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-orange-500" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, #f59e0b, #ea580c)' }} />
             )}
           </button>
         </div>

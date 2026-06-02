@@ -10,8 +10,6 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
   const pct = chaptersTotal > 0 ? Math.min(chaptersCrawled / chaptersTotal, 1) : 0;
   const pctStr = (pct * 100).toFixed(0);
 
-  const trackBg = isDark ? 'bg-slate-800/60' : 'bg-gray-200';
-
   if (status === 'completed') {
     return (
       <div className="space-y-2">
@@ -21,8 +19,8 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
           </svg>
           Crawl complete — {chaptersCrawled} chapter(s) scraped
         </div>
-        <div className={`h-2.5 ${trackBg} rounded-full overflow-hidden`}>
-          <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: '100%' }} />
+        <div className="lg-glass h-2.5 rounded-full overflow-hidden" style={{ padding: 0 }}>
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: '100%', background: 'linear-gradient(90deg, #34d399, #10b981)' }} />
         </div>
       </div>
     );
@@ -37,8 +35,8 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
           </svg>
           Crawl failed
         </div>
-        <div className={`h-2.5 ${trackBg} rounded-full overflow-hidden`}>
-          <div className={`h-full rounded-full bg-red-500`} style={{ width: `${pctStr}%` }} />
+        <div className="lg-glass h-2.5 rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${pctStr}%`, background: 'linear-gradient(90deg, #f87171, #ef4444)' }} />
         </div>
       </div>
     );
@@ -54,8 +52,8 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
           </svg>
           Crawl cancelled — {chaptersCrawled} chapter(s) scraped
         </div>
-        <div className={`h-2.5 ${trackBg} rounded-full overflow-hidden`}>
-          <div className={`h-full rounded-full bg-amber-500`} style={{ width: `${pctStr}%` }} />
+        <div className="lg-glass h-2.5 rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${pctStr}%`, background: 'linear-gradient(90deg, #fbbf24, #f59e0b)' }} />
         </div>
       </div>
     );
@@ -65,20 +63,20 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
-        <span className={isDark ? 'text-slate-300' : 'text-gray-700'}>
+        <span className={isDark ? 'text-white/65' : 'text-black/65'}>
           Chapter {chaptersCrawled}
           {chaptersTotal > 0 ? ` / ${chaptersTotal}` : ''}
         </span>
-        <span className={isDark ? 'text-slate-500' : 'text-gray-500'}>{pctStr}%</span>
+        <span className={isDark ? 'text-white/30' : 'text-black/30'}>{pctStr}%</span>
       </div>
-      <div className={`h-2.5 ${trackBg} rounded-full overflow-hidden`}>
+      <div className="lg-glass h-2.5 rounded-full overflow-hidden">
         <div
-          className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-          style={{ width: `${pctStr}%` }}
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${pctStr}%`, background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', boxShadow: '0 0 12px rgba(99,102,241,0.4)' }}
         />
       </div>
       {currentTitle && (
-        <p className={`text-xs truncate ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+        <p className={`text-xs truncate ${isDark ? 'text-white/35' : 'text-black/35'}`}>
           Now: <span className={isDark ? 'text-indigo-300' : 'text-indigo-600'}>{currentTitle}</span>
         </p>
       )}

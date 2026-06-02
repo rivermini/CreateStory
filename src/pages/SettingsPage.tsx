@@ -285,31 +285,41 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
-        <div className="flex items-center gap-3">
-          <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span>Loading settings...</span>
+      <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: isDark ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)' : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)' }}>
+        <div className="lg-orb lg-orb-1" />
+        <div className="lg-orb lg-orb-2" />
+        <div className="lg-orb lg-orb-3" />
+        <div className="relative z-10 flex items-center justify-center min-h-screen">
+          <div className="flex items-center gap-3" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.5)' }}>
+            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span>Loading settings...</span>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: isDark ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)' : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)' }}>
+      <div className="lg-orb lg-orb-1" />
+      <div className="lg-orb lg-orb-2" />
+      <div className="lg-orb lg-orb-3" />
 
-        {/* Page Header */}
-        <div className="mb-2">
-          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-            Settings
-          </h1>
-          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-            Customize your experience
-          </p>
-        </div>
+      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
+        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+
+          {/* Page Header */}
+          <div className="lg-glass-deep px-6 py-5">
+            <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
+              Settings
+            </h1>
+            <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+              Customize your experience
+            </p>
+          </div>
 
         {/* Error */}
         {error && (
@@ -325,19 +335,16 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         )}
 
         {/* Theme Section */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-4 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
+        <section className="lg-glass p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-slate-800 text-indigo-400' : 'bg-gray-100 text-indigo-600'}`}>
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
               </svg>
             </div>
             <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Appearance</h2>
-              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Toggle between light and dark theme</p>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Appearance</h2>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Toggle between light and dark theme</p>
             </div>
           </div>
 
@@ -349,14 +356,14 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                 localTheme === 'light'
                   ? 'border-indigo-500 bg-indigo-600/10'
                   : isDark
-                    ? 'border-slate-700 hover:border-slate-600 bg-slate-800/40'
-                    : 'border-gray-200 hover:border-gray-300 bg-gray-50'
+                    ? 'border-white/[0.08] hover:border-white/[0.15] bg-white/[0.03]'
+                    : 'border-black/8 hover:border-indigo-200 bg-[rgba(0,0,0,0.02)]'
               }`}
             >
-              <svg className={`w-6 h-6 ${localTheme === 'light' ? 'text-indigo-400' : isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-6 h-6 ${localTheme === 'light' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
-              <span className={`text-sm font-medium ${localTheme === 'light' ? 'text-indigo-300' : isDark ? 'text-slate-400' : 'text-gray-500'}`}>Light</span>
+              <span className={`text-sm font-medium ${localTheme === 'light' ? 'text-indigo-300' : isDark ? 'text-white/35' : 'text-gray-500'}`}>Light</span>
             </button>
 
             {/* Dark option */}
@@ -366,32 +373,29 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                 localTheme === 'dark'
                   ? 'border-indigo-500 bg-indigo-600/10'
                   : isDark
-                    ? 'border-slate-700 hover:border-slate-600 bg-slate-800/40'
-                    : 'border-gray-200 hover:border-gray-300 bg-gray-50'
+                    ? 'border-white/[0.08] hover:border-white/[0.15] bg-white/[0.03]'
+                    : 'border-black/8 hover:border-indigo-200 bg-[rgba(0,0,0,0.02)]'
               }`}
             >
-              <svg className={`w-6 h-6 ${localTheme === 'dark' ? 'text-indigo-400' : isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-6 h-6 ${localTheme === 'dark' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
               </svg>
-              <span className={`text-sm font-medium ${localTheme === 'dark' ? 'text-indigo-300' : isDark ? 'text-slate-400' : 'text-gray-500'}`}>Dark</span>
+              <span className={`text-sm font-medium ${localTheme === 'dark' ? 'text-indigo-300' : isDark ? 'text-white/35' : 'text-gray-500'}`}>Dark</span>
             </button>
           </div>
         </section>
 
         {/* Drive Sync Config Section */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-4 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
+        <section className="lg-glass p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-slate-800 text-indigo-400' : 'bg-gray-100 text-indigo-600'}`}>
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
               </svg>
             </div>
             <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Drive Sync Configuration</h2>
-              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Configure Google Drive sync and backend API settings</p>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Drive Sync Configuration</h2>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure Google Drive sync and backend API settings</p>
             </div>
           </div>
 
@@ -423,8 +427,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             {/* Upload JSON Button */}
             <label className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer ${
               isDark
-                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
+                ? 'bg-white/[0.06] hover:bg-white/[0.08] text-white/70 border border-white/[0.08]'
+                : 'bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)] text-[rgba(0,0,0,0.6)] border border-black/8'
             }`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -442,7 +446,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           {/* Paste JSON Option */}
           <div className="mt-4 space-y-2">
             <div className="flex items-center justify-between">
-              <label className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+              <label className={`text-sm font-medium ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
                 Or paste JSON preset
               </label>
               <button
@@ -452,8 +456,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                   jsonText.trim()
                     ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
                     : isDark
-                      ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      ? 'bg-white/[0.06] text-white/30 cursor-not-allowed'
+                      : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
                 }`}
               >
                 Apply
@@ -467,15 +471,15 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               className={`w-full px-3 py-2.5 rounded-xl border text-sm font-mono resize-none
                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                 ${isDark
-                  ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600'
-                  : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400'
+                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
+                  : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
                 }`}
             />
           </div>
 
           {/* Upload Error */}
           {uploadError && (
-            <div className={`text-sm text-red-400 flex items-center gap-2`}>
+            <div className={`text-sm ${isDark ? 'text-red-400' : 'text-red-500'} flex items-center gap-2`}>
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
@@ -485,30 +489,30 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
 
           {/* Current Config Summary */}
           {config && (
-            <div className={`mt-4 p-4 rounded-xl ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'}`}>
-              <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Current Configuration</h3>
+            <div className={`mt-4 p-4 rounded-xl ${isDark ? 'bg-white/[0.02]' : 'bg-[rgba(0,0,0,0.02)]'}`}>
+              <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>Current Configuration</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className={`${isDark ? 'text-slate-500' : 'text-gray-500'}`}>API URL:</span>
-                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-slate-300' : 'text-gray-900'}`}>
+                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>API URL:</span>
+                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
                     {config.main_be_api_base_url || <span className="italic text-gray-400">Not configured</span>}
                   </span>
                 </div>
                 <div>
-                  <span className={`${isDark ? 'text-slate-500' : 'text-gray-500'}`}>User ID:</span>
-                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-slate-300' : 'text-gray-900'}`}>
+                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>User ID:</span>
+                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
                     {config.main_be_user_id ? `${config.main_be_user_id.slice(0, 8)}...` : <span className="italic text-gray-400">Not configured</span>}
                   </span>
                 </div>
                 <div>
-                  <span className={`${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Folder ID:</span>
-                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-slate-300' : 'text-gray-900'}`}>
+                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Folder ID:</span>
+                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
                     {config.folder_id ? `${config.folder_id.slice(0, 12)}...` : <span className="italic text-gray-400">Not configured</span>}
                   </span>
                 </div>
                 <div>
-                  <span className={`${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Service Account:</span>
-                  <span className={`ml-2 font-mono text-xs ${isDark ? 'text-slate-300' : 'text-gray-900'}`}>
+                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Service Account:</span>
+                  <span className={`ml-2 font-mono text-xs ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
                     {config.service_account_json_name || <span className="italic text-gray-400">Not configured</span>}
                   </span>
                 </div>
@@ -518,33 +522,30 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         </section>
 
         {/* Crawl Defaults Section */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
+        <section className="lg-glass p-5 sm:p-6 space-y-5">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-slate-800 text-indigo-400' : 'bg-gray-100 text-indigo-600'}`}>
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
             <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Default Crawl Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Applied automatically on the crawl page</p>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Default Crawl Settings</h2>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Applied automatically on the crawl page</p>
             </div>
           </div>
 
           {/* Mode toggle */}
-          <div className={`flex items-center gap-1 p-1 rounded-xl w-fit ${isDark ? 'bg-slate-800/80' : 'bg-gray-100'}`}>
+          <div className={`flex items-center gap-1 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
             <button
               onClick={() => setCrawlMode('count')}
               className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                 crawlMode === 'count'
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                   : isDark
-                    ? 'text-slate-400 hover:text-slate-200'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'text-white/40 hover:text-white/70'
+                    : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
               }`}
             >
               Count
@@ -555,8 +556,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                 crawlMode === 'range'
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                   : isDark
-                    ? 'text-slate-400 hover:text-slate-200'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'text-white/40 hover:text-white/70'
+                    : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
               }`}
             >
               Range
@@ -566,7 +567,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           {/* Count input */}
           {crawlMode === 'count' ? (
             <div className="max-w-xs">
-              <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
                 Default chapter count
               </label>
               <input
@@ -578,15 +579,15 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                 className={`w-full px-4 py-3 border rounded-xl
                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                   ${isDark
-                    ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-                    : 'bg-gray-50 border-gray-300 text-gray-900'
+                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
                   }`}
               />
             </div>
           ) : (
             <div className="flex items-end gap-3 max-w-sm">
               <div className="flex-1">
-                <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
                   From chapter
                 </label>
                 <input
@@ -597,14 +598,14 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                   className={`w-full px-4 py-3 border rounded-xl
                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                     ${isDark
-                      ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-                      : 'bg-gray-50 border-gray-300 text-gray-900'
+                      ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                      : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
                     }`}
                 />
               </div>
-              <span className={`pb-3 font-medium ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>to</span>
+              <span className={`pb-3 font-medium ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>to</span>
               <div className="flex-1">
-                <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
                   To chapter
                 </label>
                 <input
@@ -615,15 +616,15 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                   className={`w-full px-4 py-3 border rounded-xl
                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                     ${isDark
-                      ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-                      : 'bg-gray-50 border-gray-300 text-gray-900'
+                      ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                      : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
                     }`}
                 />
               </div>
             </div>
           )}
 
-          <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+          <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
             {crawlMode === 'count'
               ? `Default: crawl up to ${count} chapter${count !== 1 ? 's' : ''}`
               : `Default: crawl chapters ${rangeFrom} to ${rangeTo} (${Math.max(0, rangeTo - rangeFrom + 1)} total)`
@@ -632,25 +633,22 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         </section>
 
         {/* Auto Audio Settings Section */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
+        <section className="lg-glass p-5 sm:p-6 space-y-5">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-slate-800 text-indigo-400' : 'bg-gray-100 text-indigo-600'}`}>
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
             <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Auto Audio Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Configure rest time, API base, and test story IDs</p>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Auto Audio Settings</h2>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure rest time, API base, and test story IDs</p>
             </div>
           </div>
 
           {/* Rest time between stories */}
           <div className="max-w-xs">
-            <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+            <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
               Rest time between stories (seconds)
             </label>
             <input
@@ -662,18 +660,18 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               className={`w-full px-4 py-3 border rounded-xl
                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                 ${isDark
-                  ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-                  : 'bg-gray-50 border-gray-300 text-gray-900'
+                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                  : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
                 }`}
             />
-            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+            <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
               Set to 0 to disable resting between stories
             </p>
           </div>
 
           {/* Test Story IDs */}
           <div className="max-w-lg">
-            <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+            <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
               Test Story IDs
             </label>
             <textarea
@@ -691,40 +689,37 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               className={`w-full px-4 py-3 border rounded-xl text-sm font-mono resize-none
                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                 ${isDark
-                  ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-600'
-                  : 'bg-gray-50 border-gray-300 text-gray-900 placeholder:text-gray-400'
+                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
+                  : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
                 }`}
             />
-            <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+            <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
               Comma or newline separated story IDs. Used in test mode.
             </p>
           </div>
         </section>
 
         {/* Crawl Auto Settings Section */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
+        <section className="lg-glass p-5 sm:p-6 space-y-5">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-slate-800 text-indigo-400' : 'bg-gray-100 text-indigo-600'}`}>
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
             </div>
             <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Crawl Auto Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Auto-fill and range limits for crawl after URL detection</p>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Crawl Auto Settings</h2>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Auto-fill and range limits for crawl after URL detection</p>
             </div>
           </div>
 
           {/* Auto fill full chapters toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <p className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+              <p className={`text-sm font-medium ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
                 Auto-fill full available chapters
               </p>
-              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
                 Automatically fill the chapter count to the full number of available chapters after detecting a story URL
               </p>
             </div>
@@ -733,7 +728,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
                 crawlAutoMaxChapters
                   ? 'bg-indigo-600'
-                  : isDark ? 'bg-slate-600' : 'bg-gray-300'
+                  : isDark ? 'bg-white/10' : 'bg-black/10'
               }`}
             >
               <span
@@ -803,6 +798,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         credentialFileExists={credentialFileExists}
         onCredentialUploadSuccess={() => setCredentialFileExists(true)}
       />
+      </div>
     </div>
   );
 }

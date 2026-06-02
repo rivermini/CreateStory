@@ -37,23 +37,23 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
   const duration = formatDuration(startedAt, finishedAt);
 
   const statusDotMap: Record<string, string> = {
-    running:   isDark ? 'bg-blue-400'   : 'bg-blue-500',
-    completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
-    failed:   isDark ? 'bg-red-400'   : 'bg-red-500',
-    cancelled: isDark ? 'bg-amber-400' : 'bg-amber-500',
-    idle:     isDark ? 'bg-slate-400' : 'bg-gray-400',
+    running:   '#60a5fa',
+    completed: '#34d399',
+    failed:   '#f87171',
+    cancelled: '#fbbf24',
+    idle:     isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
   };
 
   const statusTextMap: Record<string, string> = {
-    running:   isDark ? 'text-blue-400'   : 'text-blue-600',
-    completed: isDark ? 'text-emerald-400' : 'text-emerald-600',
-    failed:   isDark ? 'text-red-400'   : 'text-red-600',
-    cancelled: isDark ? 'text-amber-400' : 'text-amber-600',
-    idle:     isDark ? 'text-slate-400' : 'text-gray-500',
+    running:   '#60a5fa',
+    completed: '#34d399',
+    failed:   '#f87171',
+    cancelled: '#fbbf24',
+    idle:     isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
   };
 
-  const dot = statusDotMap[status] ?? (isDark ? 'bg-slate-400' : 'bg-gray-400');
-  const text = statusTextMap[status] ?? (isDark ? 'text-slate-400' : 'text-gray-500');
+  const dot = statusDotMap[status] ?? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)');
+  const text = statusTextMap[status] ?? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)');
   const label = status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
@@ -73,8 +73,8 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
         label="Status"
         value={(
           <span className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${dot} ${status === 'running' ? 'animate-pulse' : ''}`} />
-            <span className={text}>{label}</span>
+            <span className="w-2 h-2 rounded-full" style={{ background: dot, ...(status === 'running' ? { animation: 'pulse 2s infinite' } : {}) }} />
+            <span style={{ color: text }}>{label}</span>
           </span>
         )}
         isDark={isDark}
@@ -96,13 +96,10 @@ function StatCard({ label, value, sub, isDark }: {
   isDark: boolean;
 }) {
   return (
-    <div className={`rounded-2xl p-4 border ${isDark
-      ? 'bg-slate-900/60 border-slate-800/60'
-      : 'bg-white border-gray-200'
-    }`}>
-      <p className={`text-xs font-medium uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{label}</p>
-      <p className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{value}</p>
-      {sub && <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{sub}</p>}
+    <div className="lg-glass-card p-4">
+      <p className={`text-xs font-medium uppercase tracking-wider mb-2 ${isDark ? 'text-white/30' : 'text-black/30'}`}>{label}</p>
+      <p className="text-xl sm:text-2xl font-bold" style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)' }}>{value}</p>
+      {sub && <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-black/30'}`}>{sub}</p>}
     </div>
   );
 }

@@ -28,18 +28,36 @@ function formatTime(ts: string | null): string {
 }
 
 const PHASES = [
-  { id: 'phase1', label: 'Phase 1', subtitle: 'Needing Update', desc: 'Stories marked as needing update in the dashboard.', badge: 'Recommended' },
-  { id: 'phase2', label: 'Phase 2', subtitle: 'Recently Updated', desc: 'Most recently updated stories. Select how many to scan.', badge: 'Recent' },
-  { id: 'phase3', label: 'Phase 3', subtitle: 'Test Story', desc: 'Hardcoded test IDs. Verifies pipeline without touching real stories.', badge: 'Test' },
+  { id: 'phase1', label: 'Needing Update', desc: 'Stories with missing audio in the dashboard.' },
+  { id: 'phase2', label: 'Recently Updated', desc: 'Most recently updated stories.' },
+  { id: 'phase3', label: 'Test Story', desc: 'Hardcoded test IDs. Verifies the pipeline safely.' },
 ];
+
+const PHASE_ACCENT: Record<string, string> = {
+  phase1: '#6366f1',
+  phase2: '#f59e0b',
+  phase3: '#10b981',
+};
+
+const STEP_NAMES: Record<number, string> = {
+  1: 'Fetching stories',
+  2: 'Finding missing audio',
+  3: 'Creating audio queue',
+  4: 'Generating TTS chapters',
+  5: 'Polling generation status',
+  6: 'Saving audio files',
+  7: 'Fetching GDrive folder',
+  8: 'Uploading chapters',
+  9: 'Updating story metadata',
+  10: 'Finalizing',
+  11: 'Complete',
+};
 
 export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAudioSession, onAutoAudioSessionUpdate }: AutoAudioPageProps) {
   const isDark = themeMode === 'dark';
 
-  // Shared session state — initialized from Shell's polling so navigating back
-  // preserves the last known session without refetching.
   const [session, setSession] = useState<AutoAudioSession | null>(() => autoAudioSession);
-  const [selectedPhase, setSelectedPhase] = useState('phase1');
+  const [selectedPhase, setSelectedPhase] = useState<string>(() => autoAudioSession?.phase ?? 'phase1');
   const [phase2Limit, setPhase2Limit] = useState(20);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -56,32 +74,41 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
   const isStopping = session?.status === 'stopping';
   const isDone = session?.status === 'completed' || session?.status === 'error' || session?.status === 'stopped';
   const currentPhaseInfo = PHASES.find(p => p.id === selectedPhase)!;
+  const runningAccent = PHASE_ACCENT[session?.phase || 'phase1'] || '#6366f1';
 
-  // Sync incoming session from Shell's polling.
+  const sessionRef = useRef(autoAudioSession);
+  useEffect(() => { sessionRef.current = autoAudioSession; }, [autoAudioSession]);
   useEffect(() => { setSession(autoAudioSession); }, [autoAudioSession]);
-  // Also poll independently so this page stays fresh even if Shell's interval lags.
+  useEffect(() => {
+    if (session === null && autoAudioSession === null) {
+      const stored = localStorage.getItem('autoaudio_last_session');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.status === 'completed' || parsed.status === 'error' || parsed.status === 'stopped') {
+          setSession(parsed);
+        }
+      }
+    }
+  }, [session, autoAudioSession]);
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       try {
         const data = await getAutoAudioStatus();
         if (!cancelled) {
+          if (data === null && sessionRef.current !== null) return;
           setSession(data);
-          onAutoAudioSessionUpdate(data);
+          if (data !== null) onAutoAudioSessionUpdate(data);
         }
-      } catch { /* ignore polling errors */ }
+      } catch { /* ignore */ }
     };
     poll();
     const t = setInterval(poll, 2000);
     return () => { cancelled = true; clearInterval(t); };
   }, [onAutoAudioSessionUpdate]);
   useEffect(() => { getDriveSyncConfig().then(cfg => setConfig(cfg)).catch(() => {}).finally(() => setConfigLoading(false)); }, []);
-  // Sync the selected phase tab to the running session's phase so navigating back
-  // shows the correct panel instead of always defaulting to phase 1.
   useEffect(() => {
-    if (session?.phase && session.status === 'running') {
-      setSelectedPhase(session.phase);
-    }
+    if (session?.phase && session.status === 'running') setSelectedPhase(session.phase);
   }, [session?.phase, session?.status]);
   useEffect(() => {
     if (logEndRef.current && session?.logs && session.logs.length > prevLogLenRef.current) {
@@ -93,6 +120,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
   const handleStart = async () => {
     setError('');
     setLoading(true);
+    localStorage.removeItem('autoaudio_last_session');
     try {
       await startAutoAudio({ phase: selectedPhase, test_mode: selectedPhase === 'phase3', limit: selectedPhase === 'phase2' ? phase2Limit : undefined });
       const data = await getAutoAudioStatus();
@@ -123,397 +151,470 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
 
   const progressPct = session?.progress.total ? Math.round((session.progress.done / session.progress.total) * 100) : 0;
   const chapterPct = session?.chapter_progress?.total ? Math.round((session.chapter_progress.done / session.chapter_progress.total) * 100) : 0;
-  const totalStories = session?.story_results?.length ?? 0;
-  const totalGenerated = session?.story_results?.reduce((acc, r) => acc + r.chapters_uploaded, 0) ?? 0;
   const needsConfig = !configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id);
 
+  const statusLabel = session?.status ? session.status.charAt(0).toUpperCase() + session.status.slice(1) : 'Idle';
+
   const val = (dark: string, light: string) => isDark ? dark : light;
-  const txtMuted = val('text-slate-400', 'text-gray-400');
-  const txtSub = val('text-slate-300', 'text-gray-600');
-
-  const glassBase = isDark
-    ? 'bg-white/[0.03] backdrop-blur-xl border border-white/[0.06]'
-    : 'bg-white/70 backdrop-blur-xl border border-black/5';
-
-  const btnColor = (phase: string) => {
-    if (phase === 'phase1') return 'bg-blue-500 hover:bg-blue-400 text-white';
-    if (phase === 'phase2') return 'bg-amber-500 hover:bg-amber-400 text-white';
-    return 'bg-emerald-500 hover:bg-emerald-400 text-white';
+  const c = (key: string) => {
+    const map: Record<string, [string, string]> = {
+      bg: ['bg-[#0a0a14]', 'bg-[#e8e4f8]'],
+      bgAlt: ['bg-[#0f0f1e]', 'bg-[#f0e8f8]'],
+      glassOrb1: ['#4f46e5', '#6366f1'],
+      glassOrb2: ['#7c3aed', '#8b5cf6'],
+      glassOrb3: ['#0369a1', '#0ea5e9'],
+      text: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
+      textMuted: ['text-white/40', 'text-[rgba(0,0,0,0.4)]'],
+      textSub: ['text-white/30', 'text-[rgba(0,0,0,0.3)]'],
+      textBody: ['text-white/70', 'text-[rgba(0,0,0,0.7)]'],
+      textBodyStrong: ['text-white/85', 'text-[rgba(0,0,0,0.8)]'],
+      divider: ['bg-white/6', 'bg-black/6'],
+      logBg: ['bg-black/30', 'bg-black/4'],
+      logText: ['text-white/50', 'text-[rgba(0,0,0,0.5)]'],
+      logTime: ['text-white/20', 'text-[rgba(0,0,0,0.25)]'],
+      rowBg: ['bg-white/[0.04]', 'bg-[rgba(0,0,0,0.03)]'],
+      rowBorder: ['border-white/[0.05]', 'border-black/5'],
+      cardSubtleBg: ['bg-white/[0.03]', 'bg-[rgba(0,0,0,0.02)]'],
+      progressTrack: ['bg-white/[0.06]', 'bg-white/8'],
+      inputBg: ['bg-white/[0.05]', 'bg-[rgba(0,0,0,0.04)]'],
+      inputBorder: ['border-white/[0.08]', 'border-black/8'],
+      inputText: ['text-white', 'text-[rgba(0,0,0,0.85)]'],
+    };
+    return isDark ? map[key][0] : map[key][1];
   };
 
-  const phaseTabActive = (phase: string) => {
-    if (phase === 'phase1') return isDark ? 'text-blue-400' : 'text-blue-600';
-    if (phase === 'phase2') return isDark ? 'text-amber-400' : 'text-amber-600';
-    return isDark ? 'text-emerald-400' : 'text-emerald-600';
-  };
-
-  const logLevelColor = (level: string) => {
-    switch (level) {
-      case 'error': return 'text-red-400';
-      case 'warning': return 'text-amber-400';
-      default: return '';
+  const statusChipClass = () => {
+    switch (session?.status) {
+      case 'running': return 'lg-chip lg-chip-blue';
+      case 'completed': return 'lg-chip lg-chip-green';
+      case 'error': return 'lg-chip lg-chip-red';
+      case 'stopping': case 'stopped': return 'lg-chip lg-chip-amber';
+      default: return 'lg-chip lg-chip-neutral';
     }
   };
 
-  const statusBgClass = (status: string) => {
-    switch (status) {
-      case 'running': return isDark ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-100 text-blue-700';
-      case 'completed': return isDark ? 'bg-emerald-900/40 text-emerald-400' : 'bg-emerald-100 text-emerald-700';
-      case 'error': return isDark ? 'bg-red-900/40 text-red-400' : 'bg-red-100 text-red-700';
-      case 'stopped': case 'stopping': return isDark ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700';
-      default: return isDark ? 'bg-slate-800/60 text-slate-400' : 'bg-gray-100 text-gray-600';
-    }
-  };
-
-  const subtleBg2 = isDark ? 'bg-white/[0.03]' : 'bg-black/[0.02]';
+  const pageBg = isDark
+    ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
+    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
 
   return (
-    <div className={`min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0 ${val('bg-slate-950', 'bg-gray-50')}`}>
-      <main className="w-full xl:w-[72vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-4">
+    <div className={`min-h-screen relative overflow-hidden ${val('dark', 'light')}`} style={{ background: pageBg }}>
+      {/* Ambient orbs */}
+      <div className="lg-orb lg-orb-1" style={{ background: isDark ? PHASE_ACCENT.phase1 : '#6366f1' }} />
+      <div className="lg-orb lg-orb-2" style={{ background: isDark ? PHASE_ACCENT.phase3 : '#8b5cf6' }} />
+      <div className="lg-orb lg-orb-3" style={{ background: isDark ? PHASE_ACCENT.phase2 : '#0ea5e9' }} />
 
-        {/* Header */}
-        <div className="space-y-1">
-          <h1 className={`text-2xl font-bold ${val('text-white', 'text-gray-900')}`}>Auto Audio</h1>
-          <p className={`text-sm ${txtMuted}`}>Discover stories with missing audio and generate TTS automatically</p>
-        </div>
+      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
+        <main className="w-full xl:w-[72vw] mx-auto px-4 sm:px-6 py-6 space-y-5">
 
-        <ServerModeBanner
-          serverUrl={config?.main_be_api_base_url ?? null}
-          isDark={isDark}
-          isConfigLoading={configLoading}
-          isConfigValid={config ? Boolean(config.main_be_api_base_url && config.main_be_user_id) : undefined}
-          onConfigure={() => window.location.href = '/settings'}
-        />
-
-        {error && (
-          <div className={`p-3 rounded-xl text-sm ${isDark ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
-            {error}
-          </div>
-        )}
-
-        {/* Phase Segmented Control */}
-        <div className={`p-1 rounded-2xl ${isDark ? 'bg-white/[0.04]' : 'bg-white/80 backdrop-blur-xl border border-black/5'}`}>
-          <div className="grid grid-cols-3 gap-1">
-            {PHASES.map(phase => {
-              const isActive = selectedPhase === phase.id;
-              const isSessionPhase = session?.phase === phase.id;
-              return (
-                <button
-                  key={phase.id}
-                  onClick={() => { if (!isRunning) { setSelectedPhase(phase.id); setShowStartConfirm(false); } }}
-                  className={`
-                    relative px-3 py-2.5 rounded-xl text-center transition-all duration-200
-                    ${isActive
-                      ? isDark
-                        ? 'bg-white/10 shadow-sm shadow-black/20 text-white'
-                        : 'bg-white shadow-sm shadow-gray-200/80 text-gray-900'
-                      : `${isDark ? 'hover:bg-white/[0.04] text-slate-400 hover:text-slate-300' : 'hover:bg-white/70 text-gray-400 hover:text-gray-600'}`
-                    }
-                  `}
-                >
-                  <span className={`block text-sm font-semibold ${isActive ? phaseTabActive(phase.id) : ''}`}>{phase.label}</span>
-                  <span className={`block text-xs mt-0.5 ${isActive ? (isDark ? 'text-white/60' : 'text-gray-500') : ''}`}>{phase.subtitle}</span>
-                  {isSessionPhase && isRunning && (
-                    <span className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${isDark ? 'bg-blue-400' : 'bg-blue-500'} animate-pulse`} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Phase Detail Panel */}
-        <div className={`${glassBase} rounded-2xl p-5 space-y-4`}>
-          {/* Phase header */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h2 className={`text-base font-semibold ${val('text-white', 'text-gray-900')}`}>{currentPhaseInfo.subtitle}</h2>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>
-                  {currentPhaseInfo.badge}
-                </span>
-              </div>
-              <p className={`text-sm ${txtMuted}`}>{currentPhaseInfo.desc}</p>
+          {/* ── Page Header ── */}
+          <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
+            <div>
+              <h1 className={`text-2xl font-bold tracking-tight ${c('text')}`}>Auto Audio</h1>
+              <p className={`text-sm mt-1 ${c('textMuted')}`}>Discover stories with missing audio and generate TTS automatically</p>
             </div>
-
-            {/* Inline action buttons */}
             <div className="flex-shrink-0 flex items-center gap-2">
-              {!isRunning ? (
-                !showStartConfirm ? (
+              {session && (
+                <span className={statusChipClass()}>
+                  {isRunning && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+                  {statusLabel}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <ServerModeBanner
+            serverUrl={config?.main_be_api_base_url ?? null}
+            isDark={isDark}
+            isConfigLoading={configLoading}
+            isConfigValid={config ? Boolean(config.main_be_api_base_url && config.main_be_user_id) : undefined}
+            onConfigure={() => window.location.href = '/settings'}
+          />
+
+          {error && (
+            <div className={`lg-glass-card px-4 py-3 text-sm ${isDark ? 'text-red-400' : 'text-red-500'}`}>
+              {error}
+            </div>
+          )}
+
+          {/* ── Phase Selector ── */}
+          <div className="lg-glass-nav p-1.5">
+            <div className="grid grid-cols-3 gap-1">
+              {PHASES.map(phase => {
+                const isActive = selectedPhase === phase.id;
+                const isSessionPhase = session?.phase === phase.id;
+                const color = PHASE_ACCENT[phase.id];
+                return (
                   <button
-                    onClick={() => setShowStartConfirm(true)}
-                    disabled={needsConfig}
-                    className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 ${btnColor(selectedPhase)} ${needsConfig ? 'opacity-30 cursor-not-allowed' : ''}`}
+                    key={phase.id}
+                    onClick={() => { if (!isRunning) { setSelectedPhase(phase.id); setShowStartConfirm(false); } }}
+                    className="relative flex flex-col items-center gap-0.5 px-3 py-3 rounded-[14px] transition-all duration-200 cursor-pointer"
+                    style={{
+                      background: isActive ? `linear-gradient(135deg, ${color}22, ${color}15)` : 'transparent',
+                      border: isActive ? `1px solid ${color}40` : '1px solid transparent',
+                      boxShadow: isActive ? `0 4px 16px ${color}20` : 'none',
+                    }}
                   >
-                    {needsConfig ? 'Setup' : 'Start'}
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setShowStartConfirm(false)}
-                      disabled={loading}
-                      className={`px-3 py-2 rounded-xl text-xs font-medium transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-slate-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'} disabled:opacity-40`}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleStart}
-                      disabled={loading}
-                      className={`px-4 py-2 rounded-xl text-xs font-semibold text-white transition-colors ${btnColor(selectedPhase)} disabled:opacity-50`}
-                    >
-                      {loading ? 'Starting...' : 'Start'}
-                    </button>
-                  </>
-                )
-              ) : (
-                <button
-                  onClick={() => setShowStopConfirm(true)}
-                  disabled={isStopping}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-500 hover:bg-red-400 text-white transition-all duration-200 active:scale-95 disabled:opacity-50"
-                >
-                  {isStopping ? 'Stopping...' : 'Stop'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Limit input for phase 2 */}
-          {selectedPhase === 'phase2' && (
-            <div className="flex items-center gap-3">
-              <label className={`text-sm ${txtSub}`}>Stories to scan:</label>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPhase2Limit(l => Math.max(1, l - 5))}
-                  disabled={isRunning}
-                  className={`w-7 h-7 rounded-lg text-sm font-medium flex items-center justify-center transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-slate-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'} disabled:opacity-30`}
-                >−</button>
-                <input
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={phase2Limit}
-                  onChange={e => setPhase2Limit(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
-                  disabled={isRunning}
-                  className={`w-16 text-center text-sm rounded-xl border transition-colors ${isDark ? 'bg-white/5 border-white/10 text-white' : 'bg-white border-gray-200 text-gray-900'} focus:outline-none focus:border-indigo-400 disabled:opacity-40`}
-                />
-                <button
-                  onClick={() => setPhase2Limit(l => Math.min(500, l + 5))}
-                  disabled={isRunning}
-                  className={`w-7 h-7 rounded-lg text-sm font-medium flex items-center justify-center transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-slate-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'} disabled:opacity-30`}
-                >+</button>
-              </div>
-            </div>
-          )}
-
-          {/* Status badge when not running */}
-          {session && !isRunning && (
-            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${statusBgClass(session.status)}`}>
-              {session.status === 'running' && (
-                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isDark ? 'bg-blue-400' : 'bg-blue-600'}`} />
-              )}
-              {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-            </div>
-          )}
-
-          {/* Progress bars when running (show even when viewing a different phase tab) */}
-          {isRunning && (
-            <div className="space-y-3">
-              {session!.progress.total > 0 && (
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className={`text-xs ${txtMuted}`}>Stories</span>
-                    <span className={`text-xs font-mono ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>{session!.progress.done}/{session!.progress.total} <span className={txtMuted}>({progressPct}%)</span></span>
-                  </div>
-                  <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/5' : 'bg-gray-200'}`}>
-                    <div className={`h-full rounded-full transition-all duration-500 ${isDark ? 'bg-indigo-400' : 'bg-indigo-500'}`} style={{ width: `${progressPct}%` }} />
-                  </div>
-                </div>
-              )}
-              {session!.chapter_progress?.total > 0 && (
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className={`text-xs ${txtMuted}`}>Chapters</span>
-                    <span className={`text-xs font-mono font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{session!.chapter_progress.done}/{session!.chapter_progress.total} <span className={txtMuted}>({chapterPct}%)</span></span>
-                  </div>
-                  <div className={`h-3 rounded-full overflow-hidden ${isDark ? 'bg-white/5' : 'bg-gray-200'} ${isDark ? 'ring-1 ring-inset ring-slate-700' : 'ring-1 ring-inset ring-gray-200'}`}>
-                    <div className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-amber-500 to-amber-400" style={{ width: `${chapterPct}%` }} />
-                  </div>
-                </div>
-              )}
-              <div className="flex justify-between items-center">
-                <span className={`text-xs ${txtMuted}`}>{session!.current_step_desc || 'Initializing'}</span>
-                <span className={`text-xs font-mono ${isDark ? 'text-white/40' : 'text-gray-400'}`}>Step {session!.current_step}/11</span>
-              </div>
-            </div>
-          )}
-
-          {/* Current story */}
-          {isRunning && session?.current_story && (
-            <div className={`p-3 rounded-xl ${subtleBg2}`}>
-              <span className={`text-xs ${txtMuted}`}>Processing</span>
-              <p className={`text-sm font-medium ${val('text-white', 'text-gray-900')} truncate`}>{session.current_story}</p>
-            </div>
-          )}
-
-          {/* Session summary when done */}
-          {isDone && (
-            <div className={`p-3 rounded-xl space-y-1 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-100'}`}>
-              <p className={`text-sm font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Summary</p>
-              <p className={`text-xs ${txtMuted}`}>{totalStories} stories processed</p>
-              <p className={`text-xs ${txtMuted}`}>{totalGenerated} chapters uploaded</p>
-            </div>
-          )}
-
-          {/* Error when errored */}
-          {session?.status === 'error' && session.error && (
-            <div className={`p-3 rounded-xl text-xs ${isDark ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
-              <strong>Error:</strong> {session.error}
-            </div>
-          )}
-
-          {/* Timestamps */}
-          {session && (
-            <div className={`flex justify-between text-xs ${txtMuted} pt-1 border-t ${isDark ? 'border-white/[0.06]' : 'border-black/5'}`}>
-              <span>{session.started_at ? `Started ${formatTime(session.started_at)}` : '—'}</span>
-              <span>{session.finished_at ? formatTime(session.finished_at) : '—'}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Stats + Preview row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Missing Audio Preview */}
-          <div className={`${glassBase} rounded-2xl p-5 space-y-3`}>
-            <div className="flex items-center justify-between">
-              <h3 className={`text-sm font-semibold ${val('text-white', 'text-gray-900')}`}>Missing Audio</h3>
-              <button
-                onClick={async () => {
-                  try {
-                    const data = await getAutoAudioStatus();
-                    setSession(data);
-                    onAutoAudioSessionUpdate(data);
-                  } catch { /* ignore */ }
-                }}
-                disabled={isRunning}
-                className={`p-1.5 rounded-lg transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-slate-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'} disabled:opacity-40`}
-                title="Refresh preview"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
-
-            {!(session?.stories_missing_audio ?? []).length && (
-              <p className={`text-xs ${txtMuted}`}>
-                {session?.status === 'running' ? 'Scanning...' : 'No preview. Start a session.'}
-              </p>
-            )}
-
-            {(session?.stories_missing_audio ?? []).length > 0 && (
-              <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                {(session!.stories_missing_audio ?? []).map(story => (
-                  <div key={story.storyId} className={`flex justify-between items-center py-2 px-3 rounded-xl ${subtleBg2}`}>
-                    <span className={`text-sm truncate flex-1 mr-3 ${val('text-white/80', 'text-gray-700')}`}>{story.title}</span>
-                    <span className={`text-xs font-mono flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{story.missingCount}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Story Results */}
-          <div className={`${glassBase} rounded-2xl p-5 space-y-3`}>
-            <h3 className={`text-sm font-semibold ${val('text-white', 'text-gray-900')}`}>Story Results</h3>
-            {!session && <p className={`text-xs ${txtMuted}`}>No active session</p>}
-            {session && (!session.story_results || session.story_results.length === 0) && (
-              <p className={`text-xs ${txtMuted}`}>{isRunning ? 'Processing stories...' : 'No results yet.'}</p>
-            )}
-            {session && session.story_results && session.story_results.length > 0 && (
-              <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                {session.story_results.map((result, i) => (
-                  <div key={i} className={`flex justify-between items-start py-2 px-3 rounded-xl ${subtleBg2}`}>
-                    <div className="flex-1 min-w-0 mr-3">
-                      <p className={`text-sm font-medium truncate ${val('text-white/80', 'text-gray-700')}`}>{result.story_title}</p>
-                      <p className={`text-xs ${txtMuted}`}>Gen: {result.chapters_generated} · Up: {result.chapters_uploaded}</p>
-                      {result.error && <p className={`text-xs mt-0.5 ${isDark ? 'text-red-400' : 'text-red-500'}`}>{result.error}</p>}
-                    </div>
-                    {result.chapters_uploaded > 0 && (
-                      <span className={`flex-shrink-0 text-xs font-mono font-bold px-2 py-0.5 rounded-lg ${isDark ? 'text-emerald-400 bg-emerald-500/15' : 'text-emerald-600 bg-emerald-50'}`}>
-                        {result.chapters_uploaded}
-                      </span>
+                    <span className="text-sm font-semibold" style={{ color: isActive ? color : isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>{phase.label}</span>
+                    {isSessionPhase && isRunning && (
+                      <span className="absolute top-2 right-2" style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />
                     )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Phase Detail ── */}
+          <div className="lg-glass p-6 space-y-5">
+            {/* Phase header row */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className={`text-base font-semibold ${c('text')}`}>{currentPhaseInfo.label}</h2>
+                  <span className="lg-chip lg-chip-neutral">Phase {selectedPhase.replace('phase', '')}</span>
+                </div>
+                <p className={`text-sm mt-1 ${c('textMuted')}`}>{currentPhaseInfo.desc}</p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex-shrink-0 flex items-center gap-2">
+                {!isRunning ? (
+                  !showStartConfirm ? (
+                    <button
+                      onClick={() => setShowStartConfirm(true)}
+                      disabled={needsConfig}
+                      className="lg-btn-primary"
+                      style={{ opacity: needsConfig ? 0.4 : 1 }}
+                    >
+                      {needsConfig ? (
+                        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
+                      ) : null}
+                      {needsConfig ? 'Setup' : 'Start Session'}
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={() => setShowStartConfirm(false)} disabled={loading} className="lg-btn-ghost">Cancel</button>
+                      <button onClick={handleStart} disabled={loading} className="lg-btn-primary">
+                        {loading ? (
+                          <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        ) : null}
+                        {loading ? 'Starting…' : 'Launch'}
+                      </button>
+                    </>
+                  )
+                ) : (
+                  <button onClick={() => setShowStopConfirm(true)} disabled={isStopping} className="lg-btn-danger">
+                    {isStopping ? (
+                      <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    ) : (
+                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                    )}
+                    {isStopping ? 'Stopping…' : 'Stop'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Phase 2 limit */}
+            {selectedPhase === 'phase2' && (
+              <div className="flex items-center gap-4 px-1">
+                <span className="text-sm font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)' }}>Stories to scan</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPhase2Limit(l => Math.max(1, l - 5))}
+                    disabled={isRunning}
+                    className="lg-icon-btn"
+                    style={{ width: 28, height: 28, borderRadius: 8 }}
+                  >−</button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={phase2Limit}
+                    onChange={e => setPhase2Limit(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
+                    disabled={isRunning}
+                    className="w-16 text-center text-sm rounded-xl border"
+                    style={{
+                      background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                      border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)',
+                      color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)',
+                      fontWeight: 600,
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={() => setPhase2Limit(l => Math.min(500, l + 5))}
+                    disabled={isRunning}
+                    className="lg-icon-btn"
+                    style={{ width: 28, height: 28, borderRadius: 8 }}
+                  >+</button>
+                </div>
+              </div>
+            )}
+
+            {/* Progress section */}
+            {isRunning && (
+              <div className="space-y-4">
+                {session!.progress.total > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>Stories</span>
+                      <span className="text-xs font-bold tabular-nums" style={{ color: runningAccent }}>{session!.progress.done} / {session!.progress.total}</span>
+                    </div>
+                    <div className="lg-progress-track" style={{ height: 6 }}>
+                      <div className="lg-progress-fill" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${runningAccent}cc, ${runningAccent}88)`, boxShadow: `0 0 10px ${runningAccent}50` }} />
+                    </div>
+                  </div>
+                )}
+
+                {session!.chapter_progress?.total > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>Chapters</span>
+                      <span className="text-xs font-bold tabular-nums" style={{ color: '#f59e0b' }}>{session!.chapter_progress.done} / {session!.chapter_progress.total}</span>
+                    </div>
+                    <div className="lg-progress-track" style={{ height: 6 }}>
+                      <div className="lg-progress-fill" style={{ width: `${chapterPct}%`, background: 'linear-gradient(90deg, #f59e0bcc, #f59e0b88)', boxShadow: '0 0 10px #f59e0b50' }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Step indicator */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 grid grid-cols-11 gap-0.5">
+                    {Array.from({ length: 11 }, (_, i) => {
+                      const step = i + 1;
+                      const done = (session!.current_step || 0) >= step;
+                      const active = (session!.current_step || 0) === step;
+                      return (
+                        <div
+                          key={step}
+                          className="h-1 rounded-full transition-all duration-500"
+                          style={{
+                            background: done ? runningAccent : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                            boxShadow: active ? `0 0 6px ${runningAccent}80` : 'none',
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="text-xs tabular-nums flex-shrink-0" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>
+                    Step {session!.current_step || 1}/11
+                  </span>
+                </div>
+
+                <p className="text-xs text-center" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>
+                  {session!.current_step_desc || STEP_NAMES[session!.current_step || 1] || 'Initializing…'}
+                </p>
+
+                {session?.current_story && (
+                  <div className="lg-glass-card px-4 py-3 flex items-center gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${runningAccent}15` }}>
+                      <svg width="14" height="14" fill="none" stroke={runningAccent} strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>Processing</p>
+                      <p className="text-sm font-semibold truncate" style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }}>{session.current_story}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Session done summary */}
+            {isDone && (
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { value: session?.story_results?.length ?? 0, label: 'Stories Processed' },
+                  { value: session?.story_results?.reduce((acc, r) => acc + r.chapters_uploaded, 0) ?? 0, label: 'Chapters Uploaded' },
+                ].map(({ value, label }) => (
+                  <div key={label} className="lg-glass-card px-4 py-4 text-center">
+                    <div className="lg-metric-value" style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)' }}>{value}</div>
+                    <div className="lg-metric-label" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>{label}</div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Live Log */}
-        <div className={`${glassBase} rounded-2xl p-5 space-y-3`}>
-          <h3 className={`text-sm font-semibold ${val('text-white', 'text-gray-900')}`}>Live Log</h3>
-          {!session && <p className={`text-xs ${txtMuted}`}>No active session</p>}
-          {session && session.logs.length === 0 && <p className={`text-xs ${txtMuted}`}>Waiting for logs...</p>}
-          {session && session.logs.length > 0 && (
-            <div className={`rounded-xl p-3 font-mono text-xs space-y-0.5 max-h-[320px] overflow-y-auto ${isDark ? 'bg-black/20 text-slate-300' : 'bg-gray-50 text-gray-700'}`}
-              style={{ fontSize: '0.7rem', lineHeight: '1.6' }}>
-              {session.logs.map((log, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className={`flex-shrink-0 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}>[{log.timestamp}]</span>
-                  <span className={`flex-shrink-0 w-5 text-right ${isDark ? 'text-indigo-400/60' : 'text-indigo-400'}`}>S{log.step}</span>
-                  <span className={logLevelColor(log.level)}>{log.message}</span>
+            {/* Error */}
+            {session?.status === 'error' && session.error && (
+              <div className="lg-glass-card px-4 py-3" style={{ color: isDark ? '#f87171' : '#ef4444', background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)', border: isDark ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(239,68,68,0.15)' }}>
+                <strong>Error:</strong> {session.error}
+              </div>
+            )}
+
+            {/* Timestamps */}
+            {session && (
+              <>
+                <div className={`lg-divider`} />
+                <div className={`flex justify-between text-xs ${c('textSub')}`}>
+                  <span>{session.started_at ? `Started ${formatTime(session.started_at)}` : '—'}</span>
+                  <span>{session.finished_at ? formatTime(session.finished_at) : '—'}</span>
                 </div>
-              ))}
-              <div ref={logEndRef} />
+              </>
+            )}
+          </div>
+
+          {/* ── Stats + Preview row ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Missing Audio */}
+            <div className="lg-glass p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className={`text-sm font-semibold ${c('text')}`}>Missing Audio</h3>
+                <button
+                  onClick={async () => {
+                    try {
+                      const data = await getAutoAudioStatus();
+                      setSession(data);
+                      onAutoAudioSessionUpdate(data);
+                    } catch { /* ignore */ }
+                  }}
+                  disabled={isRunning}
+                  className="lg-icon-btn"
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                </button>
+              </div>
+
+              {!(session?.stories_missing_audio ?? []).length ? (
+                <p className={`text-sm ${c('textMuted')}`}>
+                  {session?.status === 'running' ? 'Scanning stories…' : 'No preview available. Start a session.'}
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {session!.stories_missing_audio.map(story => (
+                    <div key={story.storyId} className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${c('rowBg')}`} style={{ border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}>
+                      <span className={`text-sm font-medium truncate flex-1 mr-3 ${c('textBody')}`}>{story.title}</span>
+                      <span className="flex-shrink-0 text-xs font-bold tabular-nums px-2 py-0.5 rounded-lg" style={{ background: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>{story.missingCount}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
+            {/* Story Results */}
+            <div className="lg-glass p-5 space-y-4">
+              <h3 className={`text-sm font-semibold ${c('text')}`}>Story Results</h3>
 
-      </main>
+              {!session && <p className={`text-sm ${c('textMuted')}`}>No active session</p>}
+              {session && (session.story_results!.length > 0 || session.current_story) && (
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {(() => {
+                    const processedIds = new Set(session.story_results.map(r => r.story_id));
+                    const currentId = session.current_story;
+                    const displayResults = [
+                      ...session.story_results,
+                      ...(currentId && !processedIds.has(currentId) ? [{ story_id: currentId, story_title: currentId, chapters_generated: 0, chapters_uploaded: 0, upload_errors: [], error: '', _processing: true }] : []),
+                    ];
+                    return displayResults.map((result: any) => (
+                      <div key={result.story_id} className={`flex items-start justify-between px-3 py-2.5 rounded-xl ${c('rowBg')}`} style={{ border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}>
+                        <div className="flex-1 min-w-0 mr-3">
+                          <p className={`text-sm font-medium truncate ${c('textBody')}`}>{result.story_title}</p>
+                          {result._processing ? (
+                            <p className="text-xs mt-0.5" style={{ color: runningAccent }}>Processing…</p>
+                          ) : (
+                            <p className="text-xs mt-0.5" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>Gen: {result.chapters_generated} · Up: {result.chapters_uploaded}</p>
+                          )}
+                          {result.error && <p className="text-xs mt-0.5" style={{ color: isDark ? '#f87171' : '#ef4444' }}>{result.error}</p>}
+                        </div>
+                        {result._processing ? (
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: `${runningAccent}40`, borderTopColor: runningAccent }} />
+                        ) : result.chapters_uploaded > 0 ? (
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(52,211,153,0.12)' }}>
+                            <svg width="10" height="10" fill="none" stroke="#10b981" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          </span>
+                        ) : null}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+              {session && !session.current_story && (!session.story_results || session.story_results.length === 0) && (
+                <p className={`text-sm ${c('textMuted')}`}>No results yet.</p>
+              )}
+            </div>
+          </div>
 
-      {/* Stop Modal */}
+          {/* ── Live Log ── */}
+          <div className="lg-glass p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className={`text-sm font-semibold ${c('text')}`}>Live Log</h3>
+              {isRunning && (
+                <span className="lg-chip lg-chip-blue" style={{ fontSize: '0.6rem' }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                  LIVE
+                </span>
+              )}
+            </div>
+
+            {!session && <p className={`text-sm ${c('textMuted')}`}>No active session</p>}
+            {session && session.logs.length === 0 && <p className={`text-sm ${c('textMuted')}`}>Waiting for logs…</p>}
+            {session && session.logs.length > 0 && (
+              <div className={`lg-log-container ${c('logBg')}`}>
+                {session.logs.map((log, i) => {
+                  const levelColor = log.level === 'error' ? (isDark ? '#f87171' : '#ef4444') : log.level === 'warning' ? '#fbbf24' : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)');
+                  return (
+                    <div key={i} className="flex gap-2 items-start">
+                      <span className="flex-shrink-0" style={{ color: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.25)', fontSize: '0.62rem' }}>[{log.timestamp}]</span>
+                      <span className="flex-shrink-0 text-right tabular-nums" style={{ color: runningAccent, fontSize: '0.62rem', opacity: 0.7, minWidth: 16 }}>S{log.step}</span>
+                      <span style={{ color: levelColor, fontSize: '0.62rem' }}>{log.message}</span>
+                    </div>
+                  );
+                })}
+                <div ref={logEndRef} />
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* ── Stop Modal ── */}
       {showStopConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}>
-          <div className={`${glassBase} rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl`}>
-            <h3 className={`text-base font-semibold ${val('text-white', 'text-gray-900')}`}>Stop Session?</h3>
-            <p className={`text-sm ${txtSub}`}>Audio generation will halt. Already-generated chapters may still be uploaded.</p>
+        <div className="lg-modal-overlay">
+          <div className="lg-glass-deep p-6 w-full max-w-sm space-y-5">
+            <div>
+              <h3 className={`text-base font-bold ${c('text')}`}>Stop Session?</h3>
+              <p className={`text-sm mt-1 ${c('textMuted')}`}>Audio generation will halt. Already-generated chapters may still be uploaded.</p>
+            </div>
             <div className="space-y-2">
-              <p className={`text-xs ${txtMuted}`}>Type <strong className={isDark ? 'text-red-400' : 'text-red-500'}>CONFIRM</strong> to stop:</p>
+              <p className={`text-xs ${c('textSub')}`}>
+                Type <strong style={{ color: isDark ? '#f87171' : '#ef4444' }}>CONFIRM</strong> to stop:
+              </p>
               <input
                 type="text"
                 value={stopConfirmText}
                 onChange={e => setStopConfirmText(e.target.value)}
                 placeholder="CONFIRM"
                 autoFocus
-                className={`w-full px-3 py-2 rounded-xl text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50 ${
-                  isDark ? 'bg-white/5 border-white/10 text-white placeholder:text-slate-600' : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'
-                }`}
+                className="w-full px-3 py-2.5 rounded-xl text-sm"
+                style={{
+                  background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                  border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+                  color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)',
+                  outline: 'none',
+                }}
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => { setShowStopConfirm(false); setStopConfirmText(''); }}
-                className={`py-2.5 rounded-xl text-sm font-medium transition-colors ${isDark ? 'bg-white/5 hover:bg-white/10 text-slate-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
-              >
-                Cancel
-              </button>
+              <button onClick={() => { setShowStopConfirm(false); setStopConfirmText(''); }} className="lg-btn-ghost">Cancel</button>
               <button
                 onClick={handleStop}
                 disabled={stopConfirmText !== 'CONFIRM'}
-                className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                  stopConfirmText === 'CONFIRM'
-                    ? 'bg-red-500 hover:bg-red-400 text-white'
-                    : `${isDark ? 'bg-white/5 text-slate-600' : 'bg-gray-100 text-gray-400'} cursor-not-allowed`
-                }`}
-              >
-                Stop
-              </button>
+                className="lg-btn-danger"
+                style={{ opacity: stopConfirmText !== 'CONFIRM' ? 0.4 : 1 }}
+              >Stop Session</button>
             </div>
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+      `}</style>
     </div>
   );
 }

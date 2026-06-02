@@ -156,276 +156,297 @@ export function BatchPage({ themeMode }: BatchPageProps) {
   const totalChapters = entries.reduce((sum, e) => sum + (e.totalChapterCount ?? 0), 0);
   const anyLoading = entries.some(e => e.isLoading);
 
+  const val = (dark: string, light: string) => isDark ? dark : light;
+  const c = (key: string) => {
+    const map: Record<string, [string, string]> = {
+      bg: ['bg-[#0a0a14]', 'bg-[#e8e4f8]'],
+      bgAlt: ['bg-[#0f0f1e]', 'bg-[#f0e8f8]'],
+      text: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
+      textMuted: ['text-white/40', 'text-[rgba(0,0,0,0.4)]'],
+      textSub: ['text-white/30', 'text-[rgba(0,0,0,0.3)]'],
+      textBody: ['text-white/70', 'text-[rgba(0,0,0,0.7)]'],
+      textBodyStrong: ['text-white/85', 'text-[rgba(0,0,0,0.8)]'],
+      divider: ['bg-white/6', 'bg-black/6'],
+      logBg: ['bg-black/30', 'bg-black/4'],
+      logText: ['text-white/50', 'text-[rgba(0,0,0,0.5)]'],
+      logTime: ['text-white/20', 'text-[rgba(0,0,0,0.25)]'],
+      rowBg: ['bg-white/[0.04]', 'bg-[rgba(0,0,0,0.03)]'],
+      rowBorder: ['border-white/[0.05]', 'border-black/5'],
+      cardSubtleBg: ['bg-white/[0.03]', 'bg-[rgba(0,0,0,0.02)]'],
+      progressTrack: ['bg-white/[0.06]', 'bg-white/8'],
+      inputBg: ['bg-white/[0.05]', 'bg-[rgba(0,0,0,0.04)]'],
+      inputBorder: ['border-white/[0.08]', 'border-black/8'],
+      inputText: ['text-white', 'text-[rgba(0,0,0,0.85)]'],
+    };
+    return isDark ? map[key][0] : map[key][1];
+  };
+
+  const pageBg = isDark
+    ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
+    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
+
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+    <div className={`min-h-screen relative overflow-hidden ${val('dark', 'light')}`} style={{ background: pageBg }}>
+      <div className="lg-orb lg-orb-1" />
+      <div className="lg-orb lg-orb-2" />
+      <div className="lg-orb lg-orb-3" />
 
-        {/* Page Header */}
-        <div className="mb-2">
-          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-            Batch Crawl
-          </h1>
-          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-            Crawl multiple novels at once
-          </p>
-        </div>
+      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
+        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
 
-        {/* Summary bar */}
-        <div className={`flex flex-wrap items-center gap-4 p-4 rounded-2xl ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
-          <div className="flex items-center gap-2 text-sm">
-            <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>URLs:</span>
-            <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{entries.length}</span>
+          {/* Page Header */}
+          <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
+            <div>
+              <h1 className={`text-2xl font-bold tracking-tight ${c('text')}`}>Batch Crawl</h1>
+              <p className={`text-sm mt-1 ${c('textMuted')}`}>Crawl multiple novels at once</p>
+            </div>
           </div>
-          <div className={`w-px h-5 hidden sm:block ${isDark ? 'bg-slate-700' : 'bg-gray-300'}`} />
-          <div className="flex items-center gap-2 text-sm">
-            <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>Valid:</span>
-            <span className={`font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{validCount}</span>
+
+          {/* Summary bar */}
+          <div className={`lg-glass p-4 flex flex-wrap items-center gap-4`}>
+            <div className="flex items-center gap-2 text-sm">
+              <span className={c('textMuted')}>URLs:</span>
+              <span className={`font-semibold ${c('textBodyStrong')}`}>{entries.length}</span>
+            </div>
+            <div className={`w-px h-5 hidden sm:block ${c('divider')}`} />
+            <div className="flex items-center gap-2 text-sm">
+              <span className={c('textMuted')}>Valid:</span>
+              <span className={`font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{validCount}</span>
+            </div>
+            <div className={`w-px h-5 hidden sm:block ${c('divider')}`} />
+            <div className="flex items-center gap-2 text-sm">
+              <span className={c('textMuted')}>Total chapters:</span>
+              <span className={`font-semibold ${c('textBodyStrong')}`}>{totalChapters.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs ml-auto">
+              <span className={c('textSub')}>Press Enter to detect</span>
+            </div>
           </div>
-          <div className={`w-px h-5 hidden sm:block ${isDark ? 'bg-slate-700' : 'bg-gray-300'}`} />
-          <div className="flex items-center gap-2 text-sm">
-            <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>Total chapters:</span>
-            <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{totalChapters.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs ml-auto">
-            <span className={isDark ? 'text-slate-500' : 'text-gray-400'}>Press Enter to detect</span>
-          </div>
-        </div>
 
-        {/* URL entries */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-4 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
-          <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Novel URLs</h2>
+          {/* URL entries */}
+          <section className="lg-glass p-5 sm:p-6 space-y-4">
+            <h2 className={`text-base font-semibold ${c('text')}`}>Novel URLs</h2>
 
-          {entries.map((entry, idx) => {
-            const isPaywalled = entry.novelMetadata?.is_paywalled === true;
-            return (
-              <div key={entry.id}>
-                <div className="flex items-center gap-3">
-                  {/* Entry number */}
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${isDark
-                    ? 'bg-slate-800/60 border border-slate-700/50'
-                    : 'bg-gray-100 border border-gray-200'
-                  }`}>
-                    <span className={`text-sm font-bold ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>{idx + 1}</span>
-                  </div>
-
-                  {/* URL input */}
-                  <div className="relative flex-1">
-                    <input
-                      type="url"
-                      value={entry.url}
-                      onChange={e => handleUrlChange(entry.id, e.target.value)}
-                      onBlur={() => handleDetectEntry(entry)}
-                      onKeyDown={e => handleUrlKeyDown(e, entry)}
-                      placeholder={supportedSites.length > 0
-                        ? `https://www.${supportedSites[0]?.base_url.replace('https://', '').replace('http://', '') || 'wattpad.com'}/...`
-                        : 'https://www.wattpad.com/... or https://www.novelworm.com/...'}
-                      className={`w-full px-4 py-3 border rounded-xl text-sm transition-all duration-200
-                        focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                        ${isDark
-                          ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
-                          : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
-                        }`}
-                    />
-                    {entry.isLoading && (
-                      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                        <svg className="animate-spin h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Status icon */}
-                  {!entry.isLoading && entry.isValid && !isPaywalled && (
-                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
-                      ? 'bg-emerald-900/30 border border-emerald-800/40'
-                      : 'bg-emerald-50 border border-emerald-200'
-                    }`} title="Valid">
-                      <svg className={`w-4 h-4 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                  )}
-                  {!entry.isLoading && entry.isValid && entry.novelMetadata?.is_paywalled && (
-                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
-                      ? 'bg-amber-900/30 border border-amber-800/40'
-                      : 'bg-amber-50 border border-amber-200'
-                    }`} title="Paywalled">
-                      <svg className={`w-4 h-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                    </div>
-                  )}
-                  {!entry.isLoading && entry.error && (
-                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
-                      ? 'bg-red-900/30 border border-red-800/40'
-                      : 'bg-red-50 border border-red-200'
-                    }`} title={entry.error}>
-                      <svg className={`w-4 h-4 ${isDark ? 'text-red-400' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </div>
-                  )}
-
-                  {/* Remove */}
-                  {entries.length > 2 && (
-                    <button
-                      onClick={() => handleRemoveEntry(entry.id)}
-                      className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${isDark
-                        ? 'text-slate-500 hover:text-red-400 hover:bg-red-900/20'
-                        : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
-                      }`}
-                      title="Remove"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                {entry.isValid && !isPaywalled && (
-                  <div className="ml-11 flex items-center gap-3 py-2">
-                    <label className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Range (optional):</label>
-                    <input
-                      type="text"
-                      value={entry.chapterRange}
-                      onChange={e => updateEntry(entry.id, { chapterRange: e.target.value })}
-                      placeholder="e.g. 1-100 or 50-75"
-                      className={`px-3 py-1.5 border rounded-xl text-xs transition-colors
-                        focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                        w-36 ${isDark
-                          ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
-                          : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
-                        }`}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          <button
-            onClick={handleAddEntry}
-            className={`flex items-center gap-2 text-sm font-medium transition-colors ${isDark
-              ? 'text-indigo-400 hover:text-indigo-300'
-              : 'text-indigo-600 hover:text-indigo-700'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add another URL
-          </button>
-        </section>
-
-        {/* Detection results */}
-        {entries.some(e => e.isValid || e.error) && (
-          <section className={`rounded-2xl p-5 sm:p-6 space-y-3 ${isDark
-            ? 'bg-slate-900/60 border border-slate-800/60'
-            : 'bg-white border border-gray-200'
-          }`}>
-            <h2 className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Detection Results</h2>
             {entries.map((entry, idx) => {
               const isPaywalled = entry.novelMetadata?.is_paywalled === true;
               return (
-                <div key={entry.id} className={`flex items-center gap-3 text-sm py-2 border-b last:border-0 ${isDark ? 'border-slate-800/60' : 'border-gray-200'}`}>
-                  <span className={`w-5 text-xs font-mono ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{idx + 1}.</span>
-                  {entry.isValid ? (
-                    <>
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isPaywalled ? (isDark ? 'bg-amber-400' : 'bg-amber-500') : (isDark ? 'bg-emerald-400' : 'bg-emerald-500')}`} />
-                      <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{entry.siteInfo?.site_name}</span>
-                      {entry.storyTitle && <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>— {entry.storyTitle}</span>}
-                      {entry.totalChapterCount != null && (
-                        <span className={`ml-auto text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{entry.totalChapterCount.toLocaleString()} ch</span>
+                <div key={entry.id}>
+                  <div className="flex items-center gap-3">
+                    {/* Entry number */}
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${isDark
+                      ? 'bg-white/[0.04] border border-white/[0.06]'
+                      : 'bg-[rgba(0,0,0,0.04)] border border-black/5'
+                    }`}>
+                      <span className={`text-sm font-bold ${c('textMuted')}`}>{idx + 1}</span>
+                    </div>
+
+                    {/* URL input */}
+                    <div className="relative flex-1">
+                      <input
+                        type="url"
+                        value={entry.url}
+                        onChange={e => handleUrlChange(entry.id, e.target.value)}
+                        onBlur={() => handleDetectEntry(entry)}
+                        onKeyDown={e => handleUrlKeyDown(e, entry)}
+                        placeholder={supportedSites.length > 0
+                          ? `https://www.${supportedSites[0]?.base_url.replace('https://', '').replace('http://', '') || 'wattpad.com'}/...`
+                          : 'https://www.wattpad.com/... or https://www.novelworm.com/...'}
+                        className={`w-full px-4 py-3 border rounded-xl text-sm transition-all duration-200
+                          focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                          ${isDark
+                            ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder-white/30'
+                            : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder-[rgba(0,0,0,0.3)]'
+                          }`}
+                      />
+                      {entry.isLoading && (
+                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                          <svg className="animate-spin h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        </div>
                       )}
-                      {isPaywalled && (
-                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${isDark
-                          ? 'bg-amber-900/40 text-amber-400 border-amber-800/40'
-                          : 'bg-amber-100 text-amber-700 border-amber-200'
-                        }`}>Paywalled</span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDark ? 'bg-red-400' : 'bg-red-500'}`} />
-                      <span className={`truncate flex-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{entry.url}</span>
-                      <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>{entry.error}</span>
-                    </>
+                    </div>
+
+                    {/* Status icon */}
+                    {!entry.isLoading && entry.isValid && !isPaywalled && (
+                      <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
+                        ? 'bg-emerald-500/10 border border-emerald-500/20'
+                        : 'bg-emerald-50 border border-emerald-200'
+                      }`} title="Valid">
+                        <svg className={`w-4 h-4 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                    {!entry.isLoading && entry.isValid && entry.novelMetadata?.is_paywalled && (
+                      <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
+                        ? 'bg-amber-500/10 border border-amber-500/20'
+                        : 'bg-amber-50 border border-amber-200'
+                      }`} title="Paywalled">
+                        <svg className={`w-4 h-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                    )}
+                    {!entry.isLoading && entry.error && (
+                      <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isDark
+                        ? 'bg-red-500/10 border border-red-500/20'
+                        : 'bg-red-50 border border-red-200'
+                      }`} title={entry.error}>
+                        <svg className={`w-4 h-4 ${isDark ? 'text-red-400' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </div>
+                    )}
+
+                    {/* Remove */}
+                    {entries.length > 2 && (
+                      <button
+                        onClick={() => handleRemoveEntry(entry.id)}
+                        className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${isDark
+                          ? 'text-white/30 hover:text-red-400 hover:bg-red-500/10'
+                          : 'text-[rgba(0,0,0,0.3)] hover:text-red-600 hover:bg-red-50'
+                        }`}
+                        title="Remove"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  {entry.isValid && !isPaywalled && (
+                    <div className="ml-11 flex items-center gap-3 py-2">
+                      <label className={`text-xs ${c('textMuted')}`}>Range (optional):</label>
+                      <input
+                        type="text"
+                        value={entry.chapterRange}
+                        onChange={e => updateEntry(entry.id, { chapterRange: e.target.value })}
+                        placeholder="e.g. 1-100 or 50-75"
+                        className={`px-3 py-1.5 border rounded-xl text-xs transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                          w-36 ${isDark
+                            ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder-white/30'
+                            : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder-[rgba(0,0,0,0.3)]'
+                          }`}
+                      />
+                    </div>
                   )}
                 </div>
               );
             })}
+
+            <button
+              onClick={handleAddEntry}
+              className={`flex items-center gap-2 text-sm font-medium transition-colors ${isDark
+                ? 'text-indigo-400 hover:text-indigo-300'
+                : 'text-indigo-600 hover:text-indigo-700'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add another URL
+            </button>
           </section>
-        )}
 
-        {/* Output format */}
-        <section className={`rounded-2xl p-5 sm:p-6 space-y-3 ${isDark
-          ? 'bg-slate-900/60 border border-slate-800/60'
-          : 'bg-white border border-gray-200'
-        }`}>
-          <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Output Format</h2>
-          <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Applied to all novels in this batch</p>
-          <div className="flex items-center gap-3">
-            <label className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Format:</label>
-            <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">MD</span>
-          </div>
-        </section>
-
-        {/* Error */}
-        {startError && (
-          <div className={`flex items-center gap-3 p-4 rounded-xl text-sm ${isDark
-            ? 'bg-red-900/20 border border-red-800/30 text-red-400'
-            : 'bg-red-50 border border-red-200 text-red-600'
-          }`}>
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {startError}
-          </div>
-        )}
-
-        {/* Start button */}
-        <button
-          onClick={handleStart}
-          disabled={isStarting || validCount === 0 || anyLoading}
-          className={`w-full py-4 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${isStarting || validCount === 0 || anyLoading
-            ? isDark
-              ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
-              : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
-            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'
-          }`}
-        >
-          {isStarting ? (
-            <>
-              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Starting {validCount} crawl{validCount !== 1 ? 's' : ''}...
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Crawl All ({validCount} novel{validCount !== 1 ? 's' : ''})
-            </>
+          {/* Detection results */}
+          {entries.some(e => e.isValid || e.error) && (
+            <section className="lg-glass p-5 sm:p-6 space-y-3">
+              <h2 className={`text-sm font-semibold ${c('textBodyStrong')}`}>Detection Results</h2>
+              {entries.map((entry, idx) => {
+                const isPaywalled = entry.novelMetadata?.is_paywalled === true;
+                return (
+                  <div key={entry.id} className={`flex items-center gap-3 text-sm py-2 border-b last:border-0 ${c('rowBorder')}`}>
+                    <span className={`w-5 text-xs font-mono ${c('textMuted')}`}>{idx + 1}.</span>
+                    {entry.isValid ? (
+                      <>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isPaywalled ? (isDark ? 'bg-amber-400' : 'bg-amber-500') : (isDark ? 'bg-emerald-400' : 'bg-emerald-500')}`} />
+                        <span className={`font-medium ${c('textBodyStrong')}`}>{entry.siteInfo?.site_name}</span>
+                        {entry.storyTitle && <span className={c('textMuted')}>— {entry.storyTitle}</span>}
+                        {entry.totalChapterCount != null && (
+                          <span className={`ml-auto text-xs ${c('textMuted')}`}>{entry.totalChapterCount.toLocaleString()} ch</span>
+                        )}
+                        {isPaywalled && (
+                          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${isDark
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : 'bg-amber-100 text-amber-700 border-amber-200'
+                          }`}>Paywalled</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isDark ? 'bg-red-400' : 'bg-red-500'}`} />
+                        <span className={`truncate flex-1 ${c('textMuted')}`}>{entry.url}</span>
+                        <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>{entry.error}</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </section>
           )}
-        </button>
 
-        {validCount === 0 && !anyLoading && (
-          <p className={`text-xs text-center ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-            Detect all URLs first by pressing Enter in each field or clicking outside.
-          </p>
-        )}
-      </main>
+          {/* Output format */}
+          <section className="lg-glass p-5 sm:p-6 space-y-3">
+            <h2 className={`text-base font-semibold ${c('text')}`}>Output Format</h2>
+            <p className={`text-sm ${c('textMuted')}`}>Applied to all novels in this batch</p>
+            <div className="flex items-center gap-3">
+              <label className={`text-sm ${c('textMuted')}`}>Format:</label>
+              <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">MD</span>
+            </div>
+          </section>
+
+          {/* Error */}
+          {startError && (
+            <div className={`flex items-center gap-3 p-4 rounded-xl text-sm ${isDark
+              ? 'bg-red-500/10 border border-red-500/20 text-red-400'
+              : 'bg-red-50 border border-red-200 text-red-600'
+            }`}>
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {startError}
+            </div>
+          )}
+
+          {/* Start button */}
+          <button
+            onClick={handleStart}
+            disabled={isStarting || validCount === 0 || anyLoading}
+            className={`w-full py-4 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${isStarting || validCount === 0 || anyLoading
+              ? isDark
+                ? 'bg-white/[0.04] text-white/30 cursor-not-allowed shadow-none border border-white/[0.05]'
+                : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed shadow-none border border-black/5'
+              : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'
+            }`}
+          >
+            {isStarting ? (
+              <>
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Starting {validCount} crawl{validCount !== 1 ? 's' : ''}...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Crawl All ({validCount} novel{validCount !== 1 ? 's' : ''})
+              </>
+            )}
+          </button>
+
+          {validCount === 0 && !anyLoading && (
+            <p className={`text-xs text-center ${c('textSub')}`}>
+              Detect all URLs first by pressing Enter in each field or clicking outside.
+            </p>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

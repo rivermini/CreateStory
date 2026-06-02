@@ -46,6 +46,28 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
   const statusConfig = isDark ? STATUS_CONFIG_DARK : STATUS_CONFIG_LIGHT;
 
+  const pageBg = isDark
+    ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
+    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
+
+  const c = (key: string) => {
+    const map: Record<string, [string, string]> = {
+      text:      ['text-white/90',      'text-[rgba(0,0,0,0.85)]'],
+      textMuted: ['text-white/40',       'text-[rgba(0,0,0,0.4)]'],
+      textSub:   ['text-white/25',       'text-[rgba(0,0,0,0.25)]'],
+      textBody:  ['text-white/70',       'text-[rgba(0,0,0,0.65)]'],
+      textBodyStrong: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
+      glassBg:   ['bg-white/[0.03]',     'bg-white/70'],
+      glassBorder: ['border-white/[0.06]','border-black/[0.06]'],
+      glassHover:['hover:bg-white/[0.05]','hover:bg-white/80'],
+      rowBg:     ['bg-white/[0.04]',     'bg-[rgba(0,0,0,0.04)]'],
+      rowBorder:  ['border-white/[0.05]', 'border-black/[0.05]'],
+      divider:   ['border-white/[0.06]', 'border-black/[0.06]'],
+      glassNav:  ['bg-[#0f0f1e]/90',    'bg-white/80'],
+    };
+    return map[key]?.[isDark ? 0 : 1] ?? '';
+  };
+
   const loadJobs = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -163,22 +185,25 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   };
 
   const statCards: { label: string; value: number; color: string; dot: string }[] = [
-    { label: 'Total',   value: stats.total,   color: isDark ? 'text-slate-100' : 'text-gray-900',   dot: isDark ? 'bg-slate-400'   : 'bg-gray-400'   },
+    { label: 'Total',   value: stats.total,   color: c('textBodyStrong'), dot: isDark ? 'bg-slate-400'   : 'bg-gray-400'   },
     { label: 'Success', value: stats.success,  color: isDark ? 'text-emerald-400' : 'text-emerald-600', dot: isDark ? 'bg-emerald-400' : 'bg-emerald-500' },
     { label: 'Errors',  value: stats.error,    color: isDark ? 'text-red-400' : 'text-red-600',    dot: isDark ? 'bg-red-400'     : 'bg-red-500'     },
     { label: 'Running', value: stats.running,  color: isDark ? 'text-blue-400' : 'text-blue-600',   dot: isDark ? 'bg-blue-400'    : 'bg-blue-500'    },
   ];
 
   return (
-    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col flex-1 gap-5">
+    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
+      <div className="lg-orb lg-orb-1" />
+      <div className="lg-orb lg-orb-2" />
+      <div className="lg-orb lg-orb-3" />
+      <main className="relative z-10 w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col flex-1 gap-5">
 
         {/* ── Page Header ───────────────────────────────── */}
-        <div className="mb-2">
-          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+        <div className="lg-glass-deep px-6 py-5">
+          <h1 className={`text-2xl sm:text-3xl font-bold ${c('text')}`}>
             Sync History
           </h1>
-          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+          <p className={`mt-1 text-sm sm:text-base ${c('textMuted')}`}>
             View and manage your sync job history
           </p>
         </div>
@@ -195,15 +220,12 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                   if (label === 'Errors')  setFilter('error');
                   if (label === 'Running') setFilter('running');
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left group transition-all duration-200 ${isDark
-                  ? 'bg-slate-900/60 border-slate-800/60 hover:bg-slate-900 hover:border-slate-700'
-                  : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                }`}
+                className={`lg-glass-card px-4 py-3 rounded-xl text-left group transition-all duration-200 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
               >
                 <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot} ${label === 'Running' && value > 0 ? 'animate-pulse' : ''}`} />
                 <div>
                   <div className={`text-xl font-bold ${color} tabular-nums leading-none`}>{value}</div>
-                  <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{label}</div>
+                  <div className={`text-xs mt-0.5 ${c('textSub')}`}>{label}</div>
                 </div>
               </button>
             ))}
@@ -214,8 +236,8 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
         <div className="flex flex-wrap items-center gap-2">
 
           {/* Kind filter */}
-          <div className={`flex items-center gap-1 p-1 rounded-xl ${isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
-            <span className={`px-2 text-xs hidden sm:inline ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Type:</span>
+          <div className={`flex items-center gap-1 p-1 rounded-xl ${c('glassBg')} ${c('glassBorder')}`}>
+            <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Type:</span>
             {([
               ['all', 'All'],
               ['upload_single', 'Upload'],
@@ -226,7 +248,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                 onClick={() => setFilterKind(value)}
                 className={`px-3 py-1 text-xs rounded-lg transition-colors ${filterKind === value
                   ? 'bg-indigo-600 text-white'
-                  : `${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-500 hover:text-gray-700'}`
+                  : `${c('textMuted')} hover:${isDark ? '!text-white/80' : '!text-black/80'}`
                 }`}
               >
                 {label}
@@ -236,7 +258,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
           {/* Search */}
           <div className="relative flex-1 min-w-[180px]">
-            <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? 'text-slate-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
@@ -246,14 +268,14 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
               onChange={e => setSearch(e.target.value)}
               className={`w-full pl-9 pr-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${
                 isDark
-                  ? 'bg-slate-900/60 border-slate-800 text-slate-200 placeholder:text-slate-500'
-                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
+                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
+                  : 'bg-[rgba(0,0,0,0.04)] border-black/[0.06] text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
               }`}
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-gray-400 hover:text-gray-600'}`}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 ${c('textSub')} hover:${isDark ? '!text-white/80' : '!text-black/80'}`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -265,10 +287,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
           {/* Refresh */}
           <button
             onClick={() => { setLoading(true); loadJobs(); }}
-            className={`px-3 py-2 text-sm border rounded-xl transition-colors flex items-center gap-1.5 ${isDark
-              ? 'text-slate-400 hover:text-slate-200 border-slate-800 hover:bg-slate-900'
-              : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
+            className={`lg-glass px-3 py-2 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -280,9 +299,9 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
           {selectedIds.size > 0 && (
             <button
               onClick={() => setBulkDeleteTarget(filtered.filter(j => selectedIds.has(j.id)))}
-              className={`px-3 py-2 text-sm border rounded-xl transition-colors flex items-center gap-1.5 ${isDark
-                ? 'text-red-400 border-red-800/60 hover:bg-red-900/20'
-                : 'text-red-600 border-red-300 hover:bg-red-50'
+              className={`lg-glass px-3 py-2 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark
+                ? 'text-red-400 hover:bg-red-900/20'
+                : 'text-red-600 hover:bg-red-50'
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -302,11 +321,11 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
               ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length; }}
               onChange={toggleSelectAll}
               className={`w-4 h-4 rounded cursor-pointer ${isDark
-                ? 'border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0'
-                : 'border-gray-300 bg-white text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0'
+                ? 'border-white/20 bg-white/5 text-indigo-400 focus:ring-indigo-500 focus:ring-offset-0'
+                : 'border-black/20 bg-black/5 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0'
               }`}
             />
-            <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+            <span className={`text-xs ${c('textSub')}`}>
               {selectedIds.size > 0 ? `${selectedIds.size} selected` : `Select all ${filtered.length}`}
             </span>
           </div>
@@ -322,7 +341,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
         {/* ── Loading ──────────────────────────────────────────────────── */}
         {loading && jobs.length === 0 && (
-          <div className={`flex items-center justify-center py-20 gap-3 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+          <div className={`flex items-center justify-center py-20 gap-3 ${c('textMuted')}`}>
             <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -333,13 +352,13 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
         {/* ── Empty ────────────────────────────────────────────────────── */}
         {!loading && jobs.length === 0 && (
-          <div className={`flex flex-col items-center justify-center py-24 space-y-3 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
-            <svg className={`w-14 h-14 ${isDark ? 'text-slate-700' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`flex flex-col items-center justify-center py-24 space-y-3 ${c('textSub')}`}>
+            <svg className={`w-14 h-14 ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <p className={isDark ? 'text-slate-400' : 'text-gray-500'}>No sync jobs yet.</p>
-            <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>Upload a story from the Drive Sync page to get started.</p>
+            <p className={c('textMuted')}>No sync jobs yet.</p>
+            <p className={`text-sm ${c('textSub')}`}>Upload a story from the Drive Sync page to get started.</p>
           </div>
         )}
 
@@ -359,7 +378,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
               return (
                 <div
                   key={job.id}
-                  className={`rounded-2xl border transition-all duration-200 ${statusCfg.bg} ${statusCfg.border}
+                  className={`lg-glass-card rounded-2xl border transition-all duration-200 ${statusCfg.bg} ${statusCfg.border}
                     ${selectedIds.has(job.id) ? 'ring-1 ring-indigo-500/50' : ''}`}
                 >
                   {/* Card header */}
@@ -380,11 +399,11 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
                     {/* Title */}
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-sm font-semibold truncate pr-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                      <h3 className={`text-sm font-semibold truncate pr-2 ${c('textBodyStrong')}`}>
                         {job.display_name || job.folder_name}
                       </h3>
                       {job.result_message && !job.error && (
-                        <p className={`text-xs truncate mt-0.5 pr-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{job.result_message}</p>
+                        <p className={`text-xs truncate mt-0.5 pr-4 ${c('textSub')}`}>{job.result_message}</p>
                       )}
                       {job.error && (
                         <p className={`text-xs truncate mt-0.5 pr-4 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{job.error}</p>
@@ -456,7 +475,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                     )}
 
                     {/* Time */}
-                    <span className={`shrink-0 text-xs hidden lg:inline ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                    <span className={`shrink-0 text-xs hidden lg:inline ${c('textSub')}`}>
                       {formatTime(job.created_at)}
                     </span>
 
@@ -464,10 +483,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
-                        className={`px-3 py-1.5 text-xs rounded-xl transition-colors flex items-center gap-1 ${isDark
-                          ? 'text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800'
-                          : 'text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'
-                        }`}
+                        className={`lg-glass px-3 py-1.5 text-xs rounded-xl transition-colors flex items-center gap-1 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
                         title={isExpanded ? 'Hide logs' : 'Show logs'}
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -480,9 +496,9 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                       </button>
                       <button
                         onClick={() => setDeleteTarget(job)}
-                        className={`p-1.5 rounded-xl transition-colors ${isDark
-                          ? 'text-slate-600 hover:text-red-400 bg-slate-800/40 hover:bg-red-900/20'
-                          : 'text-gray-400 hover:text-red-600 bg-gray-100 hover:bg-red-50'
+                        className={`lg-glass p-1.5 rounded-xl transition-colors ${isDark
+                          ? 'text-white/40 hover:text-red-400 hover:bg-red-900/20'
+                          : 'text-black/40 hover:text-red-600 hover:bg-red-50'
                         }`}
                         title="Delete job"
                       >
@@ -496,8 +512,8 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
                   {/* Expanded logs */}
                   {isExpanded && job.logs.length > 0 && (
-                    <div className={`border-t px-4 py-3 ${isDark ? 'border-slate-800/60 bg-black/20' : 'border-gray-200 bg-gray-50/50'}`}>
-                      <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Logs</p>
+                    <div className={`border-t px-4 py-3 ${c('rowBg')}`}>
+                      <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${c('textSub')}`}>Logs</p>
                       <div className="space-y-1 max-h-48 overflow-y-auto">
                         {job.logs.map((log, i) => (
                           <LogLine key={i} log={log} isDark={isDark} />
@@ -513,13 +529,13 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
         {/* ── No results ─────────────────────────────────────────────── */}
         {!loading && jobs.length > 0 && filtered.length === 0 && (
-          <div className={`text-center py-20 space-y-3 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
-            <svg className={`w-12 h-12 mx-auto ${isDark ? 'text-slate-700' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`text-center py-20 space-y-3 ${c('textSub')}`}>
+            <svg className={`w-12 h-12 mx-auto ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <p className={isDark ? 'text-slate-400' : 'text-gray-500'}>No jobs match your filters or search.</p>
+            <p className={c('textMuted')}>No jobs match your filters or search.</p>
             <button onClick={() => { setFilter('all'); setFilterKind('all'); setSearch(''); }}
-              className="text-sm text-indigo-400 hover:text-indigo-300">
+              className={`text-sm ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}>
               Clear all filters
             </button>
           </div>
@@ -529,10 +545,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
         {!loading && jobs.length > 0 && (
           <div className="flex justify-center pt-2">
             <button onClick={loadJobs}
-              className={`px-4 py-2 text-sm border rounded-xl transition-colors ${isDark
-                ? 'text-slate-400 hover:text-slate-200 border-slate-800 hover:bg-slate-900'
-                : 'text-gray-500 hover:text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}>
+              className={`lg-glass px-4 py-2 text-sm rounded-xl transition-colors ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}>
               Refresh
             </button>
           </div>
@@ -541,7 +554,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
         {/* ── Delete modal ─────────────────────────────────────────────── */}
         {deleteTarget && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className={`rounded-2xl p-6 max-w-sm w-full shadow-2xl ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-gray-200'}`}>
+            <div className={`lg-glass-card rounded-2xl p-6 max-w-sm w-full shadow-2xl`}>
               <div className="flex items-center gap-3 mb-3">
                 <div className={`p-2 rounded-xl ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
                   <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -549,23 +562,20 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </div>
-                <h3 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Delete Job</h3>
+                <h3 className={`text-base font-semibold ${c('text')}`}>Delete Job</h3>
               </div>
-              <p className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+              <p className={`text-sm mb-5 ${c('textMuted')}`}>
                 Permanently delete{' '}
-                <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{deleteTarget.display_name || deleteTarget.folder_name}</span>?
+                <span className={`font-medium ${c('textBodyStrong')}`}>{deleteTarget.display_name || deleteTarget.folder_name}</span>?
                 This cannot be undone.
               </p>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setDeleteTarget(null)} disabled={isDeleting}
-                  className={`px-4 py-2 text-sm rounded-xl transition-colors disabled:opacity-50 ${isDark
-                    ? 'text-slate-300 bg-slate-800 hover:bg-slate-700'
-                    : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-                  }`}>
+                  className={`lg-glass px-4 py-2 text-sm rounded-xl transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}>
                   Cancel
                 </button>
                 <button onClick={handleConfirmDelete} disabled={isDeleting}
-                  className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 rounded-xl transition-colors">
+                  className={`px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 rounded-xl transition-colors`}>
                   {isDeleting ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
@@ -576,7 +586,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
         {/* ── Bulk delete modal ───────────────────────────────────────── */}
         {bulkDeleteTarget && bulkDeleteTarget.length > 0 && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className={`rounded-2xl p-6 max-w-sm w-full shadow-2xl ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-gray-200'}`}>
+            <div className={`lg-glass-card rounded-2xl p-6 max-w-sm w-full shadow-2xl`}>
               <div className="flex items-center gap-3 mb-3">
                 <div className={`p-2 rounded-xl ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
                   <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -584,27 +594,24 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </div>
-                <h3 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Delete {bulkDeleteTarget.length} Jobs</h3>
+                <h3 className={`text-base font-semibold ${c('text')}`}>Delete {bulkDeleteTarget.length} Jobs</h3>
               </div>
-              <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                Permanently delete <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>{bulkDeleteTarget.length} selected jobs</span>?
+              <p className={`text-sm mb-4 ${c('textMuted')}`}>
+                Permanently delete <span className={`font-medium ${c('textBodyStrong')}`}>{bulkDeleteTarget.length} selected jobs</span>?
                 This cannot be undone.
               </p>
-              <div className={`max-h-44 overflow-y-auto rounded-xl p-3 space-y-1 mb-5 ${isDark ? 'bg-slate-800/60' : 'bg-gray-50'}`}>
+              <div className={`max-h-44 overflow-y-auto rounded-xl p-3 space-y-1 mb-5 ${c('rowBg')}`}>
                 {bulkDeleteTarget.map(job => (
-                  <div key={job.id} className={`flex items-center gap-2 text-xs py-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                    <span className={`font-mono ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{job.id.slice(0, 6)}</span>
+                  <div key={job.id} className={`flex items-center gap-2 text-xs py-1 ${c('textBody')}`}>
+                    <span className={`font-mono ${c('textSub')}`}>{job.id.slice(0, 6)}</span>
                     <span className="truncate">{job.display_name || job.folder_name}</span>
-                    <span className={`ml-auto shrink-0 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>({job.status})</span>
+                    <span className={`ml-auto shrink-0 ${c('textSub')}`}>({job.status})</span>
                   </div>
                 ))}
               </div>
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setBulkDeleteTarget(null)} disabled={isBulkDeleting}
-                  className={`px-4 py-2 text-sm rounded-xl transition-colors disabled:opacity-50 ${isDark
-                    ? 'text-slate-300 bg-slate-800 hover:bg-slate-700'
-                    : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-                  }`}>
+                  className={`lg-glass px-4 py-2 text-sm rounded-xl transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}>
                   Cancel
                 </button>
                 <button onClick={handleConfirmBulkDelete} disabled={isBulkDeleting}

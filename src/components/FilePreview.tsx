@@ -60,65 +60,47 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
   };
 
   const isJson = filename.endsWith('.json');
+  const isMd = filename.endsWith('.md');
+  const isTxt = filename.endsWith('.txt');
 
-  const accentColors = accent === 'emerald'
-    ? { border: 'border-l-emerald-500', bg: isDark ? 'bg-emerald-900/20' : 'bg-emerald-50' }
-    : accent === 'cyan'
-    ? { border: 'border-l-cyan-500', bg: isDark ? 'bg-cyan-900/20' : 'bg-cyan-50' }
-    : { border: '', bg: '' };
+  const typeConfig = isJson
+    ? { label: '{}', bg: isDark ? 'bg-indigo-500/20' : 'bg-indigo-50', text: isDark ? 'text-indigo-400' : 'text-indigo-600' }
+    : isMd
+    ? { label: 'MD', bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-400' : 'text-cyan-600' }
+    : isTxt
+    ? { label: 'TXT', bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-400' : 'text-cyan-600' }
+    : { label: 'CSV', bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-400' : 'text-emerald-600' };
+
+  const copyBtnBase = isDark
+    ? 'text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/30'
+    : 'text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/30';
 
   return (
-    <div className={`border rounded-2xl overflow-hidden ${isDark
-      ? 'border-slate-800/60 bg-slate-900/60'
-      : 'border-gray-200 bg-white'
-    } ${accentColors.border} border-l-4`}>
+    <div className={`lg-glass-card overflow-hidden ${accent === 'emerald' ? 'border-l-4 border-l-emerald-500' : accent === 'cyan' ? 'border-l-4 border-l-cyan-500' : ''}`}>
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex-shrink-0">
-            {isJson ? (
-              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
-                ? 'bg-indigo-900/40 text-indigo-400'
-                : 'bg-indigo-100 text-indigo-600'
-              }`}>{'{}'}</span>
-            ) : filename.endsWith('.md') ? (
-              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
-                ? 'bg-cyan-900/40 text-cyan-400'
-                : 'bg-cyan-100 text-cyan-600'
-              }`}>MD</span>
-            ) : filename.endsWith('.txt') ? (
-              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
-                ? 'bg-cyan-900/40 text-cyan-400'
-                : 'bg-cyan-100 text-cyan-600'
-              }`}>TXT</span>
-            ) : (
-              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
-                ? 'bg-emerald-900/40 text-emerald-400'
-                : 'bg-emerald-100 text-emerald-600'
-              }`}>CSV</span>
-            )}
+            <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${typeConfig.bg} ${typeConfig.text}`}>
+              {typeConfig.label}
+            </span>
           </div>
           <div className="min-w-0">
-            <p className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>{filename}</p>
-            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>{formatBytes(sizeBytes)}</p>
+            <p className={`text-sm font-medium truncate ${isDark ? 'text-white/85' : 'text-black/80'}`}>{filename}</p>
+            <p className={`text-xs ${isDark ? 'text-white/35' : 'text-black/40'}`}>{formatBytes(sizeBytes)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={handleExpand}
             disabled={loading}
-            className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-200 disabled:opacity-50 ${isDark
-              ? 'text-slate-300 bg-slate-800/60 hover:bg-slate-800'
-              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-            }`}
+            className={`lg-btn-ghost px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-200 disabled:opacity-50`}
           >
             {loading ? 'Loading...' : expanded ? 'Collapse' : 'Preview'}
           </button>
           <button
             onClick={handleCopy}
             disabled={copied}
-            className={`relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl
-              transition-all duration-200 disabled:cursor-default bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30
-              ${copied ? 'bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+            className={`relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-200 disabled:cursor-default ${copyBtnBase} ${copied ? '' : ''}`}
             title="Copy full file content to clipboard"
             onMouseLeave={() => copied && setCopied(false)}
           >
@@ -137,7 +119,7 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
           </button>
           <button
             onClick={onDownload}
-            className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-200 text-white bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/30`}
+            className={`lg-btn-primary px-3 py-1.5 text-xs font-medium rounded-xl transition-all duration-200`}
           >
             Download
           </button>
@@ -145,18 +127,18 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
       </div>
 
       {expanded && (
-        <div className={`border-t px-4 py-4 ${isDark ? 'border-slate-800/60' : 'border-gray-200'}`}>
+        <div className={`border-t px-4 py-4 ${isDark ? 'border-white/8' : 'border-black/8'}`}>
           {err && <p className={`text-sm mb-3 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{err}</p>}
           {preview ? (
             <div className="space-y-2">
               <pre className={`border rounded-xl p-4 overflow-x-auto text-xs font-mono max-h-60 overflow-y-auto ${isDark
-                ? 'bg-slate-950 border-slate-800/60 text-slate-300'
-                : 'bg-gray-50 border-gray-200 text-gray-700'
+                ? 'bg-black/20 border-white/8 text-white/65'
+                : 'bg-black/4 border-black/8 text-black/70'
               }`}>
                 <code>{preview.preview || '(empty file)'}</code>
               </pre>
               {preview.total_lines > 30 && (
-                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                <p className={`text-xs ${isDark ? 'text-white/35' : 'text-black/35'}`}>
                   ... and {preview.total_lines - 30} more lines
                 </p>
               )}

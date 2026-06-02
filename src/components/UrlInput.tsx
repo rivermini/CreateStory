@@ -28,9 +28,13 @@ export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }
     }
   };
 
+  const inputBase = isDark
+    ? 'bg-white/8 border-white/12 text-white/85 placeholder:text-white/30 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50'
+    : 'bg-black/4 border-black/10 text-black/80 placeholder:text-black/30 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50';
+
   return (
     <div className="space-y-2">
-      <label htmlFor="url-input" className={`block text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+      <label htmlFor="url-input" className={`block text-sm font-medium ${isDark ? 'text-white/45' : 'text-black/45'}`}>
         Novel URL
       </label>
       <div className="relative">
@@ -41,12 +45,7 @@ export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }
           onChange={handleChange}
           onBlur={handleBlur}
           placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
-          className={`w-full px-4 py-3 rounded-xl border transition-all duration-200
-                     text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                     ${isDark
-                       ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
-                       : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
-                     }`}
+          className={`w-full px-4 py-3 rounded-xl border transition-all duration-200 text-sm focus:outline-none ${inputBase}`}
         />
         {isLoading && (
           <div className="absolute inset-y-0 right-3 flex items-center">
@@ -59,14 +58,11 @@ export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }
       </div>
 
       {isValid && siteInfo && slug && (
-        <div className={`flex items-center gap-2 text-sm rounded-xl p-3 ${isDark
-          ? 'bg-emerald-900/20 border border-emerald-800/30'
-          : 'bg-emerald-50 border border-emerald-200'
-        }`}>
-          <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="lg-glass flex items-center gap-2 text-sm p-3" style={{ border: isDark ? '1px solid rgba(52,211,153,0.2)' : '1px solid rgba(52,211,153,0.3)', background: isDark ? 'rgba(52,211,153,0.06)' : 'rgba(52,211,153,0.04)' }}>
+          <svg className="w-4 h-4 flex-shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          <span className={isDark ? 'text-slate-200' : 'text-gray-800'}>
+          <span className={isDark ? 'text-white/65' : 'text-black/65'}>
             <span className="font-medium">{siteInfo.site_name}</span>
             {' · '}Slug: <code className={isDark ? 'text-indigo-300' : 'text-indigo-600'}>{slug}</code>
           </span>
@@ -74,11 +70,8 @@ export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }
       )}
 
       {error && (
-        <div className={`flex items-center gap-2 text-sm rounded-xl p-3 ${isDark
-          ? 'bg-red-900/20 border border-red-800/30'
-          : 'bg-red-50 border border-red-200'
-        }`}>
-          <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-red-400' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="lg-glass flex items-center gap-2 text-sm p-3" style={{ border: isDark ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(239,68,68,0.3)', background: isDark ? 'rgba(239,68,68,0.06)' : 'rgba(239,68,68,0.04)' }}>
+          <svg className="w-4 h-4 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className={isDark ? 'text-red-400' : 'text-red-600'}>{error}</span>

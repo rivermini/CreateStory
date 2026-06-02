@@ -32,14 +32,12 @@ export function HomePage({ themeMode }: HomePageProps) {
   const [autoMaxChapters, setAutoMaxChapters] = useState(false);
   const outputFormat = 'md' as const;
 
-  // Load supported sites from backend on mount
   useEffect(() => {
     listSites()
       .then(sites => setSupportedSites(sites))
       .catch(() => {/* ignore — gracefully degrade */});
   }, []);
 
-  // Apply defaults loaded from backend settings on mount
   useEffect(() => {
     getSettings()
       .then(s => {
@@ -54,7 +52,6 @@ export function HomePage({ themeMode }: HomePageProps) {
       .catch(() => {/* ignore — use local defaults */});
   }, []);
 
-  // Handle retry params from failed/cancelled sessions
   useEffect(() => {
     const retryUrl = searchParams.get('retryUrl');
     const retryRangeFrom = searchParams.get('retryFrom');
@@ -75,13 +72,11 @@ export function HomePage({ themeMode }: HomePageProps) {
       setToChapter(parseInt(retryLimit) || 10);
     }
 
-    // Clear the params after applying them
     if (retryUrl || retryRangeFrom || retryRangeTo || retryLimit) {
       setSearchParams({});
     }
   }, []);
 
-  // Auto-fill to max available chapters when URL is detected and setting is enabled
   useEffect(() => {
     if (!autoMaxChapters || !totalChapterCount || totalChapterCount <= 0) return;
     setToChapter(totalChapterCount);
@@ -157,416 +152,412 @@ export function HomePage({ themeMode }: HomePageProps) {
     }
   };
 
+  const val = (dark: string, light: string) => isDark ? dark : light;
+  const c = (key: string) => {
+    const map: Record<string, [string, string]> = {
+      bg: ['bg-[#0a0a14]', 'bg-[#e8e4f8]'],
+      bgAlt: ['bg-[#0f0f1e]', 'bg-[#f0e8f8]'],
+      glassOrb1: ['#4f46e5', '#6366f1'],
+      glassOrb2: ['#7c3aed', '#8b5cf6'],
+      glassOrb3: ['#0369a1', '#0ea5e9'],
+      text: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
+      textMuted: ['text-white/40', 'text-[rgba(0,0,0,0.4)]'],
+      textSub: ['text-white/30', 'text-[rgba(0,0,0,0.3)]'],
+      textBody: ['text-white/70', 'text-[rgba(0,0,0,0.7)]'],
+      textBodyStrong: ['text-white/85', 'text-[rgba(0,0,0,0.8)]'],
+      divider: ['bg-white/6', 'bg-black/6'],
+      logBg: ['bg-black/30', 'bg-black/4'],
+      logText: ['text-white/50', 'text-[rgba(0,0,0,0.5)]'],
+      logTime: ['text-white/20', 'text-[rgba(0,0,0,0.25)]'],
+      rowBg: ['bg-white/[0.04]', 'bg-[rgba(0,0,0,0.03)]'],
+      rowBorder: ['border-white/[0.05]', 'border-black/5'],
+      cardSubtleBg: ['bg-white/[0.03]', 'bg-[rgba(0,0,0,0.02)]'],
+      progressTrack: ['bg-white/[0.06]', 'bg-white/8'],
+      inputBg: ['bg-white/[0.05]', 'bg-[rgba(0,0,0,0.04)]'],
+      inputBorder: ['border-white/[0.08]', 'border-black/8'],
+      inputText: ['text-white', 'text-[rgba(0,0,0,0.85)]'],
+    };
+    return isDark ? map[key][0] : map[key][1];
+  };
+
+  const pageBg = isDark
+    ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
+    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
+
   return (
-    <div className={`min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-            New Crawl
-          </h1>
-          <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-            Enter a novel URL to start crawling chapters
-          </p>
-        </div>
+    <div className={`min-h-screen relative overflow-hidden ${val('dark', 'light')}`} style={{ background: pageBg }}>
+      {/* Ambient orbs */}
+      <div className="lg-orb lg-orb-1" />
+      <div className="lg-orb lg-orb-2" />
+      <div className="lg-orb lg-orb-3" />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
+      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
+        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
-          {/* Left column */}
-          <div className="space-y-6">
+          {/* Page Header */}
+          <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
+            <div>
+              <h1 className={`text-2xl font-bold tracking-tight ${c('text')}`}>New Crawl</h1>
+              <p className={`text-sm mt-1 ${c('textMuted')}`}>Enter a novel URL to start crawling chapters</p>
+            </div>
+          </div>
 
-            {/* Mobile: Novel Info Preview */}
-            {isValid && (
-              <button
-                onClick={() => setMobileSheetOpen(true)}
-                className={`lg:hidden w-full rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 ${
-                  isDark
-                    ? 'bg-slate-900/60 border border-slate-800/60 hover:bg-slate-800/60'
-                    : 'bg-white border border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <div className={`w-12 h-16 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  isDark ? 'bg-slate-800/60' : 'bg-gray-100'
-                }`}>
-                  {novelMetadata?.cover_url ? (
-                    <img
-                      src={novelMetadata.cover_url}
-                      alt="Cover"
-                      className="w-full h-full rounded-lg object-cover"
-                      onError={(e) => e.currentTarget.style.display = 'none'}
-                    />
-                  ) : (
-                    <span className="text-xl">📖</span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className={`font-semibold truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                    {panelTitle || storyTitle}
-                  </p>
-                  {totalChapterCount != null && (
-                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                      {totalChapterCount.toLocaleString()} chapters
-                    </p>
-                  )}
-                </div>
-                <svg className={`w-5 h-5 flex-shrink-0 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            )}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
 
-            {/* URL Input Card */}
-            <section className={`rounded-2xl p-5 sm:p-6 space-y-5 ${isDark
-              ? 'bg-slate-900/60 border border-slate-800/60'
-              : 'bg-white border border-gray-200'
-            }`}>
-              {/* Card Header */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark
-                      ? 'bg-indigo-600/20 text-indigo-400'
-                      : 'bg-indigo-100 text-indigo-600'
-                    }`}>
-                      1
-                    </span>
-                    <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
-                      Paste a Novel URL
-                    </h2>
-                  </div>
-                  <p className={`text-xs sm:text-sm ml-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                    {supportedSites.length > 0
-                      ? `Supported: ${supportedSites.map(s => s.base_url.replace('https://', '').replace('http://', '')).join(', ')}`
-                      : 'Supported: wattpad.com'}
-                  </p>
-                </div>
+            {/* Left column */}
+            <div className="space-y-5">
+
+              {/* Mobile: Novel Info Preview */}
+              {isValid && (
                 <button
-                  onClick={() => navigate('/batch')}
-                  className={`flex-shrink-0 px-3.5 py-2 text-sm font-medium border rounded-xl transition-all duration-200 flex items-center gap-2 ${isDark
-                    ? 'text-indigo-400 border-indigo-800/50 hover:border-indigo-600 hover:bg-indigo-600/10'
-                    : 'text-indigo-600 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50'
-                  }`}
-                  title="Crawl multiple novels at once"
+                  onClick={() => setMobileSheetOpen(true)}
+                  className={`lg:hidden w-full rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 ${c('cardSubtleBg')} border ${c('rowBorder')}`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  <div className={`w-12 h-16 rounded-lg flex items-center justify-center flex-shrink-0 ${c('inputBg')}`}>
+                    {novelMetadata?.cover_url ? (
+                      <img
+                        src={novelMetadata.cover_url}
+                        alt="Cover"
+                        className="w-full h-full rounded-lg object-cover"
+                        onError={(e) => e.currentTarget.style.display = 'none'}
+                      />
+                    ) : (
+                      <span className="text-xl">📖</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className={`font-semibold truncate ${c('textBodyStrong')}`}>{panelTitle || storyTitle}</p>
+                    {totalChapterCount != null && (
+                      <p className={`text-sm ${c('textMuted')}`}>{totalChapterCount.toLocaleString()} chapters</p>
+                    )}
+                  </div>
+                  <svg className={`w-5 h-5 flex-shrink-0 ${c('textMuted')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  Batch
                 </button>
-              </div>
+              )}
 
-              {/* URL Input */}
-              <div className="space-y-2">
-                <label htmlFor="url-input" className={`block text-sm font-medium ${isDark ? 'text-slate-400' : 'text-gray-700'}`}>
-                  Novel URL
-                </label>
-                <div className="relative">
-                  <input
-                    id="url-input"
-                    type="url"
-                    value={inputUrl}
-                    onChange={(e) => handleUrlChange(e.target.value)}
-                    placeholder="https://www.wattpad.com/... or https://www.inkitt.com/... or https://www.novelworm.com/..."
-                    className={`w-full px-4 py-3.5 border rounded-xl
-                      focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200
-                      ${isDark
-                        ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500'
-                        : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
-                      }`}
-                  />
-                  {isLoading && (
-                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                      <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              {/* URL Input Card */}
+              <section className="lg-glass p-5 sm:p-6 space-y-5">
+                {/* Card Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark ? 'bg-indigo-600/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600'}`}>1</span>
+                      <h2 className={`text-base font-semibold ${c('text')}`}>Paste a Novel URL</h2>
+                    </div>
+                    <p className={`text-xs sm:text-sm ml-8 ${c('textMuted')}`}>
+                      {supportedSites.length > 0
+                        ? `Supported: ${supportedSites.map(s => s.base_url.replace('https://', '').replace('http://', '')).join(', ')}`
+                        : 'Supported: wattpad.com'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => navigate('/batch')}
+                    className={`flex-shrink-0 px-3.5 py-2 text-sm font-medium border rounded-xl transition-all duration-200 flex items-center gap-2 ${isDark
+                      ? 'text-indigo-400 border-white/[0.08] hover:border-indigo-400/50 hover:bg-indigo-400/10'
+                      : 'text-indigo-600 border-black/10 hover:border-indigo-400 hover:bg-indigo-50'
+                    }`}
+                    title="Crawl multiple novels at once"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Batch
+                  </button>
+                </div>
+
+                {/* URL Input */}
+                <div className="space-y-2">
+                  <label htmlFor="url-input" className={`block text-sm font-medium ${c('textMuted')}`}>Novel URL</label>
+                  <div className="relative">
+                    <input
+                      id="url-input"
+                      type="url"
+                      value={inputUrl}
+                      onChange={(e) => handleUrlChange(e.target.value)}
+                      placeholder="https://www.wattpad.com/... or https://www.inkitt.com/... or https://www.novelworm.com/..."
+                      className={`w-full px-4 py-3.5 border rounded-xl
+                        focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200
+                        ${isDark
+                          ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder-white/30'
+                          : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder-[rgba(0,0,0,0.3)]'
+                        }`}
+                    />
+                    {isLoading && (
+                      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                        <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Detection Result */}
+                {isValid && siteInfo && (
+                  <div className={`rounded-xl p-4 space-y-2 ${isDark
+                    ? 'bg-emerald-500/10 border border-emerald-500/20'
+                    : 'bg-emerald-50 border border-emerald-200'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <svg className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
+                      <span className={`font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>{siteInfo.site_name}</span>
+                      {storyTitle && (
+                        <span className={c('textBody')}>— {storyTitle}</span>
+                      )}
+                    </div>
+                    {siteInfo.config_name === 'wattpad' && resolvedUrl && (
+                      <p className={`text-xs ml-7 ${c('textMuted')}`}>
+                        {inputUrl.includes('/character') ? 'Character page' :
+                          inputUrl.includes('/prologue') ? 'Prologue' :
+                            inputUrl.includes('/chapter-') ? 'Chapter page' : 'Story page'} &rarr; Chapter 1
+                        {slug && <span className="ml-1">(ID: <code className={`${isDark ? 'text-indigo-300' : 'text-indigo-600'} font-mono`}>{slug}</code>)</span>}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {error && (
+                  <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${isDark
+                    ? 'bg-red-500/10 border border-red-500/20 text-red-400'
+                    : 'bg-red-50 border border-red-200 text-red-600'
+                  }`}>
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{error}</span>
+                  </div>
+                )}
+              </section>
+
+              {/* Chapter Range Card */}
+              <section className={`lg-glass p-5 sm:p-6 space-y-5 transition-all duration-200 ${inputsLocked ? 'opacity-60' : ''}`}>
+                {/* Card Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark ? 'bg-indigo-600/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600'}`}>2</span>
+                      <h2 className={`text-base font-semibold ${c('text')}`}>Chapter Range</h2>
+                    </div>
+                    <p className={`text-xs sm:text-sm ml-8 ${c('textMuted')}`}>
+                      {inputsLocked ? 'Paste a novel URL first' : 'Set which chapters to crawl'}
+                    </p>
+                  </div>
+                  {totalChapterCount != null && (
+                    <div className={`flex-shrink-0 px-3 py-2 rounded-xl text-right ${isDark
+                      ? 'bg-indigo-500/10 border border-indigo-500/20'
+                      : 'bg-indigo-50 border border-indigo-200'
+                    }`}>
+                      <p className={`text-sm font-bold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>{totalChapterCount.toLocaleString()}</p>
+                      <p className={`text-[10px] mt-0.5 leading-none ${isDark ? 'text-indigo-400/70' : 'text-indigo-500/70'}`}>max chapters</p>
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Detection Result */}
-              {isValid && siteInfo && (
-                <div className={`rounded-xl p-4 space-y-2 ${isDark
-                  ? 'bg-emerald-900/20 border border-emerald-800/30'
-                  : 'bg-emerald-50 border border-emerald-200'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <svg className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className={`font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
-                      {siteInfo.site_name}
-                    </span>
-                    {storyTitle && (
-                      <span className={`${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                        — {storyTitle}
-                      </span>
-                    )}
-                  </div>
-                  {siteInfo.config_name === 'wattpad' && resolvedUrl && (
-                    <p className={`text-xs ml-7 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                      {inputUrl.includes('/character') ? 'Character page' :
-                        inputUrl.includes('/prologue') ? 'Prologue' :
-                          inputUrl.includes('/chapter-') ? 'Chapter page' : 'Story page'} &rarr; Chapter 1
-                      {slug && <span className="ml-1">(ID: <code className={`${isDark ? 'text-indigo-300' : 'text-indigo-600'} font-mono`}>{slug}</code>)</span>}
-                    </p>
-                  )}
+                {/* Mode toggle */}
+                <div className={`flex items-center gap-1 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
+                  <button
+                    onClick={() => setRangeMode('count')}
+                    disabled={inputsLocked}
+                    className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${rangeMode === 'count'
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                      : isDark
+                        ? 'text-white/40 hover:text-white/70'
+                        : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
+                      }`}
+                  >Count</button>
+                  <button
+                    onClick={() => setRangeMode('range')}
+                    disabled={inputsLocked}
+                    className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${rangeMode === 'range'
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                      : isDark
+                        ? 'text-white/40 hover:text-white/70'
+                        : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
+                      }`}
+                  >Range</button>
                 </div>
-              )}
 
-              {error && (
-                <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${isDark
-                  ? 'bg-red-900/20 border border-red-800/30 text-red-400'
+                {/* Range inputs */}
+                {rangeMode === 'count' ? (
+                  <div className="max-w-xs w-full">
+                    <label className={`block text-sm mb-2 ${c('textMuted')}`}>
+                      Max chapters to crawl
+                      {totalChapterCount != null && (
+                        <span className={`ml-2 text-xs ${c('textSub')}`}>(max: {totalChapterCount.toLocaleString()})</span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={effectiveMax}
+                        value={toChapter}
+                        disabled={inputsLocked}
+                        onChange={(e) => handleToChapterChange(parseInt(e.target.value) || 1)}
+                        className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
+                          focus:outline-none focus:ring-2 focus:ring-indigo-500
+                          ${isDark
+                            ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                            : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
+                          }`}
+                      />
+                      {totalChapterCount != null && (
+                        <span className={`absolute right-4 top-1/2 -translate-y-1/2 text-sm pointer-events-none ${c('textMuted')}`}>
+                          / {totalChapterCount.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-end gap-3 max-w-sm w-full">
+                    <div className="flex-1 min-w-0">
+                      <label className={`block text-sm mb-2 ${c('textMuted')}`}>
+                        From chapter
+                        {totalChapterCount != null && (
+                          <span className={`ml-2 text-xs ${c('textSub')}`}>(max: {totalChapterCount.toLocaleString()})</span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={effectiveMax}
+                        value={rangeFrom}
+                        disabled={inputsLocked}
+                        onChange={(e) => handleRangeFromChange(parseInt(e.target.value) || 1)}
+                        className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
+                          focus:outline-none focus:ring-2 focus:ring-indigo-500
+                          ${isDark
+                            ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                            : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
+                          }`}
+                      />
+                    </div>
+                    <span className={`pb-3 font-medium ${c('textMuted')}`}>to</span>
+                    <div className="flex-1">
+                      <label className={`block text-sm mb-2 ${c('textMuted')}`}>
+                        To chapter
+                        {totalChapterCount != null && (
+                          <span className={`ml-2 text-xs ${c('textSub')}`}>(max: {totalChapterCount.toLocaleString()})</span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        min={rangeFrom}
+                        max={effectiveMax}
+                        value={rangeTo}
+                        disabled={inputsLocked}
+                        onChange={(e) => handleRangeToChange(parseInt(e.target.value) || rangeFrom)}
+                        className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
+                          focus:outline-none focus:ring-2 focus:ring-indigo-500
+                          ${isDark
+                            ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                            : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
+                          }`}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Format indicator */}
+                <div className="flex items-center gap-3">
+                  <label className={`text-sm ${c('textMuted')}`}>Format:</label>
+                  <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">MD</span>
+                </div>
+
+                {rangeMode === 'range' && !inputsLocked && (
+                  <p className={`text-sm ${c('textMuted')}`}>Will crawl chapters {rangeFrom}&ndash;{rangeTo} ({rangeTotal.toLocaleString()} total)</p>
+                )}
+              </section>
+
+              {/* Start Error */}
+              {startError && (
+                <div className={`flex items-center gap-3 p-4 rounded-xl text-sm ${isDark
+                  ? 'bg-red-500/10 border border-red-500/20 text-red-400'
                   : 'bg-red-50 border border-red-200 text-red-600'
                 }`}>
                   <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>{error}</span>
+                  {startError}
                 </div>
               )}
-            </section>
 
-            {/* Chapter Range Card */}
-            <section className={`rounded-2xl p-5 sm:p-6 space-y-5 transition-all duration-200 ${inputsLocked ? 'opacity-60' : ''} ${isDark
-              ? 'bg-slate-900/60 border border-slate-800/60'
-              : 'bg-white border border-gray-200'
-            }`}>
-              {/* Card Header */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark
-                      ? 'bg-indigo-600/20 text-indigo-400'
-                      : 'bg-indigo-100 text-indigo-600'
-                    }`}>
-                      2
-                    </span>
-                    <h2 className={`text-base font-semibold ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>
-                      Chapter Range
-                    </h2>
-                  </div>
-                  <p className={`text-xs sm:text-sm ml-8 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                    {inputsLocked ? 'Paste a novel URL first' : 'Set which chapters to crawl'}
-                  </p>
-                </div>
-                {totalChapterCount != null && (
-                  <div className={`flex-shrink-0 px-3 py-2 rounded-xl text-right ${isDark
-                    ? 'bg-indigo-900/30 border border-indigo-800/40'
-                    : 'bg-indigo-50 border border-indigo-200'
-                  }`}>
-                    <p className={`text-sm font-bold leading-none ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
-                      {totalChapterCount.toLocaleString()}
-                    </p>
-                    <p className={`text-[10px] mt-0.5 leading-none ${isDark ? 'text-indigo-400/70' : 'text-indigo-500/70'}`}>max chapters</p>
-                  </div>
+              {/* Start Button */}
+              <button
+                onClick={handleStart}
+                disabled={isStarting || !isValid || isPaywalled}
+                title={isPaywalled ? 'Crawling disabled — Wattpad Original' : undefined}
+                className={`w-full py-4 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${isPaywalled || isStarting || !isValid
+                  ? isDark
+                    ? 'bg-white/[0.04] text-white/30 cursor-not-allowed shadow-none border border-white/[0.05]'
+                    : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed shadow-none border border-black/5'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'
+                  }`}
+              >
+                {isStarting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Starting crawl...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Start Crawl
+                  </>
                 )}
-              </div>
+              </button>
 
-              {/* Mode toggle */}
-              <div className={`flex items-center gap-1 p-1 rounded-xl w-fit ${isDark ? 'bg-slate-800/80' : 'bg-gray-100'}`}>
-                <button
-                  onClick={() => setRangeMode('count')}
-                  disabled={inputsLocked}
-                  className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${rangeMode === 'count'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : isDark
-                      ? 'text-slate-400 hover:text-slate-200 disabled:opacity-40'
-                      : 'text-gray-500 hover:text-gray-700 disabled:opacity-40'
-                    }`}
-                >
-                  Count
-                </button>
-                <button
-                  onClick={() => setRangeMode('range')}
-                  disabled={inputsLocked}
-                  className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${rangeMode === 'range'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : isDark
-                      ? 'text-slate-400 hover:text-slate-200 disabled:opacity-40'
-                      : 'text-gray-500 hover:text-gray-700 disabled:opacity-40'
-                    }`}
-                >
-                  Range
-                </button>
-              </div>
+            </div>
 
-              {/* Range inputs */}
-              {rangeMode === 'count' ? (
-                <div className="max-w-xs w-full">
-                  <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                    Max chapters to crawl
-                    {totalChapterCount != null && (
-                      <span className={`ml-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>(max: {totalChapterCount.toLocaleString()})</span>
-                    )}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min={1}
-                      max={effectiveMax}
-                      value={toChapter}
-                      disabled={inputsLocked}
-                      onChange={(e) => handleToChapterChange(parseInt(e.target.value) || 1)}
-                      className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
-                        focus:outline-none focus:ring-2 focus:ring-indigo-500
-                        ${isDark
-                          ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-                          : 'bg-gray-50 border-gray-300 text-gray-900'
-                        }`}
-                    />
-                    {totalChapterCount != null && (
-                      <span className={`absolute right-4 top-1/2 -translate-y-1/2 text-sm pointer-events-none ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
-                        / {totalChapterCount.toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-end gap-3 max-w-sm w-full">
-                  <div className="flex-1 min-w-0">
-                    <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                      From chapter
-                      {totalChapterCount != null && (
-                        <span className={`ml-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>(max: {totalChapterCount.toLocaleString()})</span>
-                      )}
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={effectiveMax}
-                      value={rangeFrom}
-                      disabled={inputsLocked}
-                      onChange={(e) => handleRangeFromChange(parseInt(e.target.value) || 1)}
-                      className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
-                        focus:outline-none focus:ring-2 focus:ring-indigo-500
-                        ${isDark
-                          ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-                          : 'bg-gray-50 border-gray-300 text-gray-900'
-                        }`}
-                    />
-                  </div>
-                  <span className={`pb-3 font-medium ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>to</span>
-                  <div className="flex-1">
-                    <label className={`block text-sm mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                      To chapter
-                      {totalChapterCount != null && (
-                        <span className={`ml-2 text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>(max: {totalChapterCount.toLocaleString()})</span>
-                      )}
-                    </label>
-                    <input
-                      type="number"
-                      min={rangeFrom}
-                      max={effectiveMax}
-                      value={rangeTo}
-                      disabled={inputsLocked}
-                      onChange={(e) => handleRangeToChange(parseInt(e.target.value) || rangeFrom)}
-                      className={`w-full px-4 py-3 border rounded-xl disabled:opacity-50 disabled:cursor-not-allowed
-                        focus:outline-none focus:ring-2 focus:ring-indigo-500
-                        ${isDark
-                          ? 'bg-slate-800/60 border-slate-700 text-slate-100'
-                          : 'bg-gray-50 border-gray-300 text-gray-900'
-                        }`}
-                    />
-                  </div>
+            {/* Right column */}
+            <div className="space-y-4 lg:sticky lg:top-6">
+              {isValid && (
+                <div className="lg-glass p-4 rounded-2xl">
+                  <NovelInfoPanel
+                    storyTitle={panelTitle || storyTitle}
+                    siteName={siteInfo?.site_name || null}
+                    chapters={chapters}
+                    chapterCount={chapterCount}
+                    totalChapterCount={totalChapterCount}
+                    isLoading={isLoadingChapters}
+                    isDetecting={isLoading}
+                    error={chaptersError}
+                    warning={warning}
+                    isChapterUrl={isChapterUrl}
+                    novelMetadata={novelMetadata}
+                    onCrawlNovel={handleCrawlNovel}
+                    isDark={isDark}
+                    isResolvingTotal={isResolvingTotal}
+                  />
                 </div>
               )}
-
-              {/* Format indicator */}
-              <div className="flex items-center gap-3">
-                <label className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Format:</label>
-                <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">MD</span>
-              </div>
-
-              {rangeMode === 'range' && !inputsLocked && (
-                <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
-                  Will crawl chapters {rangeFrom}&ndash;{rangeTo} ({rangeTotal.toLocaleString()} total)
-                </p>
-              )}
-            </section>
-
-            {/* Start Error */}
-            {startError && (
-              <div className={`flex items-center gap-3 p-4 rounded-xl text-sm ${isDark
-                ? 'bg-red-900/20 border border-red-800/30 text-red-400'
-                : 'bg-red-50 border border-red-200 text-red-600'
-              }`}>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {startError}
-              </div>
-            )}
-
-            {/* Start Button */}
-            <button
-              onClick={handleStart}
-              disabled={isStarting || !isValid || isPaywalled}
-              title={isPaywalled ? 'Crawling disabled — Wattpad Original' : undefined}
-              className={`w-full py-4 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${isPaywalled || isStarting || !isValid
-                ? isDark
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
-                  : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'
-                }`}
-            >
-              {isStarting ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Starting crawl...
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Start Crawl
-                </>
-              )}
-            </button>
-
+            </div>
           </div>
+        </main>
 
-          {/* Right column */}
-          <div className="space-y-4 lg:sticky lg:top-6">
-            {isValid && (
-              <NovelInfoPanel
-                storyTitle={panelTitle || storyTitle}
-                siteName={siteInfo?.site_name || null}
-                chapters={chapters}
-                chapterCount={chapterCount}
-                totalChapterCount={totalChapterCount}
-                isLoading={isLoadingChapters}
-                isDetecting={isLoading}
-                error={chaptersError}
-                warning={warning}
-                isChapterUrl={isChapterUrl}
-                novelMetadata={novelMetadata}
-                onCrawlNovel={handleCrawlNovel}
-                isDark={isDark}
-                isResolvingTotal={isResolvingTotal}
-              />
-            )}
-          </div>
-        </div>
-      </main>
-
-      {/* Mobile Bottom Sheet */}
-      <MobileBottomSheet
-        isOpen={mobileSheetOpen}
-        onClose={() => setMobileSheetOpen(false)}
-        storyTitle={panelTitle || storyTitle}
-        chapters={chapters}
-        chapterCount={chapterCount}
-        totalChapterCount={totalChapterCount}
-        novelMetadata={novelMetadata}
-        onCrawlNovel={handleCrawlNovel}
-        isDark={isDark}
-      />
+        {/* Mobile Bottom Sheet */}
+        <MobileBottomSheet
+          isOpen={mobileSheetOpen}
+          onClose={() => setMobileSheetOpen(false)}
+          storyTitle={panelTitle || storyTitle}
+          chapters={chapters}
+          chapterCount={chapterCount}
+          totalChapterCount={totalChapterCount}
+          novelMetadata={novelMetadata}
+          onCrawlNovel={handleCrawlNovel}
+          isDark={isDark}
+        />
+      </div>
     </div>
   );
 }

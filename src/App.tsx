@@ -62,16 +62,47 @@ function App() {
   );
 }
 
+const SESSION_STORAGE_KEY = 'autoaudio_last_session';
+
 function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChange: (mode: ThemeMode) => void }) {
   const isDark = themeMode === 'dark';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [autoAudioSession, setAutoAudioSession] = useState<AutoAudioSession | null>(null);
+
+  const [autoAudioSession, setAutoAudioSession] = useState<AutoAudioSession | null>(() => {
+    try {
+      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const loadAutoAudioStatus = useCallback(async () => {
     try {
       const data = await getAutoAudioStatus();
-      setAutoAudioSession(data);
+      if (data) {
+        setAutoAudioSession(data);
+        if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+        } else {
+          localStorage.removeItem(SESSION_STORAGE_KEY);
+        }
+      } else if (data === null) {
+        const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const isDone = parsed.status === 'completed' || parsed.status === 'error' || parsed.status === 'stopped';
+          if (isDone) {
+            setAutoAudioSession(parsed);
+          } else {
+            localStorage.removeItem(SESSION_STORAGE_KEY);
+            setAutoAudioSession(null);
+          }
+        } else {
+          setAutoAudioSession(null);
+        }
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -130,7 +161,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
           isDark ? 'bg-slate-950' : 'bg-gray-50'
         }`}
       >
-        <div className={`pt-14 lg:pt-0 ${sidebarCollapsed ? 'pl-16 lg:pl-16' : 'pl-0 lg:pl-64'} min-h-screen transition-all duration-300`}>
+        <div className={`pt-14 lg:pt-0 ${sidebarCollapsed ? 'pl-[72px]' : 'pl-[248px]'} min-h-screen transition-all duration-300`}>
           <Suspense fallback={
             <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
               Loading...
@@ -140,8 +171,8 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
               <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/batch" element={<BatchPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/results" element={<ResultPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/results" element={<ResultPage themeMode={themeMode} />} />
+              <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} />} />
               <Route path="/bedread" element={<BedReadPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />

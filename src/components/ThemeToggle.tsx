@@ -48,24 +48,35 @@ export function ThemeToggle({ mode, onChange }: { mode: ThemeMode; onChange: (mo
         <button
             type="button"
             onClick={cycleTheme}
-            className={`relative w-9 h-9 flex items-center justify-center rounded-full border shadow-lg backdrop-blur-sm transition-all duration-200 group overflow-hidden ${
-                isDark
-                    ? 'border-slate-700 bg-slate-900/90 hover:bg-slate-800/90 hover:border-slate-600'
-                    : 'border-gray-300 bg-white/90 hover:bg-gray-100/90 hover:border-gray-400'
-            }`}
+            className="relative w-9 h-9 flex items-center justify-center rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 group overflow-hidden"
+            style={{
+                background: isDark ? 'rgba(15,15,35,0.8)' : 'rgba(255,255,255,0.8)',
+                backdropFilter: 'blur(16px)',
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(0,0,0,0.1)',
+            }}
             title={`Theme: ${mode}`}
         >
             <div
-                className={`relative w-5 h-5 transition-all duration-200 ${
-                    animating ? 'scale-0 opacity-0 rotate-90' : 'scale-100 opacity-100 rotate-0'
-                } ${isDark ? 'text-slate-400 group-hover:text-slate-200' : 'text-gray-500 group-hover:text-gray-800'}`}
+                className="relative w-5 h-5 transition-all duration-200"
+                style={{
+                    transform: animating ? 'scale(0) rotate(90deg)' : 'scale(1) rotate(0deg)',
+                    opacity: animating ? 0 : 1,
+                    color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)',
+                }}
             >
                 <ThemeIcon mode={displayMode} className="absolute inset-0 w-full h-full" />
             </div>
 
-            <div className={`absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ${
-                isDark ? 'bg-gradient-to-r from-transparent via-white/5 to-transparent' : 'bg-gradient-to-r from-transparent via-black/3 to-transparent'
-            }`} />
+            <div
+                className="absolute inset-0 transition-transform duration-700"
+                style={{
+                    transform: 'translateX(-100%)',
+                    background: isDark
+                        ? 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent)'
+                        : 'linear-gradient(90deg, transparent, rgba(0,0,0,0.04), transparent)',
+                }}
+            />
         </button>
     );
 }

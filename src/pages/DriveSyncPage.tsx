@@ -363,94 +363,96 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const successfulUploads = Array.from(uploadResults.values()).filter(r => r.success).length;
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      {/* Hero Header */}
-      <header className={`relative overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div>
-                <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Drive Sync
-                </h1>
-                <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                  Sync your crawled novels with Google Drive
-                </p>
+    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: isDark ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)' : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)' }}>
+      <div className="lg-orb lg-orb-1" />
+      <div className="lg-orb lg-orb-2" />
+      <div className="lg-orb lg-orb-3" />
+
+      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
+        {/* Hero Header */}
+        <header className="relative overflow-hidden">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div>
+                  <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
+                    Drive Sync
+                  </h1>
+                  <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                    Sync your crawled novels with Google Drive
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Status Bar */}
-          {config && !configLoading && (
-            <div className={`mt-6 mb-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 p-4 rounded-2xl ${isDark ? 'bg-slate-900/60 backdrop-blur-sm border border-slate-800/60' : 'bg-white/80 backdrop-blur-sm border border-gray-200/80'}`}>
-              {/* Status indicator */}
-              <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${hasActiveJobs ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
-                <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                  {hasActiveJobs ? 'Syncing...' : 'Ready'}
-                </span>
-              </div>
-
-              {/* Divider */}
-              <div className={`hidden sm:block w-px h-5 ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`} />
-
-              {/* Folder info */}
-              <div className="flex items-center gap-2 min-w-0">
-                <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-                <span className={`text-xs sm:text-sm truncate ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                  {config.folder_id}
-                </span>
-              </div>
-
-              {/* Stats badges */}
-              <div className="flex items-center gap-2 sm:ml-auto">
-                <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-600'}`}>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  {totalUploadable} ready to upload
+            {/* Status Bar */}
+            {config && !configLoading && (
+              <div className="mt-6 mb-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 p-4 rounded-2xl lg-glass">
+                {/* Status indicator */}
+                <div className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${hasActiveJobs ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                  <span className={`text-sm font-medium ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
+                    {hasActiveJobs ? 'Syncing...' : 'Ready'}
+                  </span>
                 </div>
-                <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-600'}`}>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+
+                {/* Divider */}
+                <div className={`hidden sm:block w-px h-5 ${isDark ? 'bg-white/6' : 'bg-black/6'}`} />
+
+                {/* Folder info */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
-                  {totalUpdatable} can update
+                  <span className={`text-xs sm:text-sm truncate ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
+                    {config.folder_id}
+                  </span>
                 </div>
-                {successfulUploads > 0 && (
-                  <div className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-500`}>
+
+                {/* Stats badges */}
+                <div className="flex items-center gap-2 sm:ml-auto">
+                  <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-white/[0.04] text-white/40' : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.4)]'}`}>
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
-                    {successfulUploads} uploaded
+                    {totalUploadable} ready to upload
                   </div>
-                )}
+                  <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-white/[0.04] text-white/40' : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.4)]'}`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    {totalUpdatable} can update
+                  </div>
+                  {successfulUploads > 0 && (
+                    <div className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {successfulUploads} uploaded
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </header>
+            )}
+          </div>
+        </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-2">
         {/* Loading state */}
         {configLoading && (
-          <div className={`flex items-center justify-center gap-4 p-8 rounded-2xl ${isDark ? 'bg-slate-900/60 border border-slate-800/60' : 'bg-white border border-gray-200'}`}>
-            <svg className="w-6 h-6 animate-spin text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="lg-glass p-8 flex items-center justify-center gap-4">
+            <svg className="w-6 h-6 animate-spin text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>Loading Drive Sync...</span>
+            <span className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Loading Drive Sync...</span>
           </div>
         )}
 
         {/* Error state */}
         {configError && (
-          <div className={`flex items-center gap-3 p-4 rounded-2xl text-sm ${isDark ? 'bg-red-900/20 border border-red-800/30 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            {configError}
+          <div className={`lg-glass-card p-4 text-sm ${isDark ? 'text-red-400' : 'text-red-500'}`}>
+            <span>{configError}</span>
           </div>
         )}
 
@@ -521,6 +523,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         credentialFileExists={credentialFileExists}
         onCredentialUploadSuccess={() => setCredentialFileExists(true)}
       />
+      </div>
     </div>
   );
 }

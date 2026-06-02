@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
@@ -11,6 +12,8 @@ interface MobileSidebarProps {
     onClose: () => void;
     autoAudioSession?: AutoAudioSession | null;
 }
+
+const PHASE_ACCENT = '#6366f1';
 
 function navActive(locationPath: string, expect: string) {
     if (expect === '/results/all') {
@@ -71,7 +74,13 @@ const navIcons: Record<string, React.ReactNode> = {
     ),
     '/supported-sites': (
         <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" />
+        </svg>
+    ),
+    '/settings': (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
     ),
 };
@@ -110,12 +119,7 @@ const NAV_SECTIONS = [
         label: 'System',
         items: [
             { to: '/supported-sites', label: 'Supported Sites', icon: navIcons['/supported-sites'] },
-            { to: '/settings', label: 'Settings', icon: (
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-            )},
+            { to: '/settings', label: 'Settings', icon: navIcons['/settings'] },
         ],
     },
 ] as const;
@@ -126,115 +130,175 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
 
     const autoAudioRunning = autoAudioSession?.status === 'running';
     const autoAudioStopping = autoAudioSession?.status === 'stopping';
+    const autoAudioBadgeActive = autoAudioRunning || autoAudioStopping;
+    const activeAccent = autoAudioBadgeActive ? '#10b981' : PHASE_ACCENT;
+
+    const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+
+    const makeNavItem = (item: { to: string; label: string; icon: React.ReactNode }) => {
+        const active = navActive(location.pathname, item.to);
+        const hovered = hoveredItem === item.to;
+        const showAutoAudioBadge = item.to === '/auto-audio' && autoAudioBadgeActive;
+
+        const showHover = hovered && !active;
+        const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
+        const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
+        const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)';
+
+        return (
+            <Link
+                key={item.to}
+                to={item.to}
+                onClick={onClose}
+                className="group relative flex items-center gap-3 transition-all duration-200"
+                style={{ textDecoration: 'none' }}
+                onMouseEnter={() => setHoveredItem(item.to)}
+                onMouseLeave={() => setHoveredItem(null)}
+            >
+                <span
+                    className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full transition-all duration-300"
+                    style={{
+                        width: active ? 4 : 0,
+                        height: active ? 24 : 0,
+                        background: activeAccent,
+                        boxShadow: active ? `0 0 10px ${activeAccent}80` : 'none',
+                    }}
+                />
+                <span
+                    className="relative flex items-center gap-3 rounded-[14px] transition-all duration-200 w-full"
+                    style={{
+                        padding: '10px 14px',
+                        background: active
+                            ? `linear-gradient(135deg, ${activeAccent}18, ${activeAccent}10)`
+                            : showHover
+                            ? hoverBg
+                            : showAutoAudioBadge
+                            ? 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.06))'
+                            : 'transparent',
+                        border: active
+                            ? `1px solid ${activeAccent}30`
+                            : showHover
+                            ? '1px solid rgba(0,0,0,0)'
+                            : showAutoAudioBadge
+                            ? '1px solid rgba(16,185,129,0.2)'
+                            : '1px solid transparent',
+                        boxShadow: active
+                            ? `0 2px 12px ${activeAccent}15, inset 0 1px 0 rgba(255,255,255,0.05)`
+                            : showHover
+                            ? 'inset 0 1px 0 rgba(255,255,255,0.04)'
+                            : 'none',
+                    }}
+                >
+                    <span
+                        className="flex-shrink-0 transition-colors duration-200"
+                        style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)') }}
+                    >
+                        {item.icon}
+                    </span>
+                    <span
+                        className="text-sm font-medium truncate transition-colors duration-200"
+                        style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)') }}
+                    >
+                        {item.label}
+                    </span>
+
+                    {showAutoAudioBadge && (
+                        <span className="ml-auto" style={{ color: '#10b981' }}>
+                            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10b981', boxShadow: '0 0 6px #10b98180' }} />
+                        </span>
+                    )}
+                    {active && !showAutoAudioBadge && (
+                        <span className="ml-auto">
+                            <span className="block rounded-full" style={{ width: 6, height: 6, background: activeAccent, boxShadow: `0 0 6px ${activeAccent}80` }} />
+                        </span>
+                    )}
+                </span>
+            </Link>
+        );
+    };
 
     return (
         <>
             {/* Backdrop */}
             <div
-                className={`lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${
-                    isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                }`}
+                className={`lg:hidden fixed inset-0 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                style={{
+                    background: 'rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                }}
                 onClick={onClose}
             />
 
             {/* Sidebar panel */}
             <aside
-                className={`lg:hidden fixed inset-0 z-50 flex flex-col transition-transform duration-300 ease-out w-64 ${
-                    isOpen ? 'translate-x-0' : '-translate-x-full'
-                } ${
-                    isDark
-                        ? 'bg-slate-900/95 border-r border-slate-800/80 backdrop-blur-xl'
-                        : 'bg-white/95 border-r border-gray-200/80 backdrop-blur-xl shadow-2xl'
-                }`}
+                className={`lg:hidden fixed inset-0 z-50 flex flex-col transition-transform duration-300 ease-out`}
+                style={{
+                    width: 280,
+                    background: isDark
+                        ? 'rgba(15, 15, 35, 0.82)'
+                        : 'rgba(255, 255, 255, 0.82)',
+                    backdropFilter: 'blur(40px) saturate(200%)',
+                    WebkitBackdropFilter: 'blur(40px) saturate(200%)',
+                    borderRight: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(255,255,255,0.6)',
+                    boxShadow: isDark
+                        ? '0 32px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)'
+                        : '0 32px 64px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)',
+                    transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+                }}
             >
                 {/* Brand */}
-                <div className={`flex items-center gap-3 px-4 py-5 border-b shrink-0 ${
-                    isDark ? 'border-slate-800' : 'border-gray-200'
-                }`}>
+                <div
+                    className="flex items-center gap-3 shrink-0"
+                    style={{
+                        padding: '20px 16px',
+                        borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+                    }}
+                >
                     <AppIcon size="xl" className="flex-shrink-0" />
                     <div className="min-w-0 flex-1">
-                        <h1 className={`text-lg font-bold truncate ${
-                            isDark ? 'text-slate-100' : 'text-gray-900'
-                        }`}>
+                        <h1 className="text-base font-bold truncate" style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)' }}>
                             Novel Crawler
                         </h1>
-                        <p className={`text-xs truncate ${
-                            isDark ? 'text-slate-500' : 'text-gray-400'
-                        }`}>
+                        <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }}>
                             Content Fetcher
                         </p>
                     </div>
                     <button
                         onClick={onClose}
-                        className={`p-1.5 rounded-lg transition-colors ${
-                            isDark
-                                ? 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/60'
-                                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
-                        }`}
+                        className="lg-icon-btn flex-shrink-0"
                         title="Close sidebar"
                     >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="" style={{ width: 14, height: 14, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
                 {/* Nav */}
-                <nav className={`flex-1 overflow-y-auto py-4 px-3 space-y-4 scrollbar-thin ${
-                    isDark ? 'scrollbar-slate-700' : 'scrollbar-gray-300'
-                }`}>
+                <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
                     {NAV_SECTIONS.map((section) => (
                         <div key={section.label}>
-                            <p className={`px-4 pb-2 text-xs font-semibold uppercase tracking-wider ${
-                                isDark ? 'text-slate-600' : 'text-gray-400'
-                            }`}>
+                            <p
+                                className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-widest"
+                                style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' }}
+                            >
                                 {section.label}
                             </p>
-                            <div className="space-y-1">
-                                {section.items.map((item) => {
-                                    const active = navActive(location.pathname, item.to);
-                                    const showAutoAudioBadge = item.to === '/auto-audio' && (autoAudioRunning || autoAudioStopping);
-                                    return (
-                                        <Link
-                                            key={item.to}
-                                            to={item.to}
-                                            onClick={onClose}
-                                            className={`group flex items-center gap-3 rounded-xl transition-all duration-200 px-4 py-2.5 ${
-                                                active
-                                                    ? isDark
-                                                        ? 'bg-indigo-600/20 text-indigo-400'
-                                                        : 'bg-indigo-50 text-indigo-700'
-                                                    : showAutoAudioBadge
-                                                        ? isDark
-                                                            ? 'bg-emerald-600/20 text-emerald-400'
-                                                            : 'bg-emerald-50 text-emerald-700'
-                                                        : isDark
-                                                            ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                                                            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80'
-                                            }`}
-                                        >
-                                            <span className="flex-shrink-0">{item.icon}</span>
-                                            <span className="text-sm font-medium truncate">{item.label}</span>
-                                            {showAutoAudioBadge && (
-                                                <span className="ml-auto flex items-center gap-1.5">
-                                                    <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-emerald-400' : 'bg-emerald-600'} animate-pulse`} />
-                                                </span>
-                                            )}
-                                            {active && !showAutoAudioBadge && (
-                                                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                            )}
-                                        </Link>
-                                    );
-                                })}
+                            <div className="space-y-0.5">
+                                {section.items.map((item) => makeNavItem(item))}
                             </div>
                         </div>
                     ))}
                 </nav>
 
                 {/* Bottom: Theme */}
-                <div className={`border-t px-4 py-4 shrink-0  ${
-                    isDark ? 'border-slate-800' : 'border-gray-200'
-                }`}>
+                <div
+                    style={{
+                        padding: '12px 12px',
+                        borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+                    }}
+                >
                     <ThemeToggle mode={themeMode} onChange={onThemeChange} />
                 </div>
             </aside>
