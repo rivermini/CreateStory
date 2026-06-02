@@ -44,6 +44,52 @@ export function ConfigModal({
   const isDark = themeMode !== 'light';
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        let json = JSON.parse(event.target?.result as string);
+
+        if (Array.isArray(json)) {
+          if (json.length === 0) return;
+          json = json[0];
+        }
+
+        if (json && typeof json === 'object' && !json.folder_id && !json.main_be_api_base_url) {
+          if (json.data) json = json.data;
+          else if (json.config) json = json.config;
+          else if (json.settings) json = json.settings;
+          else if (json.attributes) json = json.attributes;
+          else if (json.result) json = json.result;
+        }
+
+        if (Array.isArray(json)) {
+          json = json[0] || {};
+        }
+
+        if (!json || typeof json !== 'object') return;
+
+        const folderId = json.folder_id || json.folderId || json.folder || '';
+        const apiUrl = json.main_be_api_base_url || json.apiBaseUrl || json.apiUrl || json.baseUrl || '';
+        if (!folderId && !apiUrl) return;
+
+        onFormChange({
+          folder_id: folderId,
+          service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
+          main_be_api_base_url: apiUrl,
+          main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.beToken || '',
+          main_be_user_id: json.main_be_user_id || json.userId || json.main_be_user_id_header || json.xUserId || '',
+        });
+      } catch {
+        // silently ignore parse errors in modal context
+      }
+    };
+    reader.readAsText(file);
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -221,6 +267,22 @@ export function ConfigModal({
                 }`}
             />
             <p className={`text-xs mt-1.5 ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Required for checking server stories and updating chapter counts.</p>
+          </div>
+
+          {/* Upload JSON Preset */}
+          <div className="flex items-center gap-3">
+            <label className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'}`}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload JSON Preset
+              <input
+                type="file"
+                accept="application/json"
+                onChange={handleJsonFileUpload}
+                className="hidden"
+              />
+            </label>
           </div>
 
           {savingConfigError && (

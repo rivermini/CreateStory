@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
     getAutoAudioHistory,
     getAutoAudioSession,
+    removeAutoAudioSession,
     type AutoAudioHistoryEntry,
     type AutoAudioSession,
     type AutoAudioLogEntry,
@@ -71,20 +72,29 @@ interface SessionCardProps {
     expandedSession: AutoAudioSession | null;
     loadingDetail: boolean;
     isDark: boolean;
+    deleteMode: boolean;
+    isSelected: boolean;
     onToggleExpand: (sessionId: string) => void;
+    onToggleSelect: (sessionId: string) => void;
 }
 
 function SessionCard({
     session, order, isExpanded, expandedSession, loadingDetail,
-    isDark, onToggleExpand,
+    isDark, deleteMode, isSelected, onToggleExpand, onToggleSelect,
 }: SessionCardProps) {
     const dotFn = STATUS_DOT_MAP[session.status] ?? STATUS_DOT_MAP.idle;
     const dot = dotFn(isDark);
     const label = STATUS_LABEL_MAP[session.status] ?? session.status;
 
-    const cardBg = isDark ? 'bg-slate-900/60 border-slate-800/60' : 'bg-white border-gray-200';
-    const rootClasses = `${cardBg} rounded-2xl border overflow-hidden flex transition-all duration-200`;
-    const orderBg = isDark ? 'bg-indigo-900/20 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
+    const cardBg = deleteMode && isSelected
+        ? (isDark ? 'bg-red-950/30 border-red-800/50' : 'bg-red-50 border-red-200')
+        : (isDark ? 'bg-slate-900/60 border-slate-800/60' : 'bg-white border-gray-200');
+
+    const rootClasses = `${cardBg} rounded-2xl border overflow-hidden flex transition-all duration-200 ${deleteMode ? 'cursor-pointer select-none' : ''}`;
+
+    const orderBg = deleteMode && isSelected
+        ? (isDark ? 'bg-red-900/40 border-red-800/40 text-red-300' : 'bg-red-100 border-red-200 text-red-700')
+        : (isDark ? 'bg-indigo-900/20 border-indigo-800/40 text-indigo-300' : 'bg-indigo-50 border-indigo-200 text-indigo-700');
 
     const logLevelColor = (level: string) => {
         if (level === 'error') return isDark ? 'text-red-400' : 'text-red-600';
@@ -93,7 +103,10 @@ function SessionCard({
     };
 
     return (
-        <div className={rootClasses}>
+        <div
+            className={rootClasses}
+            onClick={deleteMode ? () => onToggleSelect(session.session_id) : undefined}
+        >
             {order != null && (
                 <div className={`w-12 flex-shrink-0 border-r flex flex-col items-center justify-center rounded-l-2xl transition-colors duration-200 ${orderBg}`}>
                     <span className="text-base font-bold select-none">#{order}</span>
@@ -103,7 +116,7 @@ function SessionCard({
             <div className="flex-1 min-w-0 flex flex-col">
                 <div
                     className={`px-5 py-4 flex flex-col sm:flex-row items-start gap-4 cursor-pointer`}
-                    onClick={() => onToggleExpand(session.session_id)}
+                    onClick={() => deleteMode ? onToggleSelect(session.session_id) : onToggleExpand(session.session_id)}
                 >
                     <div className="flex-shrink-0 mt-1 flex items-center gap-2">
                         <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />
@@ -284,6 +297,10 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     const [loadingDetail, setLoadingDetail] = useState(false);
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const loadMoreRef = useRef<HTMLDivElement | null>(null);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [deleteMode, setDeleteMode] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; ids: string[] }>({ open: false, ids: [] });
 
     const loadHistory = useCallback(async () => {
         setLoading(true);
@@ -337,6 +354,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
 
     const visibleSessions = filtered.slice(0, visibleCount);
     const hasMore = visibleCount < filtered.length;
+    const allVisibleSelected = visibleSessions.length > 0 && visibleSessions.every(s => selectedIds.has(s.session_id));
 
     useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filterStatus, filterMode, sortOrder, specificDate, search]);
 
@@ -367,6 +385,44 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
             setExpandedSession(null);
         } finally {
             setLoadingDetail(false);
+        }
+    };
+
+    const handleToggleSelect = (sessionId: string) => {
+        const s = new Set(selectedIds);
+        s.has(sessionId) ? s.delete(sessionId) : s.add(sessionId);
+        setSelectedIds(s);
+    };
+
+    const toggleDeleteMode = () => {
+        if (deleteMode) {
+            setDeleteMode(false);
+            setSelectedIds(new Set());
+        } else {
+            setDeleteMode(true);
+        }
+    };
+
+    const handleDeleteClick = () => {
+        if (selectedIds.size === 0) return;
+        setDeleteConfirmation({ open: true, ids: Array.from(selectedIds) });
+    };
+
+    const handleConfirmDelete = async () => {
+        try {
+            setIsDeleting(true);
+            for (const id of deleteConfirmation.ids) {
+                await removeAutoAudioSession(id);
+            }
+            setSelectedIds(new Set());
+            setDeleteConfirmation({ open: false, ids: [] });
+            setDeleteMode(false);
+            await loadHistory();
+        } catch {
+            setError('Failed to delete sessions.');
+            setDeleteConfirmation({ open: false, ids: [] });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -523,6 +579,53 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                     </button>
                 </div>
 
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center justify-start gap-2">
+                    <button
+                        onClick={toggleDeleteMode}
+                        className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${deleteMode
+                            ? (isDark ? 'text-red-300 border border-red-700 bg-red-900/20 hover:bg-red-900/40' : 'text-red-600 border border-red-300 bg-red-50 hover:bg-red-100')
+                            : (isDark ? 'text-slate-300 border border-slate-700 hover:bg-slate-800' : 'text-gray-600 border border-gray-300 hover:bg-gray-100')}`}
+                    >
+                        {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
+                    </button>
+                    {deleteMode && (
+                        <button
+                            onClick={() => allVisibleSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(visibleSessions.map(s => s.session_id)))}
+                            className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark ? 'text-slate-300 border border-slate-700 hover:bg-slate-800' : 'text-gray-600 border border-gray-300 hover:bg-gray-100'}`}
+                        >
+                            {allVisibleSelected ? 'Unselect All' : 'Select All'}
+                        </button>
+                    )}
+                    {deleteMode && selectedIds.size > 0 && (
+                        <button
+                            onClick={handleDeleteClick}
+                            disabled={isDeleting}
+                            className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 shadow-lg ${isDeleting
+                                ? (isDark ? 'bg-red-900/50 text-red-400 cursor-not-allowed shadow-none' : 'bg-red-100 text-red-400 cursor-not-allowed shadow-none')
+                                : 'text-white bg-red-600 hover:bg-red-500 shadow-red-600/30'} `}
+                        >
+                            {isDeleting ? 'Removing...' : `Delete (${selectedIds.size})`}
+                        </button>
+                    )}
+                </div>
+
+                {/* Delete Mode Banner */}
+                {deleteMode && (
+                    <div className={`rounded-2xl p-3 flex items-center justify-between gap-3 ${isDark
+                        ? 'bg-red-900/20 border border-red-800/30'
+                        : 'bg-red-50 border border-red-200'}`}>
+                        <div className="flex items-center gap-2">
+                            <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Delete Mode Active</span>
+                            {selectedIds.size > 0 && <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-500'}`}>({selectedIds.size} selected)</span>}
+                        </div>
+                        <button onClick={toggleDeleteMode} className={`text-xs underline ${isDark ? 'text-red-300 hover:text-white' : 'text-red-500 hover:text-red-700'}`}>Exit Delete Mode</button>
+                    </div>
+                )}
+
                 {/* Search */}
                 <div className="relative">
                     <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -585,7 +688,10 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                             expandedSession={expandedId === session.session_id ? expandedSession : null}
                             loadingDetail={expandedId === session.session_id && loadingDetail}
                             isDark={isDark}
+                            deleteMode={deleteMode}
+                            isSelected={selectedIds.has(session.session_id)}
                             onToggleExpand={handleToggleExpand}
+                            onToggleSelect={handleToggleSelect}
                         />
                     ))}
                     {hasMore && <div ref={loadMoreRef} className={`py-6 text-center text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Loading more sessions...</div>}
@@ -602,6 +708,38 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                         >
                             Refresh
                         </button>
+                    </div>
+                )}
+
+                {/* Delete Confirmation Modal */}
+                {deleteConfirmation.open && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                        <div className={`rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-gray-200'}`}>
+                            <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Confirm Delete</h3>
+                            <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                Are you sure you want to delete {deleteConfirmation.ids.length} session{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+                            </p>
+                            <div className="flex gap-2 justify-end pt-2">
+                                <button
+                                    onClick={() => setDeleteConfirmation({ open: false, ids: [] })}
+                                    disabled={isDeleting}
+                                    className={`px-4 py-2 text-sm rounded-xl transition-colors ${isDark
+                                        ? 'text-slate-300 bg-slate-800 hover:bg-slate-700'
+                                        : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmDelete}
+                                    disabled={isDeleting}
+                                    className={`px-4 py-2 text-sm text-white rounded-xl transition-colors shadow-lg ${isDark
+                                        ? 'bg-red-600 hover:bg-red-500 disabled:bg-red-900/50 disabled:text-red-400 shadow-red-600/30'
+                                        : 'bg-red-600 hover:bg-red-500'}`}
+                                >
+                                    {isDeleting ? 'Removing...' : 'Delete'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </main>

@@ -3,7 +3,7 @@
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
-export const FIXED_JSON_PREFIX = 'credentials/';
+export const FIXED_JSON_PREFIX = 'data/credentials/';
 
 type FetchOptions = RequestInit & { timeout?: number };
 
@@ -1127,4 +1127,11 @@ export async function getAutoAudioHistory(): Promise<AutoAudioHistoryEntry[]> {
 
 export async function getAutoAudioSession(sessionId: string): Promise<AutoAudioSession> {
   return apiFetch<AutoAudioSession>(`/api/auto-audio/history/${encodeURIComponent(sessionId)}`);
+}
+
+export async function removeAutoAudioSession(sessionId: string): Promise<{ deleted: boolean; session_id: string }> {
+  return apiFetch<{ deleted: boolean; session_id: string }>(
+    `/api/auto-audio/history/${encodeURIComponent(sessionId)}`,
+    { method: 'DELETE' }
+  );
 }

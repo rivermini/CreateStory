@@ -251,15 +251,9 @@ export function ResultPage({ themeMode }: ResultPageProps) {
           }`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>
-                  Main output
-                </p>
                 <h2 className={`mt-1 text-xl sm:text-2xl font-bold ${isDark ? 'text-emerald-100' : 'text-emerald-900'}`}>
                   Combined File
                 </h2>
-                <p className={`mt-1 text-sm ${isDark ? 'text-emerald-100/80' : 'text-emerald-800'}`}>
-                  This is the complete output file. Download or preview this first.
-                </p>
               </div>
               <button
                 onClick={handleDownloadCombined}
