@@ -61,6 +61,13 @@ class ChapterListResponse(BaseModel):
     message: str = Field(default="", description="Human-readable message or error explanation")
     story_title: Optional[str] = Field(default=None, description="Title of the novel/story")
     chapter_count: int = Field(default=0, description="Number of chapter entries returned (max 50)")
-    total_chapter_count: Optional[int] = Field(default=None, description="Total chapter count from site metadata")
+    total_chapter_count: Optional[int] = Field(default=None, description="Total chapter count from site metadata (may arrive later for NovelWorm)")
     chapters: list[ChapterEntry] = Field(default_factory=list, description="List of chapter entries (max 50)")
     warning: Optional[str] = Field(default=None, description="Non-fatal warning")
+
+
+class BinarySearchTotalResponse(BaseModel):
+    url: str = Field(..., description="The story URL that was queried")
+    total: Optional[int] = Field(default=None, description="Total chapter count, None if still running")
+    done: bool = Field(default=False, description="True when binary search has completed")
+    fetching: bool = Field(default=False, description="True when binary search is in progress")

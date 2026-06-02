@@ -2,6 +2,8 @@
 
 import logging
 import re
+import threading
+import time
 import urllib.parse
 from typing import Optional
 
@@ -9,6 +11,7 @@ from bs4 import BeautifulSoup
 from fastapi import APIRouter, Query
 
 from api.models.site_info import (
+    BinarySearchTotalResponse,
     ChapterEntry,
     ChapterListResponse,
     SiteDetectResponse,
@@ -19,6 +22,11 @@ from api.services.site_service import get_site_service
 router = APIRouter(prefix="/api/sites", tags=["Sites"])
 
 logger = logging.getLogger(__name__)
+
+# In-memory cache for binary search results keyed by story URL.
+# Value: {"total": int, "fetched_at": float, "done": bool}
+_binary_search_cache: dict[str, dict] = {}
+_cache_lock = threading.Lock()
 
 
 def is_novelworm_chapter_url(url: str) -> bool:
@@ -59,8 +67,110 @@ def _fetch_novelworm_chapters(story_url: str, timeout: int = 30) -> tuple[list[C
 
     html = body.decode("utf-8", errors="replace")
     story_title = _extract_novelworm_story_title(html)
-    entries, warning, total_count = _parse_novelworm_chapters_from_html(html, story_url)
-    return entries, warning, total_count, story_title
+    entries, warning, _ = _parse_novelworm_chapters_from_html(html, story_url)
+
+    # Kick off binary search in a background thread — return immediately so the
+    # frontend gets the TOC chapters right away.  Frontend polls /api/sites/chapters/total
+    # to retrieve the result when it's ready.
+    _start_binary_search_background(browser, story_url)
+
+    # Return the TOC count as total until binary search finishes.
+    # Frontend can distinguish "unknown total" vs "this is the actual total" via the /total endpoint.
+    return entries, warning, None, story_title
+
+
+def _start_binary_search_background(browser, story_url: str) -> None:
+    """Spawn a daemon thread to run binary search and cache the result."""
+    url_key = story_url.rstrip("/")
+
+    with _cache_lock:
+        # Skip if already cached (with fresh TTL of 1 hour)
+        entry = _binary_search_cache.get(url_key)
+        if entry and entry["done"] and (time.time() - entry["fetched_at"]) < 3600:
+            return
+        # Mark as in-progress (idempotent — safe to call twice)
+        _binary_search_cache[url_key] = {
+            "total": None,
+            "done": False,
+            "fetched_at": time.time(),
+        }
+
+    def _run():
+        total = _novelworm_binary_search_total(browser, story_url)
+        with _cache_lock:
+            _binary_search_cache[url_key] = {
+                "total": total,
+                "done": True,
+                "fetched_at": time.time(),
+            }
+        logger.info("[novelworm] Binary search background done: %d chapters for %s", total, story_url)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+
+def _novelworm_binary_search_total(browser, story_url: str, max_guess: int = 5000) -> int:
+    """Run binary search to find the highest valid chapter number for a NovelWorm story."""
+    def fetch_title(url: str) -> bool:
+        try:
+            _, _, body, _, _ = browser.fetch(url, timeout=10, skip_scroll=True)
+            html = body.decode("utf-8", errors="replace")
+            return _extract_chapter_title_from_html(html) != ""
+        except Exception:
+            return False
+
+    def extract_chapter_num(url: str) -> int | None:
+        m = re.search(r"/(\d+)/?$", url.rstrip("/"))
+        return int(m.group(1)) if m else None
+
+    low, high = 1, max_guess
+    best = 0
+
+    while low <= high:
+        mid = (low + high) // 2
+        url = f"{story_url.rstrip('/')}/{str(mid).zfill(6)}"
+        if fetch_title(url):
+            best = mid
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    # Refine around the boundary in chunks of 10, then 100
+    for delta in [10, 100]:
+        check_url = f"{story_url.rstrip('/')}/{str(best + delta).zfill(6)}"
+        if fetch_title(check_url):
+            low, high = best + 1, best + delta * 2
+            while low <= high:
+                mid = (low + high) // 2
+                url = f"{story_url.rstrip('/')}/{str(mid).zfill(6)}"
+                if fetch_title(url):
+                    best = mid
+                    low = mid + 1
+                else:
+                    high = mid - 1
+            break
+
+    return best
+
+
+def _extract_chapter_title_from_html(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    og = soup.select_one("meta[property='og:title']")
+    if og:
+        content = og.get("content", "").strip()
+        if content:
+            return content
+    selectors = [
+        "h1.chapter-title", ".chapter-header h1", ".chapter-title",
+        "[class*='chapter-title']", "h1",
+    ]
+    for sel in selectors:
+        el = soup.select_one(sel)
+        if el:
+            text = el.get_text(strip=True)
+            if text:
+                return text
+    return ""
 
 
 def _extract_novelworm_story_title(html: str) -> Optional[str]:
@@ -276,4 +386,38 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
         total_chapter_count=total_chapter_count,
         chapters=chapters,
         warning=warning if not chapters else None,
+    )
+
+
+@router.get("/chapters/total", response_model=BinarySearchTotalResponse)
+def get_binary_search_total(url: str = Query(..., description="Story-level novel URL")) -> BinarySearchTotalResponse:
+    """Poll the binary-search result for NovelWorm stories.
+
+    Returns immediately. The frontend should call this every 1-2 seconds after
+    fetching /api/sites/chapters until done=True.
+    """
+    if not url or not url.startswith(("http://", "https://")):
+        return BinarySearchTotalResponse(url=url, total=None, done=False, fetching=False)
+
+    url_key = url.rstrip("/")
+    with _cache_lock:
+        entry = _binary_search_cache.get(url_key)
+
+    if entry is None:
+        # Not started yet — front-end should call /chapters first
+        return BinarySearchTotalResponse(url=url, total=None, done=False, fetching=False)
+
+    if entry["done"]:
+        return BinarySearchTotalResponse(
+            url=url,
+            total=entry["total"],
+            done=True,
+            fetching=False,
+        )
+
+    return BinarySearchTotalResponse(
+        url=url,
+        total=entry["total"],
+        done=False,
+        fetching=True,
     )

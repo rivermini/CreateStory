@@ -106,12 +106,12 @@ class NovelWormSpider(BaseSpider):
         self._is_story_url_mode = True
 
         try:
-            chapter_links = self._collect_chapter_links_via_selenium(story_url, limit=self.limit)
+            all_links = self._collect_chapter_links_via_selenium(story_url, limit=self.limit)
         except Exception as exc:
             self.logger.error("[novelworm/story=%s] Failed to collect chapter links: %s", story_slug, exc)
-            chapter_links = []
+            all_links = []
 
-        if not chapter_links:
+        if not all_links:
             self.logger.warning("[novelworm/story=%s] No chapter links found.", story_slug)
             first_chapter_url = f"{story_url.rstrip('/')}/000001"
             req = self._build_chapter_request(first_chapter_url, chapter_index=0)
@@ -119,6 +119,7 @@ class NovelWormSpider(BaseSpider):
                 yield req
             return
 
+        # Filter links to the requested range.
         start_idx = (self._range_start - 1) if self._range_start is not None else 0
         fetch_count = (
             (self._range_end - self._range_start + 1)
@@ -126,7 +127,7 @@ class NovelWormSpider(BaseSpider):
             else self.limit
         )
 
-        for i, link in enumerate(chapter_links[start_idx:start_idx + fetch_count]):
+        for i, link in enumerate(all_links[start_idx:start_idx + fetch_count]):
             chapter_url = link.get("url", "")
             if not chapter_url:
                 continue
@@ -172,7 +173,9 @@ class NovelWormSpider(BaseSpider):
                 all_links[num] = link
 
         # Fill in any missing chapters with sequential URLs (titles are re-discovered during actual crawl).
-        scan_limit = min(limit, total) if total > 0 else limit
+        # Use range_end as the ceiling when a chapter_range is set, so the full range is covered.
+        effective_limit = self._range_end if self._range_end is not None else limit
+        scan_limit = min(effective_limit, total) if total > 0 else effective_limit
         for ch in range(1, scan_limit + 1):
             if ch in all_links:
                 continue
