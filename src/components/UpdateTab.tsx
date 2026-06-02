@@ -598,8 +598,8 @@ export function UpdateTab({
                               <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Chapters:</span>
                               <input
                                 type="number"
-                                min={1}
-                                defaultValue={1}
+                                min={newCount}
+                                defaultValue={newCount}
                                 onChange={e => {
                                   const val = parseInt(e.target.value, 10);
                                   setChapterCountInputs(prev => {
@@ -1028,8 +1028,8 @@ export function UpdateTab({
                         <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Chapters:</span>
                         <input
                           type="number"
-                          min={1}
-                          defaultValue={1}
+                          min={newCount}
+                          defaultValue={newCount}
                           onChange={e => {
                             const val = parseInt(e.target.value, 10);
                             setChapterCountInputs(prev => {
