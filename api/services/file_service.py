@@ -19,7 +19,7 @@ class FileService:
     def list_output_files(
         self,
         crawl_id: str,
-        fmt: Literal["jsonl", "csv", "txt"],
+        fmt: Literal["md"],
         custom_dir: Optional[str] = None,
     ) -> list[OutputFile]:
         output_dir = self.get_output_dir(crawl_id, custom_dir)

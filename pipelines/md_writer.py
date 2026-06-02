@@ -1,4 +1,4 @@
-"""Scrapy pipeline that writes scraped chapters to separate TXT files."""
+"""Scrapy pipeline that writes scraped chapters to separate Markdown files."""
 
 from pathlib import Path
 
@@ -17,8 +17,8 @@ class MdWriterPipeline(BasePipeline):
 
     def process_item(self, item: dict, spider: scrapy.Spider) -> dict:
         if self.active is None:
-            fmt = spider.settings.get("OUTPUT_FORMAT", "both")
-            self.active = fmt in ("txt", "both")
+            fmt = spider.settings.get("OUTPUT_FORMAT", "md")
+            self.active = fmt in ("md", "both")
             if self.active:
                 self._output_dir, self._filename_prefix = self._resolve_output_dir_and_prefix(spider)
 
@@ -30,7 +30,7 @@ class MdWriterPipeline(BasePipeline):
         novel_title = item_dict.get("novel_title", "")
         content = item_dict.get("content", "").replace("\\n", "\n")
 
-        filename = f"{sanitize_filename(self._filename_prefix)}_chapter_{chapter_number}.txt"
+        filename = f"{sanitize_filename(self._filename_prefix)}_chapter_{chapter_number}.md"
         path = self._output_dir / filename
 
         chapter_title = item_dict.get("chapter_title") or item_dict.get("title") or novel_title

@@ -15,8 +15,8 @@ class CrawlRequest(BaseModel):
         default=None,
         description='Chapter range such as "3-5" or "10-15". When set, overrides limit.',
     )
-    output_format: Literal["jsonl", "txt"] = Field(
-        default="jsonl", description="Output file format: 'jsonl' or 'txt'"
+    output_format: Literal["md"] = Field(
+        default="md", description="Output file format: 'md' (Markdown)"
     )
     novel_name: Optional[str] = Field(
         default=None,
@@ -91,7 +91,7 @@ class CrawlResult(BaseModel):
         default=None,
         description="Filename of the combined JSON file, if created.",
     )
-    combined_txt_file: Optional[str] = Field(
+    combined_md_file: Optional[str] = Field(
         default=None,
-        description="Filename of the combined TXT file, if created (txt output only).",
+        description="Filename of the combined Markdown file, if created (md output only).",
     )

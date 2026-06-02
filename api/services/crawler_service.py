@@ -138,10 +138,10 @@ class CrawlProgress:
     novel_name: str = ""
     site_name: str = ""
     completed: Optional[bool] = None
-    output_format: str = "jsonl"
+    output_format: str = "md"
     combine_chapters: bool = False
     combined_file: str = ""
-    combined_txt_file: str = ""
+    combined_md_file: str = ""
     source_url: str = ""
 
     def add_log(self, message: str, level: str = "info") -> LogEntry:
@@ -195,9 +195,9 @@ class CrawlService:
                         finished_at=entry.get("finished_at"),
                         error_message=entry.get("error_message", ""),
                         combined_file=entry.get("combined_file", ""),
-                        combined_txt_file=entry.get("combined_txt_file", entry.get("combined_md_file", "")),
+                        combined_md_file=entry.get("combined_md_file", entry.get("combined_txt_file", "")),
                         completed=entry.get("completed"),
-                        output_format=entry.get("output_format", "jsonl"),
+                        output_format=entry.get("output_format", "md"),
                         source_url=entry.get("source_url", ""),
                     )
             logger.info("Loaded %d persisted session(s) from %s", len(data), self._index_file)
@@ -220,7 +220,7 @@ class CrawlService:
                     "finished_at": p.finished_at,
                     "error_message": p.error_message,
                     "combined_file": p.combined_file,
-                    "combined_txt_file": p.combined_txt_file,
+                    "combined_md_file": p.combined_md_file,
                     "completed": p.completed,
                     "output_format": p.output_format,
                     "source_url": p.source_url,
@@ -242,7 +242,7 @@ class CrawlService:
         site_name: str,
         novel: str,
         limit: int,
-        output_format: str = "jsonl",
+        output_format: str = "md",
         chapter_range: Optional[str] = None,
         novel_name: Optional[str] = None,
         completed: Optional[bool] = None,
@@ -436,7 +436,7 @@ class CrawlService:
         if not raw:
             return []
 
-        if filepath.suffix.lower() == ".txt":
+        if filepath.suffix.lower() == ".md":
             return []
 
         if "\n" in raw:
@@ -468,7 +468,7 @@ class CrawlService:
             return
 
         output_dir = file_service.get_output_dir(crawl_id)
-        output_format = p.output_format or "jsonl"
+        output_format = p.output_format or "md"
         chapter_files = file_service.list_output_files(crawl_id, fmt=output_format)
         if not chapter_files:
             with self._lock:
@@ -531,80 +531,40 @@ class CrawlService:
 
         combined: list[dict] = []
         novel_metadata: Optional[dict] = None
-        is_text = output_format == "txt"
 
-        if is_text:
-            # Write combined .txt — full chapter content including header, separated by HR
-            txt_filename = f"{sanitize_filename(base_name)}.txt"
-            txt_path = output_dir / txt_filename
-            txt_parts: list[str] = []
-            chapters_data: list[dict] = []
-            for file_meta in chapter_files_sorted:
-                filepath = output_dir / file_meta.filename
-                try:
-                    raw = filepath.read_text(encoding="utf-8").strip()
-                    if raw:
-                        txt_parts.append(raw)
-                    chapters_data.append({"content": raw, "chapter_number": file_meta.chapter_number})
-                except OSError:
-                    continue
-            txt_text = "\n\n---\n\n".join(txt_parts).rstrip()
+        # Write combined .md — full chapter content including header, separated by HR
+        md_filename = f"{sanitize_filename(base_name)}.md"
+        md_path = output_dir / md_filename
+        md_parts: list[str] = []
+        chapters_data: list[dict] = []
+        for file_meta in chapter_files_sorted:
+            filepath = output_dir / file_meta.filename
             try:
-                with open(txt_path, "w", encoding="utf-8") as fh:
-                    fh.write(txt_text)
-            except Exception as exc:
-                with self._lock:
-                    p = self._sessions.get(crawl_id)
-                    if p:
-                        p.add_log(f"[COMBINE] Error writing TXT: {exc}", "error")
-                return
-
-            # Also write combined .json for the API
-            combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
-            combined_path = output_dir / combined_name
-            combined_payload = {
-                "crawl_id": crawl_id,
-                "chapter_count": len(chapter_files_sorted),
-                "chapters": chapters_data,
-            }
-            try:
-                with open(combined_path, "w", encoding="utf-8") as fh:
-                    _json.dump(combined_payload, fh, ensure_ascii=False, indent=2)
-            except Exception as exc:
-                with self._lock:
-                    p = self._sessions.get(crawl_id)
-                    if p:
-                        p.add_log(f"[COMBINE] Error writing JSON: {exc}", "error")
-                return
-
+                raw = filepath.read_text(encoding="utf-8").strip()
+                if raw:
+                    md_parts.append(raw)
+                chapters_data.append({"content": raw, "chapter_number": file_meta.chapter_number})
+            except OSError:
+                continue
+        md_text = "\n\n---\n\n".join(md_parts).rstrip()
+        try:
+            with open(md_path, "w", encoding="utf-8") as fh:
+                fh.write(md_text)
+        except Exception as exc:
             with self._lock:
                 p = self._sessions.get(crawl_id)
                 if p:
-                    p.combined_file = combined_name
-                    p.combined_txt_file = txt_filename
-                    p.add_log(f"[COMBINE] Created '{txt_filename}' with {len(chapter_files_sorted)} chapters.", "info")
-                    self._persist_index()
+                    p.add_log(f"[COMBINE] Error writing Markdown: {exc}", "error")
             return
 
-        # jsonl/csv: read files as JSON and write combined .json
-        for file_meta in chapter_files_sorted:
-            filepath = output_dir / file_meta.filename
-            chapters = self._read_chapter_file(filepath)
-            for obj in chapters:
-                if "chapter" not in obj or obj["chapter"] == 0:
-                    obj["chapter"] = file_meta.chapter_number
-                combined.append(obj)
-                if novel_metadata is None and isinstance(obj, dict) and obj.get("novel_metadata"):
-                    novel_metadata = obj["novel_metadata"]
-
+        # Also write combined .json for the API
         combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
+        combined_path = output_dir / combined_name
         combined_payload = {
             "crawl_id": crawl_id,
-            "chapter_count": len(combined),
-            "novel_metadata": novel_metadata,
-            "chapters": combined,
+            "chapter_count": len(chapter_files_sorted),
+            "chapters": chapters_data,
         }
-        combined_path = output_dir / combined_name
         try:
             with open(combined_path, "w", encoding="utf-8") as fh:
                 _json.dump(combined_payload, fh, ensure_ascii=False, indent=2)
@@ -619,7 +579,8 @@ class CrawlService:
             p = self._sessions.get(crawl_id)
             if p:
                 p.combined_file = combined_name
-                p.add_log(f"[COMBINE] Created '{combined_name}' with {len(combined)} chapters.", "info")
+                p.combined_md_file = md_filename
+                p.add_log(f"[COMBINE] Created '{md_filename}' with {len(chapter_files_sorted)} chapters.", "info")
                 self._persist_index()
 
     def cancel_crawl(self, crawl_id: str) -> bool:
