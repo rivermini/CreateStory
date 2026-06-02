@@ -15,33 +15,47 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
-SETTINGS_FILE = Path(__file__).parent.parent / "data" / "user_settings.json"
+SETTINGS_FILE = Path(__file__).parent.parent.parent / "data" / "user_settings.json"
+
+
+def _write_example_file(path: Path, example: dict) -> None:
+    """Write example defaults to disk for the user to see and edit."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(example, f, indent=2)
+    except Exception:
+        pass  # Non-critical — user can still see defaults in API response
+
+
+_SETTINGS_EXAMPLE = {
+    "theme": "light",
+    "crawl_mode": "count",
+    "crawl_default_count": 10,
+    "crawl_default_range_from": 1,
+    "crawl_default_range_to": 10,
+    "crawl_auto_max_chapters": False,
+    "auto_audio_rest_seconds": 30,
+    "auto_audio_external_api_base": "",
+    "auto_audio_test_story_ids": [
+        "ce6176c4-aeb5-4ee1-847f-ee56df64a386",
+        "07d59e98-d693-429b-a9d1-53ce2fd89e55",
+    ],
+}
 
 
 def _load_settings() -> dict:
     """Load settings from disk, returning defaults if absent or corrupted."""
-    defaults = {
-        "theme": "light",
-        "crawl_mode": "count",
-        "crawl_default_count": 10,
-        "crawl_default_range_from": 1,
-        "crawl_default_range_to": 10,
-        "crawl_auto_max_chapters": False,
-        "auto_audio_rest_seconds": 30,
-        "auto_audio_external_api_base": "",
-        "auto_audio_test_story_ids": [
-            "ce6176c4-aeb5-4ee1-847f-ee56df64a386",
-            "07d59e98-d693-429b-a9d1-53ce2fd89e55",
-        ],
-    }
     try:
         SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
         if SETTINGS_FILE.exists():
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                return {**defaults, **json.load(f)}
+                return {**_SETTINGS_EXAMPLE, **json.load(f)}
     except Exception as exc:
         logger.warning("Failed to load settings, using defaults: %s", exc)
-    return defaults
+    # First load — write example defaults to disk for the user to see/edit
+    _write_example_file(SETTINGS_FILE, _SETTINGS_EXAMPLE)
+    return _SETTINGS_EXAMPLE
 
 
 def _save_settings(data: dict) -> None:

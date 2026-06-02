@@ -12,10 +12,32 @@ logger = logging.getLogger(__name__)
 
 def get_drive_sync_config_path() -> Path:
     """Return the path to the drive_sync_config.json file.
-    This file lives in FastAPIServer/api/data/ and is the single source of truth
+    This file lives in FastAPIServer/data/ and is the single source of truth
     for external API credentials shared by all services.
     """
-    return Path(__file__).parent.parent / "api" / "data" / "drive_sync_config.json"
+    return Path(__file__).parent.parent / "data" / "drive_sync_config.json"
+
+
+_DRIVE_SYNC_CONFIG_EXAMPLE = {
+    "folder_id": "REPLACE_WITH_YOUR_GOOGLE_DRIVE_FOLDER_ID",
+    "service_account_json_path": "data/credentials/google-service-account.json",
+    "main_be_api_base_url": "REPLACE_WITH_YOUR_API_BASE_URL",
+    "main_be_user_id": "REPLACE_WITH_YOUR_USER_ID",
+    "enabled": True,
+    "main_category_id": "154971fe-7da7-41c4-91ee-b2a9613d6fa0",
+    "main_be_bearer_token": "REPLACE_WITH_YOUR_BEARER_TOKEN",
+}
+
+
+def _write_drive_sync_example() -> None:
+    """Write example drive sync config to disk for the user to see and edit."""
+    try:
+        path = get_drive_sync_config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(_DRIVE_SYNC_CONFIG_EXAMPLE, f, indent=2)
+    except Exception:
+        pass  # Non-critical
 
 
 def load_external_api_config() -> dict:
@@ -32,6 +54,8 @@ def load_external_api_config() -> dict:
     config_path = get_drive_sync_config_path()
 
     if not config_path.exists():
+        # First access — write example defaults to disk for the user to see/edit
+        _write_drive_sync_example()
         raise DriveSyncConfigError(
             f"Drive sync config not found at {config_path}. "
             "Please configure your settings in the Drive Sync Configuration modal."

@@ -62,21 +62,22 @@ def get_history() -> list[AutoAudioHistoryEntry]:
     sessions = service.get_history()
     entries = []
     for s in sessions:
-        story_results = s.get("story_results", [])
-        total_chapters = sum(r.get("chapters_uploaded", 0) for r in story_results)
+        # Pass through the pre-computed totals from BedReadVoices.
+        # story_results is not included in the history list response, so we
+        # rely on the values that BedReadVoices already computed.
         entries.append(AutoAudioHistoryEntry(
             session_id=s.get("session_id", ""),
             phase=s.get("phase", "phase1"),
             test_mode=s.get("test_mode", False),
-            voice=s.get("voice", ""),
+            voice=s.get("voice") or "",
             status=s.get("status", ""),
             current_step=s.get("current_step", 0),
             current_step_desc=s.get("current_step_desc", ""),
             started_at=s.get("started_at"),
             finished_at=s.get("finished_at"),
             error=s.get("error", ""),
-            total_stories=len(story_results),
-            total_chapters=total_chapters,
+            total_stories=s.get("total_stories", 0),
+            total_chapters=s.get("total_chapters", 0),
         ))
     return entries
 
@@ -89,3 +90,13 @@ def get_session(session_id: str) -> AutoAudioSessionResponse:
     if session_data is None:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
     return AutoAudioSessionResponse(**session_data)
+
+
+@router.delete("/history/{session_id}")
+def delete_session(session_id: str) -> dict:
+    """Delete a session from history."""
+    service = get_auto_audio_service()
+    deleted = service.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
+    return {"deleted": True, "session_id": session_id}

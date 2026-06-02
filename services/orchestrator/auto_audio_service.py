@@ -85,6 +85,15 @@ class AutoAudioServiceProxy:
             resp.raise_for_status()
             return resp.json()
 
+    def delete_session(self, session_id: str) -> bool:
+        url = f"{_bedreadvoices_url()}/api/auto-audio/history/{session_id}"
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.delete(url)
+            if resp.status_code == 404:
+                return False
+            resp.raise_for_status()
+            return True
+
 
 _auto_audio_service: Optional[AutoAudioServiceProxy] = None
 

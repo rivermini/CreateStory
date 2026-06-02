@@ -48,5 +48,4 @@ Thumbs.db
 
 # Data / output
 output/
-api/data/*.json
-!api/data/.gitkeep
+data/
