@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
     getAutoAudioHistory,
     getAutoAudioSession,
-    removeAutoAudioSession,
+    removeAutoAudioSessions,
     type AutoAudioHistoryEntry,
     type AutoAudioSession,
     type AutoAudioLogEntry,
@@ -411,9 +411,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     const handleConfirmDelete = async () => {
         try {
             setIsDeleting(true);
-            for (const id of deleteConfirmation.ids) {
-                await removeAutoAudioSession(id);
-            }
+            await removeAutoAudioSessions(deleteConfirmation.ids);
             setSelectedIds(new Set());
             setDeleteConfirmation({ open: false, ids: [] });
             setDeleteMode(false);

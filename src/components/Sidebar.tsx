@@ -118,8 +118,9 @@ const NAV_ITEMS_SYSTEM: NavItem[] = [
 
 const NAV_SECTIONS = [
     { label: 'Novel Crawler', items: NAV_ITEMS_CRAWL },
-    { label: 'BedReads Voices', items: [...NAV_ITEMS_AUTO_AUDIO, ...NAV_ITEMS_AUDIO] },
-    { label: 'BedReads DriveSync', items: NAV_ITEMS_BEDREADS },
+    { label: 'Audio', items: NAV_ITEMS_AUDIO },
+    { label: 'DriveSync', items: NAV_ITEMS_BEDREADS },
+    { label: 'Auto Audio', items: NAV_ITEMS_AUTO_AUDIO },
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ] as const;
 

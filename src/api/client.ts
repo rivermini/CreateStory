@@ -1135,3 +1135,14 @@ export async function removeAutoAudioSession(sessionId: string): Promise<{ delet
     { method: 'DELETE' }
   );
 }
+
+export async function removeAutoAudioSessions(sessionIds: string[]): Promise<{ deleted: number; requested: number }> {
+  return apiFetch<{ deleted: number; requested: number }>(
+    '/api/auto-audio/history/batch-delete',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_ids: sessionIds }),
+    }
+  );
+}
