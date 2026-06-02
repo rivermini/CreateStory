@@ -1,6 +1,7 @@
 """FastAPI application entry point for the NovelCrawler microservice."""
 
 import logging
+import signal
 import sys
 from pathlib import Path
 
@@ -53,6 +54,17 @@ async def on_startup():
         browser._resolve_chromedriver()
     except Exception as exc:
         logger.warning("Startup ChromeDriver preload failed: %s", exc)
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    try:
+        from handlers.selenium_handler import _get_browser
+        browser = _get_browser()
+        browser.close()
+        logger.info("Selenium browser closed on shutdown.")
+    except Exception as exc:
+        logger.warning("Shutdown browser close failed: %s", exc)
 
 
 @app.get("/api", tags=["Health"])

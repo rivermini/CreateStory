@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import urllib.parse
 from typing import Optional
 
 from api.models.site_info import NovelMetadata, SiteDetectResponse, SiteInfoResponse
@@ -64,6 +65,145 @@ def _fetch_wattpad_metadata(story_id: str) -> Optional[NovelMetadata]:
         season_current=season_current,
         season_total=season_total,
     )
+
+
+_INKITT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/136.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.inkitt.com/",
+}
+
+
+def _fetch_inkitt_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata]]:
+    try:
+        import json
+        import requests
+        from bs4 import BeautifulSoup
+
+        resp = requests.get(url, headers=_INKITT_HEADERS, timeout=20)
+        if resp.status_code != 200:
+            return None, None
+        if _inkitt_blocked(resp.text):
+            return None, None
+        soup = BeautifulSoup(resp.text, "html.parser")
+    except Exception:
+        return None, None
+
+    json_ld: dict = {}
+    for script in soup.select("script[type='application/ld+json']"):
+        raw = script.get_text(strip=True)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        candidates = data if isinstance(data, list) else [data]
+        for candidate in candidates:
+            if isinstance(candidate, dict) and candidate.get("@type") == "Article":
+                json_ld = candidate
+                break
+        if json_ld:
+            break
+
+    title = _inkitt_story_title(soup, json_ld)
+    author = _inkitt_author(soup, json_ld)
+    cover_url = _inkitt_cover_url(soup, json_ld)
+    description = json_ld.get("description") or _meta_content(soup, "meta[name='description']")
+    chapter_count = _inkitt_chapter_count(soup, url)
+
+    metadata = NovelMetadata(
+        title=title,
+        author=author,
+        authors=[author] if author else None,
+        cover_url=cover_url,
+        description=description,
+        num_parts=chapter_count,
+    )
+    return title, metadata
+
+
+def _inkitt_blocked(html: str) -> bool:
+    head = html[:10000]
+    return (
+        "Just a moment" in head
+        or "Attention Required! | Cloudflare" in head
+        or "/cdn-cgi/challenge-platform/" in head
+    )
+
+
+def _inkitt_story_title(soup, json_ld: dict) -> Optional[str]:
+    h1 = soup.select_one("h1")
+    if h1:
+        text = _clean_inkitt_text(h1.get_text(" ", strip=True))
+        if text:
+            return text
+
+    headline = json_ld.get("headline")
+    if headline:
+        return _clean_inkitt_text(str(headline))
+
+    og_title = _meta_content(soup, "meta[property='og:title']")
+    if og_title:
+        return re.sub(r"\s+-\s+Free Novel by .*$", "", og_title, flags=re.IGNORECASE).strip()
+    return None
+
+
+def _inkitt_author(soup, json_ld: dict) -> Optional[str]:
+    author = _meta_content(soup, "meta[name='author']")
+    if author:
+        return author
+
+    json_author = json_ld.get("author")
+    if isinstance(json_author, dict) and json_author.get("name"):
+        return _clean_inkitt_text(str(json_author["name"]))
+
+    for anchor in soup.select(".author-link"):
+        text = _clean_inkitt_text(anchor.get_text(" ", strip=True))
+        if text and "stories" not in text.lower():
+            return text
+    return None
+
+
+def _inkitt_cover_url(soup, json_ld: dict) -> Optional[str]:
+    image = json_ld.get("image")
+    if isinstance(image, dict) and image.get("url"):
+        return str(image["url"])
+    if isinstance(image, str):
+        return image
+    return _meta_content(soup, "meta[property='og:image']") or None
+
+
+def _inkitt_chapter_count(soup, url: str) -> Optional[int]:
+    story_id_match = re.search(r"/stories/(\d+)", urllib.parse.urlparse(url).path)
+    if not story_id_match:
+        return None
+
+    story_id = story_id_match.group(1)
+    chapter_numbers: set[int] = set()
+    for anchor in soup.select("a[href*='/stories/'][href*='/chapters/']"):
+        href = urllib.parse.urljoin("https://www.inkitt.com", anchor.get("href", ""))
+        match = re.search(r"/stories/(\d+)/chapters/(\d+)", urllib.parse.urlparse(href).path)
+        if match and match.group(1) == story_id:
+            chapter_numbers.add(int(match.group(2)))
+    return len(chapter_numbers) or None
+
+
+def _meta_content(soup, selector: str) -> Optional[str]:
+    element = soup.select_one(selector)
+    if not element:
+        return None
+    value = element.get("content", "")
+    return _clean_inkitt_text(value) if value else None
+
+
+def _clean_inkitt_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.replace("\ufeff", " ")).strip()
 
 
 class SiteService:
@@ -138,6 +278,9 @@ class SiteService:
                         story_title = (el.get(attr, "") or el.get_text(strip=True)).strip() if attr else el.get_text(strip=True)
                         if story_title:
                             break
+
+        elif site_info.config_name == "inkitt":
+            story_title, novel_meta = _fetch_inkitt_metadata(url)
 
         return SiteDetectResponse(
             site=SiteInfoResponse(

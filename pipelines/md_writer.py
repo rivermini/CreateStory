@@ -33,7 +33,7 @@ class MdWriterPipeline(BasePipeline):
         filename = f"{sanitize_filename(self._filename_prefix)}_chapter_{chapter_number}.txt"
         path = self._output_dir / filename
 
-        chapter_title = item_dict.get("chapter_title", novel_title)
+        chapter_title = item_dict.get("chapter_title") or item_dict.get("title") or novel_title
 
         lines = [f"{filename}: {chapter_title}", "", content]
         with open(path, "w", encoding="utf-8") as fh:

@@ -28,6 +28,17 @@ logger = logging.getLogger(__name__)
 _binary_search_cache: dict[str, dict] = {}
 _cache_lock = threading.Lock()
 
+_INKITT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/136.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.inkitt.com/",
+}
+
 
 def is_novelworm_chapter_url(url: str) -> bool:
     return bool(re.search(r"/\d{3,}/?$", url.rstrip("/")))
@@ -308,6 +319,133 @@ def _extract_wattpad_story_id(url: str) -> Optional[str]:
     return None
 
 
+def _fetch_inkitt_chapters(story_url: str, timeout: int = 30) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
+    try:
+        import requests
+        resp = requests.get(story_url, headers=_INKITT_HEADERS, timeout=timeout)
+    except Exception as exc:
+        return [], f"Inkitt request failed: {exc}", None, None
+
+    if resp.status_code != 200:
+        return [], f"Inkitt returned HTTP {resp.status_code}", None, None
+
+    html = resp.text
+    if _is_inkitt_blocked(html):
+        return [], "Inkitt returned a Cloudflare challenge. Retry after browser cookies are available.", None, None
+
+    soup = BeautifulSoup(html, "html.parser")
+    story_id = _extract_inkitt_story_id(story_url)
+    if not story_id:
+        return [], "Could not extract Inkitt story ID from URL", None, None
+
+    story_title = _extract_inkitt_story_title(soup)
+    entries_by_number: dict[int, ChapterEntry] = {}
+
+    for anchor in soup.select("a[href*='/stories/'][href*='/chapters/']"):
+        href = anchor.get("href", "")
+        if not href:
+            continue
+
+        absolute = urllib.parse.urljoin("https://www.inkitt.com", href)
+        match = re.search(r"/stories/(\d+)/chapters/(\d+)", urllib.parse.urlparse(absolute).path)
+        if not match or match.group(1) != story_id:
+            continue
+
+        chapter_number = int(match.group(2))
+        title = _clean_inkitt_chapter_title(anchor.get_text(" ", strip=True), chapter_number)
+        existing = entries_by_number.get(chapter_number)
+        if existing and existing.title:
+            continue
+        entries_by_number[chapter_number] = ChapterEntry(
+            chapter_number=chapter_number,
+            title=title,
+            url=absolute,
+        )
+
+    current_chapter = _extract_inkitt_chapter_number(story_url) or 1
+    if current_chapter not in entries_by_number:
+        chapter_title = _extract_inkitt_page_chapter_title(soup) or f"Chapter {current_chapter}"
+        entries_by_number[current_chapter] = ChapterEntry(
+            chapter_number=current_chapter,
+            title=chapter_title,
+            url=story_url,
+        )
+
+    entries = [entries_by_number[n] for n in sorted(entries_by_number)]
+    total_count = len(entries)
+    if not entries:
+        return [], "No chapter links found on this Inkitt page", None, story_title
+
+    return entries[:50], None, total_count, story_title
+
+
+def _is_inkitt_blocked(html: str) -> bool:
+    head = html[:10000]
+    return (
+        "Just a moment" in head
+        or "Attention Required! | Cloudflare" in head
+        or "/cdn-cgi/challenge-platform/" in head
+    )
+
+
+def _extract_inkitt_story_id(url: str) -> Optional[str]:
+    match = re.search(r"/stories/(\d+)", urllib.parse.urlparse(url).path)
+    return match.group(1) if match else None
+
+
+def _extract_inkitt_chapter_number(url: str) -> Optional[int]:
+    match = re.search(r"/stories/\d+/chapters/(\d+)", urllib.parse.urlparse(url).path)
+    return int(match.group(1)) if match else None
+
+
+def _extract_inkitt_story_title(soup: BeautifulSoup) -> Optional[str]:
+    title = soup.select_one("h1")
+    if title:
+        text = _clean_inkitt_text(title.get_text(" ", strip=True))
+        if text:
+            return text
+
+    og_title = soup.select_one("meta[property='og:title']")
+    if og_title:
+        text = _clean_inkitt_text(og_title.get("content", ""))
+        if text:
+            text = re.sub(r"\s+-\s+Free Novel by .*$", "", text, flags=re.IGNORECASE)
+            return text
+
+    if soup.title:
+        text = _clean_inkitt_text(soup.title.get_text(" ", strip=True))
+        text = re.sub(r"\s+by\s+.+?\s+at\s+Inkitt$", "", text, flags=re.IGNORECASE)
+        if text:
+            return text
+    return None
+
+
+def _extract_inkitt_page_chapter_title(soup: BeautifulSoup) -> Optional[str]:
+    for selector in [
+        "article#story-text-container h2.chapter-head-title",
+        "article#story-text-container h2",
+        "h2.chapter-head-title",
+    ]:
+        element = soup.select_one(selector)
+        if element:
+            text = _clean_inkitt_text(element.get_text(" ", strip=True))
+            if text:
+                return text
+    return None
+
+
+def _clean_inkitt_chapter_title(title: str, chapter_number: int) -> str:
+    cleaned = _clean_inkitt_text(title)
+    cleaned = re.sub(rf"^{chapter_number}\s+", "", cleaned).strip()
+    if not cleaned or cleaned.lower() in {"next chapter", "previous chapter"}:
+        return f"Chapter {chapter_number}"
+    return cleaned
+
+
+def _clean_inkitt_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.replace("\ufeff", " ")).strip()
+
+
 @router.get("/detect", response_model=SiteDetectResponse)
 def detect_site(url: str = Query(..., description="Novel URL to detect")) -> SiteDetectResponse:
     """Detect which site a URL belongs to and extract the novel slug."""
@@ -367,6 +505,12 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
             if fetch_warning:
                 warning = fetch_warning
             if not story_title and fetched_story_title:
+                story_title = fetched_story_title
+        elif site_info.config_name == "inkitt":
+            chapters, fetch_warning, total_chapter_count, fetched_story_title = _fetch_inkitt_chapters(story_url)
+            if fetch_warning:
+                warning = fetch_warning
+            if fetched_story_title:
                 story_title = fetched_story_title
         else:
             warning = f"Chapter listing is not supported for '{site_info.site_name}'"

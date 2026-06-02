@@ -66,6 +66,7 @@ def slug_from_url(url: str) -> Optional[str]:
     url = url.rstrip("/")
 
     for pattern in [
+        r"/stories/([^/?#]+)",
         r"/novel/([^/?#]+)",
         r"/story/([^/?#]+)",
         r"/book/([^/?#]+)",
