@@ -6,6 +6,7 @@ Supports:
   Story URL: scrapy crawl wattpad -a novel="https://www.wattpad.com/story/..." -a limit=5
 """
 
+import asyncio
 import logging
 import re
 import time
@@ -75,10 +76,19 @@ class WattpadSpider(BaseSpider):
         "Referer": "https://www.wattpad.com/",
     }
 
-    def __init__(self, *args, novel: str = "", limit: int = 1, chapter_range: str = "", **kwargs):
+    def __init__(
+        self,
+        *args,
+        novel: str = "",
+        limit: int = 1,
+        chapter_range: str = "",
+        api_concurrency: int = 4,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.start_urls: list[str] = [novel.strip()] if novel.strip() else []
         self.limit: int = max(1, int(limit))
+        self.api_concurrency: int = max(1, min(8, int(api_concurrency)))
         self._range_start: Optional[int] = None
         self._range_end: Optional[int] = None
 
@@ -96,6 +106,8 @@ class WattpadSpider(BaseSpider):
             raise ValueError(
                 "Spider argument 'novel' is required (a full Wattpad chapter or story URL)."
             )
+
+        self.novel_slug = self._extract_story_id(self.start_urls[0]) or self._story_id_from_url(self.start_urls[0])
 
         cfg = load_site_config(self.config_name)
         self.selector_config: SelectorConfig = self.build_selector_config(cfg)
@@ -161,8 +173,8 @@ class WattpadSpider(BaseSpider):
             if self._range_start is not None and self._range_end is not None
             else self.limit
         )
-        async for r in self._dispatch_chapters(story_id, all_parts, start_idx, fetch_count):
-            yield r
+        async for item in self._yield_story_chapters_from_api(story_id, all_parts, start_idx, fetch_count):
+            yield item
 
     def _log_story_header(self, story_data: dict) -> None:
         title = story_data.get("title", "?")
@@ -261,6 +273,99 @@ class WattpadSpider(BaseSpider):
             "season_total": season_total,
         }
         return {k: v for k, v in meta.items() if v is not None}
+
+    async def _yield_story_chapters_from_api(
+        self,
+        story_id: str,
+        parts: list[dict],
+        start_idx: int = 0,
+        fetch_count: Optional[int] = None,
+    ) -> AsyncGenerator[Chapter, None]:
+        if fetch_count is None:
+            fetch_count = self.limit
+
+        limited = parts[start_idx:start_idx + fetch_count]
+        self.limit = len(limited)
+        self.novel_slug = story_id
+        self.logger.info(
+            "[wattpad/story=%s] Will crawl %d chapters via API with concurrency=%d.",
+            story_id,
+            len(limited),
+            self.api_concurrency,
+        )
+
+        novel_meta = self._build_novel_metadata(self._story_data) if self._story_data else {}
+        story_title = (self._story_data or {}).get("title") or story_id
+
+        for batch_start in range(0, len(limited), self.api_concurrency):
+            batch = limited[batch_start:batch_start + self.api_concurrency]
+            results = await asyncio.gather(
+                *[
+                    asyncio.to_thread(self._fetch_part_content_api_first, part)
+                    for part in batch
+                ],
+                return_exceptions=True,
+            )
+
+            for offset, (part, result) in enumerate(zip(batch, results)):
+                chapter_index = start_idx + batch_start + offset
+                chapter_number = chapter_index + 1
+                part_url = part.get("url") or ""
+                chapter_url = urllib.parse.urljoin("https://www.wattpad.com", part_url)
+                chapter_title = part.get("title") or f"Chapter {chapter_number}"
+
+                if isinstance(result, Exception):
+                    self.logger.warning(
+                        "[wattpad/story=%s] API fetch failed for chapter %d '%s': %s",
+                        story_id,
+                        chapter_number,
+                        chapter_title,
+                        result,
+                    )
+                    self._skipped_locked += 1
+                    continue
+
+                cleaned_content = clean_chapter_content(result or "")
+                word_count = len(cleaned_content.split())
+                if word_count < 200:
+                    self.logger.warning(
+                        "Chapter %d '%s' has only %d words after extraction.",
+                        chapter_number,
+                        chapter_title,
+                        word_count,
+                    )
+
+                self._chapters_crawled += 1
+                self._saved_chapters += 1
+                self.logger.info(
+                    "[%d/%d] Crawled chapter %d: %s",
+                    self._chapters_crawled,
+                    self.limit,
+                    chapter_number,
+                    chapter_title,
+                )
+
+                yield Chapter(
+                    novel_slug=story_id,
+                    novel_title=story_title,
+                    chapter_number=chapter_number,
+                    title=chapter_title,
+                    content=cleaned_content,
+                    source_url=chapter_url,
+                    novel_metadata=novel_meta if batch_start == 0 and offset == 0 else None,
+                )
+
+    def _fetch_part_content_api_first(self, part: dict) -> str:
+        chapter_id = str(part.get("id") or "")
+        if not chapter_id:
+            return ""
+
+        content = self._fetch_chapter_content_api(chapter_id)
+        if content:
+            return content
+
+        chapter_url = urllib.parse.urljoin("https://www.wattpad.com", part.get("url") or "")
+        return self._fetch_chapter_content_pages(chapter_url, chapter_id)
 
     async def _dispatch_chapters(
         self, story_id: str, parts: list[dict], start_idx: int = 0, fetch_count: Optional[int] = None,
