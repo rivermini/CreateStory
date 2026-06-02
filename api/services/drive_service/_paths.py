@@ -14,16 +14,13 @@ import threading
 # -------------------------------------------------------------------------
 # Resolve from _paths.py location:
 #   _paths.py lives at: BedReadDriveSync/api/services/drive_service/_paths.py
-#   So we go up 4 levels to project root (Services/), then into credentials/
+#   parents[0]=drive_service/, [1]=services/, [2]=api/, [3]=BedReadDriveSync/, [4]=Services/
+#   5 chained .parent calls = parents[4] = Services/
 # Shared data/config folder — points to the FastAPIServer's data directory
 # so that config is shared across all microservices.
-# Resolve from _paths.py location:
-#   _paths.py lives at: BedReadDriveSync/api/services/drive_service/_paths.py
-#   parents[0]=drive_service/, [1]=services/, [2]=api/, [3]=BedReadDriveSync/, [4]=Services/
 _DATA_DIR = (
-    Path(__file__).parent.parent.parent.parent.resolve()
+    Path(__file__).resolve().parent.parent.parent.parent.parent
     / "FastAPIServer"
-    / "api"
     / "data"
 )
 _CONFIG_FILE = _DATA_DIR / "drive_sync_config.json"
@@ -32,10 +29,10 @@ _HISTORY_FILE = _DATA_DIR / "drive_sync_history.json"
 _JOBS_FILE = _DATA_DIR / "sync_jobs.json"
 _JOBS_LOCK_FILE = _DATA_DIR / "sync_jobs.lock"
 
-# Shared credentials folder (Services/FastAPIServer/credentials/) — fallback when
+# Shared credentials folder (Services/FastAPIServer/data/credentials/) — fallback when
 # the configured service_account_json_path is not found locally.
 _SHARED_CREDENTIALS_DIR = (
-    Path(__file__).resolve().parents[4] / "FastAPIServer" / "credentials"
+    Path(__file__).resolve().parent.parent.parent.parent.parent / "FastAPIServer" / "data" / "credentials"
 )
 
 # -------------------------------------------------------------------------

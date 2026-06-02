@@ -64,8 +64,12 @@ class DriveAPIMixin:
             if self._config is None:
                 raise RuntimeError("Drive sync config not set.")
             creds_path = Path(self._config.service_account_json_path)
-            if not creds_path.is_absolute():
-                creds_path = _SHARED_CREDENTIALS_DIR / creds_path.name
+            if creds_path.is_absolute():
+                pass  # use as-is
+            elif creds_path.name:
+                # Strip "data/credentials/" prefix and resolve under _SHARED_CREDENTIALS_DIR
+                stripped = creds_path.name
+                creds_path = _SHARED_CREDENTIALS_DIR / stripped
             if not creds_path.is_file():
                 raise FileNotFoundError(
                     f"Service account JSON not found at configured path or {_SHARED_CREDENTIALS_DIR}"

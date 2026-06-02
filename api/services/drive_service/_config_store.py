@@ -16,6 +16,16 @@ from api.services.drive_service._paths import (
     _STATUS_FILE,
 )
 
+_DRIVE_SYNC_CONFIG_EXAMPLE = {
+    "folder_id": "REPLACE_WITH_YOUR_GOOGLE_DRIVE_FOLDER_ID",
+    "service_account_json_path": "data/credentials/google-service-account.json",
+    "main_be_api_base_url": "REPLACE_WITH_YOUR_API_BASE_URL",
+    "main_be_user_id": "REPLACE_WITH_YOUR_USER_ID",
+    "enabled": True,
+    "main_category_id": "154971fe-7da7-41c4-91ee-b2a9613d6fa0",
+    "main_be_bearer_token": "REPLACE_WITH_YOUR_BEARER_TOKEN",
+}
+
 
 class ConfigStoreMixin:
     """
@@ -40,10 +50,23 @@ class ConfigStoreMixin:
         path = Path(self._config.service_account_json_path) if self._config else _CONFIG_FILE
         return path
 
+    def _write_example_config(self) -> None:
+        """Write example drive sync config to disk for the user to see and edit."""
+        try:
+            _DATA_DIR.mkdir(parents=True, exist_ok=True)
+            _CONFIG_FILE.write_text(
+                json.dumps(_DRIVE_SYNC_CONFIG_EXAMPLE, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass  # Non-critical
+
     def _load_config(self) -> None:
         from api.models.drive_sync import DriveSyncConfig
 
         if not _CONFIG_FILE.exists():
+            # First access — write example defaults to disk for the user to see/edit
+            self._write_example_config()
             return
         try:
             raw = json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
