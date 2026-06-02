@@ -87,3 +87,13 @@ def get_session(session_id: str) -> AutoAudioSessionResponse:
     if session_data is None:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
     return AutoAudioSessionResponse(**session_data)
+
+
+@router.delete("/history/{session_id}")
+def delete_session(session_id: str) -> dict:
+    """Delete a session from history."""
+    service = get_auto_audio_service()
+    deleted = service.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
+    return {"deleted": True, "session_id": session_id}

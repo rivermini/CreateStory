@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 def get_drive_sync_config_path() -> Path:
     """Return the path to the drive_sync_config.json file.
-    This file lives in FastAPIServer/api/data/ and is the single source of truth
+    This file lives in FastAPIServer/data/ and is the single source of truth
     for external API credentials shared by all services.
     """
-    return Path(__file__).parent.parent / "api" / "data" / "drive_sync_config.json"
+    # BedReadVoices/api/config.py -> BedReadVoices/ -> Services/ -> FastAPIServer/data/
+    return Path(__file__).parent.parent.parent / "FastAPIServer" / "data" / "drive_sync_config.json"
 
 
 def load_external_api_config() -> dict:

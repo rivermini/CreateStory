@@ -37,7 +37,7 @@ def _get_settings() -> dict:
     if _settings_cache is not None and (now - _settings_cache_time) < _SETTINGS_CACHE_TTL:
         return _settings_cache
     try:
-        settings_file = Path(__file__).parent.parent.parent / "api" / "data" / "user_settings.json"
+        settings_file = Path(__file__).parent.parent.parent.parent / "FastAPIServer" / "data" / "user_settings.json"
         with open(settings_file, "r", encoding="utf-8") as f:
             _settings_cache = json.load(f)
             _settings_cache_time = now
@@ -1575,6 +1575,22 @@ class AutoAudioService:
         if active and active.session_id == session_id:
             return active.to_dict()
         return None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Remove a session from history. Returns True if deleted, False if not found."""
+        history = self._load_history()
+        original_len = len(history)
+        history = [s for s in history if s.get("session_id") != session_id]
+        if len(history) == original_len:
+            return False
+        self._persist_sessions(history)
+        log_path = self._logs_dir / f"session_{session_id}.json"
+        if log_path.exists():
+            try:
+                log_path.unlink()
+            except Exception:
+                pass
+        return True
 
 
 _auto_audio_service: Optional[AutoAudioService] = None

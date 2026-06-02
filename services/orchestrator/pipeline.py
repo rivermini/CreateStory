@@ -13,6 +13,7 @@ from .batch import BatchPoller
 from .client import ExternalAPIClient
 from .config import _get_settings
 from .models import AutoAudioSession, StoryMissingAudio, StoryResult
+from .session import SessionManager
 from .upload import UploadManager
 
 
@@ -25,11 +26,13 @@ class StoryPipeline:
         bedread_client: BedReadClient,
         batch_poller: BatchPoller,
         upload_manager: UploadManager,
+        session_mgr: SessionManager,
     ) -> None:
         self._api = api_client
         self._br = bedread_client
         self._poller = batch_poller
         self._upload = upload_manager
+        self._session_mgr = session_mgr
 
     def process_story(self, session: AutoAudioSession, story: StoryMissingAudio) -> StoryResult:
         result = StoryResult(
@@ -352,6 +355,9 @@ class StoryPipeline:
         session.add_story_result(result.to_dict())
         if result.chapters_uploaded > 0:
             session.record_completed_story(story.story_id)
+            self._session_mgr.save_completed_stories(
+                session.phase, session.completed_stories
+            )
         total_ch = sum(len(s.missing_chapters) for s in all_stories)
         done_ch = sum(r.get("chapters_uploaded", 0) for r in session.story_results)
         session.update_chapter_progress(done_ch, total_ch)

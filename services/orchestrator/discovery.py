@@ -27,15 +27,14 @@ class StoryDiscovery:
 
         if session.test_mode:
             session.add_log(2, f"Test mode: checking {len(story_ids)} test story IDs")
-            stories_raw: list[dict] = [
-                {**story_metadata.get(sid, {}), "storyId": sid,
-                 "_chapters": self._api.fetch_story_chapters(sid)}
-                for sid in story_ids
-                if self._api.fetch_story_chapters(sid)
-            ]
-            for raw in stories_raw:
-                if "title" not in raw or not raw["title"]:
-                    raw["title"] = f"Test Story {raw.get('storyId', sid)[:8]}"
+            stories_raw: list[dict] = []
+            for sid in story_ids:
+                chapters = self._api.fetch_story_chapters(sid)
+                if chapters:
+                    entry = {**story_metadata.get(sid, {}), "storyId": sid, "_chapters": chapters}
+                    if "title" not in entry or not entry["title"]:
+                        entry["title"] = f"Test Story {sid[:8]}"
+                    stories_raw.append(entry)
         else:
             session.add_log(2, f"Discovering stories with missing audio among {len(story_ids)} stories...")
             stories_raw = [

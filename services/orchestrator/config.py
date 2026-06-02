@@ -26,13 +26,20 @@ def _get_settings() -> dict:
     if _settings_cache is not None and (now - _settings_cache_time) < _SETTINGS_CACHE_TTL:
         return _settings_cache
     try:
-        settings_file = Path(__file__).parent.parent.parent / "api" / "data" / "user_settings.json"
-        with open(settings_file, "r", encoding="utf-8") as f:
-            _settings_cache = json.load(f)
-            _settings_cache_time = now
+        # Read from FastAPIServer's user_settings.json (the canonical source, updated by the frontend).
+        # BedReadVoices and FastAPIServer are siblings under Services/.
+        # From BedReadVoices/services/orchestrator/config.py, go up 4 levels to Services/, then into FastAPIServer/data/.
+        brv_root = Path(__file__).parent.parent.parent.parent
+        settings_file = brv_root / "FastAPIServer" / "data" / "user_settings.json"
+        if settings_file.exists():
+            with open(settings_file, "r", encoding="utf-8") as f:
+                _settings_cache = json.load(f)
+                _settings_cache_time = now
+                return _settings_cache
     except Exception:
-        _settings_cache = {}
-    return _settings_cache if _settings_cache is not None else {}
+        pass
+    _settings_cache = {}
+    return _settings_cache
 
 
 def _get_bedreadvoices_url() -> str:

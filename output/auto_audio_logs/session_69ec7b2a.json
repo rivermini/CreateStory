@@ -1,0 +1,188 @@
+{
+  "session_id": "69ec7b2a",
+  "phase": "phase1",
+  "test_mode": true,
+  "voice": null,
+  "status": "completed",
+  "current_step": 11,
+  "current_step_desc": "Saving session log",
+  "current_story": "AUTO1",
+  "progress": {
+    "done": 1,
+    "total": 1
+  },
+  "chapter_progress": {
+    "done": 2,
+    "total": 2
+  },
+  "stories_missing_audio": [
+    {
+      "storyId": "4150d4dd-ddce-4fc0-b79b-c79fd5673820",
+      "title": "AUTO1",
+      "missingCount": 2,
+      "existingVoice": null
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-06-01 23:31:00",
+      "step": 0,
+      "message": "Session 69ec7b2a started (phase=phase1, test_mode=True, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:00",
+      "step": 0,
+      "message": "Test mode: using 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:00",
+      "step": 1,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:01",
+      "step": 1,
+      "message": "Found 1 stories needing update",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:01",
+      "step": 2,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:01",
+      "step": 2,
+      "message": "Found 1 stories to check \u2014 starting chapter checks...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:02",
+      "step": 2,
+      "message": "Found 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:02",
+      "step": 1,
+      "message": "Phase 1: 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:31:02",
+      "step": 3,
+      "message": "[1/1] AUTO1",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:26",
+      "step": 6,
+      "message": "Downloading chapter 1 from BedReadVoices (batch_id=f9caa461)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:28",
+      "step": 6,
+      "message": "Downloaded chapter 1: 5639212 bytes",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:30",
+      "step": 6,
+      "message": "Compressed: 5639212 -> 693013 bytes (87.7% reduction, 48kbps opus)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:30",
+      "step": 6,
+      "message": "Compressed chapter 5d1e03b1-8338-47aa-8035-47503efbebd1: 5639212 -> 693013 bytes",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:34",
+      "step": 6,
+      "message": "Uploaded chapter 5d1e03b1-8338-47aa-8035-47503efbebd1 audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:34",
+      "step": 9,
+      "message": "Deleted 1 local audio file(s): ['C:\\\\Users\\\\hatru\\\\AppData\\\\Local\\\\Temp\\\\bedread_auto_f9caa461\\\\chapter_1.wav']",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:34",
+      "step": 6,
+      "message": "Downloading chapter 2 from BedReadVoices (batch_id=f9caa461)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:36",
+      "step": 6,
+      "message": "Downloaded chapter 2: 3931180 bytes",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:37",
+      "step": 6,
+      "message": "Compressed: 3931180 -> 484940 bytes (87.7% reduction, 48kbps opus)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:37",
+      "step": 6,
+      "message": "Compressed chapter e708414f-7f28-42e3-8b66-641978b4fab2: 3931180 -> 484940 bytes",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:40",
+      "step": 6,
+      "message": "Uploaded chapter e708414f-7f28-42e3-8b66-641978b4fab2 audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:40",
+      "step": 9,
+      "message": "Deleted 1 local audio file(s): ['C:\\\\Users\\\\hatru\\\\AppData\\\\Local\\\\Temp\\\\bedread_auto_f9caa461\\\\chapter_2.wav']",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:40",
+      "step": 9,
+      "message": "Removed batch temp directory: C:\\Users\\hatru\\AppData\\Local\\Temp\\bedread_auto_f9caa461",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:40",
+      "step": 7,
+      "message": "Done: generated=2, uploaded=2",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:33:40",
+      "step": 11,
+      "message": "Auto audio session completed successfully",
+      "level": "info"
+    }
+  ],
+  "started_at": "2026-06-01 23:31:00",
+  "finished_at": "2026-06-01 23:33:40",
+  "error": "",
+  "story_results": [
+    {
+      "story_id": "4150d4dd-ddce-4fc0-b79b-c79fd5673820",
+      "story_title": "AUTO1",
+      "chapters_generated": 2,
+      "chapters_uploaded": 2,
+      "upload_errors": [],
+      "error": ""
+    }
+  ],
+  "completed_stories": [
+    "4150d4dd-ddce-4fc0-b79b-c79fd5673820"
+  ]
+}

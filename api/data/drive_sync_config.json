@@ -1,9 +1,0 @@
-{
-  "folder_id": "19AA24nze_o9BKd4g8EH7TCAC8A3gp5aV",
-  "service_account_json_path": "credentials/nova-crawler-drive-sync-445ff578305c.json",
-  "main_be_api_base_url": "https://api-novel.santngo.com",
-  "main_be_user_id": "0cb73bf8-55a4-436c-bd23-23bb29c03c67",
-  "enabled": true,
-  "main_category_id": "154971fe-7da7-41c4-91ee-b2a9613d6fa0",
-  "main_be_bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRvb2xAbm92ZWwuY29tIiwic3ViIjoiMGNiNzNiZjgtNTVhNC00MzZjLWJkMjMtMjNiYjI5YzAzYzY3IiwiaWF0IjoxNzc5OTQwMTU2fQ.NKBP50NsdpVJ-Z-P1CISmZqdzARgyIDOlo2UWS7kWjU"
-}

@@ -48,7 +48,7 @@ class AutoAudioService:
         self._discovery = StoryDiscovery(self._api)
         self._session_mgr = SessionManager(self._logs_dir)
         self._pipeline = StoryPipeline(
-            self._api, self._br, self._poller, self._uploader
+            self._api, self._br, self._poller, self._uploader, self._session_mgr
         )
 
     def _run_session(self, session: AutoAudioSession) -> None:
@@ -331,11 +331,6 @@ class AutoAudioService:
         stories: list[StoryMissingAudio],
     ) -> None:
         self._pipeline.run(session, stories, session.phase)
-        # After pipeline completes, persist completed stories
-        if session.completed_stories:
-            self._session_mgr.save_completed_stories(
-                session.phase, session.completed_stories
-            )
 
     def start_session(self, phase: str, test_mode: bool, voice: Optional[str],
                       limit: int = 20) -> str:
@@ -401,6 +396,10 @@ class AutoAudioService:
         if active and active.session_id == session_id:
             return active.to_dict()
         return None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Remove a session from history. Returns True if deleted, False if not found."""
+        return self._session_mgr.delete_session(session_id)
 
 
 _auto_audio_service: Optional[AutoAudioService] = None

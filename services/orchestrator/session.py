@@ -89,6 +89,22 @@ class SessionManager:
         except Exception as exc:
             logger.warning("Failed to persist auto audio session history: %s", exc)
 
+    def delete_session(self, session_id: str) -> bool:
+        """Remove a session from history. Returns True if deleted, False if not found."""
+        history = self.load_history()
+        original_len = len(history)
+        history = [s for s in history if s.get("session_id") != session_id]
+        if len(history) == original_len:
+            return False
+        self._persist_sessions(history)
+        log_path = self._logs_dir / f"session_{session_id}.json"
+        if log_path.exists():
+            try:
+                log_path.unlink()
+            except Exception:
+                pass
+        return True
+
     def _persist_sessions(self, sessions: list[dict]) -> None:
         try:
             with open(self._history_file, "w", encoding="utf-8") as fh:

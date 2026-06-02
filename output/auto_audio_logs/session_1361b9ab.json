@@ -1,0 +1,99 @@
+{
+  "session_id": "1361b9ab",
+  "phase": "phase1",
+  "test_mode": true,
+  "voice": null,
+  "status": "completed",
+  "current_step": 11,
+  "current_step_desc": "Saving session log",
+  "current_story": "AUTO1",
+  "progress": {
+    "done": 0,
+    "total": 0
+  },
+  "chapter_progress": {
+    "done": 0,
+    "total": 1
+  },
+  "stories_missing_audio": [
+    {
+      "storyId": "4150d4dd-ddce-4fc0-b79b-c79fd5673820",
+      "title": "AUTO1",
+      "missingCount": 1,
+      "existingVoice": "af_bella"
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-06-01 23:52:44",
+      "step": 0,
+      "message": "Session 1361b9ab started (phase=phase1, test_mode=True, voice=random)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:44",
+      "step": 0,
+      "message": "Test mode: using 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:44",
+      "step": 1,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:44",
+      "step": 1,
+      "message": "Found 1 stories needing update",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:44",
+      "step": 2,
+      "message": "Test mode: checking 1 test story IDs",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:45",
+      "step": 2,
+      "message": "Found 1 stories to check \u2014 starting chapter checks...",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:46",
+      "step": 2,
+      "message": "Found 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:46",
+      "step": 1,
+      "message": "Phase 1: 1 stories with missing audio",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:46",
+      "step": 3,
+      "message": "Skipping 1 already-processed story(ies) (found 0 remaining)",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:46",
+      "step": 3,
+      "message": "All phase 1 stories already processed \u2014 nothing to do",
+      "level": "info"
+    },
+    {
+      "timestamp": "2026-06-01 23:52:46",
+      "step": 11,
+      "message": "Auto audio session completed successfully",
+      "level": "info"
+    }
+  ],
+  "started_at": "2026-06-01 23:52:44",
+  "finished_at": "2026-06-01 23:52:46",
+  "error": "",
+  "story_results": [],
+  "completed_stories": []
+}

@@ -144,7 +144,12 @@ class ExternalAPIClient:
         return []
 
     def fetch_story_chapters(self, story_id: str) -> list[dict]:
-        data = self.get(f"/api/v1/story/{story_id}/chapters")
+        try:
+            data = self.get(f"/api/v1/story/{story_id}/chapters")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return []
+            raise
         if isinstance(data, dict):
             chapters = data.get("data", [])
             if isinstance(chapters, list):
@@ -173,7 +178,12 @@ class ExternalAPIClient:
         return chapter_map
 
     def fetch_story_audio(self, story_id: str) -> list[dict]:
-        data = self.get(f"/api/v1/story/{story_id}/audio")
+        try:
+            data = self.get(f"/api/v1/story/{story_id}/audio")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return []
+            raise
         if isinstance(data, dict):
             items = data.get("data", [])
             if isinstance(items, list):
