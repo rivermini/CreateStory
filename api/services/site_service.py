@@ -257,27 +257,13 @@ class SiteService:
 
         elif site_info.config_name == "novelworm":
             try:
-                from handlers.selenium_handler import _get_browser
-                browser = _get_browser()
-                _, _, body, _, _ = browser.fetch(url, timeout=30, skip_scroll=True)
-                html = body.decode("utf-8", errors="replace")
+                from api.services.novelworm_api import NovelWormApiClient
+
+                story_title, metadata = NovelWormApiClient(timeout=20).resolve_metadata(url)
+                if metadata:
+                    novel_meta = NovelMetadata(**metadata)
             except Exception:
-                html = ""
-            if html:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(html, "html.parser")
-                for sel, attr in [
-                    ("meta[property='og:title']", "content"),
-                    ("h1.story-title", None),
-                    (".story-header h1", None),
-                    (".story-info h1", None),
-                    ("[class*='story-title']", None),
-                ]:
-                    el = soup.select_one(sel)
-                    if el:
-                        story_title = (el.get(attr, "") or el.get_text(strip=True)).strip() if attr else el.get_text(strip=True)
-                        if story_title:
-                            break
+                story_title = None
 
         elif site_info.config_name == "inkitt":
             story_title, novel_meta = _fetch_inkitt_metadata(url)

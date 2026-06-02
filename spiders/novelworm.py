@@ -6,20 +6,24 @@ Supports:
   Chapter URL: scrapy crawl novelworm -a novel="https://www.novelworm.com/.../000001" -a limit=5
 """
 
-import json
+import asyncio
 import logging
 import re
 import time
 import urllib.parse
-from pathlib import Path
 from typing import Generator
 
 import scrapy
 from bs4 import BeautifulSoup
 from scrapy.http import Response, TextResponse
 
+from api.services.novelworm_api import (
+    NovelWormApiClient,
+    NovelWormChapterContent,
+    NovelWormChapterRef,
+    NovelWormStory,
+)
 from configs.base_config import load_site_config
-from handlers.selenium_handler import _site_cookie_file as _get_cookie_file
 from models.chapter import Chapter
 from spiders.base_spider import BaseSpider, SelectorConfig
 from utils.cleaner import clean_chapter_content
@@ -42,10 +46,19 @@ class NovelWormSpider(BaseSpider):
     _SELECTOR_NOVEL_TITLE = ".story-title, .story-header h1, .story-info h1"
     _SELECTOR_AUTHOR = ".author-name, .author a, [class*='author']"
 
-    def __init__(self, *args, novel: str = "", limit: int = 1, chapter_range: str = "", **kwargs):
+    def __init__(
+        self,
+        *args,
+        novel: str = "",
+        limit: int = 1,
+        chapter_range: str = "",
+        api_concurrency: int = 4,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.start_urls: list[str] = [novel.strip()] if novel.strip() else []
         self.limit: int = max(1, int(limit))
+        self.api_concurrency: int = max(1, min(8, int(api_concurrency)))
         self._range_start: int | None = None
         self._range_end: int | None = None
 
@@ -64,6 +77,9 @@ class NovelWormSpider(BaseSpider):
                 "Spider argument 'novel' is required (a full NovelWorm chapter or story URL)."
             )
 
+        self.novel_slug = self._extract_story_slug(self.start_urls[0])
+        self._api_client = NovelWormApiClient(timeout=20, retries=2)
+
         cfg = load_site_config(self.config_name)
         self.selector_config: SelectorConfig = self.build_selector_config(cfg)
 
@@ -75,6 +91,20 @@ class NovelWormSpider(BaseSpider):
 
     async def start(self):
         url = self.start_urls[0]
+        api_yielded = False
+        try:
+            async for item in self._start_via_api():
+                api_yielded = True
+                yield item
+            return
+        except Exception as exc:
+            if api_yielded:
+                raise
+            self.logger.warning(
+                "[novelworm] Fast API crawl failed before yielding items; falling back to Selenium: %s",
+                exc,
+            )
+
         if self._is_story_url(url):
             async for req in self._start_from_story_page():
                 yield req
@@ -97,6 +127,123 @@ class NovelWormSpider(BaseSpider):
         if match:
             return int(match.group(1))
         return None
+
+    async def _start_via_api(self) -> Generator[Chapter, None, None]:
+        start_url = self.start_urls[0]
+        story = await asyncio.to_thread(self._api_client.resolve_story, start_url)
+
+        self.novel_slug = story.slug
+        self._story_title = story.title
+        self._story_author = story.author
+        self._is_story_url_mode = self._is_story_url(start_url)
+
+        selected_refs = self._select_api_chapters(story, start_url)
+        if not selected_refs:
+            raise RuntimeError("NovelWorm API returned no matching chapter references")
+
+        self.limit = len(selected_refs)
+        self.logger.info(
+            "[novelworm/story=%s] API resolved %d chapter record(s); crawling %d with concurrency=%d.",
+            story.slug,
+            len(story.chapters),
+            len(selected_refs),
+            self.api_concurrency,
+        )
+
+        for batch_start in range(0, len(selected_refs), self.api_concurrency):
+            batch = selected_refs[batch_start:batch_start + self.api_concurrency]
+            results = await asyncio.gather(
+                *[asyncio.to_thread(self._api_client.fetch_chapter, ref) for ref in batch],
+                return_exceptions=True,
+            )
+
+            for ref, result in zip(batch, results):
+                if isinstance(result, Exception):
+                    self.logger.warning(
+                        "[novelworm] API chapter fetch failed for %s: %s",
+                        ref.url,
+                        result,
+                    )
+                    continue
+
+                chapter = self._chapter_from_api(story, result)
+                if chapter is None:
+                    continue
+                yield chapter
+
+        if self._chapters_crawled == 0:
+            raise RuntimeError("NovelWorm API returned no usable chapter content")
+
+    def _select_api_chapters(self, story: NovelWormStory, start_url: str) -> list[NovelWormChapterRef]:
+        chapters = story.chapters
+        if not chapters:
+            return []
+
+        if self._is_story_url(start_url):
+            if self._range_start is not None and self._range_end is not None:
+                return [
+                    ref for ref in chapters
+                    if self._range_start <= ref.chapter_number <= self._range_end
+                ]
+            return chapters[:self.limit]
+
+        start_pos = 0
+        if story.start_index_id:
+            for i, ref in enumerate(chapters):
+                if ref.id == story.start_index_id:
+                    start_pos = i
+                    break
+        else:
+            url_num = self._chapter_number_from_url(start_url)
+            if url_num is not None:
+                for i, ref in enumerate(chapters):
+                    if ref.index_num == url_num:
+                        start_pos = i
+                        break
+
+        return chapters[start_pos:start_pos + self.limit]
+
+    def _chapter_from_api(
+        self,
+        story: NovelWormStory,
+        chapter_data: NovelWormChapterContent,
+    ) -> Chapter | None:
+        ref = chapter_data.ref
+        url_normalized = self._normalize_url(ref.url)
+        if url_normalized in self._seen_urls:
+            return None
+        self._seen_urls.add(url_normalized)
+
+        content = self._api_client.html_to_text(chapter_data.content_html)
+        cleaned_content = clean_chapter_content(content)
+        word_count = len(cleaned_content.split())
+
+        if word_count < 100:
+            self.logger.warning(
+                "Chapter %d '%s' has only %d words.",
+                ref.chapter_number,
+                chapter_data.title or ref.title,
+                word_count,
+            )
+
+        self._chapters_crawled += 1
+        self.logger.info(
+            "[%d/%d] Crawled chapter %d: %s",
+            self._chapters_crawled,
+            self.limit,
+            ref.chapter_number,
+            chapter_data.title or ref.title,
+        )
+
+        return Chapter(
+            novel_slug=story.slug,
+            novel_title=story.title,
+            chapter_number=ref.chapter_number,
+            title=chapter_data.title or ref.title,
+            content=cleaned_content,
+            source_url=ref.url,
+            novel_metadata=story.metadata,
+        )
 
     async def _start_from_story_page(self) -> Generator:
         story_url = self.start_urls[0]

@@ -64,30 +64,19 @@ def is_chapter_url(url: str) -> bool:
 
 def _fetch_novelworm_chapters(story_url: str, timeout: int = 30) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
     try:
-        from handlers.selenium_handler import _get_browser
-        browser = _get_browser()
+        from api.services.novelworm_api import NovelWormApiClient
+
+        client = NovelWormApiClient(timeout=timeout)
+        story = client.resolve_story(story_url)
     except Exception as exc:
-        logger.warning("[novelworm] Could not get Selenium browser: %s", exc)
-        return [], f"Selenium unavailable: {exc}", None, None
+        logger.warning("[novelworm] API chapter list failed for story page: %s", exc)
+        return [], f"NovelWorm API request failed: {exc}", None, None
 
-    try:
-        final_url, status, body, headers, _ = browser.fetch(story_url, timeout=timeout, skip_scroll=True)
-    except Exception as exc:
-        logger.warning("[novelworm] Selenium fetch failed for story page: %s", exc)
-        return [], f"Selenium fetch failed: {exc}", None, None
-
-    html = body.decode("utf-8", errors="replace")
-    story_title = _extract_novelworm_story_title(html)
-    entries, warning, _ = _parse_novelworm_chapters_from_html(html, story_url)
-
-    # Kick off binary search in a background thread — return immediately so the
-    # frontend gets the TOC chapters right away.  Frontend polls /api/sites/chapters/total
-    # to retrieve the result when it's ready.
-    _start_binary_search_background(browser, story_url)
-
-    # Return the TOC count as total until binary search finishes.
-    # Frontend can distinguish "unknown total" vs "this is the actual total" via the /total endpoint.
-    return entries, warning, None, story_title
+    entries = [
+        ChapterEntry(chapter_number=ref.chapter_number, title=ref.title, url=ref.url)
+        for ref in story.chapters[:50]
+    ]
+    return entries, None, len(story.chapters), story.title
 
 
 def _start_binary_search_background(browser, story_url: str) -> None:
