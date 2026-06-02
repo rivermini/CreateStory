@@ -80,7 +80,12 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
                 ? 'bg-indigo-900/40 text-indigo-400'
                 : 'bg-indigo-100 text-indigo-600'
               }`}>{'{}'}</span>
-            ) : filename.endsWith('.txt') || filename.endsWith('.md') ? (
+            ) : filename.endsWith('.md') ? (
+              <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
+                ? 'bg-cyan-900/40 text-cyan-400'
+                : 'bg-cyan-100 text-cyan-600'
+              }`}>MD</span>
+            ) : filename.endsWith('.txt') ? (
               <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-xs font-bold ${isDark
                 ? 'bg-cyan-900/40 text-cyan-400'
                 : 'bg-cyan-100 text-cyan-600'

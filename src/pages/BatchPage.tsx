@@ -45,7 +45,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
   const navigate = useNavigate();
   const [entries, setEntries] = useState<BatchEntry[]>([createEntry(1, ''), createEntry(2, '')]);
   const [nextId, setNextId] = useState(3);
-  const outputFormat = 'txt' as const;
+  const outputFormat = 'md' as const;
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState('');
   const [supportedSites, setSupportedSites] = useState<SiteInfoResponse[]>([]);
@@ -374,7 +374,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
           <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Applied to all novels in this batch</p>
           <div className="flex items-center gap-3">
             <label className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Format:</label>
-            <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">TXT</span>
+            <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">MD</span>
           </div>
         </section>
 

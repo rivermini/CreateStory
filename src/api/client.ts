@@ -79,7 +79,7 @@ export interface CrawlRequest {
   site_name: string;
   novel: string;
   limit: number;
-  output_format: 'jsonl' | 'txt';
+  output_format: 'jsonl' | 'md';
   chapter_range?: string;
   novel_name?: string;
   completed?: boolean;

@@ -30,7 +30,7 @@ export function HomePage({ themeMode }: HomePageProps) {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [supportedSites, setSupportedSites] = useState<SiteInfoResponse[]>([]);
   const [autoMaxChapters, setAutoMaxChapters] = useState(false);
-  const outputFormat = 'txt' as const;
+  const outputFormat = 'md' as const;
 
   // Load supported sites from backend on mount
   useEffect(() => {
@@ -476,7 +476,7 @@ export function HomePage({ themeMode }: HomePageProps) {
               {/* Format indicator */}
               <div className="flex items-center gap-3">
                 <label className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Format:</label>
-                <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">TXT</span>
+                <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">MD</span>
               </div>
 
               {rangeMode === 'range' && !inputsLocked && (
