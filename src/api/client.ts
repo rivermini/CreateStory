@@ -335,6 +335,7 @@ export interface SettingsResponse {
   auto_audio_rest_seconds: number;
   auto_audio_external_api_base: string;
   auto_audio_test_story_ids: string[];
+  tts_concurrency: number;
 }
 
 export async function getSettings(): Promise<SettingsResponse> {

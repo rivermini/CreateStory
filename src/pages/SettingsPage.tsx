@@ -34,6 +34,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(30);
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
+  const [ttsConcurrency, setTtsConcurrency] = useState(1);
 
   // Drive Sync Config Modal
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
@@ -67,6 +68,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 30);
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
+        setTtsConcurrency(s.tts_concurrency ?? 1);
       })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
@@ -271,6 +273,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         crawl_auto_max_chapters: crawlAutoMaxChapters,
         auto_audio_rest_seconds: autoAudioRestSeconds,
         auto_audio_test_story_ids: autoAudioTestStoryIds,
+        tts_concurrency: ttsConcurrency,
       });
       setSettings(updated);
       onThemeChange(localTheme === 'dark' ? 'dark' : 'light');
@@ -695,6 +698,47 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             />
             <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
               Comma or newline separated story IDs. Used in test mode.
+            </p>
+          </div>
+        </section>
+
+        {/* TTS Concurrency Section */}
+        <section className="lg-glass p-5 sm:p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+            </div>
+            <div>
+              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>TTS Concurrency</h2>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Number of concurrent voice generation workers</p>
+            </div>
+          </div>
+
+          <div className="max-w-xs">
+            <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+              Concurrent workers
+            </label>
+            <div className={`flex items-center gap-3 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
+              {[1, 2].map(v => (
+                <button
+                  key={v}
+                  onClick={() => setTtsConcurrency(v)}
+                  className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    ttsConcurrency === v
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                      : isDark
+                        ? 'text-white/40 hover:text-white/70'
+                        : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
+              1 = slower but stable. 2 = faster batch processing.
             </p>
           </div>
         </section>
