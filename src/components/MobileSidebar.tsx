@@ -62,6 +62,11 @@ const navIcons: Record<string, React.ReactNode> = {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
     ),
+    '/drive-sync/content-update': (
+        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h8M8 11h8m-8 4h5M5 5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5z" />
+        </svg>
+    ),
     '/auto-audio': (
         <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -105,6 +110,7 @@ const NAV_SECTIONS = [
         label: 'BedReads',
         items: [
             { to: '/drive-sync', label: 'Drive Sync', icon: navIcons['/drive-sync'] },
+            { to: '/drive-sync/content-update', label: 'Content Update', icon: navIcons['/drive-sync/content-update'] },
             { to: '/drive-sync/history', label: 'Sync History', icon: navIcons['/drive-sync/history'] },
         ],
     },

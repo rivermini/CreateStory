@@ -729,6 +729,96 @@ export async function updateChapters(folderId: string): Promise<UpdateChaptersRe
   });
 }
 
+export interface ContentUpdateStoryRef {
+  id: string;
+  title: string;
+  maxChapter: number;
+}
+
+export interface ContentUpdateSearchResponse {
+  found: boolean;
+  exact_match: ContentUpdateStoryRef | null;
+  stories: ContentUpdateStoryRef[];
+  message: string;
+}
+
+export interface ContentUpdateFolderRef {
+  id: string;
+  name: string;
+  prefix: string;
+  display_name: string;
+  is_completed: boolean;
+  chapter_count?: number | null;
+  extended_chapter_count?: number | null;
+  modified_time?: string | null;
+}
+
+export type ContentUpdateChapterStatusValue = 'same' | 'different' | 'missing_drive' | 'drive_only' | 'error';
+
+export interface ContentUpdateChapterStatus {
+  chapterNumber: number;
+  title: string;
+  status: ContentUpdateChapterStatusValue | 'ready' | 'updated';
+  fileName?: string | null;
+  serverLength: number;
+  driveLength: number;
+  message?: string | null;
+}
+
+export interface ContentUpdateSummary {
+  total: number;
+  same: number;
+  different: number;
+  missingDrive: number;
+  driveOnly: number;
+  errors: number;
+}
+
+export interface ContentUpdateScanResponse {
+  found: boolean;
+  story: ContentUpdateStoryRef | null;
+  folder: ContentUpdateFolderRef | null;
+  chapters: ContentUpdateChapterStatus[];
+  summary: ContentUpdateSummary;
+  message: string;
+}
+
+export interface ContentUpdateChapterResponse {
+  success: boolean;
+  message: string;
+  chapter?: ContentUpdateChapterStatus | null;
+}
+
+export async function searchContentUpdateStory(keyword: string): Promise<ContentUpdateSearchResponse> {
+  return apiFetch<ContentUpdateSearchResponse>(
+    `/api/drive-sync/content-update/search?keyword=${encodeURIComponent(keyword)}`,
+    { timeout: 30000 }
+  );
+}
+
+export async function inspectContentUpdateFolder(folderName: string): Promise<ContentUpdateScanResponse> {
+  return apiFetch<ContentUpdateScanResponse>(
+    `/api/drive-sync/content-update/folder?folder_name=${encodeURIComponent(folderName)}`,
+    { timeout: 600000 }
+  );
+}
+
+export async function scanContentUpdateStory(storyId: string): Promise<ContentUpdateScanResponse> {
+  return apiFetch<ContentUpdateScanResponse>(
+    `/api/drive-sync/content-update/scan/${encodeURIComponent(storyId)}`,
+    { timeout: 600000 }
+  );
+}
+
+export async function updateContentChapter(storyId: string, folderId: string, chapterNumber: number): Promise<ContentUpdateChapterResponse> {
+  return apiFetch<ContentUpdateChapterResponse>('/api/drive-sync/content-update/update-chapter', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ story_id: storyId, folder_id: folderId, chapter_number: chapterNumber }),
+    timeout: 60000,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Drive Sync — Job system
 // ---------------------------------------------------------------------------

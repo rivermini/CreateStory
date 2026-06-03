@@ -16,6 +16,7 @@ const BedReadPage = lazy(() => import('./pages/BedReadPage').then(m => ({ defaul
 const BedReadJobsPage = lazy(() => import('./pages/BedReadJobsPage').then(m => ({ default: m.default })));
 const DriveSyncPage = lazy(() => import('./pages/DriveSyncPage').then(m => ({ default: m.DriveSyncPage })));
 const DriveSyncHistoryPage = lazy(() => import('./pages/DriveSyncHistoryPage').then(m => ({ default: m.DriveSyncHistoryPage })));
+const ChapterContentUpdatePage = lazy(() => import('./pages/ChapterContentUpdatePage').then(m => ({ default: m.ChapterContentUpdatePage })));
 const AutoAudioPage = lazy(() => import('./pages/AutoAudioPage').then(m => ({ default: m.AutoAudioPage })));
 const AutoAudioHistoryPage = lazy(() => import('./pages/AutoAudioHistoryPage').then(m => ({ default: m.AutoAudioHistoryPage })));
 const SupportedSitesPage = lazy(() => import('./pages/SupportedSitesPage').then(m => ({ default: m.SupportedSitesPage })));
@@ -176,6 +177,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
               <Route path="/bedread" element={<BedReadPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/drive-sync/content-update" element={<ChapterContentUpdatePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode} onThemeChange={onThemeChange} autoAudioSession={autoAudioSession} onAutoAudioSessionUpdate={setAutoAudioSession} />} />
               <Route path="/auto-audio/history" element={<AutoAudioHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
