@@ -87,9 +87,7 @@ class SessionManager:
             return []
 
     def get_session(self, session_id: str) -> Optional[dict]:
-        if session_id in self._by_id:
-            return self._by_id[session_id]
-        # Fallback: try loading from the individual session log file (for running sessions not yet persisted)
+        # Check individual session log file first — it always has the full data.
         log_path = self._logs_dir / f"session_{session_id}.json"
         if log_path.exists():
             try:
@@ -97,6 +95,9 @@ class SessionManager:
                     return json.load(fh)
             except Exception:
                 pass
+        # Fallback to history (summary only, no story_results or logs).
+        if session_id in self._by_id:
+            return self._by_id[session_id]
         # Last resort: scan the full history file
         for session_data in self.load_history():
             if session_data.get("session_id") == session_id:
@@ -112,21 +113,22 @@ class SessionManager:
 
     def persist_history(self, session: AutoAudioSession) -> None:
         try:
-            history = self.load_history()
-            history.insert(0, session.to_dict())
-            self._persist_sessions(history[:100])
-            self._by_id[session.session_id] = session.to_dict()
+            # Use summary dict to avoid bloating the history file with per-story detail.
+            self._by_id[session.session_id] = session.to_summary_dict()
+            if len(self._by_id) > 100:
+                ordered_ids = list(self._by_id.keys())
+                for old_id in ordered_ids[:-100]:
+                    self._by_id.pop(old_id, None)
+            self._persist_sessions(list(self._by_id.values()))
         except Exception as exc:
             logger.warning("Failed to persist auto audio session history: %s", exc)
 
     def delete_session(self, session_id: str) -> bool:
-        history = self.load_history()
-        original_len = len(history)
-        history = [s for s in history if s.get("session_id") != session_id]
-        if len(history) == original_len:
+        # Use in-memory _by_id dict directly — no file read needed.
+        if session_id not in self._by_id:
             return False
-        self._persist_sessions(history)
         self._by_id.pop(session_id, None)
+        self._persist_sessions(list(self._by_id.values()))
         log_path = self._logs_dir / f"session_{session_id}.json"
         if log_path.exists():
             try:
@@ -138,22 +140,21 @@ class SessionManager:
     def delete_sessions_batch(self, session_ids: list[str]) -> int:
         if not session_ids:
             return 0
-        history = self.load_history()
+        # Use in-memory _by_id dict directly — no file read needed.
         id_set = set(session_ids)
-        before = len(history)
-        history = [s for s in history if s.get("session_id") not in id_set]
-        deleted = before - len(history)
-        if deleted > 0:
-            self._persist_sessions(history)
-            for sid in session_ids:
-                self._by_id.pop(sid, None)
-                log_path = self._logs_dir / f"session_{sid}.json"
-                if log_path.exists():
-                    try:
-                        log_path.unlink()
-                    except Exception:
-                        pass
-        return deleted
+        before = sum(1 for sid in self._by_id if sid in id_set)
+        if before == 0:
+            return 0
+        for sid in session_ids:
+            self._by_id.pop(sid, None)
+            log_path = self._logs_dir / f"session_{sid}.json"
+            if log_path.exists():
+                try:
+                    log_path.unlink()
+                except Exception:
+                    pass
+        self._persist_sessions(list(self._by_id.values()))
+        return before
 
     def _persist_sessions(self, sessions: list[dict]) -> None:
         try:

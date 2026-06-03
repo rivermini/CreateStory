@@ -77,12 +77,16 @@ def resume_session() -> AutoAudioPauseResponse:
 @router.get("/history", response_model=list[AutoAudioHistoryEntry])
 def get_history() -> list[AutoAudioHistoryEntry]:
     """Return all past auto audio sessions."""
+    import time, logging
+    _t0 = time.monotonic()
+    _logger = logging.getLogger(__name__)
     service = get_auto_audio_service()
     sessions = service.get_history()
+    _logger.info("get_history: service.get_history took %.1fms", (time.monotonic() - _t0) * 1000)
     entries = []
     for s in sessions:
-        story_results = s.get("story_results", [])
-        total_chapters = sum(r.get("chapters_uploaded", 0) for r in story_results)
+        # Use pre-computed totals from the summary dict — story_results is not
+        # included in the lightweight history format for performance.
         entries.append(AutoAudioHistoryEntry(
             session_id=s.get("session_id", ""),
             phase=s.get("phase", "phase1"),
@@ -94,9 +98,10 @@ def get_history() -> list[AutoAudioHistoryEntry]:
             started_at=s.get("started_at"),
             finished_at=s.get("finished_at"),
             error=s.get("error", ""),
-            total_stories=len(story_results),
-            total_chapters=total_chapters,
+            total_stories=s.get("total_stories", 0),
+            total_chapters=s.get("total_chapters", 0),
         ))
+    _logger.info("get_history: total took %.1fms for %d sessions", (time.monotonic() - _t0) * 1000, len(entries))
     return entries
 
 

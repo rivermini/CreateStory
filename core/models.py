@@ -114,6 +114,27 @@ class AutoAudioSession:
                 "is_paused": self._paused,
             }
 
+    def to_summary_dict(self) -> dict:
+        """Lightweight dict for history list storage. Excludes per-story detail and logs."""
+        with self._lock:
+            total_chapters = sum(
+                r.get("chapters_uploaded", 0) for r in self.story_results
+            )
+            return {
+                "session_id": self.session_id,
+                "phase": self.phase,
+                "test_mode": self.test_mode,
+                "voice": self.voice,
+                "status": self.status,
+                "current_step": self.current_step,
+                "current_step_desc": self.current_step_desc,
+                "started_at": self.started_at,
+                "finished_at": self.finished_at,
+                "error": self.error,
+                "total_stories": len(self.story_results),
+                "total_chapters": total_chapters,
+            }
+
     def add_log(self, step: int, message: str, level: str = "info") -> None:
         with self._lock:
             self.logs.append(LogEntry(
