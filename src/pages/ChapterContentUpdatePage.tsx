@@ -53,7 +53,6 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
   const [scanError, setScanError] = useState('');
   const [scanData, setScanData] = useState<ContentUpdateScanResponse | null>(null);
 
-  const [confirmChapter, setConfirmChapter] = useState<number | null>(null);
   const [updatingChapters, setUpdatingChapters] = useState<Set<number>>(new Set());
   const [updateResults, setUpdateResults] = useState<Map<number, ChapterResult>>(new Map());
 
@@ -146,7 +145,6 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
     setSelectedStory(null);
     setScanData(null);
     setScanError('');
-    setConfirmChapter(null);
     setUpdateResults(new Map());
     try {
       const result = await inspectContentUpdateFolder(q);
@@ -168,7 +166,6 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
     if (!scanData?.folder || !selectedStory) return;
     const chapterNumber = chapter.chapterNumber;
     setUpdatingChapters(prev => new Set(prev).add(chapterNumber));
-    setConfirmChapter(null);
     setUpdateResults(prev => {
       const next = new Map(prev);
       next.delete(chapterNumber);
@@ -327,10 +324,7 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
                           isDark={isDark}
                           result={updateResults.get(chapter.chapterNumber)}
                           isUpdating={updatingChapters.has(chapter.chapterNumber)}
-                          confirming={confirmChapter === chapter.chapterNumber}
                           canUpdate={Boolean(scanData.folder && scanData.story && chapter.status === 'ready')}
-                          onAskConfirm={() => setConfirmChapter(chapter.chapterNumber)}
-                          onCancelConfirm={() => setConfirmChapter(null)}
                           onConfirm={() => handleConfirmUpdate(chapter)}
                         />
                       ))
@@ -397,20 +391,14 @@ function ChapterRow({
   isDark,
   result,
   isUpdating,
-  confirming,
   canUpdate,
-  onAskConfirm,
-  onCancelConfirm,
   onConfirm,
 }: {
   chapter: ContentUpdateChapterStatus;
   isDark: boolean;
   result?: ChapterResult;
   isUpdating: boolean;
-  confirming: boolean;
   canUpdate: boolean;
-  onAskConfirm: () => void;
-  onCancelConfirm: () => void;
   onConfirm: () => void;
 }) {
   const textMain = isDark ? 'text-white/85' : 'text-black/80';
@@ -438,25 +426,14 @@ function ChapterRow({
           )}
         </div>
         <div className="flex items-center gap-2 self-start lg:self-center">
-          {confirming ? (
-            <>
-              <button onClick={onCancelConfirm} className="lg-icon-btn" title="Cancel">
-                <XIcon className="w-4 h-4" />
-              </button>
-              <button onClick={onConfirm} className="lg-icon-btn" title="Confirm update" style={{ color: '#10b981', borderColor: 'rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.12)' }}>
-                <CheckIcon className="w-4 h-4" />
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={onAskConfirm}
-              disabled={!canUpdate || isUpdating}
-              className={!canUpdate || isUpdating ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : 'lg-btn-primary'}
-              style={canUpdate && !isUpdating ? { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', boxShadow: '0 4px 16px rgba(245,158,11,0.35)', color: 'white' } : undefined}
-            >
-              {isUpdating ? <><Spinner className="w-4 h-4" /> Updating...</> : <><RefreshIcon className="w-4 h-4" /> Update</>}
-            </button>
-          )}
+          <button
+            onClick={onConfirm}
+            disabled={!canUpdate || isUpdating}
+            className={!canUpdate || isUpdating ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : 'lg-btn-primary'}
+            style={canUpdate && !isUpdating ? { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', boxShadow: '0 4px 16px rgba(245,158,11,0.35)', color: 'white' } : undefined}
+          >
+            {isUpdating ? <><Spinner className="w-4 h-4" /> Updating...</> : <><RefreshIcon className="w-4 h-4" /> Update</>}
+          </button>
         </div>
       </div>
     </div>
@@ -528,14 +505,6 @@ function CheckIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
 }
