@@ -79,24 +79,19 @@ router = APIRouter(prefix="/api/results", tags=["Results"])
 
 @router.get("")
 async def list_all_results() -> list[dict]:
-    """Return a summary for every crawl session ever created."""
+    """Return a lightweight summary for every crawl session.
+    
+    Does NOT enumerate output files or extract novel metadata to avoid
+    expensive filesystem I/O per session. That data is loaded on demand
+    via the per-session /{crawl_id} endpoint.
+    """
     crawl_service = get_crawl_service()
-    file_service = get_file_service()
     sessions = crawl_service.get_all_sessions()
 
     results: list[dict] = []
     for progress in sessions:
-        crawl_id = progress.crawl_id
-        output_dir = file_service.get_output_dir(crawl_id)
-        fmt = progress.output_format or "md"
-        chapter_files = file_service.list_output_files(crawl_id, fmt=fmt)
-
-        novel_metadata: Optional[dict] = None
-        if chapter_files:
-            novel_metadata = _extract_novel_metadata_from_files(output_dir, chapter_files)
-
         results.append({
-            "crawl_id": crawl_id,
+            "crawl_id": progress.crawl_id,
             "status": progress.status,
             "spider_name": progress.site_name or "",
             "novel_name": progress.novel_name or "",
@@ -105,11 +100,8 @@ async def list_all_results() -> list[dict]:
             "started_at": progress.started_at,
             "finished_at": progress.finished_at,
             "error_message": progress.error_message,
-            "output_files": [
-                {"filename": f.filename, "size_bytes": f.size_bytes, "chapter_number": f.chapter_number}
-                for f in chapter_files
-            ],
-            "novel_metadata": novel_metadata,
+            "output_files": [],
+            "novel_metadata": None,
             "combined_file": progress.combined_file or None,
             "combined_md_file": progress.combined_md_file or None,
             "source_url": progress.source_url or None,
