@@ -220,7 +220,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                   if (label === 'Errors')  setFilter('error');
                   if (label === 'Running') setFilter('running');
                 }}
-                className={`lg-glass-card px-4 py-3 rounded-xl text-left group transition-all duration-200 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
+                className={`lg-glass-card flex items-center gap-3 px-4 py-4 rounded-xl text-left group transition-all duration-200 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
               >
                 <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot} ${label === 'Running' && value > 0 ? 'animate-pulse' : ''}`} />
                 <div>
