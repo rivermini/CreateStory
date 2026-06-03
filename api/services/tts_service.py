@@ -167,6 +167,8 @@ class TTSService:
     CONCURRENCY: int = _default_concurrency()
     CHUNK_SIZE: int = _env_int("KOKORO_CHUNK_SIZE", 1400, minimum=600, maximum=2400)
     SAVE_CHUNKS: bool = _env_bool("KOKORO_SAVE_CHUNKS", False)
+    RETRY_MIN_CHUNK_SIZE: int = 180
+    RETRY_MAX_DEPTH: int = 4
 
     def __init__(self) -> None:
         self._jobs: dict[str, TTSJob] = {}
@@ -346,6 +348,88 @@ class TTSService:
         if voice not in supported:
             raise ValueError(f"Unsupported voice: {voice}")
         return voice
+
+    @staticmethod
+    def _should_split_tts_error(error_msg: str) -> bool:
+        msg = error_msg.lower()
+        return (
+            "index 510 is out of bounds" in msg
+            or "phoneme" in msg
+            or "number of lines in input and output" in msg
+        )
+
+    def _create_with_split_retry(
+        self,
+        kokoro,
+        text: str,
+        voice_val,
+        speed: float,
+        lang: str,
+        worker_id: int,
+        chunk_index: int,
+        depth: int = 0,
+    ) -> tuple["np.ndarray", int]:
+        import numpy as np
+
+        try:
+            samples, sr = kokoro.create(
+                text,
+                voice=voice_val,
+                speed=speed,
+                lang=lang,
+            )
+            return samples, sr
+        except Exception as exc:
+            error_msg = str(exc)
+            if (
+                depth >= self.RETRY_MAX_DEPTH
+                or len(text) <= self.RETRY_MIN_CHUNK_SIZE
+                or not self._should_split_tts_error(error_msg)
+            ):
+                raise
+
+            next_size = max(self.RETRY_MIN_CHUNK_SIZE, int(len(text) * 0.5))
+            sub_chunks = self.chunk_text(text, initial_chunk_size=next_size)
+            if len(sub_chunks) <= 1:
+                words = text.split()
+                if len(words) <= 1:
+                    raise
+                midpoint = max(1, len(words) // 2)
+                sub_chunks = [
+                    " ".join(words[:midpoint]).strip(),
+                    " ".join(words[midpoint:]).strip(),
+                ]
+
+            logger.warning(
+                "Worker %d chunk %d TTS line/phoneme error, splitting into %d sub-chunks (depth=%d).",
+                worker_id,
+                chunk_index + 1,
+                len(sub_chunks),
+                depth + 1,
+            )
+
+            sample_parts: list[np.ndarray] = []
+            sample_rate = SAMPLE_RATE
+            for sub_chunk in sub_chunks:
+                sub_chunk = sub_chunk.strip()
+                if not sub_chunk:
+                    continue
+                sub_samples, sub_sr = self._create_with_split_retry(
+                    kokoro,
+                    sub_chunk,
+                    voice_val,
+                    speed,
+                    lang,
+                    worker_id,
+                    chunk_index,
+                    depth + 1,
+                )
+                sample_parts.append(sub_samples)
+                sample_rate = sub_sr
+
+            if not sample_parts:
+                raise
+            return np.concatenate(sample_parts), sample_rate
 
     def start_job(
         self,
@@ -577,38 +661,15 @@ class TTSService:
                             logger.info("Worker %d job %s cancelled mid-processing.", worker_id, job_id)
                             break
 
-                    try:
-                        samples, sr = kokoro.create(
-                            chunk,
-                            voice=voice_val,
-                            speed=job.speed,
-                            lang=job.lang,
-                        )
-                    except Exception as exc:
-                        error_msg = str(exc)
-                        if "index 510 is out of bounds" in error_msg or "phoneme" in error_msg.lower():
-                            logger.warning("Worker %d chunk %d phoneme error, splitting.", worker_id, i + 1)
-                            samples_list = []
-                            sr = SAMPLE_RATE
-                            sub_chunks = self.chunk_text(chunk, initial_chunk_size=int(len(chunk) * 0.6))
-                            for sub_chunk in sub_chunks:
-                                try:
-                                    sub_s, sub_sr = kokoro.create(
-                                        sub_chunk,
-                                        voice=voice_val,
-                                        speed=job.speed,
-                                        lang=job.lang,
-                                    )
-                                    samples_list.append(sub_s)
-                                    sr = sub_sr
-                                except Exception:
-                                    continue
-                            if samples_list:
-                                samples = np.concatenate(samples_list)
-                            else:
-                                raise
-                        else:
-                            raise
+                    samples, sr = self._create_with_split_retry(
+                        kokoro,
+                        chunk,
+                        voice_val,
+                        job.speed,
+                        job.lang,
+                        worker_id,
+                        i,
+                    )
 
                     sample_rate = sr
                     if self.SAVE_CHUNKS:
