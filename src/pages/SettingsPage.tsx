@@ -36,8 +36,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [autoAudioBatchWindow, setAutoAudioBatchWindow] = useState(2);
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
-  const [ttsConcurrency, setTtsConcurrency] = useState<number | null>(null);
-  const ttsConcurrencyOptions: Array<number | null> = [null, 1, 2, 3, 4];
+  const [ttsConcurrency, setTtsConcurrency] = useState(1);
+  const ttsConcurrencyOptions = [1, 2];
 
   // Drive Sync Config Modal
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
@@ -73,7 +73,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         setAutoAudioBatchWindow(s.auto_audio_batch_window ?? 2);
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
-        setTtsConcurrency(s.tts_concurrency ?? null);
+        setTtsConcurrency(Math.min(2, Math.max(1, s.tts_concurrency ?? 1)));
       })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
@@ -783,7 +783,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             <div className={`flex flex-wrap items-center gap-2 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
               {ttsConcurrencyOptions.map(v => (
                 <button
-                  key={v ?? 'auto'}
+                  key={v}
                   onClick={() => setTtsConcurrency(v)}
                   className={`min-w-12 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                     ttsConcurrency === v
@@ -793,12 +793,12 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                         : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
                   }`}
                 >
-                  {v ?? 'Auto'}
+                  {v}
                 </button>
               ))}
             </div>
             <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-              Auto chooses a CPU-friendly worker count. Use 1 for stability, 2-4 for faster batch throughput.
+              Use 1 for stability or 2 for faster throughput. Kokoro concurrency is capped at 2.
             </p>
           </div>
         </section>
