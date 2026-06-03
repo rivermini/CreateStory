@@ -218,3 +218,10 @@ class JobListResponse(BaseModel):
     """API response for GET /api/drive-sync/jobs."""
     jobs: list[SyncJob]
     total: int
+
+
+class TokenValidationResponse(BaseModel):
+    """API response for GET /api/drive-sync/config/validate-token."""
+    valid: bool
+    status_code: Optional[int] = None
+    message: Optional[str] = None

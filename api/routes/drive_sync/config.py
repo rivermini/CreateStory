@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from api.models.drive_sync import DriveSyncConfigResponse, DriveSyncProgressResponse
+from api.models.drive_sync import DriveSyncConfigResponse, DriveSyncProgressResponse, TokenValidationResponse
 from api.services.drive_service import get_drive_sync_service, init_drive_sync_config
 
 
@@ -137,3 +137,14 @@ async def get_main_be_url() -> DriveSyncUrlResponse:
     if cfg is None:
         return DriveSyncUrlResponse(url=None)
     return DriveSyncUrlResponse(url=cfg.main_be_api_base_url)
+
+
+# GET /api/drive-sync/config/validate-token
+@router.get("/config/validate-token", response_model=TokenValidationResponse, tags=["Drive Sync"])
+async def validate_bearer_token() -> TokenValidationResponse:
+    """Validate the stored Main BE bearer token by calling GET /api/v1/story."""
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+    valid, status_code, message = service.validate_token()
+    return TokenValidationResponse(valid=valid, status_code=status_code, message=message)

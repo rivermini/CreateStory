@@ -292,6 +292,8 @@ class MainBEClientMixin:
                         headers=headers,
                         params={"page": page, "limit": 100},
                     )
+                    if resp.status_code == 401:
+                        raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
                     if resp.status_code not in (200, 201):
                         logger.warning("get_all_server_stories page %d returned %d", page, resp.status_code)
                         break
@@ -306,8 +308,10 @@ class MainBEClientMixin:
                             "maxChapter": story.get("maxChapter") or story.get("chapterCount") or 0,
                         })
                     page += 1
-        except Exception as exc:
-            logger.warning("get_all_server_stories exception: %s", exc)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            raise
 
         self._set_cached_server_stories(all_stories)
         return all_stories
@@ -547,12 +551,47 @@ class MainBEClientMixin:
                     headers=headers,
                     params=params,
                 )
+                if resp.status_code == 401:
+                    raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
                 if resp.status_code in (200, 201):
                     return resp.json()
                 logger.warning("get_stories_needing_update returned %d: %s", resp.status_code, resp.text[:300])
                 return {"success": False, "message": f"HTTP {resp.status_code}", "data": None}
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            raise
         except Exception as exc:
+            if "401" in str(exc):
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
             logger.warning("get_stories_needing_update exception: %s", exc)
             return {"success": False, "message": str(exc), "data": None}
+
+    def validate_token(self) -> tuple[bool, int, str]:
+        """
+        Validate the main BE bearer token by making a simple GET /api/v1/story.
+        Returns (valid, status_code, message).
+        """
+        if self._config is None:
+            return (False, 0, "Drive sync config not set.")
+        if not self._config.main_be_bearer_token:
+            return (False, 0, "Bearer token is not set.")
+        if not self._config.main_be_api_base_url:
+            return (False, 0, "Main BE API base URL is not set.")
+        url = f"{self._config.main_be_api_base_url}/api/v1/story"
+        headers = {
+            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
+            "x-user-id": self._config.main_be_user_id,
+        }
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.get(url, headers=headers, params={"page": 1, "limit": 1})
+                if resp.status_code == 401:
+                    return (False, resp.status_code, "Unauthorized: Invalid or expired bearer token.")
+                if resp.status_code in (200, 201):
+                    return (True, resp.status_code, "Token is valid.")
+                return (False, resp.status_code, resp.text[:200] or resp.reason_phrase)
+        except httpx.RequestError as exc:
+            return (False, 0, f"Request failed: {exc}")
 
 
