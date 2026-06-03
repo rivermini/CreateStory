@@ -23,6 +23,7 @@ from configs.base_config import load_site_config
 from models.chapter import Chapter
 from spiders.base_spider import BaseSpider, SelectorConfig
 from utils.cleaner import clean_chapter_content
+from utils.proxy import requests_proxies
 
 
 logger = logging.getLogger(__name__)
@@ -211,6 +212,9 @@ class WattpadSpider(BaseSpider):
 
         session = requests.Session()
         session.headers.update(self._WATTPAD_HEADERS)
+        proxies = requests_proxies("wattpad")
+        if proxies:
+            session.proxies.update(proxies)
 
         try:
             cookie_file = Path(__file__).parent.parent / "handlers" / "selenium_cookies.json"
@@ -639,7 +643,13 @@ class WattpadSpider(BaseSpider):
         }
 
         try:
-            response = requests.get(url, params=params, headers=headers, timeout=30)
+            response = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=30,
+                proxies=requests_proxies("wattpad"),
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -687,7 +697,12 @@ class WattpadSpider(BaseSpider):
             url = base_url if page_num == 1 else f"{base_url}/page/{page_num}"
 
             try:
-                response = requests.get(url, headers=headers, timeout=30)
+                response = requests.get(
+                    url,
+                    headers=headers,
+                    timeout=30,
+                    proxies=requests_proxies("wattpad"),
+                )
                 if response.status_code == 404:
                     break
 

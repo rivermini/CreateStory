@@ -18,6 +18,7 @@ from api.models.site_info import (
     SiteInfoResponse,
 )
 from api.services.site_service import get_site_service
+from utils.proxy import requests_proxies
 
 router = APIRouter(prefix="/api/sites", tags=["Sites"])
 
@@ -311,7 +312,12 @@ def _extract_wattpad_story_id(url: str) -> Optional[str]:
 def _fetch_inkitt_chapters(story_url: str, timeout: int = 30) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
     try:
         import requests
-        resp = requests.get(story_url, headers=_INKITT_HEADERS, timeout=timeout)
+        resp = requests.get(
+            story_url,
+            headers=_INKITT_HEADERS,
+            timeout=timeout,
+            proxies=requests_proxies("inkitt"),
+        )
     except Exception as exc:
         return [], f"Inkitt request failed: {exc}", None, None
 

@@ -27,6 +27,7 @@ from configs.base_config import load_site_config
 from models.chapter import Chapter
 from spiders.base_spider import BaseSpider, SelectorConfig
 from utils.cleaner import clean_chapter_content
+from utils.proxy import requests_proxies
 
 
 logger = logging.getLogger(__name__)
@@ -458,7 +459,7 @@ class NovelWormSpider(BaseSpider):
     def _collect_chapter_links_from_html(self, url: str) -> list[dict]:
         import requests as _requests
         try:
-            resp = _requests.get(url, timeout=30)
+            resp = _requests.get(url, timeout=30, proxies=requests_proxies("novelworm"))
             resp.raise_for_status()
             html = resp.text
         except Exception as exc:

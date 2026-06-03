@@ -9,6 +9,8 @@ from typing import Optional
 
 import requests
 
+from utils.proxy import requests_proxies
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +36,13 @@ def resolve_wattpad_url(url: str) -> Optional[WattpadStoryInfo]:
     }
 
     try:
-        resp = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        resp = requests.get(
+            url,
+            headers=headers,
+            timeout=15,
+            allow_redirects=True,
+            proxies=requests_proxies("wattpad"),
+        )
         final_url = resp.url
     except requests.RequestException as exc:
         logger.warning("Wattpad: request failed for %s: %s", url, exc)

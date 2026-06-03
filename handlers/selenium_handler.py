@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 
 from scrapy.core.downloader.handlers.http11 import HTTP11DownloadHandler
 from scrapy.http import Request, Response, TextResponse
+from utils.proxy import get_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,9 @@ class _SeleniumBrowser:
         options.add_argument("--disable-hang-monitor")
         options.add_argument("--disable-ipc-flooding-protection")
         options.add_argument("--disable-renderer-backgrounding")
+        proxy_url = get_proxy_url()
+        if proxy_url:
+            options.add_argument(f"--proxy-server={proxy_url}")
 
         if os.environ.get("CHROME_BIN"):
             options.binary_location = os.environ["CHROME_BIN"]

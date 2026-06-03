@@ -79,6 +79,8 @@ The server starts on **http://localhost:8002**. API docs are at **http://localho
 | `CHROME_BIN` | auto-detected | Path to Chrome executable |
 | `SCRAPY_ENV` | `dev` | Scrapy settings profile: `dev` or `prod` |
 | `SERVICE_URLS_FastAPIServer` | `http://localhost:8000` | FastAPIServer base URL (for config reads) |
+| `CRAWLER_PROXY_URL` | unset | Optional HTTP/SOCKS proxy for all crawler egress traffic |
+| `WATTPAD_PROXY_URL` | unset | Optional Wattpad-only proxy override; kept for compatibility |
 
 ---
 

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from typing import Optional
 
 import requests
+
+from utils.proxy import get_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ _WATTPAD_HEADERS = {
 
 
 def _get_proxy() -> Optional[str]:
-    return os.environ.get("WATTPAD_PROXY_URL") or None
+    return get_proxy_url("wattpad")
 
 
 def _build_session(proxy: Optional[str]) -> requests.Session:

@@ -23,6 +23,7 @@ from configs.base_config import load_site_config
 from models.chapter import Chapter
 from spiders.base_spider import BaseSpider, SelectorConfig
 from utils.cleaner import build_promo_patterns, clean_chapter_content
+from utils.proxy import requests_proxies
 
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,9 @@ class InkittSpider(BaseSpider):
         self._saved_chapters = 0
         self._session = requests.Session()
         self._session.headers.update(self._HEADERS)
+        proxies = requests_proxies("inkitt")
+        if proxies:
+            self._session.proxies.update(proxies)
         self._cookies_loaded = False
         self._saved_cookie_count = self._load_saved_cookies()
 

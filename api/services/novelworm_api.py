@@ -19,6 +19,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from utils.sm4 import decrypt_ecb_hex
+from utils.proxy import requests_proxies
 
 
 class NovelWormApiError(RuntimeError):
@@ -88,6 +89,9 @@ class NovelWormApiClient:
         if session is None:
             session = requests.Session()
             session.headers.update(self.DEFAULT_HEADERS)
+            proxies = requests_proxies("novelworm")
+            if proxies:
+                session.proxies.update(proxies)
             self._thread_local.session = session
         return session
 

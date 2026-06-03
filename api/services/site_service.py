@@ -10,6 +10,7 @@ from typing import Optional
 from api.models.site_info import NovelMetadata, SiteDetectResponse, SiteInfoResponse
 from api.services.config_discovery import slug_from_url
 from api.services.site_registry import SiteRegistry
+from utils.proxy import requests_proxies
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,12 @@ def _fetch_inkitt_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetad
         import requests
         from bs4 import BeautifulSoup
 
-        resp = requests.get(url, headers=_INKITT_HEADERS, timeout=20)
+        resp = requests.get(
+            url,
+            headers=_INKITT_HEADERS,
+            timeout=20,
+            proxies=requests_proxies("inkitt"),
+        )
         if resp.status_code != 200:
             return None, None
         if _inkitt_blocked(resp.text):
