@@ -81,7 +81,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
 
   const loadAutoAudioStatus = useCallback(async () => {
     try {
-      const data = await getAutoAudioStatus();
+      const data = await getAutoAudioStatus({ compact: true });
       if (data) {
         setAutoAudioSession(data);
         if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
@@ -109,7 +109,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
 
   useEffect(() => {
     loadAutoAudioStatus();
-    const interval = setInterval(loadAutoAudioStatus, 3000);
+    const interval = setInterval(loadAutoAudioStatus, 5000);
     return () => clearInterval(interval);
   }, [loadAutoAudioStatus]);
 

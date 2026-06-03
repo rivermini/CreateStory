@@ -83,7 +83,19 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
 
   const sessionRef = useRef(autoAudioSession);
   useEffect(() => { sessionRef.current = autoAudioSession; }, [autoAudioSession]);
-  useEffect(() => { setSession(autoAudioSession); }, [autoAudioSession]);
+  useEffect(() => {
+    setSession(prev => {
+      if (!autoAudioSession) return null;
+      if (prev?.session_id === autoAudioSession.session_id) {
+        return {
+          ...autoAudioSession,
+          logs: autoAudioSession.logs.length ? autoAudioSession.logs : prev.logs,
+          story_results: autoAudioSession.story_results.length ? autoAudioSession.story_results : prev.story_results,
+        };
+      }
+      return autoAudioSession;
+    });
+  }, [autoAudioSession]);
   useEffect(() => {
     if (session === null && autoAudioSession === null) {
       const stored = localStorage.getItem('autoaudio_last_session');
@@ -99,7 +111,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
     let cancelled = false;
     const poll = async () => {
       try {
-        const data = await getAutoAudioStatus();
+        const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
         if (!cancelled) {
           if (data === null && sessionRef.current !== null) return;
           setSession(data);
@@ -108,9 +120,9 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
       } catch { /* ignore */ }
     };
     poll();
-    const t = setInterval(poll, 2000);
+    const t = setInterval(poll, isLive ? 2000 : 5000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [onAutoAudioSessionUpdate]);
+  }, [isLive, onAutoAudioSessionUpdate]);
   useEffect(() => { getDriveSyncConfig().then(cfg => setConfig(cfg)).catch(() => {}).finally(() => setConfigLoading(false)); }, []);
   useEffect(() => {
     if (session?.phase && (session.status === 'running' || session.status === 'paused')) setSelectedPhase(session.phase);
@@ -128,7 +140,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
     localStorage.removeItem('autoaudio_last_session');
     try {
       await startAutoAudio({ phase: selectedPhase, test_mode: selectedPhase === 'phase3', limit: selectedPhase === 'phase2' ? phase2Limit : undefined });
-      const data = await getAutoAudioStatus();
+      const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
       setSession(data);
       onAutoAudioSessionUpdate(data);
       setShowStartConfirm(false);
@@ -146,7 +158,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
     setError('');
     try {
       await stopAutoAudio();
-      const data = await getAutoAudioStatus();
+      const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
       setSession(data);
       onAutoAudioSessionUpdate(data);
     } catch (e) {
@@ -162,7 +174,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
       } else {
         await pauseAutoAudio();
       }
-      const data = await getAutoAudioStatus();
+      const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
       setSession(data);
       onAutoAudioSessionUpdate(data);
     } catch (e) {
@@ -500,7 +512,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                 <button
                   onClick={async () => {
                     try {
-                      const data = await getAutoAudioStatus();
+                      const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
                       setSession(data);
                       onAutoAudioSessionUpdate(data);
                     } catch { /* ignore */ }

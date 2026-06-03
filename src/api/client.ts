@@ -333,6 +333,7 @@ export interface SettingsResponse {
   crawl_default_range_to: number;
   crawl_auto_max_chapters: boolean;
   auto_audio_rest_seconds: number;
+  auto_audio_upload_workers: number;
   auto_audio_external_api_base: string;
   auto_audio_test_story_ids: string[];
   tts_concurrency: number | null;
@@ -1233,8 +1234,13 @@ export async function startAutoAudio(cfg: { phase: string; test_mode: boolean; v
   });
 }
 
-export async function getAutoAudioStatus(): Promise<AutoAudioSession | null> {
-  return apiFetch<AutoAudioSession | null>('/api/auto-audio/status');
+export async function getAutoAudioStatus(options: { compact?: boolean; logLimit?: number; resultLimit?: number } = {}): Promise<AutoAudioSession | null> {
+  const params = new URLSearchParams();
+  if (options.compact) params.set('compact', 'true');
+  if (options.logLimit !== undefined) params.set('log_limit', String(options.logLimit));
+  if (options.resultLimit !== undefined) params.set('result_limit', String(options.resultLimit));
+  const qs = params.toString();
+  return apiFetch<AutoAudioSession | null>(`/api/auto-audio/status${qs ? `?${qs}` : ''}`);
 }
 
 export async function stopAutoAudio(): Promise<void> {

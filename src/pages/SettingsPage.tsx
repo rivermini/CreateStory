@@ -31,7 +31,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [rangeFrom, setRangeFrom] = useState(1);
   const [rangeTo, setRangeTo] = useState(10);
   const [crawlAutoMaxChapters, setCrawlAutoMaxChapters] = useState(false);
-  const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(30);
+  const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(0);
+  const [autoAudioUploadWorkers, setAutoAudioUploadWorkers] = useState(3);
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
   const [ttsConcurrency, setTtsConcurrency] = useState<number | null>(null);
@@ -66,7 +67,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         setRangeFrom(s.crawl_default_range_from);
         setRangeTo(s.crawl_default_range_to);
         setCrawlAutoMaxChapters(s.crawl_auto_max_chapters ?? false);
-        setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 30);
+        setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 0);
+        setAutoAudioUploadWorkers(s.auto_audio_upload_workers ?? 3);
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
         setTtsConcurrency(s.tts_concurrency ?? null);
@@ -273,6 +275,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         crawl_default_range_to: rangeTo,
         crawl_auto_max_chapters: crawlAutoMaxChapters,
         auto_audio_rest_seconds: autoAudioRestSeconds,
+        auto_audio_upload_workers: autoAudioUploadWorkers,
         auto_audio_test_story_ids: autoAudioTestStoryIds,
         tts_concurrency: ttsConcurrency,
       });
@@ -646,31 +649,58 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Auto Audio Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure rest time, API base, and test story IDs</p>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure backoff, upload workers, and test story IDs</p>
             </div>
           </div>
 
-          {/* Rest time between stories */}
-          <div className="max-w-xs">
-            <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-              Rest time between stories (seconds)
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={600}
-              value={autoAudioRestSeconds}
-              onChange={e => setAutoAudioRestSeconds(Math.max(0, parseInt(e.target.value) || 0))}
-              className={`w-full px-4 py-3 border rounded-xl
-                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                ${isDark
-                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
-                  : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
-                }`}
-            />
-            <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-              Set to 0 to disable resting between stories
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+            <div>
+              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                Backoff after failed story (seconds)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={600}
+                value={autoAudioRestSeconds}
+                onChange={e => setAutoAudioRestSeconds(Math.max(0, parseInt(e.target.value) || 0))}
+                className={`w-full px-4 py-3 border rounded-xl
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                  ${isDark
+                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
+                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
+                  }`}
+              />
+              <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
+                Successful stories continue immediately.
+              </p>
+            </div>
+
+            <div>
+              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                Upload workers
+              </label>
+              <div className={`flex flex-wrap items-center gap-2 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
+                {[1, 2, 3, 4].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setAutoAudioUploadWorkers(v)}
+                    className={`min-w-10 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      autoAudioUploadWorkers === v
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                        : isDark
+                          ? 'text-white/40 hover:text-white/70'
+                          : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
+                Handles download, compression, and upload in parallel.
+              </p>
+            </div>
           </div>
 
           {/* Test Story IDs */}
