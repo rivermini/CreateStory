@@ -772,7 +772,7 @@ async def scan_content_update_story(story_id: str) -> ContentUpdateScanResponse:
 
 @router.post("/content-update/update-chapter", response_model=ContentUpdateChapterResponse, tags=["Drive Sync"])
 async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUpdateChapterResponse:
-    """Replace one server chapter's content/plainContent from Drive."""
+    """Replace one server chapter's index/title/content/plainContent from Drive."""
     service = get_drive_sync_service()
     if service.get_config() is None:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")

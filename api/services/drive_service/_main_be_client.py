@@ -345,12 +345,17 @@ class MainBEClientMixin:
             raise RuntimeError(f"Chapter {chapter_number} response did not contain a chapter object.")
         return data
 
-    def put_server_chapter_content(self, story_id: str, chapter_number: int, content: str, plain_content: str) -> bool:
-        """PUT content/plainContent for one chapter on the configured main BE."""
+    def put_server_chapter_content(self, story_id: str, chapter_number: int, title: str, content: str, plain_content: str) -> bool:
+        """PUT index/title/content/plainContent for one chapter on the configured main BE."""
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter/{chapter_number}"
-        payload = {"content": content, "plainContent": plain_content}
+        payload = {
+            "index": chapter_number,
+            "title": title,
+            "content": content,
+            "plainContent": plain_content,
+        }
         with httpx.Client(timeout=30.0) as client:
             resp = client.put(url, content=self._json_body(payload), headers=self._main_be_headers(include_content_type=True))
             if resp.status_code == 401:
@@ -599,6 +604,7 @@ class MainBEClientMixin:
         self.put_server_chapter_content(
             story_id,
             chapter_number,
+            drive_chapter["title"],
             drive_chapter["content"],
             drive_chapter["plainContent"],
         )
