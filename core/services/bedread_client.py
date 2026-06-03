@@ -23,7 +23,10 @@ class BedReadClient:
         self._bedread_url = _get_bedreadvoices_url()
         self._client = httpx.Client(
             timeout=30.0,
-            limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
+            # BedReadVoices often runs on another PC. Avoid stale keep-alive sockets
+            # because they can surface as RemoteProtocolError during status polling.
+            headers={"Connection": "close"},
+            limits=httpx.Limits(max_connections=30, max_keepalive_connections=0),
         )
 
     def start_batch(
