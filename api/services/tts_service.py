@@ -388,6 +388,24 @@ class TTSService:
     def get_concurrency(self) -> int:
         return self.CONCURRENCY
 
+    def set_concurrency(self, concurrency: int) -> None:
+        """Update the number of workers at runtime. Call before or after __init__."""
+        concurrency = max(1, min(concurrency, 8))
+        if concurrency == self.CONCURRENCY:
+            return
+
+        old = self.CONCURRENCY
+        self.CONCURRENCY = concurrency
+
+        if concurrency > old:
+            for i in range(old, concurrency):
+                t = Thread(target=self._worker_loop, args=(i,), daemon=True)
+                t.start()
+                self._workers.append(t)
+            logger.info("Scaled TTSService workers from %d to %d.", old, concurrency)
+        else:
+            logger.info("TTSService concurrency set to %d (active workers will drain naturally).", concurrency)
+
     def _worker_loop(self, worker_id: int) -> None:
         import numpy as np
         import time

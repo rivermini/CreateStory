@@ -46,6 +46,17 @@ class LanguageResponse(BaseModel):
     label: str
 
 
+class ConcurrencyRequest(BaseModel):
+    concurrency: int = Field(..., ge=1, le=8, description="Number of concurrent TTS workers (1-8).")
+
+
+@router.post("/concurrency")
+def update_concurrency(request: ConcurrencyRequest) -> dict:
+    service = get_tts_service()
+    service.set_concurrency(request.concurrency)
+    return {"concurrency": service.get_concurrency()}
+
+
 @router.get("/voices", response_model=list[VoiceResponse])
 def list_voices() -> list[VoiceResponse]:
     service = get_tts_service()
