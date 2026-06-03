@@ -500,6 +500,20 @@ export interface DriveSyncUpdateRequest {
   main_be_bearer_token?: string;
 }
 
+export interface DriveSyncUrlResponse {
+  url: string | null;
+}
+
+export interface TokenValidationResponse {
+  valid: boolean;
+  status_code: number | null;
+  message: string | null;
+}
+
+export async function validateMainBeToken(): Promise<TokenValidationResponse> {
+  return apiFetch<TokenValidationResponse>('/api/drive-sync/config/validate-token', { timeout: 30000 });
+}
+
 export async function getDriveSyncConfig(): Promise<DriveSyncConfig | null> {
   return apiFetch<DriveSyncConfig | null>('/api/drive-sync/config');
 }

@@ -113,9 +113,9 @@ export function ConfigModal({
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="lg-glass-deep w-full max-w-3xl rounded-2xl overflow-hidden" style={{ maxHeight: '90vh' }}>
+      <div className="lg-glass-deep w-full max-w-3xl rounded-2xl overflow-hidden h-[80vh] flex flex-col justify-between">
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 shrink-0 ${isDark ? 'border-b border-white/6' : 'border-b border-black/6'}`}>
+        <div className={`flex items-center justify-between px-6 py-4 shrink-0`}>
           <div className="flex items-center gap-3">
             <div className="lg-icon-btn" style={{ background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.08)', color: '#818cf8' }}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,7 +140,7 @@ export function ConfigModal({
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 max-h-[60vh] overflow-y-auto space-y-5">
+        <div className="px-6 py-5 h-full overflow-y-auto space-y-5">
           {/* User ID */}
           <div>
             <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white/75' : 'text-black/45'}`}>User ID (x-user-id)</label>
@@ -237,7 +237,19 @@ export function ConfigModal({
             />
             <p className={`text-xs mt-1.5 ${isDark ? 'text-white/55' : 'text-black/30'}`}>Required for checking server stories and updating chapter counts.</p>
           </div>
+          {savingConfigError && (
+            <p className={`text-sm flex items-center gap-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              {savingConfigError}
+            </p>
+          )}
+        </div>
 
+        {/* Footer */}
+        <div className={`flex items-center justify-between gap-3 px-6 py-4 shrink-0`}>
           {/* Upload JSON Preset */}
           <div className="flex items-center gap-3">
             <label className={`lg-btn-ghost rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer`}>
@@ -254,49 +266,39 @@ export function ConfigModal({
             </label>
           </div>
 
-          {savingConfigError && (
-            <p className={`text-sm flex items-center gap-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              {savingConfigError}
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="lg-btn-ghost"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSave}
+              disabled={savingConfig}
+              className={savingConfig ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : 'lg-btn-primary'}
+            >
+              {savingConfig ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save Config
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className={`flex items-center justify-end gap-3 px-6 py-4 shrink-0 ${isDark ? 'border-t border-white/6 bg-black/10' : 'border-t border-black/6 bg-black/4'}`}>
-          <button
-            onClick={onClose}
-            className="lg-btn-ghost"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={savingConfig}
-            className={savingConfig ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : 'lg-btn-primary'}
-          >
-            {savingConfig ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Saving...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M5 13l4 4L19 7" />
-                </svg>
-                Save Config
-              </>
-            )}
-          </button>
-        </div>
       </div>
     </div>
   );

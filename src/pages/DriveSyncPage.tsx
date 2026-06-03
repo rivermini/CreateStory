@@ -9,6 +9,7 @@ import {
   getJob,
   getStoriesNeedingUpdate,
   checkCredentialsExists,
+  validateMainBeToken,
   FIXED_JSON_PREFIX,
   type DriveSyncConfig,
   type DriveFolderEntry,
@@ -36,6 +37,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState('');
   const [configInvalid, setConfigInvalid] = useState(false);
+  const [tokenInvalid, setTokenInvalid] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [isInitialSetup, setIsInitialSetup] = useState(false);
 
@@ -84,10 +86,22 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
             main_be_api_base_url: cfg.main_be_api_base_url,
             main_be_user_id: (cfg as DriveSyncConfig & { main_be_user_id?: string }).main_be_user_id ?? '',
           }));
-          setConfigInvalid(!cfg.main_be_api_base_url || !cfg.main_be_user_id);
+          const hasBaseUrl = Boolean(cfg.main_be_api_base_url);
+          const hasUserId = Boolean(cfg.main_be_user_id);
+          setConfigInvalid(!hasBaseUrl || !hasUserId);
           if (jsonName) {
             const exists = await checkCredentialsExists(jsonName);
             setCredentialFileExists(exists);
+          }
+          if (hasBaseUrl && hasUserId) {
+            try {
+              const tokenResult = await validateMainBeToken();
+              if (!tokenResult.valid) {
+                setTokenInvalid(true);
+              }
+            } catch {
+              setTokenInvalid(false);
+            }
           }
           setShowConfigModal(false);
         } else {
@@ -127,6 +141,20 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       });
       setConfig(cfg);
       setShowConfigModal(false);
+      setConfigInvalid(false);
+      setTokenInvalid(false);
+
+      if (configForm.main_be_api_base_url.trim() && configForm.main_be_user_id.trim()) {
+        try {
+          const tokenResult = await validateMainBeToken();
+          if (!tokenResult.valid) {
+            setTokenInvalid(true);
+          }
+        } catch {
+          setTokenInvalid(true);
+        }
+      }
+
       showToast('Drive Sync configuration saved successfully.', 'success', 2000, 'top-center');
     } catch (e) {
       setSavingConfigError(e instanceof Error ? e.message : 'Failed to save config.');
@@ -461,7 +489,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           serverUrl={config?.main_be_api_base_url ?? null}
           isDark={isDark}
           isConfigLoading={configLoading}
-          isConfigValid={configInvalid ? false : (configLoading ? undefined : Boolean(config?.main_be_api_base_url && config?.main_be_user_id))}
+          isConfigValid={tokenInvalid ? undefined : (configInvalid ? false : (configLoading ? undefined : Boolean(config?.main_be_api_base_url && config?.main_be_user_id)))}
+          tokenInvalid={tokenInvalid}
           onConfigure={() => setShowConfigModal(true)}
         />
 
