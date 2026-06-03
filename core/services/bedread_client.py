@@ -55,10 +55,14 @@ class BedReadClient:
             return None, None, str(exc)
 
     def get_batch_job(self, batch_id: str) -> Optional[dict]:
-        try:
-            return self._get(f"/api/bedread/jobs/{batch_id}")
-        except Exception:
+        resp = self._client.get(
+            f"{self._bedread_url}/api/bedread/jobs/{batch_id}",
+            timeout=30.0,
+        )
+        if resp.status_code == 404:
             return None
+        resp.raise_for_status()
+        return resp.json()
 
     def delete_batch_job(self, batch_id: str) -> None:
         url = f"{self._bedread_url}/api/bedread/jobs/{batch_id}"

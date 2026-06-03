@@ -43,34 +43,46 @@ class BatchPoller:
                 return False, completed_files
 
             job = None
+            poll_error = False
             for attempt in range(3):
                 try:
                     job = self._br.get_batch_job(batch_id)
                     break
-                except httpx.ReadTimeout:
+                except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.RemoteProtocolError) as exc:
+                    poll_error = True
                     if attempt < 2:
                         session.add_log(
                             4,
-                            f"Read timeout polling batch {batch_id} (attempt {attempt + 1}/3), "
-                            f"retrying...",
+                            f"BedRead polling error for batch {batch_id} (attempt {attempt + 1}/3): "
+                            f"{type(exc).__name__}; retrying...",
                             level="warning",
                         )
                         time.sleep(2 ** attempt)
                     else:
                         session.add_log(
                             4,
-                            f"Read timeout polling batch {batch_id} (attempt {attempt + 1}/3), "
-                            f"continuing...",
+                            f"BedRead polling error for batch {batch_id} (attempt {attempt + 1}/3): "
+                            f"{type(exc).__name__}; continuing...",
                             level="warning",
                         )
                 except httpx.HTTPStatusError as exc:
-                    if exc.response.status_code == 503 and attempt < 2:
+                    retryable_status = exc.response.status_code in (429, 500, 502, 503, 504)
+                    poll_error = retryable_status
+                    if retryable_status and attempt < 2:
                         session.add_log(
                             4,
-                            f"503 polling batch {batch_id} (attempt {attempt + 1}/3), retrying...",
+                            f"HTTP {exc.response.status_code} polling batch {batch_id} "
+                            f"(attempt {attempt + 1}/3), retrying...",
                             level="warning",
                         )
                         time.sleep(2 ** attempt)
+                    elif exc.response.status_code in (429, 500, 502, 503, 504):
+                        session.add_log(
+                            4,
+                            f"HTTP {exc.response.status_code} polling batch {batch_id} "
+                            f"(attempt {attempt + 1}/3), continuing...",
+                            level="warning",
+                        )
                     else:
                         session.add_log(
                             4,
@@ -81,6 +93,9 @@ class BatchPoller:
                         break
 
             if job is None:
+                if poll_error:
+                    time.sleep(5)
+                    continue
                 session.add_log(4, f"Batch job {batch_id} not found", level="error")
                 return False, completed_files
 
