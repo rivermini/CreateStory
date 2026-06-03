@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 import httpx
 
@@ -22,9 +22,12 @@ class BatchPoller:
         session: AutoAudioSession,
         batch_id: str,
         timeout_seconds: int = 3600,
+        on_completed_files: Optional[Callable[[list[dict]], None]] = None,
+        on_poll_tick: Optional[Callable[[], None]] = None,
     ) -> tuple[bool, list[dict]]:
         start = time.time()
         completed_files: list[dict] = []
+        completed_indices: set[int] = set()
 
         while time.time() - start < timeout_seconds:
             if session._stopping:
@@ -85,14 +88,47 @@ class BatchPoller:
             done = sum(1 for s in statuses if s == "completed")
             total = len(statuses)
 
+            new_completed_files: list[dict] = []
+            for ch in job.get("chapters", []):
+                chapter_index = int(ch.get("chapter_number", 0) or 0)
+                if (
+                    ch.get("status") == "completed"
+                    and ch.get("output_filename")
+                    and chapter_index
+                    and chapter_index not in completed_indices
+                ):
+                    file_info = {
+                        "chapter_id": ch.get("chapter_id", ""),
+                        "chapter_index": chapter_index,
+                        "filename": ch.get("output_filename"),
+                    }
+                    completed_indices.add(chapter_index)
+                    completed_files.append(file_info)
+                    new_completed_files.append(file_info)
+
+            if new_completed_files and on_completed_files:
+                try:
+                    on_completed_files(new_completed_files)
+                except Exception as exc:
+                    session.add_log(
+                        6,
+                        f"Failed to queue completed chapter upload: {exc}",
+                        level="error",
+                    )
+                    return False, completed_files
+
+            if on_poll_tick:
+                try:
+                    on_poll_tick()
+                except Exception as exc:
+                    session.add_log(
+                        6,
+                        f"Failed to process completed chapter upload: {exc}",
+                        level="error",
+                    )
+                    return False, completed_files
+
             if all(s in ("completed", "failed") for s in statuses):
-                for ch in job.get("chapters", []):
-                    if ch.get("status") == "completed" and ch.get("output_filename"):
-                        completed_files.append({
-                            "chapter_id": ch.get("chapter_id", ""),
-                            "chapter_index": ch.get("chapter_number"),
-                            "filename": ch.get("output_filename"),
-                        })
                 return True, completed_files
 
             session.set_step(5, f"Generating audio ({done}/{total})", story=session.current_story)

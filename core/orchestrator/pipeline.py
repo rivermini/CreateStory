@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 import tempfile
 import time
 from pathlib import Path
@@ -17,8 +18,21 @@ from core.services.external_api import ExternalAPIClient
 from core.services.upload import UploadManager
 
 
+@dataclass
+class BatchState:
+    index: int
+    story: StoryMissingAudio
+    batch_id: str
+    voice: Optional[str]
+    result: StoryResult
+    chapter_id_by_index: dict[int, str]
+    upload_futures: list[Future[tuple[bool, str]]] = field(default_factory=list)
+    completed_files: list[dict] = field(default_factory=list)
+    queued_upload_indices: set[int] = field(default_factory=set)
+
+
 class StoryPipeline:
-    """Orchestrates the TTS, download, compression, and upload pipeline."""
+    """Orchestrates story batch generation and incremental chapter uploads."""
 
     def __init__(
         self,
@@ -39,44 +53,27 @@ class StoryPipeline:
         session: AutoAudioSession,
         story: StoryMissingAudio,
     ) -> StoryResult:
+        batch_info = self._start_story_batch(story, session.voice)
+        batch_id = batch_info.get("batch_id")
+        voice = batch_info.get("voice")
+        err = batch_info.get("error", "")
         result = StoryResult(
             story_id=story.story_id,
             story_title=story.story_title,
             chapters_generated=0,
             chapters_uploaded=0,
             upload_errors=[],
+            error=err if not batch_id else "",
         )
-
-        batch_info = self._start_story_batch(story, session.voice)
-        batch_id = batch_info.get("batch_id")
-        voice = batch_info.get("voice")
-        err = batch_info.get("error", "")
         if not batch_id:
-            result.error = err
             session.add_log(4, f"Failed to start batch job: {err}", level="error")
             return result
 
-        session.set_step(5, f"Polling batch job for {story.story_title}", story=story.story_title)
-        success, completed_files = self._poller.poll_until_done(session, batch_id)
-
-        if session._stopping:
-            result.chapters_generated = len(completed_files)
-            session.add_log(
-                4,
-                f"Stopped mid-poll, {len(completed_files)} chapters already done",
-                level="warning",
-            )
-            return result
-
-        result.chapters_generated = len(completed_files)
-
-        if not success and not completed_files:
-            result.error = "Batch job failed or timed out"
-            session.add_log(4, f"Batch job for '{story.story_title}' failed", level="error")
-            return result
-
-        self.upload_completed_batch(session, story, batch_id, voice, completed_files, result, [story])
-        return result
+        upload_workers = self._upload_worker_count(len(story.missing_chapters))
+        with ThreadPoolExecutor(max_workers=upload_workers) as upload_pool:
+            state = self._make_batch_state(0, story, batch_id, voice)
+            self._poll_and_upload_story(session, state, [story], upload_pool)
+        return state.result
 
     def upload_completed_batch(
         self,
@@ -88,92 +85,20 @@ class StoryPipeline:
         result: StoryResult,
         all_stories: list[StoryMissingAudio],
     ) -> None:
-        session.set_step(
-            6,
-            f"Downloading {len(completed_files)} audio files from BedReadVoices",
-            story=story.story_title,
-        )
-
-        chapter_indices = [int(f.get("chapter_index", 0) or 0) for f in completed_files]
-        chapter_id_by_index = {
-            int(ch.chapter_index): ch.chapter_id
-            for ch in story.missing_chapters
-            if ch.chapter_id
-        }
-        missing_indices = [
-            idx for idx in chapter_indices
-            if idx and not chapter_id_by_index.get(idx)
-        ]
-        if missing_indices:
-            chapter_id_by_index.update(
-                self._api.build_chapter_id_map(story.story_id, missing_indices)
-            )
-
         upload_workers = self._upload_worker_count(len(completed_files))
-        if upload_workers <= 1 or len(completed_files) <= 1:
-            for i, file_info in enumerate(completed_files):
-                if session._stopping:
-                    break
-                ok, message = self._download_and_upload_chapter(
-                    session,
-                    story,
-                    batch_id,
-                    voice,
-                    file_info,
-                    chapter_id_by_index,
-                    i,
-                    len(completed_files),
-                )
-                if ok:
-                    result.chapters_uploaded += 1
-                    self._update_chapter_progress(session, result, all_stories)
-                else:
-                    result.upload_errors.append(message)
-        else:
-            session.add_log(6, f"Uploading with {upload_workers} parallel chapter worker(s)")
-            with ThreadPoolExecutor(max_workers=upload_workers) as executor:
-                futures = [
-                    executor.submit(
-                        self._download_and_upload_chapter,
-                        session,
-                        story,
-                        batch_id,
-                        voice,
-                        file_info,
-                        chapter_id_by_index,
-                        i,
-                        len(completed_files),
-                    )
-                    for i, file_info in enumerate(completed_files)
-                ]
-                for future in as_completed(futures):
-                    if session._stopping:
-                        for pending in futures:
-                            pending.cancel()
-                        break
-                    try:
-                        ok, message = future.result()
-                    except Exception as exc:
-                        ok, message = False, f"Upload worker error: {exc}"
-                    if ok:
-                        result.chapters_uploaded += 1
-                        self._update_chapter_progress(session, result, all_stories)
-                    else:
-                        result.upload_errors.append(message)
-
-        session.set_step(
-            6,
-            f"Uploaded {result.chapters_uploaded}/{len(completed_files)} audio files "
-            f"for {story.story_title}",
-            story=story.story_title,
+        state = BatchState(
+            index=0,
+            story=story,
+            batch_id=batch_id,
+            voice=voice,
+            result=result,
+            chapter_id_by_index=self._chapter_id_map_for_story(story),
+            completed_files=list(completed_files),
         )
-
-        temp_batch_dir = Path(tempfile.gettempdir()) / f"autoaudio_{batch_id}"
-        if temp_batch_dir.exists():
-            self._upload.delete_batch_output_dir(session, batch_id, temp_batch_dir)
-
-        self._br.delete_batch_output(batch_id)
-        session.add_log(9, f"Deleted BedReadVoices batch {batch_id} output directory")
+        with ThreadPoolExecutor(max_workers=upload_workers) as upload_pool:
+            self._queue_completed_uploads(session, state, completed_files, all_stories, upload_pool)
+            self._drain_uploads(session, state, all_stories)
+        self._finish_batch_upload(session, state)
 
     def run(
         self,
@@ -181,158 +106,291 @@ class StoryPipeline:
         stories: list[StoryMissingAudio],
         phase_name: str,
     ) -> None:
-        """Process stories with one-story lookahead."""
+        """Process stories with a small in-flight batch window."""
         if not stories:
             return
 
         n = len(stories)
-        pending_next: Future[dict] | None = None
-        pending_story_index: int | None = None
+        upload_workers = self._upload_worker_count(
+            max((len(s.missing_chapters) for s in stories), default=1)
+        )
+        batch_window = self._batch_window_size()
+        in_flight: dict[int, BatchState] = {}
+        next_to_start = 0
+        next_to_poll = 0
 
-        starter = ThreadPoolExecutor(max_workers=1)
-        try:
-            i = 0
-            while i < n:
-                if not session.wait_while_paused():
-                    session.add_log(3, "Stop requested while paused, halting pipeline", level="warning")
-                    session.set_status("stopping")
+        with ThreadPoolExecutor(max_workers=upload_workers) as upload_pool:
+            while next_to_poll < n:
+                if not self._ensure_not_stopped_or_paused(session):
                     break
 
-                if session._stopping:
-                    session.add_log(3, "Stop requested, halting pipeline", level="warning")
-                    session.set_status("stopping")
-                    break
-
-                story = stories[i]
-                session.add_log(3, f"[{i + 1}/{n}] {story.story_title}")
-                session.set_step(3, f"[{i + 1}/{n}] {story.story_title}", story=story.story_title)
-                session.update_progress(i + 1, n)
-
-                if pending_next is not None and pending_story_index == i:
-                    try:
-                        batch_info = pending_next.result()
-                    except Exception as exc:
-                        batch_info = {
-                            "story": story,
-                            "batch_id": None,
-                            "voice": None,
-                            "error": str(exc),
-                        }
-                    pending_next = None
-                    pending_story_index = None
-                    if batch_info.get("batch_id"):
-                        session.add_log(
-                            3,
-                            f"[{i + 1}/{n}] {story.story_title} batch was already started",
-                        )
-                else:
-                    batch_info = self._start_story_batch(story, session.voice)
-
-                batch_id = batch_info.get("batch_id")
-                voice = batch_info.get("voice")
-                err = batch_info.get("error", "")
-                if not batch_id:
-                    result = StoryResult(
-                        story_id=story.story_id,
-                        story_title=story.story_title,
-                        chapters_generated=0,
-                        chapters_uploaded=0,
-                        upload_errors=[],
-                        error=err,
-                    )
-                    session.add_log(4, f"Failed to start batch job: {err}", level="error")
-                    self._finalize_story(session, result, story, stories)
-                    if i + 1 < n and not self._rest_between_stories(session, result):
-                        break
-                    i += 1
-                    continue
-
-                session.set_step(
-                    5, f"Polling batch job for {story.story_title}", story=story.story_title,
-                )
-                success, completed_files = self._poller.poll_until_done(session, batch_id)
-                chapters_gen = len(completed_files)
-
-                if session._stopping:
-                    result = StoryResult(
-                        story_id=story.story_id,
-                        story_title=story.story_title,
-                        chapters_generated=chapters_gen,
-                        chapters_uploaded=0,
-                        upload_errors=[],
-                    )
-                    session.add_log(
-                        4,
-                        f"Stopped mid-poll, {chapters_gen} chapters already done",
-                        level="warning",
-                    )
-                    self._finalize_story(session, result, story, stories)
-                    break
-
-                if not success and not completed_files:
-                    result = StoryResult(
-                        story_id=story.story_id,
-                        story_title=story.story_title,
-                        chapters_generated=0,
-                        chapters_uploaded=0,
-                        upload_errors=[],
-                        error="Batch job failed or timed out",
-                    )
-                    session.add_log(
-                        4, f"Batch job for '{story.story_title}' failed", level="error",
-                    )
-                    self._finalize_story(session, result, story, stories)
-                    if i + 1 < n and not self._rest_between_stories(session, result):
-                        break
-                    i += 1
-                    continue
-
-                result = StoryResult(
-                    story_id=story.story_id,
-                    story_title=story.story_title,
-                    chapters_generated=chapters_gen,
-                    chapters_uploaded=0,
-                    upload_errors=[],
-                )
-
-                if (
-                    i + 1 < n
-                    and pending_next is None
+                while (
+                    len(in_flight) < batch_window
+                    and next_to_start < n
                     and not session._stopping
                     and not session._paused
                 ):
-                    next_story = stories[i + 1]
-                    pending_story_index = i + 1
-                    pending_next = starter.submit(
-                        self._start_story_batch,
-                        next_story,
-                        session.voice,
+                    state = self._start_state_for_story(
+                        session,
+                        stories[next_to_start],
+                        next_to_start,
+                        n,
+                    )
+                    if state is not None:
+                        in_flight[next_to_start] = state
+                    next_to_start += 1
+
+                state = in_flight.pop(next_to_poll, None)
+                if state is None:
+                    next_to_poll += 1
+                    continue
+
+                session.update_progress(state.index + 1, n)
+                if state.index > 0:
+                    session.set_step(
+                        3,
+                        f"[{state.index + 1}/{n}] {state.story.story_title}",
+                        story=state.story.story_title,
                     )
                     session.add_log(
                         3,
-                        f"Started next story batch in background: {next_story.story_title}",
+                        f"[{state.index + 1}/{n}] {state.story.story_title} batch was already started",
                     )
 
-                self.upload_completed_batch(
-                    session, story, batch_id, voice, completed_files, result, stories,
-                )
-                self._finalize_story(session, result, story, stories)
+                if state.batch_id:
+                    self._poll_and_upload_story(session, state, stories, upload_pool)
+                self._finalize_story(session, state.result, state.story, stories)
 
                 if session._stopping:
-                    if pending_next is not None:
-                        self._cancel_pending_batch(pending_next)
+                    self._cancel_in_flight_batches(in_flight.values())
                     break
 
-                if result.error or result.upload_errors:
-                    if i + 1 < n and not self._rest_between_stories(session, result):
+                if state.result.error or state.result.upload_errors:
+                    if state.index + 1 < n and not self._rest_between_stories(session, state.result):
+                        self._cancel_in_flight_batches(in_flight.values())
                         break
 
-                i += 1
+                next_to_poll += 1
 
-            if session._stopping and pending_next is not None:
-                self._cancel_pending_batch(pending_next)
-        finally:
-            starter.shutdown(wait=not session._stopping, cancel_futures=session._stopping)
+    def _start_state_for_story(
+        self,
+        session: AutoAudioSession,
+        story: StoryMissingAudio,
+        index: int,
+        total: int,
+    ) -> Optional[BatchState]:
+        if index == 0:
+            session.set_step(3, f"[{index + 1}/{total}] {story.story_title}", story=story.story_title)
+            session.add_log(3, f"[{index + 1}/{total}] {story.story_title}")
+        else:
+            session.add_log(
+                3,
+                f"Started next story batch in background ({index + 1}/{total}): {story.story_title}",
+            )
+
+        batch_info = self._start_story_batch(story, session.voice)
+        batch_id = batch_info.get("batch_id")
+        voice = batch_info.get("voice")
+        err = batch_info.get("error", "")
+        if not batch_id:
+            result = StoryResult(
+                story_id=story.story_id,
+                story_title=story.story_title,
+                chapters_generated=0,
+                chapters_uploaded=0,
+                upload_errors=[],
+                error=err,
+            )
+            session.add_log(4, f"Failed to start batch job: {err}", level="error")
+            return BatchState(
+                index=index,
+                story=story,
+                batch_id="",
+                voice=voice,
+                result=result,
+                chapter_id_by_index=self._chapter_id_map_for_story(story),
+            )
+
+        return self._make_batch_state(index, story, batch_id, voice)
+
+    def _make_batch_state(
+        self,
+        index: int,
+        story: StoryMissingAudio,
+        batch_id: str,
+        voice: Optional[str],
+    ) -> BatchState:
+        return BatchState(
+            index=index,
+            story=story,
+            batch_id=batch_id,
+            voice=voice,
+            result=StoryResult(
+                story_id=story.story_id,
+                story_title=story.story_title,
+                chapters_generated=0,
+                chapters_uploaded=0,
+                upload_errors=[],
+            ),
+            chapter_id_by_index=self._chapter_id_map_for_story(story),
+        )
+
+    def _poll_and_upload_story(
+        self,
+        session: AutoAudioSession,
+        state: BatchState,
+        all_stories: list[StoryMissingAudio],
+        upload_pool: ThreadPoolExecutor,
+    ) -> None:
+        session.set_step(
+            5,
+            f"Polling batch job for {state.story.story_title}",
+            story=state.story.story_title,
+        )
+
+        def _on_completed(files: list[dict]) -> None:
+            self._queue_completed_uploads(session, state, files, all_stories, upload_pool)
+
+        def _on_poll_tick() -> None:
+            self._drain_finished_uploads(session, state, all_stories)
+
+        success, completed_files = self._poller.poll_until_done(
+            session,
+            state.batch_id,
+            on_completed_files=_on_completed,
+            on_poll_tick=_on_poll_tick,
+        )
+        state.completed_files = completed_files
+        state.result.chapters_generated = len(completed_files)
+
+        self._drain_uploads(session, state, all_stories)
+
+        if session._stopping:
+            session.add_log(
+                4,
+                f"Stopped mid-poll, {len(completed_files)} chapters already done",
+                level="warning",
+            )
+            return
+
+        if not success and not completed_files:
+            state.result.error = "Batch job failed or timed out"
+            session.add_log(
+                4,
+                f"Batch job for '{state.story.story_title}' failed",
+                level="error",
+            )
+
+        self._finish_batch_upload(session, state)
+
+    def _queue_completed_uploads(
+        self,
+        session: AutoAudioSession,
+        state: BatchState,
+        completed_files: list[dict],
+        all_stories: list[StoryMissingAudio],
+        upload_pool: ThreadPoolExecutor,
+    ) -> None:
+        if not completed_files:
+            return
+
+        missing_indices = [
+            int(f.get("chapter_index", 0) or 0)
+            for f in completed_files
+            if int(f.get("chapter_index", 0) or 0)
+            and not (
+                str(f.get("chapter_id") or "")
+                or state.chapter_id_by_index.get(int(f.get("chapter_index", 0) or 0), "")
+            )
+        ]
+        if missing_indices:
+            state.chapter_id_by_index.update(
+                self._api.build_chapter_id_map(state.story.story_id, missing_indices)
+            )
+
+        for file_info in completed_files:
+            chapter_index = int(file_info.get("chapter_index", 0) or 0)
+            if not chapter_index or chapter_index in state.queued_upload_indices:
+                continue
+            state.queued_upload_indices.add(chapter_index)
+            position = len(state.queued_upload_indices) - 1
+            future = upload_pool.submit(
+                self._download_and_upload_chapter,
+                session,
+                state.story,
+                state.batch_id,
+                state.voice,
+                file_info,
+                state.chapter_id_by_index,
+                position,
+                len(state.story.missing_chapters),
+            )
+            state.upload_futures.append(future)
+
+    def _drain_uploads(
+        self,
+        session: AutoAudioSession,
+        state: BatchState,
+        all_stories: list[StoryMissingAudio],
+    ) -> None:
+        if not state.upload_futures:
+            return
+
+        for future in as_completed(state.upload_futures):
+            if session._stopping:
+                for pending in state.upload_futures:
+                    pending.cancel()
+                break
+            try:
+                ok, message = future.result()
+            except Exception as exc:
+                ok, message = False, f"Upload worker error: {exc}"
+            if ok:
+                state.result.chapters_uploaded += 1
+                self._update_chapter_progress(session, state.result, all_stories)
+            else:
+                state.result.upload_errors.append(message)
+        state.upload_futures.clear()
+
+    def _drain_finished_uploads(
+        self,
+        session: AutoAudioSession,
+        state: BatchState,
+        all_stories: list[StoryMissingAudio],
+    ) -> None:
+        if not state.upload_futures:
+            return
+
+        pending: list[Future[tuple[bool, str]]] = []
+        for future in state.upload_futures:
+            if not future.done():
+                pending.append(future)
+                continue
+            try:
+                ok, message = future.result()
+            except Exception as exc:
+                ok, message = False, f"Upload worker error: {exc}"
+            if ok:
+                state.result.chapters_uploaded += 1
+                self._update_chapter_progress(session, state.result, all_stories)
+            else:
+                state.result.upload_errors.append(message)
+        state.upload_futures = pending
+
+    def _finish_batch_upload(self, session: AutoAudioSession, state: BatchState) -> None:
+        session.set_step(
+            6,
+            f"Uploaded {state.result.chapters_uploaded}/{len(state.completed_files)} audio files "
+            f"for {state.story.story_title}",
+            story=state.story.story_title,
+        )
+
+        temp_batch_dir = Path(tempfile.gettempdir()) / f"autoaudio_{state.batch_id}"
+        if temp_batch_dir.exists():
+            self._upload.delete_batch_output_dir(session, state.batch_id, temp_batch_dir)
+
+        self._br.delete_batch_output(state.batch_id)
+        session.add_log(9, f"Deleted BedReadVoices batch {state.batch_id} output directory")
 
     def _download_and_upload_chapter(
         self,
@@ -364,12 +422,12 @@ class StoryPipeline:
 
         session.set_step(
             6,
-            f"Downloading chapter {position + 1}/{total} for {story.story_title}",
+            f"Uploading completed chapter {position + 1}/{total} for {story.story_title}",
             story=story.story_title,
         )
         session.add_log(
             6,
-            f"Downloading chapter {chapter_index} from BedReadVoices (batch_id={batch_id})",
+            f"Downloading completed chapter {chapter_index} from BedReadVoices (batch_id={batch_id})",
         )
 
         local_path = self._br.download_chapter(
@@ -411,16 +469,30 @@ class StoryPipeline:
             "error": err,
         }
 
-    def _cancel_pending_batch(self, pending_next: Future[dict]) -> None:
-        try:
-            if pending_next.cancel():
-                return
-            batch_info = pending_next.result(timeout=0)
-            batch_id = batch_info.get("batch_id")
-            if batch_id:
-                self._br.delete_batch_job(batch_id)
-        except Exception:
-            pass
+    def _chapter_id_map_for_story(self, story: StoryMissingAudio) -> dict[int, str]:
+        return {
+            int(ch.chapter_index): ch.chapter_id
+            for ch in story.missing_chapters
+            if ch.chapter_id
+        }
+
+    def _cancel_in_flight_batches(self, states) -> None:
+        for state in states:
+            try:
+                self._br.delete_batch_job(state.batch_id)
+            except Exception:
+                pass
+
+    def _ensure_not_stopped_or_paused(self, session: AutoAudioSession) -> bool:
+        if not session.wait_while_paused():
+            session.add_log(3, "Stop requested while paused, halting pipeline", level="warning")
+            session.set_status("stopping")
+            return False
+        if session._stopping:
+            session.add_log(3, "Stop requested, halting pipeline", level="warning")
+            session.set_status("stopping")
+            return False
+        return True
 
     def _upload_worker_count(self, file_count: int) -> int:
         if file_count <= 1:
@@ -431,6 +503,14 @@ class StoryPipeline:
         except Exception:
             workers = 3
         return max(1, min(4, workers, file_count))
+
+    def _batch_window_size(self) -> int:
+        raw = _get_settings().get("auto_audio_batch_window", 2)
+        try:
+            window = int(raw)
+        except Exception:
+            window = 2
+        return max(1, min(2, window))
 
     def _rest_between_stories(
         self,
