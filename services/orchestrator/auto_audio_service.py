@@ -119,7 +119,24 @@ class AutoAudioServiceProxy:
         self._invalidate_cache("status")
         url = f"{_autoaudio_url()}/api/auto-audio/stop"
         with httpx.Client(timeout=30.0) as client:
-            client.post(url)
+            resp = client.post(url)
+            resp.raise_for_status()
+
+    def pause_session(self) -> dict:
+        self._invalidate_cache("status")
+        url = f"{_autoaudio_url()}/api/auto-audio/pause"
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(url)
+            resp.raise_for_status()
+            return resp.json()
+
+    def resume_session(self) -> dict:
+        self._invalidate_cache("status")
+        url = f"{_autoaudio_url()}/api/auto-audio/resume"
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(url)
+            resp.raise_for_status()
+            return resp.json()
 
     def get_history(self) -> list[dict]:
         def fetch() -> list[dict]:

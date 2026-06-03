@@ -9,6 +9,7 @@ from pydantic import Field
 
 from api.models.auto_audio import (
     AutoAudioHistoryEntry,
+    AutoAudioPauseResponse,
     AutoAudioSessionResponse,
     StartSessionRequest,
     StartSessionResponse,
@@ -48,11 +49,33 @@ def get_status() -> AutoAudioSessionResponse | None:
 def stop_session() -> dict:
     """Signal the active session to stop gracefully."""
     service = get_auto_audio_service()
-    session = service.get_status()
-    if session is None:
+    try:
+        service.stop_session()
+    except Exception as exc:
         raise HTTPException(status_code=404, detail="No active session to stop.")
-    service.stop_session()
     return {"message": "Stop signal sent."}
+
+
+@router.post("/pause", response_model=AutoAudioPauseResponse)
+def pause_session() -> AutoAudioPauseResponse:
+    """Pause the active auto-audio session."""
+    service = get_auto_audio_service()
+    try:
+        data = service.pause_session()
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return AutoAudioPauseResponse(**data)
+
+
+@router.post("/resume", response_model=AutoAudioPauseResponse)
+def resume_session() -> AutoAudioPauseResponse:
+    """Resume a paused auto-audio session."""
+    service = get_auto_audio_service()
+    try:
+        data = service.resume_session()
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return AutoAudioPauseResponse(**data)
 
 
 @router.get("/history", response_model=list[AutoAudioHistoryEntry])
