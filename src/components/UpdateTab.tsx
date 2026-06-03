@@ -61,6 +61,23 @@ export function UpdateTab({
     onChapterErrorsChange(chapterErrors.size > 0);
   }, [chapterErrors.size, onChapterErrorsChange]);
 
+  useEffect(() => {
+    if (!data) return;
+    const updatable = data.updatable;
+    setChapterCountInputs(prev => {
+      const next = new Map(prev);
+      let changed = false;
+      for (const entry of updatable) {
+        const id = entry.server_story.id;
+        if (!next.has(id)) {
+          next.set(id, entry.new_chapters_count ?? 1);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [data]);
+
   async function toggleFilePanel(entryId: string, filename: 'free.md' | 'tags.md', folderId: string) {
     const key = `${entryId}:${filename}`;
     const current = openFilePanels.get(key);
@@ -578,8 +595,8 @@ function UpdateCard({ entry, storiesNeedingUpdateIds, chapterCountInputs, chapte
             <input
               type="number"
               min={newCount}
-              defaultValue={newCount}
-              onChange={e => onChapterCountChange(entry.server_story.id, isNaN(parseInt(e.target.value)) ? 1 : parseInt(e.target.value))}
+              value={inputVal}
+              onChange={e => onChapterCountChange(entry.server_story.id, parseInt(e.target.value) || 1)}
               className={`w-16 px-2 py-1.5 text-xs rounded-lg border text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isDark ? 'bg-white/[0.06] border-white/20 text-white' : 'bg-black/4 border-black/10 text-black/80'}`}
             />
           </div>
