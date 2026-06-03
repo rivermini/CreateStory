@@ -12,6 +12,12 @@ from core.config import _get_external_api_config
 class ExternalAPIClient:
     """HTTP client for the external main-BE API (story/audio data)."""
 
+    def __init__(self) -> None:
+        self._client = httpx.Client(
+            timeout=30.0,
+            limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
+        )
+
     def _request(
         self,
         method: str,
@@ -22,9 +28,14 @@ class ExternalAPIClient:
     ) -> httpx.Response:
         api_base, headers = _get_external_api_config()
         url = f"{api_base}{path}"
-        with httpx.Client(timeout=timeout) as client:
-            req = client.build_request(method, url, params=params, json=json_data, headers=headers)
-            return client.send(req)
+        return self._client.request(
+            method,
+            url,
+            params=params,
+            json=json_data,
+            headers=headers,
+            timeout=timeout,
+        )
 
     def get(self, path: str, params: Optional[dict] = None) -> list | dict:
         resp = self._request("GET", path, params=params)
@@ -42,22 +53,21 @@ class ExternalAPIClient:
     def fetch_stories_needing_update(self) -> list[dict]:
         api_base, headers = _get_external_api_config()
         url = f"{api_base}/api/v1/dashboard/stories-needing-update"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(url, headers=headers)
-            resp.raise_for_status()
-            raw = resp.json()
-            if isinstance(raw, dict):
-                data = raw.get("data", {})
-                if isinstance(data, dict):
-                    items = data.get("data", data.get("items", []))
-                    if isinstance(items, list):
-                        return items
-                    return []
-                elif isinstance(data, list):
-                    return data
-            if isinstance(raw, list):
-                return raw
-            return []
+        resp = self._client.get(url, headers=headers, timeout=30.0)
+        resp.raise_for_status()
+        raw = resp.json()
+        if isinstance(raw, dict):
+            data = raw.get("data", {})
+            if isinstance(data, dict):
+                items = data.get("data", data.get("items", []))
+                if isinstance(items, list):
+                    return items
+                return []
+            elif isinstance(data, list):
+                return data
+        if isinstance(raw, list):
+            return raw
+        return []
 
     def fetch_all_stories(self) -> list[dict]:
         all_stories: list[dict] = []

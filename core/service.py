@@ -324,6 +324,34 @@ class AutoAudioService:
     ) -> None:
         self._pipeline.run(session, stories, session.phase)
 
+    def _normalize_status_summary(self, data: Optional[dict]) -> Optional[dict]:
+        if data is None:
+            return None
+        if "progress" in data and "logs" in data and "chapter_progress" in data:
+            return data
+
+        total_stories = int(data.get("total_stories", 0) or 0)
+        total_chapters = int(data.get("total_chapters", 0) or 0)
+        status = data.get("status", "")
+        done_status = status in ("completed", "error", "stopped")
+
+        return {
+            **data,
+            "current_story": data.get("current_story", ""),
+            "progress": data.get(
+                "progress",
+                {"done": total_stories if done_status else 0, "total": total_stories},
+            ),
+            "chapter_progress": data.get(
+                "chapter_progress",
+                {"done": total_chapters if done_status else 0, "total": total_chapters},
+            ),
+            "stories_missing_audio": data.get("stories_missing_audio", []),
+            "logs": data.get("logs", []),
+            "story_results": data.get("story_results", []),
+            "is_paused": data.get("is_paused", False),
+        }
+
     def start_session(
         self,
         phase: str,
@@ -369,12 +397,26 @@ class AutoAudioService:
         session.set_status("running")
         return session_id
 
-    def get_status(self) -> Optional[dict]:
+    def get_status(
+        self,
+        log_limit: Optional[int] = None,
+        result_limit: Optional[int] = None,
+        compact: bool = False,
+    ) -> Optional[dict]:
         if self._active_session is not None:
-            return self._active_session.to_dict()
+            if compact:
+                if log_limit is None:
+                    log_limit = 0
+                if result_limit is None:
+                    result_limit = 0
+            return self._active_session.to_dict(
+                log_limit=log_limit,
+                result_limit=result_limit,
+                include_completed_stories=not compact,
+            )
         # No active session — return the most recent completed session from history
         latest = self._session_mgr.get_latest_session()
-        return latest
+        return self._normalize_status_summary(latest)
 
     def stop_session(self) -> bool:
         if self._active_session is None:

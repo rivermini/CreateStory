@@ -26,6 +26,11 @@ class UploadManager:
 
     def __init__(self, api_client: ExternalAPIClient) -> None:
         self._api = api_client
+        self._ffmpeg_path: Optional[Path] | bool = False
+        self._client = httpx.Client(
+            timeout=120.0,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
 
     def upload_audio(
         self,
@@ -95,10 +100,9 @@ class UploadManager:
         last_exc: Exception | None = None
         for attempt in range(max_retries):
             try:
-                with httpx.Client(timeout=120.0) as client:
-                    resp = client.put(url, content=data, headers=headers)
-                    resp.raise_for_status()
-                    return resp
+                resp = self._client.put(url, content=data, headers=headers, timeout=120.0)
+                resp.raise_for_status()
+                return resp
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 503 and attempt < max_retries - 1:
                     last_exc = exc
@@ -130,21 +134,27 @@ class UploadManager:
             session.add_log(9, f"Failed to remove temp directory {output_dir}: {exc}", level="warning")
 
     def _find_ffmpeg(self) -> Optional[Path]:
+        if self._ffmpeg_path is not False:
+            return self._ffmpeg_path
         import shutil as _sh
         project_root = Path(__file__).parent.parent.parent
         vendor_ffmpeg = project_root / "vendor" / "ffmpeg" / "bin" / "ffmpeg.exe"
         if vendor_ffmpeg.exists():
+            self._ffmpeg_path = vendor_ffmpeg
             return vendor_ffmpeg
         path = _sh.which("ffmpeg")
         if path:
-            return Path(path)
+            self._ffmpeg_path = Path(path)
+            return self._ffmpeg_path
         try:
             import imageio_ffmpeg as _imf
             exe = _imf.get_ffmpeg_exe()
             if exe and Path(exe).exists():
-                return Path(exe)
+                self._ffmpeg_path = Path(exe)
+                return self._ffmpeg_path
         except Exception:
             pass
+        self._ffmpeg_path = None
         return None
 
     def _compress_audio_to_opus(

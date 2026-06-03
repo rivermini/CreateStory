@@ -91,8 +91,24 @@ class AutoAudioSession:
     def __post_init__(self) -> None:
         self._pause_event.set()
 
-    def to_dict(self) -> dict:
+    def to_dict(
+        self,
+        *,
+        log_limit: Optional[int] = None,
+        result_limit: Optional[int] = None,
+        include_completed_stories: bool = True,
+    ) -> dict:
         with self._lock:
+            logs = (
+                self.logs[-log_limit:]
+                if log_limit is not None and log_limit > 0
+                else ([] if log_limit == 0 else self.logs)
+            )
+            story_results = (
+                self.story_results[-result_limit:]
+                if result_limit is not None and result_limit > 0
+                else ([] if result_limit == 0 else self.story_results)
+            )
             return {
                 "session_id": self.session_id,
                 "phase": self.phase,
@@ -105,12 +121,16 @@ class AutoAudioSession:
                 "progress": self.progress,
                 "chapter_progress": self.chapter_progress,
                 "stories_missing_audio": self.stories_missing_audio,
-                "logs": self.logs,
+                "logs": logs,
                 "started_at": self.started_at,
                 "finished_at": self.finished_at,
                 "error": self.error,
-                "story_results": self.story_results,
-                "completed_stories": list(self.completed_stories),
+                "story_results": story_results,
+                **(
+                    {"completed_stories": list(self.completed_stories)}
+                    if include_completed_stories
+                    else {}
+                ),
                 "is_paused": self._paused,
             }
 
