@@ -730,6 +730,7 @@ class BedReadService:
                     if no_active_batch:
                         with self._lock:
                             self._poll_running = False
+                        self.tts_service.release_idle_models()
                         return
 
     def get_batch_job(self, batch_id: str) -> Optional[dict]:
@@ -765,6 +766,7 @@ class BedReadService:
                 batch.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 logger.info("BedRead batch %s removed from queue and cancelled", batch_id)
                 self._persist_jobs()
+                self.tts_service.release_idle_models()
                 return True
 
             if batch.status not in ("pending", "running"):
@@ -792,6 +794,8 @@ class BedReadService:
         self._persist_jobs()
         if should_restart_poll:
             self._start_poll_thread()
+        else:
+            self.tts_service.release_idle_models()
         logger.info("BedRead batch %s cancelled", batch_id)
         return True
 

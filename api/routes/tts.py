@@ -47,14 +47,18 @@ class LanguageResponse(BaseModel):
 
 
 class ConcurrencyRequest(BaseModel):
-    concurrency: int = Field(..., ge=1, le=8, description="Number of concurrent TTS workers (1-8).")
+    concurrency: int | None = Field(default=None, ge=1, le=8, description="Number of concurrent TTS workers (1-8), or null for auto.")
 
 
 @router.post("/concurrency")
 def update_concurrency(request: ConcurrencyRequest) -> dict:
     service = get_tts_service()
+    if request.concurrency is None:
+        service.set_auto_concurrency()
+        return {"concurrency": service.get_concurrency(), "mode": "auto"}
+
     service.set_concurrency(request.concurrency)
-    return {"concurrency": service.get_concurrency()}
+    return {"concurrency": service.get_concurrency(), "mode": "manual"}
 
 
 @router.get("/voices", response_model=list[VoiceResponse])
@@ -124,6 +128,13 @@ def get_queue() -> dict:
     }
 
 
+@router.post("/release-idle-models")
+def release_idle_models() -> dict:
+    service = get_tts_service()
+    released = service.release_idle_models()
+    return {"released": released, "concurrency": service.get_concurrency()}
+
+
 @router.get("/jobs/{job_id}")
 def get_job_status(job_id: str) -> dict:
     service = get_tts_service()
@@ -156,7 +167,7 @@ def stream_audio(job_id: str) -> StreamingResponse:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
 
-    output_dir = service.get_output_path(job_id).parent if service.get_output_path(job_id) else None
+    output_dir = service.get_output_dir(job_id)
 
     if job["status"] in ("cancelled", "failed") and not output_dir:
         raise HTTPException(status_code=404, detail=f"No audio available for job '{job_id}'.")
@@ -188,7 +199,9 @@ def stream_audio(job_id: str) -> StreamingResponse:
         return JSONResponse(
             content={
                 "status": job["status"],
-                "progress_pct": 0,
+                "chunks_done": job["chunks_done"],
+                "chunks_total": job["chunks_total"],
+                "progress_pct": job["progress_pct"],
                 "chunks": [],
             },
             headers={

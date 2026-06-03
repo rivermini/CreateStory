@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import uuid
+import gc
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +30,42 @@ def _detect_execution_provider() -> str:
         pass
 
     return "CPUExecutionProvider"
+
+
+def _env_int(name: str, default: int, minimum: int = 1, maximum: int | None = None) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        value = default
+    else:
+        try:
+            value = int(raw)
+        except ValueError:
+            logger.warning("Invalid %s=%r; using %d.", name, raw, default)
+            value = default
+
+    value = max(minimum, value)
+    if maximum is not None:
+        value = min(value, maximum)
+    return value
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "y", "on"}
+
+
+def _default_concurrency(ignore_env: bool = False) -> int:
+    if not ignore_env and os.environ.get("KOKORO_CONCURRENCY", "").strip():
+        return _env_int("KOKORO_CONCURRENCY", 1, minimum=1, maximum=8)
+
+    provider = _detect_execution_provider()
+    if provider == "CPUExecutionProvider":
+        cpu_count = os.cpu_count() or 2
+        return max(1, min(4, cpu_count // 2))
+
+    return 1
 
 
 SAMPLE_RATE = 24000
@@ -114,6 +151,7 @@ class TTSJob:
             "lang": self.lang,
             "speed": self.speed,
             "format": self.format,
+            "output_dir": self.output_dir,
             "chunks_total": self.chunks_total,
             "chunks_done": self.chunks_done,
             "progress_pct": self.progress_pct,
@@ -126,7 +164,9 @@ class TTSJob:
 
 
 class TTSService:
-    CONCURRENCY: int = int(os.environ.get("KOKORO_CONCURRENCY", "1"))
+    CONCURRENCY: int = _default_concurrency()
+    CHUNK_SIZE: int = _env_int("KOKORO_CHUNK_SIZE", 1400, minimum=600, maximum=2400)
+    SAVE_CHUNKS: bool = _env_bool("KOKORO_SAVE_CHUNKS", False)
 
     def __init__(self) -> None:
         self._jobs: dict[str, TTSJob] = {}
@@ -134,6 +174,8 @@ class TTSService:
         self._lock = Lock()
         self._workers: list[Thread] = []
         self._workers_running = True
+        self._target_workers = self.CONCURRENCY
+        self._busy_workers: set[int] = set()
         self._project_root = Path(__file__).parent.parent.parent.resolve()
         self._output_base = self._project_root / "output" / "tts"
         self._output_base.mkdir(parents=True, exist_ok=True)
@@ -145,14 +187,20 @@ class TTSService:
             t.start()
             self._workers.append(t)
 
-        logger.info("TTSService started with %d workers, provider=%s.", self.CONCURRENCY, _detect_execution_provider())
+        logger.info(
+            "TTSService started with %d workers, provider=%s, chunk_size=%d, save_chunks=%s.",
+            self.CONCURRENCY,
+            _detect_execution_provider(),
+            self.CHUNK_SIZE,
+            self.SAVE_CHUNKS,
+        )
 
     def _resolve_paths(self) -> tuple[Path, Path]:
         if self._model_path is None:
-            raw_model = os.environ.get("KOKORO_MODEL_PATH", "models/kokoro-v1.0.onnx")
+            raw_model = os.environ.get("KOKORO_MODEL_PATH", "api/models/kokoro-v1.0.onnx")
             self._model_path = (self._project_root / raw_model).resolve()
         if self._voices_path is None:
-            raw_voices = os.environ.get("KOKORO_VOICES_PATH", "models/voices-v1.0.bin")
+            raw_voices = os.environ.get("KOKORO_VOICES_PATH", "api/models/voices-v1.0.bin")
             self._voices_path = (self._project_root / raw_voices).resolve()
         return self._model_path, self._voices_path
 
@@ -171,8 +219,8 @@ class TTSService:
                 raise FileNotFoundError(
                     "Kokoro model files not found. "
                     "Download them and set KOKORO_MODEL_PATH / KOKORO_VOICES_PATH in .env:\n"
-                    "  wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx\n"
-                    "  wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin"
+                    "  wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx -O api/models/kokoro-v1.0.onnx\n"
+                    "  wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin -O api/models/voices-v1.0.bin"
                 )
 
             from kokoro_onnx import Kokoro
@@ -183,6 +231,14 @@ class TTSService:
             logger.info("Kokoro model loaded for worker %d on %s.", worker_id, provider)
 
         return kokoro
+
+    def _unload_kokoro_for_worker(self, worker_id: int) -> None:
+        attr = f"_kokoro_{worker_id}"
+        if hasattr(self, attr):
+            try:
+                delattr(self, attr)
+            except Exception:
+                logger.debug("Failed to unload Kokoro for worker %d.", worker_id, exc_info=True)
 
     @staticmethod
     def clean_text(text: str) -> str:
@@ -347,10 +403,11 @@ class TTSService:
 
     def list_jobs(self) -> list[dict]:
         with self._lock:
+            queue_positions = {job_id: i + 1 for i, job_id in enumerate(self._queue)}
             items = []
             for job_id, job in self._jobs.items():
                 try:
-                    items.append(job.to_dict(queue_position=self._get_queue_position(job_id)))
+                    items.append(job.to_dict(queue_position=queue_positions.get(job_id, 0)))
                 except Exception:
                     pass
             return items
@@ -366,6 +423,7 @@ class TTSService:
             if job_id in self._queue:
                 self._queue.remove(job_id)
         logger.info("TTS job %s cancelled.", job_id)
+        self.release_idle_models()
         return True
 
     def get_output_path(self, job_id: str) -> Optional[Path]:
@@ -374,8 +432,23 @@ class TTSService:
         if job is None:
             return None
         try:
+            if not job.output_filename:
+                return None
             path = Path(job.output_dir) / job.output_filename
             if path.exists():
+                return path
+            return None
+        except Exception:
+            return None
+
+    def get_output_dir(self, job_id: str) -> Optional[Path]:
+        with self._lock:
+            job = self._jobs.get(job_id)
+        if job is None or not job.output_dir:
+            return None
+        try:
+            path = Path(job.output_dir)
+            if path.exists() and path.is_dir():
                 return path
             return None
         except Exception:
@@ -396,6 +469,7 @@ class TTSService:
 
         old = self.CONCURRENCY
         self.CONCURRENCY = concurrency
+        self._target_workers = concurrency
 
         if concurrency > old:
             for i in range(old, concurrency):
@@ -404,7 +478,33 @@ class TTSService:
                 self._workers.append(t)
             logger.info("Scaled TTSService workers from %d to %d.", old, concurrency)
         else:
-            logger.info("TTSService concurrency set to %d (active workers will drain naturally).", concurrency)
+            logger.info("TTSService concurrency set to %d (extra workers will exit when idle).", concurrency)
+
+    def set_auto_concurrency(self) -> None:
+        self.set_concurrency(_default_concurrency(ignore_env=True))
+
+    def release_idle_models(self, force: bool = False) -> bool:
+        """Release cached Kokoro/ONNX sessions when no TTS job is currently running."""
+        with self._lock:
+            busy = bool(self._busy_workers)
+            queued_or_processing = any(
+                job.status in ("queued", "processing")
+                for job in self._jobs.values()
+            )
+        if busy or (queued_or_processing and not force):
+            return False
+
+        released = False
+        for worker_id in range(len(self._workers)):
+            attr = f"_kokoro_{worker_id}"
+            if hasattr(self, attr):
+                self._unload_kokoro_for_worker(worker_id)
+                released = True
+
+        if released:
+            gc.collect()
+            logger.info("Released idle Kokoro model sessions.")
+        return released
 
     def _worker_loop(self, worker_id: int) -> None:
         import numpy as np
@@ -413,6 +513,12 @@ class TTSService:
         logger.info("Worker %d started, waiting for jobs...", worker_id)
 
         while self._workers_running:
+            if worker_id >= self._target_workers:
+                self._unload_kokoro_for_worker(worker_id)
+                gc.collect()
+                logger.info("Worker %d stopped after concurrency downscale.", worker_id)
+                return
+
             job_id: Optional[str] = None
             with self._lock:
                 while self._queue and self._queue[0] in self._jobs:
@@ -433,25 +539,35 @@ class TTSService:
             if job is None:
                 continue
 
-            job.status = "processing"
-            job.started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with self._lock:
+                self._busy_workers.add(worker_id)
+                job.status = "processing"
+                job.started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             logger.info("Worker %d picked TTS job %s.", worker_id, job_id)
+
+            all_samples: list[np.ndarray] = []
+            chunks: list[str] = []
+            samples_list: list[np.ndarray] = []
+            kokoro = None
+            voice_val = None
+            samples = None
+            merged = None
+            sub_s = None
 
             try:
                 kokoro = self._get_kokoro_for_worker(worker_id)
                 voice_val = self._validate_voice(job.voice, kokoro)
 
-                chunks = self.chunk_text(job.text, initial_chunk_size=1000)
+                chunks = self.chunk_text(job.text, initial_chunk_size=self.CHUNK_SIZE)
                 job.chunks_total = len(chunks)
                 job.chunks_done = 0
 
                 logger.info(
-                    "Worker %d job %s: %d chunks, voice=%s, lang=%s, speed=%.1f, fmt=%s",
-                    worker_id, job_id, len(chunks), job.voice, job.lang, job.speed, job.format,
+                    "Worker %d job %s: %d chunks, voice=%s, lang=%s, speed=%.1f, fmt=%s, chunk_size=%d",
+                    worker_id, job_id, len(chunks), job.voice, job.lang, job.speed, job.format, self.CHUNK_SIZE,
                 )
 
-                all_samples: list[np.ndarray] = []
                 sample_rate = SAMPLE_RATE
 
                 for i, chunk in enumerate(chunks):
@@ -460,8 +576,6 @@ class TTSService:
                         if j and j.status == "cancelled":
                             logger.info("Worker %d job %s cancelled mid-processing.", worker_id, job_id)
                             break
-
-                    chunk_file = Path(job.output_dir) / f"chunk_{i + 1:03d}.{job.format}"
 
                     try:
                         samples, sr = kokoro.create(
@@ -474,7 +588,7 @@ class TTSService:
                         error_msg = str(exc)
                         if "index 510 is out of bounds" in error_msg or "phoneme" in error_msg.lower():
                             logger.warning("Worker %d chunk %d phoneme error, splitting.", worker_id, i + 1)
-                            samples_list: list[np.ndarray] = []
+                            samples_list = []
                             sr = SAMPLE_RATE
                             sub_chunks = self.chunk_text(chunk, initial_chunk_size=int(len(chunk) * 0.6))
                             for sub_chunk in sub_chunks:
@@ -496,8 +610,12 @@ class TTSService:
                         else:
                             raise
 
-                    import soundfile as sf
-                    sf.write(str(chunk_file), samples, sr)
+                    sample_rate = sr
+                    if self.SAVE_CHUNKS:
+                        import soundfile as sf
+                        chunk_file = Path(job.output_dir) / f"chunk_{i + 1:03d}.{job.format}"
+                        sf.write(str(chunk_file), samples, sr)
+
                     all_samples.append(samples)
 
                     with self._lock:
@@ -543,6 +661,19 @@ class TTSService:
                         j.status = "failed"
                         j.error = repr(exc)
                         j.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            finally:
+                all_samples.clear()
+                chunks.clear()
+                samples_list.clear()
+                kokoro = None
+                voice_val = None
+                samples = None
+                merged = None
+                sub_s = None
+                with self._lock:
+                    self._busy_workers.discard(worker_id)
+                gc.collect()
+                self.release_idle_models()
 
 
 _tts_service: Optional[TTSService] = None

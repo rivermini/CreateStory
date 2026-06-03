@@ -97,7 +97,9 @@ The server starts on **http://localhost:8001**. API docs are at **http://localho
 | `KOKORO_MODEL_PATH` | `api/models/kokoro-v1.0.onnx` | Path to Kokoro ONNX model file |
 | `KOKORO_VOICES_PATH` | `api/models/voices-v1.0.bin` | Path to voices manifest |
 | `ONNX_PROVIDER` | *(auto-detect)* | `CUDAExecutionProvider` or `CPUExecutionProvider` |
-| `KOKORO_CONCURRENCY` | `1` | Max concurrent TTS worker threads |
+| `KOKORO_CONCURRENCY` | Auto (`1` on CUDA, up to `4` on CPU) | Max concurrent TTS worker threads |
+| `KOKORO_CHUNK_SIZE` | `1400` | Target text characters per TTS chunk; larger values reduce overhead |
+| `KOKORO_SAVE_CHUNKS` | `false` | Write intermediate `chunk_*.wav` files for debugging |
 | `SERVICE_URLS_FastAPIServer` | `http://localhost:8000` | FastAPIServer URL (for runtime config fetch) |
 | `SERVICE_URLS_BedReadVoices` | `http://localhost:8001` | Self-reference |
 
@@ -210,7 +212,7 @@ POST /api/tts/speak
 
 **CUDA not available.** Leave `ONNX_PROVIDER` empty to auto-detect. Falls back to CPU if CUDA is not installed.
 
-**Slow audio generation.** Increase `KOKORO_CONCURRENCY` in `.env` (default is 1). More workers = faster throughput on multi-core/GPU.
+**Slow audio generation.** Leave `KOKORO_CONCURRENCY` unset for auto-tuning, or set it manually in `.env`. CPU machines usually benefit from `2` to `4`; CUDA usually works best at `1`, with `2` worth testing if VRAM is comfortable. Increase `KOKORO_CHUNK_SIZE` for fewer inference calls, or lower it if a story hits phoneme/context errors.
 
 **External API errors in batch generation.** The service fetches external API credentials from FastAPIServer's `drive_sync_config.json` at runtime. Ensure FastAPIServer is running and the config file exists.
 
