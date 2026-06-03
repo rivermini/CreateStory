@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import Field
 
 from api.models.auto_audio import (
@@ -36,10 +36,18 @@ def start_session(request: StartSessionRequest) -> StartSessionResponse:
 
 
 @router.get("/status", response_model=AutoAudioSessionResponse | None)
-def get_status() -> AutoAudioSessionResponse | None:
+def get_status(
+    log_limit: int | None = Query(default=None, ge=0, le=500),
+    result_limit: int | None = Query(default=None, ge=0, le=500),
+    compact: bool = Query(default=False),
+) -> AutoAudioSessionResponse | None:
     """Return the current active session state, or the most recent completed session if none is running."""
     service = get_auto_audio_service()
-    data = service.get_status()
+    data = service.get_status(
+        log_limit=log_limit,
+        result_limit=result_limit,
+        compact=compact,
+    )
     if data is None:
         return None
     return AutoAudioSessionResponse(**data)

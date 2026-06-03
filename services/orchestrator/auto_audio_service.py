@@ -61,19 +61,25 @@ class AutoAudioServiceProxy:
     """
 
     _CACHE_TTL = 5.0  # seconds
+    _STATUS_CACHE_TTL = 1.0  # seconds
 
     def __init__(self) -> None:
         self._active_session: Optional[dict] = None
         self._cache: dict[str, tuple[float, object]] = {}
         self._lock = Lock()
+        self._client = httpx.Client(
+            timeout=30.0,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
 
     def _cached_get(self, key: str, fetch_fn) -> object:
         """Return cached value if fresh, otherwise fetch and cache it."""
         now = time.monotonic()
+        ttl = self._STATUS_CACHE_TTL if key.startswith("status") else self._CACHE_TTL
         with self._lock:
             if key in self._cache:
                 ts, val = self._cache[key]
-                if now - ts < self._CACHE_TTL:
+                if now - ts < ttl:
                     return val
             val = fetch_fn()
             self._cache[key] = (now, val)
@@ -82,7 +88,40 @@ class AutoAudioServiceProxy:
     def _invalidate_cache(self, *keys: str) -> None:
         with self._lock:
             for k in keys:
-                self._cache.pop(k, None)
+                if k == "status":
+                    for existing_key in list(self._cache):
+                        if existing_key.startswith("status"):
+                            self._cache.pop(existing_key, None)
+                else:
+                    self._cache.pop(k, None)
+
+    def _normalize_status_summary(self, data: Optional[dict]) -> Optional[dict]:
+        if data is None:
+            return None
+        if "progress" in data and "logs" in data and "chapter_progress" in data:
+            return data
+
+        total_stories = int(data.get("total_stories", 0) or 0)
+        total_chapters = int(data.get("total_chapters", 0) or 0)
+        status = data.get("status", "")
+        done_status = status in ("completed", "error", "stopped")
+
+        return {
+            **data,
+            "current_story": data.get("current_story", ""),
+            "progress": data.get(
+                "progress",
+                {"done": total_stories if done_status else 0, "total": total_stories},
+            ),
+            "chapter_progress": data.get(
+                "chapter_progress",
+                {"done": total_chapters if done_status else 0, "total": total_chapters},
+            ),
+            "stories_missing_audio": data.get("stories_missing_audio", []),
+            "logs": data.get("logs", []),
+            "story_results": data.get("story_results", []),
+            "is_paused": data.get("is_paused", False),
+        }
 
     def start_session(
         self,
@@ -93,58 +132,66 @@ class AutoAudioServiceProxy:
     ) -> str:
         self._invalidate_cache("status", "history")
         url = f"{_autoaudio_url()}/api/auto-audio/start"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, json={
-                "phase": phase,
-                "test_mode": test_mode,
-                "voice": voice,
-                "limit": limit,
-            })
-            resp.raise_for_status()
-            data = resp.json()
-            return data["session_id"]
+        resp = self._client.post(url, json={
+            "phase": phase,
+            "test_mode": test_mode,
+            "voice": voice,
+            "limit": limit,
+        }, timeout=30.0)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["session_id"]
 
-    def get_status(self) -> Optional[dict]:
+    def get_status(
+        self,
+        log_limit: Optional[int] = None,
+        result_limit: Optional[int] = None,
+        compact: bool = False,
+    ) -> Optional[dict]:
+        cache_key = f"status:{int(compact)}:{log_limit}:{result_limit}"
+
         def fetch() -> Optional[dict]:
             url = f"{_autoaudio_url()}/api/auto-audio/status"
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.get(url)
-                if resp.status_code == 200:
-                    return resp.json()
-                return None
+            params: dict[str, object] = {}
+            if log_limit is not None:
+                params["log_limit"] = log_limit
+            if result_limit is not None:
+                params["result_limit"] = result_limit
+            if compact:
+                params["compact"] = "true"
+            resp = self._client.get(url, params=params, timeout=30.0)
+            if resp.status_code == 200:
+                return self._normalize_status_summary(resp.json())
+            return None
 
-        return self._cached_get("status", fetch)
+        return self._cached_get(cache_key, fetch)
 
     def stop_session(self) -> None:
         self._invalidate_cache("status")
         url = f"{_autoaudio_url()}/api/auto-audio/stop"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url)
-            resp.raise_for_status()
+        resp = self._client.post(url, timeout=30.0)
+        resp.raise_for_status()
 
     def pause_session(self) -> dict:
         self._invalidate_cache("status")
         url = f"{_autoaudio_url()}/api/auto-audio/pause"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url)
-            resp.raise_for_status()
-            return resp.json()
+        resp = self._client.post(url, timeout=30.0)
+        resp.raise_for_status()
+        return resp.json()
 
     def resume_session(self) -> dict:
         self._invalidate_cache("status")
         url = f"{_autoaudio_url()}/api/auto-audio/resume"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url)
-            resp.raise_for_status()
-            return resp.json()
+        resp = self._client.post(url, timeout=30.0)
+        resp.raise_for_status()
+        return resp.json()
 
     def get_history(self) -> list[dict]:
         def fetch() -> list[dict]:
             url = f"{_autoaudio_url()}/api/auto-audio/history"
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.get(url)
-                resp.raise_for_status()
-                return resp.json()
+            resp = self._client.get(url, timeout=30.0)
+            resp.raise_for_status()
+            return resp.json()
 
         return self._cached_get("history", fetch)
 
@@ -155,32 +202,29 @@ class AutoAudioServiceProxy:
 
         def fetch() -> Optional[dict]:
             url = f"{_autoaudio_url()}/api/auto-audio/history/{session_id}"
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.get(url)
-                if resp.status_code == 404:
-                    return None
-                resp.raise_for_status()
-                return resp.json()
+            resp = self._client.get(url, timeout=30.0)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()
 
         return self._cached_get(key, fetch)
 
     def delete_session(self, session_id: str) -> bool:
         self._invalidate_cache("status", "history", f"session:{session_id}")
         url = f"{_autoaudio_url()}/api/auto-audio/history/{session_id}"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.delete(url)
-            if resp.status_code == 404:
-                return False
-            resp.raise_for_status()
-            return True
+        resp = self._client.delete(url, timeout=30.0)
+        if resp.status_code == 404:
+            return False
+        resp.raise_for_status()
+        return True
 
     def delete_sessions_batch(self, session_ids: list[str]) -> int:
         self._invalidate_cache("status", "history", *[f"session:{sid}" for sid in session_ids])
         url = f"{_autoaudio_url()}/api/auto-audio/history/batch-delete"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, json={"session_ids": session_ids})
-            resp.raise_for_status()
-            return resp.json().get("deleted", 0)
+        resp = self._client.post(url, json={"session_ids": session_ids}, timeout=30.0)
+        resp.raise_for_status()
+        return resp.json().get("deleted", 0)
 
 
 _auto_audio_service: Optional[AutoAudioServiceProxy] = None
