@@ -20,22 +20,22 @@ type FilterMode = 'all' | 'test' | 'prod';
 
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
     completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
-    error:     (d) => d ? 'bg-red-400'    : 'bg-red-500',
-    stopped:   (d) => d ? 'bg-amber-400'  : 'bg-amber-500',
-    running:   (d) => d ? 'bg-blue-400'   : 'bg-blue-500',
-    paused:    (d) => d ? 'bg-amber-300'  : 'bg-amber-500',
-    stopping:  (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-500 animate-pulse',
-    idle:      (d) => d ? 'bg-white/30'  : 'bg-gray-400',
+    error: (d) => d ? 'bg-red-400' : 'bg-red-500',
+    stopped: (d) => d ? 'bg-amber-400' : 'bg-amber-500',
+    running: (d) => d ? 'bg-blue-400' : 'bg-blue-500',
+    paused: (d) => d ? 'bg-amber-300' : 'bg-amber-500',
+    stopping: (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-500 animate-pulse',
+    idle: (d) => d ? 'bg-white/30' : 'bg-gray-400',
 };
 
 const STATUS_LABEL_MAP: Record<string, string> = {
     completed: 'Completed',
-    error:     'Error',
-    stopped:   'Stopped',
-    running:   'Running',
-    paused:    'Paused',
-    stopping:  'Stopping',
-    idle:      'Idle',
+    error: 'Error',
+    stopped: 'Stopped',
+    running: 'Running',
+    paused: 'Paused',
+    stopping: 'Stopping',
+    idle: 'Idle',
 };
 
 function formatTime(iso: string | null): string {
@@ -462,7 +462,34 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
             <div className="lg-orb lg-orb-1" />
             <div className="lg-orb lg-orb-2" />
             <div className="lg-orb lg-orb-3" />
-
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmation.open && (
+                <div className="lg-modal-overlay">
+                    <div className="lg-glass-deep p-6 w-full max-w-sm space-y-4">
+                        <h3 className={`text-lg font-semibold ${c('text')}`}>Confirm Delete</h3>
+                        <p className={`text-sm ${c('textBody')}`}>
+                            Are you sure you want to delete {deleteConfirmation.ids.length} session{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+                        </p>
+                        <div className="flex gap-2 justify-end pt-2">
+                            <button
+                                onClick={() => setDeleteConfirmation({ open: false, ids: [] })}
+                                disabled={isDeleting}
+                                className="lg-btn-ghost"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmDelete}
+                                disabled={isDeleting}
+                                className="lg-btn-danger"
+                                style={{ opacity: isDeleting ? 0.4 : 1 }}
+                            >
+                                {isDeleting ? 'Removing...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
                 <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
 
@@ -708,35 +735,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                             >
                                 Refresh
                             </button>
-                        </div>
-                    )}
-
-                    {/* Delete Confirmation Modal */}
-                    {deleteConfirmation.open && (
-                        <div className="lg-modal-overlay">
-                            <div className="lg-glass-deep p-6 w-full max-w-sm space-y-4">
-                                <h3 className={`text-lg font-semibold ${c('text')}`}>Confirm Delete</h3>
-                                <p className={`text-sm ${c('textBody')}`}>
-                                    Are you sure you want to delete {deleteConfirmation.ids.length} session{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
-                                </p>
-                                <div className="flex gap-2 justify-end pt-2">
-                                    <button
-                                        onClick={() => setDeleteConfirmation({ open: false, ids: [] })}
-                                        disabled={isDeleting}
-                                        className="lg-btn-ghost"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleConfirmDelete}
-                                        disabled={isDeleting}
-                                        className="lg-btn-danger"
-                                        style={{ opacity: isDeleting ? 0.4 : 1 }}
-                                    >
-                                        {isDeleting ? 'Removing...' : 'Delete'}
-                                    </button>
-                                </div>
-                            </div>
                         </div>
                     )}
                 </main>

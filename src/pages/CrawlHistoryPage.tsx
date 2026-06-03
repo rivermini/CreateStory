@@ -45,17 +45,17 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
 
     const statusDotMap: Record<string, string> = {
         completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
-        failed:    isDark ? 'bg-red-400'    : 'bg-red-500',
-        cancelled: isDark ? 'bg-amber-400'  : 'bg-amber-500',
-        running:   isDark ? 'bg-blue-400'   : 'bg-blue-500',
-        idle:      isDark ? 'bg-white/30'  : 'bg-gray-400',
+        failed: isDark ? 'bg-red-400' : 'bg-red-500',
+        cancelled: isDark ? 'bg-amber-400' : 'bg-amber-500',
+        running: isDark ? 'bg-blue-400' : 'bg-blue-500',
+        idle: isDark ? 'bg-white/30' : 'bg-gray-400',
     };
     const statusTextMap: Record<string, string> = {
         completed: isDark ? 'text-emerald-400' : 'text-emerald-600',
-        failed:    isDark ? 'text-red-400'    : 'text-red-600',
-        cancelled: isDark ? 'text-amber-400'  : 'text-amber-600',
-        running:   isDark ? 'text-blue-400'   : 'text-blue-600',
-        idle:      isDark ? 'text-white/40'  : 'text-gray-500',
+        failed: isDark ? 'text-red-400' : 'text-red-600',
+        cancelled: isDark ? 'text-amber-400' : 'text-amber-600',
+        running: isDark ? 'text-blue-400' : 'text-blue-600',
+        idle: isDark ? 'text-white/40' : 'text-gray-500',
     };
 
     const dot = statusDotMap[session.status] ?? (isDark ? 'bg-white/30' : 'bg-gray-400');
@@ -174,14 +174,14 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                                 className={`px-3 py-1.5 text-xs font-medium rounded-xl transition-colors ${isDark
                                     ? 'text-white/70 bg-white/[0.04] hover:bg-white/[0.06]'
                                     : 'text-[rgba(0,0,0,0.7)] bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]'
-                                }`}
+                                    }`}
                             >View</button>
                             <button
                                 onClick={(e) => { e.stopPropagation(); navigate(`/crawl?session=${session.crawl_id}`); }}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${isDark
                                     ? 'text-indigo-400 border-white/5 hover:border-indigo-400/50 hover:bg-indigo-400/10'
                                     : 'text-indigo-600 border-black/5 hover:border-indigo-400 hover:bg-indigo-50'
-                                }`}
+                                    }`}
                             >Session</button>
                             {chapterFiles.length > 0 && (
                                 <button
@@ -189,7 +189,7 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                                     className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${isDark
                                         ? 'text-white/40 border-white/5 hover:text-white/70 hover:bg-white/[0.04]'
                                         : 'text-[rgba(0,0,0,0.4)] border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'
-                                    }`}
+                                        }`}
                                 >{expanded ? 'Hide' : `${chapterFiles.length}F`}</button>
                             )}
                         </div>
@@ -252,7 +252,7 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                                         <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-mono flex-shrink-0 ${isDark
                                             ? 'bg-indigo-500/10 text-indigo-400'
                                             : 'bg-indigo-100 text-indigo-600'
-                                        }`}>
+                                            }`}>
                                             {file.chapter_number > 0 ? `#${file.chapter_number}` : '—'}
                                         </span>
                                         <span className={`text-sm truncate font-mono ${c('textBody')}`}>{file.filename}</span>
@@ -264,7 +264,7 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                                             className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${isDark
                                                 ? 'text-white/70 bg-white/[0.04] hover:bg-white/[0.06]'
                                                 : 'text-[rgba(0,0,0,0.7)] bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]'
-                                            }`}
+                                                }`}
                                         >Download</button>
                                     </div>
                                 </div>
@@ -311,7 +311,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
         return listAllResults()
             .then(data => setSessions(data))
             .catch(e => setError(e instanceof Error ? e.message : 'Failed to load'))
-            .finally(() => {});
+            .finally(() => { });
     }, []);
 
     useEffect(() => {
@@ -450,10 +450,47 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
         : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
 
     return (
+
         <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
             <div className="lg-orb lg-orb-1" />
             <div className="lg-orb lg-orb-2" />
             <div className="lg-orb lg-orb-3" />
+
+            {deleteConfirmation.open && (
+                <div className="lg-modal-overlay">
+                    <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">
+                        <h3 className={`text-lg font-semibold ${c('text')}`}>
+                            {deleteConfirmation.hasRunning ? 'Warning' : 'Confirm Delete'}
+                        </h3>
+                        {deleteConfirmation.hasRunning ? (
+                            <div className="space-y-3">
+                                <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                                    You are about to delete {deleteConfirmation.crawlIds.length} session{deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}, including <strong>running crawl(s)</strong>.
+                                </p>
+                                <p className={`text-sm ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>Deleting a running session will:</p>
+                                <ul className={`text-sm space-y-1 ml-4 ${c('textMuted')}`}>
+                                    <li>• Stop the active crawl</li>
+                                    <li>• Remove all downloaded data</li>
+                                    <li>• Clear the session permanently</li>
+                                </ul>
+                                <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>This action cannot be undone.</p>
+                            </div>
+                        ) : (
+                            <p className={`text-sm ${c('textBody')}`}>
+                                Are you sure you want to delete {deleteConfirmation.crawlIds.length} session{deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}? This action cannot be undone.
+                            </p>
+                        )}
+                        <div className="flex gap-2 justify-end pt-2">
+                            <button onClick={() => setDeleteConfirmation({ open: false, crawlIds: [], hasRunning: false })}
+                                disabled={isDeleting} className="lg-btn-ghost">Cancel</button>
+                            <button onClick={handleConfirmDelete} disabled={isDeleting}
+                                className="lg-btn-danger" style={{ opacity: isDeleting ? 0.4 : 1 }}>
+                                {isDeleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
                 <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
@@ -484,7 +521,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                             className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 shadow-lg ${downloadingAllCombined || !sessions.some(s => s.combined_file || s.combined_txt_file)
                                 ? isDark ? 'text-white/30 bg-white/[0.04] cursor-not-allowed shadow-none border border-white/[0.05]' : 'text-[rgba(0,0,0,0.3)] bg-[rgba(0,0,0,0.04)] cursor-not-allowed shadow-none border border-black/5'
                                 : 'text-white bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
-                            }`}
+                                }`}
                         >
                             {downloadingAllCombined ? 'Zipping...' : 'All Combined'}
                         </button>
@@ -493,7 +530,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                             className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${deleteMode
                                 ? isDark ? 'text-red-300 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20' : 'text-red-600 border border-red-300 bg-red-50 hover:bg-red-100'
                                 : isDark ? 'text-white/50 border border-white/5 hover:text-white/70 hover:bg-white/[0.04]' : 'text-[rgba(0,0,0,0.4)] border border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'
-                            }`}
+                                }`}
                         >
                             {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
                         </button>
@@ -512,7 +549,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                                 className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 shadow-lg ${isDeleting
                                     ? isDark ? 'text-red-400 bg-red-500/20 cursor-not-allowed shadow-none' : 'text-red-400 bg-red-100 cursor-not-allowed shadow-none'
                                     : 'text-white bg-red-600 hover:bg-red-500 shadow-red-600/30'
-                                }`}
+                                    }`}
                             >
                                 {isDeleting ? 'Deleting...' : `Delete (${selectedCrawlIds.size})`}
                             </button>
@@ -619,45 +656,9 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                                 className={`px-4 py-2 text-sm border rounded-xl transition-colors ${isDark
                                     ? 'text-white/40 hover:text-white/70 border-white/5 hover:bg-white/[0.04]'
                                     : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)] border-black/5 hover:bg-[rgba(0,0,0,0.04)]'
-                                }`}>
+                                    }`}>
                                 Refresh
                             </button>
-                        </div>
-                    )}
-
-                    {deleteConfirmation.open && (
-                        <div className="lg-modal-overlay">
-                            <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">
-                                <h3 className={`text-lg font-semibold ${c('text')}`}>
-                                    {deleteConfirmation.hasRunning ? 'Warning' : 'Confirm Delete'}
-                                </h3>
-                                {deleteConfirmation.hasRunning ? (
-                                    <div className="space-y-3">
-                                        <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                                            You are about to delete {deleteConfirmation.crawlIds.length} session{deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}, including <strong>running crawl(s)</strong>.
-                                        </p>
-                                        <p className={`text-sm ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>Deleting a running session will:</p>
-                                        <ul className={`text-sm space-y-1 ml-4 ${c('textMuted')}`}>
-                                            <li>• Stop the active crawl</li>
-                                            <li>• Remove all downloaded data</li>
-                                            <li>• Clear the session permanently</li>
-                                        </ul>
-                                        <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>This action cannot be undone.</p>
-                                    </div>
-                                ) : (
-                                    <p className={`text-sm ${c('textBody')}`}>
-                                        Are you sure you want to delete {deleteConfirmation.crawlIds.length} session{deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}? This action cannot be undone.
-                                    </p>
-                                )}
-                                <div className="flex gap-2 justify-end pt-2">
-                                    <button onClick={() => setDeleteConfirmation({ open: false, crawlIds: [], hasRunning: false })}
-                                        disabled={isDeleting} className="lg-btn-ghost">Cancel</button>
-                                    <button onClick={handleConfirmDelete} disabled={isDeleting}
-                                        className="lg-btn-danger" style={{ opacity: isDeleting ? 0.4 : 1 }}>
-                                        {isDeleting ? 'Deleting...' : 'Delete'}
-                                    </button>
-                                </div>
-                            </div>
                         </div>
                     )}
                 </main>
