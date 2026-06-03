@@ -10,7 +10,12 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from api.services.tts_service import get_tts_service, SAMPLE_RATE
+from api.services.tts_service import (
+    get_tts_service,
+    MAX_KOKORO_CONCURRENCY,
+    MIN_KOKORO_CONCURRENCY,
+    SAMPLE_RATE,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tts", tags=["TTS"])
@@ -47,7 +52,12 @@ class LanguageResponse(BaseModel):
 
 
 class ConcurrencyRequest(BaseModel):
-    concurrency: int | None = Field(default=None, ge=1, le=8, description="Number of concurrent TTS workers (1-8), or null for auto.")
+    concurrency: int | None = Field(
+        default=None,
+        ge=MIN_KOKORO_CONCURRENCY,
+        le=MAX_KOKORO_CONCURRENCY,
+        description="Number of concurrent Kokoro workers (1-2).",
+    )
 
 
 @router.post("/concurrency")

@@ -14,6 +14,8 @@ from threading import Lock, Thread
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+MIN_KOKORO_CONCURRENCY = 1
+MAX_KOKORO_CONCURRENCY = 2
 
 
 def _detect_execution_provider() -> str:
@@ -58,14 +60,19 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 def _default_concurrency(ignore_env: bool = False) -> int:
     if not ignore_env and os.environ.get("KOKORO_CONCURRENCY", "").strip():
-        return _env_int("KOKORO_CONCURRENCY", 1, minimum=1, maximum=8)
+        return _env_int(
+            "KOKORO_CONCURRENCY",
+            1,
+            minimum=MIN_KOKORO_CONCURRENCY,
+            maximum=MAX_KOKORO_CONCURRENCY,
+        )
 
     provider = _detect_execution_provider()
     if provider == "CPUExecutionProvider":
         cpu_count = os.cpu_count() or 2
-        return max(1, min(4, cpu_count // 2))
+        return max(MIN_KOKORO_CONCURRENCY, min(MAX_KOKORO_CONCURRENCY, cpu_count // 2))
 
-    return 1
+    return MIN_KOKORO_CONCURRENCY
 
 
 SAMPLE_RATE = 24000
@@ -547,7 +554,7 @@ class TTSService:
 
     def set_concurrency(self, concurrency: int) -> None:
         """Update the number of workers at runtime. Call before or after __init__."""
-        concurrency = max(1, min(concurrency, 8))
+        concurrency = max(MIN_KOKORO_CONCURRENCY, min(concurrency, MAX_KOKORO_CONCURRENCY))
         if concurrency == self.CONCURRENCY:
             return
 
