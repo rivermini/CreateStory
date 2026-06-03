@@ -419,6 +419,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
             await deleteCrawlSessions(deleteConfirmation.crawlIds);
             setSelectedCrawlIds(new Set());
             setDeleteConfirmation({ open: false, crawlIds: [], hasRunning: false });
+            setDeleteMode(false);
             await fetchSessions();
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to delete sessions');

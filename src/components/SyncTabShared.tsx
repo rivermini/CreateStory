@@ -41,7 +41,7 @@ function StatusBadge({ prefix, isDark }: { prefix: string; isDark: boolean }) {
 
 function EmptyState({ message, icon, isDark }: { message: string; icon: React.ReactNode; isDark: boolean }) {
   return (
-    <div className={`flex flex-col items-center justify-center py-16 px-4 lg-glass-card`}>
+    <div className={`flex flex-col w-full h-full items-center justify-center py-16 px-4 lg-glass-card`}>
       <div className="lg-glass w-16 h-16 rounded-2xl flex items-center justify-center mb-4">
         {icon}
       </div>

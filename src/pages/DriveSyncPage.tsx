@@ -496,7 +496,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
         {/* Main content */}
         {config && !configLoading && (
-          <div className="mt-2">
+          <div className="mt-3">
 
             <StorySyncTabs
               config={config}

@@ -142,7 +142,7 @@ export function UpdateTab({
     : 'bg-black/4 border-black/10 text-black/80 placeholder:text-black/30 focus:border-amber-500 focus:ring-0';
 
   return (
-    <div className="flex flex-col min-h-[400px]">
+    <div className="flex flex-col min-h-[400px] h-full">
       <div className="lg-glass flex flex-col sm:flex-row gap-3 p-4 sticky top-0 z-10" style={{ borderRadius: 0 }}>
         <div className="relative flex-1 min-w-0">
           <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-white/50' : 'text-black/30'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -289,7 +289,7 @@ export function UpdateTab({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 p-4">
         {!loading && !data && (
           <EmptyState
             isDark={isDark}
@@ -303,7 +303,7 @@ export function UpdateTab({
         )}
 
         {loading && (
-          <div className="flex flex-col items-center justify-center py-16">
+          <div className="flex flex-col items-center justify-center py-16 w-full">
             <div className="lg-glass w-16 h-16 rounded-full flex items-center justify-center mb-4">
               <svg className="w-8 h-8 animate-spin text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
