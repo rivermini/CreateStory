@@ -411,13 +411,7 @@ class AutoAudioService:
         return {"is_paused": False, "status": session.status}
 
     def get_history(self) -> list[dict]:
-        import time
-        t0 = time.monotonic()
-        import logging
-        _logger = logging.getLogger(__name__)
-        result = self._session_mgr.load_history()
-        _logger.info("AutoAudioService.get_history: load_history took %.1fms, returned %d sessions", (time.monotonic() - t0) * 1000, len(result))
-        return result
+        return self._session_mgr.load_history()
 
     def get_session(self, session_id: str) -> Optional[dict]:
         # Check in-memory active session first (avoids file I/O)

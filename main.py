@@ -2,10 +2,11 @@
 
 import logging
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
-logger = logging.getLogger("api.main")
+_logger = logging.getLogger("api.main")
 
 from dotenv import load_dotenv
 
@@ -20,6 +21,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import auto_audio
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Pre-initialize the service at startup to avoid cold-start on first HTTP request.
+    # This eagerly loads the history and instantiates downstream clients.
+    _logger.info("AutoAudio startup: pre-initializing service...")
+    from core.service import get_auto_audio_service
+    svc = get_auto_audio_service()
+    _ = svc.get_history()  # triggers _session_mgr.load_history()
+    _ = svc.get_status()   # triggers downstream calls, warming up httpx connections
+    _logger.info("AutoAudio startup: pre-initialization complete.")
+    yield
+
+
 app = FastAPI(
     title="AutoAudio API",
     description=(
@@ -28,6 +43,7 @@ app = FastAPI(
         "then uploads compressed audio back to the main backend."
     ),
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
