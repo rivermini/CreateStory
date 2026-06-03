@@ -386,9 +386,6 @@ class MainBEClientMixin:
         for story in self.search_server_stories(title):
             if self._normalize_story_title(story.get("title", "")) == target:
                 return story
-        for story in self.get_all_server_stories():
-            if self._normalize_story_title(story.get("title", "")) == target:
-                return self._story_ref_from_api(story)
         return None
 
     def get_drive_extended_chapters(self, folder_id: str) -> dict[int, dict]:
@@ -422,6 +419,37 @@ class MainBEClientMixin:
             }
         return chapters
 
+    def list_drive_extended_chapter_files(self, folder_id: str) -> list[dict]:
+        """List chapter files in chapters-extended without downloading their content."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        drive_service = self._build_drive_service()
+        chapters_ext = self._find_chapters_extended_folder(drive_service, folder_id)
+        if not chapters_ext:
+            raise RuntimeError("No chapters-extended subfolder found for this Drive folder.")
+
+        files = self._list_files_in_folder(drive_service, chapters_ext["id"])
+        md_files = [f for f in files if f.get("name", "").lower().endswith(".md")]
+        chapters: list[dict] = []
+        for file_info in sorted(md_files, key=lambda f: self._extract_chapter_index(f.get("name", "")) or 0):
+            filename = file_info.get("name", "")
+            chapter_number = self._extract_chapter_index(filename)
+            if chapter_number is None:
+                continue
+            title = re.sub(
+                r"^Chapter\s+\d+(?:-\d+)?\s*[-_]?\s*", "", filename.rsplit(".", 1)[0], flags=re.IGNORECASE
+            ).strip().replace("_", " ")
+            chapters.append({
+                "chapterNumber": chapter_number,
+                "title": title or filename,
+                "status": "ready",
+                "fileName": filename,
+                "serverLength": 0,
+                "driveLength": 0,
+                "message": None,
+            })
+        return chapters
+
     def inspect_drive_folder_for_content_update(self, folder_name: str) -> dict:
         """Resolve a pasted Drive folder name, matching server story, and list updateable Drive chapters."""
         folder = self.find_drive_folder_by_name(folder_name)
@@ -448,7 +476,7 @@ class MainBEClientMixin:
             }
 
         try:
-            drive_chapters = self.get_drive_extended_chapters(folder["id"])
+            chapters = self.list_drive_extended_chapter_files(folder["id"])
         except Exception as exc:
             return {
                 "found": False,
@@ -458,17 +486,6 @@ class MainBEClientMixin:
                 "summary": {"total": 0, "same": 0, "different": 0, "missingDrive": 0, "driveOnly": 0, "errors": 1},
                 "message": str(exc),
             }
-        chapters: list[dict] = []
-        for chapter_number, drive_chapter in sorted(drive_chapters.items()):
-            chapters.append({
-                "chapterNumber": chapter_number,
-                "title": drive_chapter.get("title") or "",
-                "status": "ready",
-                "fileName": drive_chapter.get("fileName"),
-                "serverLength": 0,
-                "driveLength": drive_chapter.get("plainLength") or 0,
-                "message": None,
-            })
 
         return {
             "found": True,
