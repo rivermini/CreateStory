@@ -1,14 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDownloadUrl, getDownloadCombinedUrl, getDownloadAllUrl, listAllResults, deleteCrawlSessions, getDownloadAllCombinedUrl, type CrawlSessionSummary } from '../api/client';
+import { getDownloadCombinedUrl, getDownloadAllUrl, listAllResults, deleteCrawlSessions, getDownloadAllCombinedUrl, type CrawlSessionSummary } from '../api/client';
 import { type ThemeMode } from '../components/ThemeToggle';
 import { DatePicker } from '../components/DatePicker';
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 function formatDate(iso: string | null): string {
     if (!iso) return '—';
@@ -30,7 +24,6 @@ function formatDuration(start: string | null, finish: string | null): string {
 
 interface SessionCardProps {
     session: CrawlSessionSummary;
-    onDownloadFile: (crawlId: string, filename: string) => void;
     order?: number;
     isSelected?: boolean;
     onToggleSelect?: (crawlId: string) => void;
@@ -40,8 +33,7 @@ interface SessionCardProps {
     navigate: ReturnType<typeof useNavigate>;
 }
 
-function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelect, deleteMode, isDark, c, navigate }: SessionCardProps) {
-    const [expanded, setExpanded] = useState(false);
+function SessionCard({ session, order, isSelected, onToggleSelect, deleteMode, isDark, c, navigate }: SessionCardProps) {
 
     const statusDotMap: Record<string, string> = {
         completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
@@ -62,11 +54,7 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
     const text = statusTextMap[session.status] ?? (isDark ? 'text-white/40' : 'text-gray-500');
     const label = session.status.charAt(0).toUpperCase() + session.status.slice(1);
     const hasCombined = !!(session.combined_file || session.combined_txt_file);
-    const chapterFiles = (session.output_files || []).filter(f =>
-        !hasCombined || (f.filename !== (session.combined_txt_file || session.combined_file))
-    );
-    const totalSize = (session.output_files || []).reduce((sum, f) => sum + (f.size_bytes || 0), 0);
-    const hasFiles = (session.output_files || []).length > 0;
+    const hasFiles = session.chapters_crawled > 0;
     const displayTitle = session.novel_metadata?.title || session.novel_name || session.crawl_id;
     const progress = session.chapters_total > 0
         ? Math.min(100, (session.chapters_crawled / session.chapters_total) * 100)
@@ -128,7 +116,6 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                                 {session.spider_name && <span>{session.spider_name}</span>}
                                 <span className={text}>{label}</span>
                                 {session.chapters_crawled > 0 && <span>{session.chapters_crawled} chapter{session.chapters_crawled !== 1 ? 's' : ''}</span>}
-                                {totalSize > 0 && <span>{formatBytes(totalSize)}</span>}
                             </div>
                             {session.source_url && (
                                 <div className={`mt-1 text-xs truncate max-w-xs ${c('textSub')}`}>
@@ -183,15 +170,6 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                                     : 'text-indigo-600 border-black/5 hover:border-indigo-400 hover:bg-indigo-50'
                                     }`}
                             >Session</button>
-                            {chapterFiles.length > 0 && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
-                                    className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${isDark
-                                        ? 'text-white/40 border-white/5 hover:text-white/70 hover:bg-white/[0.04]'
-                                        : 'text-[rgba(0,0,0,0.4)] border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'
-                                        }`}
-                                >{expanded ? 'Hide' : `${chapterFiles.length}F`}</button>
-                            )}
                         </div>
 
                         {session.status === 'running' && session.chapters_total > 0 && (
@@ -239,50 +217,6 @@ function SessionCard({ session, onDownloadFile, order, isSelected, onToggleSelec
                         <p className={`text-xs mt-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{session.error_message}</p>
                     )}
                 </div>
-
-                {expanded && chapterFiles.length > 0 && (
-                    <div className={`border-t px-5 py-3 ${isDark ? 'border-white/[0.05] bg-white/[0.01]' : 'border-black/5 bg-[rgba(0,0,0,0.01)]'}`}>
-                        <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-white/20' : 'text-[rgba(0,0,0,0.2)]'}`}>
-                            Individual Chapters
-                        </p>
-                        <div className="space-y-1.5">
-                            {chapterFiles.slice(0, 5).map((file) => (
-                                <div key={file.filename} className="flex items-center justify-between gap-3 py-1">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded text-[10px] font-mono flex-shrink-0 ${isDark
-                                            ? 'bg-indigo-500/10 text-indigo-400'
-                                            : 'bg-indigo-100 text-indigo-600'
-                                            }`}>
-                                            {file.chapter_number > 0 ? `#${file.chapter_number}` : '—'}
-                                        </span>
-                                        <span className={`text-sm truncate font-mono ${c('textBody')}`}>{file.filename}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                        <span className={`text-xs ${c('textSub')}`}>{formatBytes(file.size_bytes)}</span>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onDownloadFile(session.crawl_id, file.filename); }}
-                                            className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${isDark
-                                                ? 'text-white/70 bg-white/[0.04] hover:bg-white/[0.06]'
-                                                : 'text-[rgba(0,0,0,0.7)] bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]'
-                                                }`}
-                                        >Download</button>
-                                    </div>
-                                </div>
-                            ))}
-                            {chapterFiles.length > 5 && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/results?session=${session.crawl_id}`); }}
-                                    className={`flex items-center gap-2 py-1 text-xs transition-colors ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
-                                >
-                                    <span>+{chapterFiles.length - 5} more files — view all in session</span>
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );
@@ -379,16 +313,6 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
         completed: filtered.filter(s => s.status === 'completed').length,
         failed: filtered.filter(s => s.status === 'failed' || s.status === 'cancelled').length,
         running: filtered.filter(s => s.status === 'running').length,
-    };
-
-    const handleDownloadFile = (crawlId: string, filename: string) => {
-        const url = getDownloadUrl(crawlId, filename);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
     };
 
     const handleToggleSelect = (crawlId: string) => {
@@ -637,7 +561,6 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                             <SessionCard
                                 key={session.crawl_id}
                                 session={session}
-                                onDownloadFile={handleDownloadFile}
                                 order={index + 1}
                                 isSelected={selectedCrawlIds.has(session.crawl_id)}
                                 onToggleSelect={handleToggleSelect}
