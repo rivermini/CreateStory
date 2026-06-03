@@ -1194,7 +1194,7 @@ export interface AutoAudioSession {
   phase: string;
   test_mode: boolean;
   voice: string;
-  status: 'idle' | 'running' | 'stopping' | 'completed' | 'error' | 'stopped';
+  status: 'idle' | 'running' | 'paused' | 'stopping' | 'completed' | 'error' | 'stopped';
   current_step: number;
   current_step_desc: string;
   current_story: string;
@@ -1206,6 +1206,7 @@ export interface AutoAudioSession {
   finished_at: string | null;
   error: string;
   story_results: AutoAudioStoryResult[];
+  is_paused?: boolean;
 }
 
 export interface AutoAudioHistoryEntry {
@@ -1237,6 +1238,19 @@ export async function getAutoAudioStatus(): Promise<AutoAudioSession | null> {
 
 export async function stopAutoAudio(): Promise<void> {
   await apiFetch('/api/auto-audio/stop', { method: 'POST' });
+}
+
+export interface AutoAudioPauseResponse {
+  is_paused: boolean;
+  status: string;
+}
+
+export async function pauseAutoAudio(): Promise<AutoAudioPauseResponse> {
+  return apiFetch<AutoAudioPauseResponse>('/api/auto-audio/pause', { method: 'POST' });
+}
+
+export async function resumeAutoAudio(): Promise<AutoAudioPauseResponse> {
+  return apiFetch<AutoAudioPauseResponse>('/api/auto-audio/resume', { method: 'POST' });
 }
 
 export async function getAutoAudioHistory(): Promise<AutoAudioHistoryEntry[]> {

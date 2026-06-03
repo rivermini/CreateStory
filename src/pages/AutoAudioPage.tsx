@@ -3,6 +3,8 @@ import {
   getAutoAudioStatus,
   startAutoAudio,
   stopAutoAudio,
+  pauseAutoAudio,
+  resumeAutoAudio,
   getDriveSyncConfig,
   type AutoAudioSession,
   type DriveSyncConfig,
@@ -71,7 +73,10 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
   const prevLogLenRef = useRef(0);
 
   const isRunning = session?.status === 'running';
+  const isPaused = session?.status === 'paused';
+  const isActive = isRunning || isPaused;
   const isStopping = session?.status === 'stopping';
+  const isLive = isActive || isStopping;
   const isDone = session?.status === 'completed' || session?.status === 'error' || session?.status === 'stopped';
   const currentPhaseInfo = PHASES.find(p => p.id === selectedPhase)!;
   const runningAccent = PHASE_ACCENT[session?.phase || 'phase1'] || '#6366f1';
@@ -108,7 +113,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
   }, [onAutoAudioSessionUpdate]);
   useEffect(() => { getDriveSyncConfig().then(cfg => setConfig(cfg)).catch(() => {}).finally(() => setConfigLoading(false)); }, []);
   useEffect(() => {
-    if (session?.phase && session.status === 'running') setSelectedPhase(session.phase);
+    if (session?.phase && (session.status === 'running' || session.status === 'paused')) setSelectedPhase(session.phase);
   }, [session?.phase, session?.status]);
   useEffect(() => {
     if (logEndRef.current && session?.logs && session.logs.length > prevLogLenRef.current) {
@@ -149,6 +154,22 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
     }
   };
 
+  const handlePauseToggle = async () => {
+    setError('');
+    try {
+      if (isPaused) {
+        await resumeAutoAudio();
+      } else {
+        await pauseAutoAudio();
+      }
+      const data = await getAutoAudioStatus();
+      setSession(data);
+      onAutoAudioSessionUpdate(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update pause state.');
+    }
+  };
+
   const progressPct = session?.progress.total ? Math.round((session.progress.done / session.progress.total) * 100) : 0;
   const chapterPct = session?.chapter_progress?.total ? Math.round((session.chapter_progress.done / session.chapter_progress.total) * 100) : 0;
   const needsConfig = !configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id);
@@ -186,6 +207,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
   const statusChipClass = () => {
     switch (session?.status) {
       case 'running': return 'lg-chip lg-chip-blue';
+      case 'paused': return 'lg-chip lg-chip-amber';
       case 'completed': return 'lg-chip lg-chip-green';
       case 'error': return 'lg-chip lg-chip-red';
       case 'stopping': case 'stopped': return 'lg-chip lg-chip-amber';
@@ -217,6 +239,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
               {session && (
                 <span className={statusChipClass()}>
                   {isRunning && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />}
+                  {isPaused && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />}
                   {statusLabel}
                 </span>
               )}
@@ -241,22 +264,22 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
           <div className="lg-glass-nav p-1.5">
             <div className="grid grid-cols-3 gap-1">
               {PHASES.map(phase => {
-                const isActive = selectedPhase === phase.id;
+                const isSelected = selectedPhase === phase.id;
                 const isSessionPhase = session?.phase === phase.id;
                 const color = PHASE_ACCENT[phase.id];
                 return (
                   <button
                     key={phase.id}
-                    onClick={() => { if (!isRunning) { setSelectedPhase(phase.id); setShowStartConfirm(false); } }}
+                    onClick={() => { if (!isLive) { setSelectedPhase(phase.id); setShowStartConfirm(false); } }}
                     className="relative flex flex-col items-center gap-0.5 px-3 py-3 rounded-[14px] transition-all duration-200 cursor-pointer"
                     style={{
-                      background: isActive ? `linear-gradient(135deg, ${color}22, ${color}15)` : 'transparent',
-                      border: isActive ? `1px solid ${color}40` : '1px solid transparent',
-                      boxShadow: isActive ? `0 4px 16px ${color}20` : 'none',
+                      background: isSelected ? `linear-gradient(135deg, ${color}22, ${color}15)` : 'transparent',
+                      border: isSelected ? `1px solid ${color}40` : '1px solid transparent',
+                      boxShadow: isSelected ? `0 4px 16px ${color}20` : 'none',
                     }}
                   >
-                    <span className="text-sm font-semibold" style={{ color: isActive ? color : isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>{phase.label}</span>
-                    {isSessionPhase && isRunning && (
+                    <span className="text-sm font-semibold" style={{ color: isSelected ? color : isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>{phase.label}</span>
+                    {isSessionPhase && isLive && (
                       <span className="absolute top-2 right-2" style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />
                     )}
                   </button>
@@ -279,7 +302,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
 
               {/* Action buttons */}
               <div className="flex-shrink-0 flex items-center gap-2">
-                {!isRunning ? (
+                {!isLive ? (
                   !showStartConfirm ? (
                     <button
                       onClick={() => setShowStartConfirm(true)}
@@ -304,6 +327,17 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                     </>
                   )
                 ) : (
+                  <>
+                    {isActive && (
+                      <button onClick={handlePauseToggle} className={isPaused ? 'lg-btn-primary' : 'lg-btn-ghost'}>
+                        {isPaused ? (
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        ) : (
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><rect x="7" y="5" width="3" height="14" rx="1"/><rect x="14" y="5" width="3" height="14" rx="1"/></svg>
+                        )}
+                        {isPaused ? 'Resume' : 'Pause'}
+                      </button>
+                    )}
                   <button onClick={() => setShowStopConfirm(true)} disabled={isStopping} className="lg-btn-danger">
                     {isStopping ? (
                       <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -312,6 +346,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                     )}
                     {isStopping ? 'Stopping…' : 'Stop'}
                   </button>
+                  </>
                 )}
               </div>
             </div>
@@ -323,7 +358,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPhase2Limit(l => Math.max(1, l - 5))}
-                    disabled={isRunning}
+                    disabled={isLive}
                     className="lg-icon-btn"
                     style={{ width: 28, height: 28, borderRadius: 8 }}
                   >−</button>
@@ -333,7 +368,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                     max={500}
                     value={phase2Limit}
                     onChange={e => setPhase2Limit(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
-                    disabled={isRunning}
+                    disabled={isLive}
                     className="w-16 text-center text-sm rounded-xl border"
                     style={{
                       background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
@@ -345,7 +380,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                   />
                   <button
                     onClick={() => setPhase2Limit(l => Math.min(500, l + 5))}
-                    disabled={isRunning}
+                    disabled={isLive}
                     className="lg-icon-btn"
                     style={{ width: 28, height: 28, borderRadius: 8 }}
                   >+</button>
@@ -354,7 +389,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
             )}
 
             {/* Progress section */}
-            {isRunning && (
+            {isLive && (
               <div className="space-y-4">
                 {session!.progress.total > 0 && (
                   <div className="space-y-2">
@@ -470,7 +505,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                       onAutoAudioSessionUpdate(data);
                     } catch { /* ignore */ }
                   }}
-                  disabled={isRunning}
+                  disabled={isLive}
                   className="lg-icon-btn"
                 >
                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -479,7 +514,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
 
               {!(session?.stories_missing_audio ?? []).length ? (
                 <p className={`text-sm ${c('textMuted')}`}>
-                  {session?.status === 'running' ? 'Scanning stories…' : 'No preview available. Start a session.'}
+                  {isLive ? 'Scanning stories...' : 'No preview available. Start a session.'}
                 </p>
               ) : (
                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
@@ -540,10 +575,10 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
           <div className="lg-glass p-5 space-y-4">
             <div className="flex items-center gap-2">
               <h3 className={`text-sm font-semibold ${c('text')}`}>Live Log</h3>
-              {isRunning && (
+              {isLive && (
                 <span className="lg-chip lg-chip-blue" style={{ fontSize: '0.6rem' }}>
                   <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />
-                  LIVE
+                  {isPaused ? 'PAUSED' : 'LIVE'}
                 </span>
               )}
             </div>

@@ -137,8 +137,9 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
     const isDark = themeMode === 'dark';
 
     const autoAudioRunning = autoAudioSession?.status === 'running';
+    const autoAudioPaused = autoAudioSession?.status === 'paused';
     const autoAudioStopping = autoAudioSession?.status === 'stopping';
-    const autoAudioBadgeActive = autoAudioRunning || autoAudioStopping;
+    const autoAudioBadgeActive = autoAudioRunning || autoAudioPaused || autoAudioStopping;
     const activeAccent = autoAudioBadgeActive ? '#10b981' : PHASE_ACCENT;
 
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);

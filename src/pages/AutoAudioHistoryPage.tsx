@@ -15,7 +15,7 @@ interface AutoAudioHistoryPageProps {
     onThemeChange: (mode: ThemeMode) => void;
 }
 
-type FilterStatus = 'all' | 'running' | 'stopping' | 'stopped' | 'completed' | 'error';
+type FilterStatus = 'all' | 'running' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'error';
 type FilterMode = 'all' | 'test' | 'prod';
 
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
@@ -23,6 +23,7 @@ const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
     error:     (d) => d ? 'bg-red-400'    : 'bg-red-500',
     stopped:   (d) => d ? 'bg-amber-400'  : 'bg-amber-500',
     running:   (d) => d ? 'bg-blue-400'   : 'bg-blue-500',
+    paused:    (d) => d ? 'bg-amber-300'  : 'bg-amber-500',
     stopping:  (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-500 animate-pulse',
     idle:      (d) => d ? 'bg-white/30'  : 'bg-gray-400',
 };
@@ -32,6 +33,7 @@ const STATUS_LABEL_MAP: Record<string, string> = {
     error:     'Error',
     stopped:   'Stopped',
     running:   'Running',
+    paused:    'Paused',
     stopping:  'Stopping',
     idle:      'Idle',
 };
@@ -312,7 +314,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     useEffect(() => { loadHistory(); }, [loadHistory]);
 
     useEffect(() => {
-        const hasRunning = sessions.some(s => s.status === 'running' || s.status === 'stopping');
+        const hasRunning = sessions.some(s => s.status === 'running' || s.status === 'paused' || s.status === 'stopping');
         if (!hasRunning) return;
         const interval = setInterval(loadHistory, 10000);
         return () => clearInterval(interval);
@@ -326,7 +328,8 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
 
     const filtered = sessions
         .filter(s => {
-            if (filterStatus !== 'all' && s.status !== filterStatus) return false;
+            if (filterStatus === 'running' && !['running', 'paused', 'stopping'].includes(s.status)) return false;
+            if (filterStatus !== 'all' && filterStatus !== 'running' && s.status !== filterStatus) return false;
             if (filterMode === 'test' && !s.test_mode) return false;
             if (filterMode === 'prod' && s.test_mode) return false;
             if (search) {
@@ -420,7 +423,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
 
     const filteredCounts = {
         all: filtered.length,
-        running: filtered.filter(s => s.status === 'running' || s.status === 'stopping').length,
+        running: filtered.filter(s => s.status === 'running' || s.status === 'paused' || s.status === 'stopping').length,
         completed: filtered.filter(s => s.status === 'completed').length,
         error: filtered.filter(s => s.status === 'error').length,
         stopped: filtered.filter(s => s.status === 'stopped').length,
@@ -512,14 +515,14 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                     )}
 
                     {/* Running Banner */}
-                    {filtered.filter(s => s.status === 'running').length > 0 && (
+                    {filtered.filter(s => s.status === 'running' || s.status === 'paused').length > 0 && (
                         <div className={`rounded-2xl p-4 flex items-center gap-3 ${isDark
                             ? 'bg-blue-500/10 border border-blue-500/20'
                             : 'bg-blue-50 border border-blue-200'}`}>
                             <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
                             <span className={`text-sm ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
-                                <span className="font-medium">{filtered.filter(s => s.status === 'running').length} session(s)</span>
-                                {' '}currently running
+                                <span className="font-medium">{filtered.filter(s => s.status === 'running' || s.status === 'paused').length} session(s)</span>
+                                {' '}currently active
                             </span>
                         </div>
                     )}
@@ -529,7 +532,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                         <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
                             {([
                                 ['all', `All (${filteredCounts.all})`],
-                                ['running', `Running (${filteredCounts.running})`],
+                                ['running', `Active (${filteredCounts.running})`],
                                 ['stopped', `Stopped (${filteredCounts.stopped})`],
                                 ['completed', `Done (${filteredCounts.completed})`],
                                 ['error', `Error (${filteredCounts.error})`],
