@@ -140,10 +140,13 @@ class AutoAudioServiceProxy:
 
     def get_history(self) -> list[dict]:
         def fetch() -> list[dict]:
+            import time
+            t0 = time.monotonic()
             url = f"{_autoaudio_url()}/api/auto-audio/history"
             with httpx.Client(timeout=30.0) as client:
                 resp = client.get(url)
                 resp.raise_for_status()
+                logger.info("AutoAudioServiceProxy.get_history: upstream took %.1fms", (time.monotonic() - t0) * 1000)
                 return resp.json()
 
         return self._cached_get("history", fetch)

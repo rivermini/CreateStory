@@ -81,8 +81,12 @@ def resume_session() -> AutoAudioPauseResponse:
 @router.get("/history", response_model=list[AutoAudioHistoryEntry])
 def get_history() -> list[AutoAudioHistoryEntry]:
     """Return all past auto audio sessions."""
+    import time, logging
+    _t0 = time.monotonic()
+    _logger = logging.getLogger(__name__)
     service = get_auto_audio_service()
     sessions = service.get_history()
+    _logger.info("FastAPIServer get_history: service.get_history took %.1fms", (time.monotonic() - _t0) * 1000)
     entries = []
     for s in sessions:
         # Pass through the pre-computed totals from BedReadVoices.
@@ -102,6 +106,7 @@ def get_history() -> list[AutoAudioHistoryEntry]:
             total_stories=s.get("total_stories", 0),
             total_chapters=s.get("total_chapters", 0),
         ))
+    _logger.info("FastAPIServer get_history: total took %.1fms for %d sessions", (time.monotonic() - _t0) * 1000, len(entries))
     return entries
 
 

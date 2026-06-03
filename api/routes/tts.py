@@ -83,6 +83,11 @@ async def get_queue() -> JSONResponse:
     return await _proxy_get("/api/tts/queue", timeout=300.0)
 
 
+@router.post("/release-idle-models")
+async def release_idle_models() -> JSONResponse:
+    return await _proxy_post("/api/tts/release-idle-models")
+
+
 @router.get("/jobs/{job_id}")
 async def get_job_status(job_id: str) -> JSONResponse:
     return await _proxy_get(f"/api/tts/jobs/{job_id}")

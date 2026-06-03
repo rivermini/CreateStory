@@ -42,11 +42,11 @@ _SETTINGS_EXAMPLE = {
         "ce6176c4-aeb5-4ee1-847f-ee56df64a386",
         "07d59e98-d693-429b-a9d1-53ce2fd89e55",
     ],
-    "tts_concurrency": 1,
+    "tts_concurrency": None,
 }
 
 
-def _propagate_tts_concurrency(concurrency: int) -> None:
+def _propagate_tts_concurrency(concurrency: int | None) -> None:
     """Tell BedReadVoices to update its TTS worker concurrency."""
     import httpx
     bv_url = os.environ.get("SERVICE_URLS_BedReadVoices", "http://localhost:8001").rstrip("/")
@@ -54,7 +54,7 @@ def _propagate_tts_concurrency(concurrency: int) -> None:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(f"{bv_url}/api/tts/concurrency", json={"concurrency": concurrency})
             resp.raise_for_status()
-            logger.info("Propagated tts_concurrency=%d to BedReadVoices.", concurrency)
+            logger.info("Propagated tts_concurrency=%s to BedReadVoices.", concurrency if concurrency is not None else "auto")
     except Exception as exc:
         logger.warning("Failed to propagate tts_concurrency to BedReadVoices: %s", exc)
 
@@ -88,8 +88,7 @@ def _save_settings(data: dict) -> None:
 async def get_settings() -> SettingsResponse:
     """Return current user settings."""
     data = _load_settings()
-    concurrency = data.get("tts_concurrency", 1)
-    _propagate_tts_concurrency(concurrency)
+    _propagate_tts_concurrency(data.get("tts_concurrency"))
     return SettingsResponse(**data)
 
 
@@ -122,7 +121,7 @@ async def update_settings(req: SettingsUpdateRequest) -> SettingsResponse:
         data["auto_audio_external_api_base"] = req.auto_audio_external_api_base
     if req.auto_audio_test_story_ids is not None:
         data["auto_audio_test_story_ids"] = req.auto_audio_test_story_ids
-    if req.tts_concurrency is not None:
+    if "tts_concurrency" in req.model_fields_set:
         data["tts_concurrency"] = req.tts_concurrency
         _propagate_tts_concurrency(req.tts_concurrency)
 
