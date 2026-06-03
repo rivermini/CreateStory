@@ -34,7 +34,8 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(30);
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
-  const [ttsConcurrency, setTtsConcurrency] = useState(1);
+  const [ttsConcurrency, setTtsConcurrency] = useState<number | null>(null);
+  const ttsConcurrencyOptions: Array<number | null> = [null, 1, 2, 3, 4];
 
   // Drive Sync Config Modal
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
@@ -68,7 +69,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 30);
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
-        setTtsConcurrency(s.tts_concurrency ?? 1);
+        setTtsConcurrency(s.tts_concurrency ?? null);
       })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
@@ -716,16 +717,16 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             </div>
           </div>
 
-          <div className="max-w-xs">
+          <div className="max-w-md">
             <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
               Concurrent workers
             </label>
-            <div className={`flex items-center gap-3 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
-              {[1, 2].map(v => (
+            <div className={`flex flex-wrap items-center gap-2 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
+              {ttsConcurrencyOptions.map(v => (
                 <button
-                  key={v}
+                  key={v ?? 'auto'}
                   onClick={() => setTtsConcurrency(v)}
-                  className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  className={`min-w-12 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                     ttsConcurrency === v
                       ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                       : isDark
@@ -733,12 +734,12 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                         : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
                   }`}
                 >
-                  {v}
+                  {v ?? 'Auto'}
                 </button>
               ))}
             </div>
             <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-              1 = slower but stable. 2 = faster batch processing.
+              Auto chooses a CPU-friendly worker count. Use 1 for stability, 2-4 for faster batch throughput.
             </p>
           </div>
         </section>
