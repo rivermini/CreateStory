@@ -296,11 +296,12 @@ class AutoAudioService:
             if session._stopping:
                 session.set_status("stopped")
                 session.add_log(11, "Auto audio session stopped by user")
+                session.set_step(11, "Auto audio session stopped")
             else:
                 session.set_status("completed")
                 session.add_log(11, "Auto audio session completed successfully")
+                session.set_step(11, "Auto audio session completed successfully")
 
-            session.set_step(11, "Auto audio session completed successfully")
             session.current_story = ""
             self._session_mgr.save_session_log(session)
             self._session_mgr.persist_history(session)
@@ -332,7 +333,7 @@ class AutoAudioService:
     ) -> str:
         if self._active_session is not None:
             existing = self._active_session
-            if existing.status in ("running", "stopping"):
+            if existing.status in ("running", "paused", "stopping"):
                 raise RuntimeError("A session is already running. Stop it first.")
 
         session_id = str(uuid.uuid4())[:8]
@@ -375,15 +376,39 @@ class AutoAudioService:
         latest = self._session_mgr.get_latest_session()
         return latest
 
-    def stop_session(self) -> None:
+    def stop_session(self) -> bool:
         if self._active_session is None:
-            return
+            return False
         session = self._active_session
-        if session.status in ("completed", "error"):
-            return
-        session._stopping = True
+        if session.status in ("completed", "error", "stopped"):
+            return False
         session.add_log(0, "Stop requested")
-        session.set_status("stopping")
+        session.request_stop()
+        return True
+
+    def pause_session(self) -> dict:
+        if self._active_session is None:
+            raise RuntimeError("No active session to pause.")
+        session = self._active_session
+        if session.status in ("completed", "error", "stopped", "stopping"):
+            raise RuntimeError(f"Cannot pause session with status '{session.status}'.")
+
+        was_paused = session.pause()
+        if was_paused:
+            session.add_log(0, "Pause requested")
+        return {"is_paused": True, "status": session.status}
+
+    def resume_session(self) -> dict:
+        if self._active_session is None:
+            raise RuntimeError("No active session to resume.")
+        session = self._active_session
+        if session.status != "paused":
+            raise RuntimeError(f"Cannot resume session with status '{session.status}'.")
+
+        resumed = session.resume()
+        if resumed:
+            session.add_log(0, "Resume requested")
+        return {"is_paused": False, "status": session.status}
 
     def get_history(self) -> list[dict]:
         return self._session_mgr.load_history()

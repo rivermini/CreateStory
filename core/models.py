@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from typing import Optional
 
 
@@ -83,8 +83,13 @@ class AutoAudioSession:
     story_results: list[dict] = field(default_factory=list)
     completed_stories: set[str] = field(default_factory=set)
     _stopping: bool = field(default=False)
+    _paused: bool = field(default=False)
+    _pause_event: Event = field(default_factory=Event)
     _lock: Lock = field(default_factory=Lock)
     limit: int = 20
+
+    def __post_init__(self) -> None:
+        self._pause_event.set()
 
     def to_dict(self) -> dict:
         with self._lock:
@@ -106,6 +111,7 @@ class AutoAudioSession:
                 "error": self.error,
                 "story_results": self.story_results,
                 "completed_stories": list(self.completed_stories),
+                "is_paused": self._paused,
             }
 
     def add_log(self, step: int, message: str, level: str = "info") -> None:
@@ -129,7 +135,7 @@ class AutoAudioSession:
             self.status = status
             if error:
                 self.error = error
-            if status in ("completed", "error"):
+            if status in ("completed", "error", "stopped"):
                 self.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def update_progress(self, done: int, total: int) -> None:
@@ -151,6 +157,42 @@ class AutoAudioSession:
     def record_completed_story(self, story_id: str) -> None:
         with self._lock:
             self.completed_stories.add(story_id)
+
+    def pause(self) -> bool:
+        with self._lock:
+            if self.status != "running":
+                return self.status == "paused"
+            self._paused = True
+            self.status = "paused"
+            self._pause_event.clear()
+            return True
+
+    def resume(self) -> bool:
+        with self._lock:
+            if self.status != "paused":
+                return False
+            self._paused = False
+            self.status = "running"
+            self._pause_event.set()
+            return True
+
+    def request_stop(self) -> None:
+        with self._lock:
+            self._stopping = True
+            self._paused = False
+            self.status = "stopping"
+            self._pause_event.set()
+
+    def wait_while_paused(self) -> bool:
+        while True:
+            with self._lock:
+                paused = self._paused
+                stopping = self._stopping
+            if stopping:
+                return False
+            if not paused:
+                return True
+            self._pause_event.wait(timeout=1)
 
 
 @dataclass

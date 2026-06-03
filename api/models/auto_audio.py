@@ -24,6 +24,11 @@ class StartSessionResponse(BaseModel):
     session_id: str
 
 
+class AutoAudioPauseResponse(BaseModel):
+    is_paused: bool
+    status: str
+
+
 class AutoAudioSessionResponse(BaseModel):
     session_id: str
     phase: str
@@ -41,6 +46,7 @@ class AutoAudioSessionResponse(BaseModel):
     finished_at: str | None
     error: str
     story_results: list[dict] = Field(default_factory=list)
+    is_paused: bool = False
 
 
 class AutoAudioHistoryEntry(BaseModel):
