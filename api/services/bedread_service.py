@@ -478,6 +478,15 @@ class BedReadService:
 
         for ch in chapters:
             try:
+                with self._lock:
+                    batch = self._batch_jobs.get(batch_id_for_tts)
+                    if batch is None or batch.status == "cancelled":
+                        logger.info(
+                            "BedRead batch %s cancelled while starting chapter jobs",
+                            batch_id_for_tts,
+                        )
+                        break
+
                 chapter_data = chapter_map.get(ch.chapter_number, {})
                 plain_content = chapter_data.get("content") or chapter_data.get("plainContent", "")
                 if plain_content:
@@ -491,13 +500,19 @@ class BedReadService:
                             speed=speed,
                             format=format,
                         )
+                        should_cancel_tts = False
                         with self._lock:
                             batch = self._batch_jobs.get(batch_id_for_tts)
-                            if batch:
+                            if batch and batch.status == "cancelled":
+                                should_cancel_tts = True
+                            elif batch:
                                 for c in batch.chapters:
                                     if c.chapter_number == ch.chapter_number:
                                         c.job_id = tts_job_id
                                         c.status = "queued"
+                        if should_cancel_tts:
+                            self.tts_service.cancel_job(tts_job_id)
+                            break
                         logger.info("BedRead batch %s: chapter %d queued as TTS job %s",
                                     batch_id_for_tts, ch.chapter_number, tts_job_id)
                     else:
@@ -528,9 +543,10 @@ class BedReadService:
                                  batch_id_for_tts, ch.chapter_number)
 
     def _start_poll_thread(self) -> None:
-        if self._poll_running:
-            return
-        self._poll_running = True
+        with self._lock:
+            if self._poll_running:
+                return
+            self._poll_running = True
         self._poll_thread = Thread(target=self._poll_and_sync, daemon=True)
         self._poll_thread.start()
 
@@ -555,12 +571,20 @@ class BedReadService:
 
             with self._lock:
                 if self._active_batch_id is None:
-                    if self._batch_queue:
-                        self._poll_running = False
-                        self._process_next_in_queue()
+                    has_queued_batch = bool(self._batch_queue)
+                else:
+                    has_queued_batch = False
+
+            if self._active_batch_id is None:
+                if has_queued_batch:
+                    self._process_next_in_queue()
+
+                with self._lock:
                     if self._active_batch_id is None:
+                        self._poll_running = False
                         return
 
+            with self._lock:
                 batch = self._batch_jobs.get(self._active_batch_id)
                 if batch is None:
                     self._active_batch_id = None
@@ -577,6 +601,10 @@ class BedReadService:
                 with self._lock:
                     batch = self._batch_jobs.get(batch_id)
                     if batch is None:
+                        continue
+                    if batch.status == "cancelled":
+                        if self._active_batch_id == batch_id:
+                            self._active_batch_id = None
                         continue
 
                 try:
@@ -636,6 +664,14 @@ class BedReadService:
                                         if c.chapter_number == cn:
                                             c.status = "failed"
                                             c.error = tts_job.get("error", "TTS job failed")
+                        elif tts_status == "cancelled":
+                            with self._lock:
+                                batch = self._batch_jobs.get(batch_id)
+                                if batch:
+                                    for c in batch.chapters:
+                                        if c.chapter_number == cn:
+                                            c.status = "failed"
+                                            c.error = "TTS job was cancelled"
                         elif tts_status == "processing":
                             with self._lock:
                                 batch = self._batch_jobs.get(batch_id)
@@ -662,6 +698,10 @@ class BedReadService:
                     batch = self._batch_jobs.get(batch_id)
                     if batch is None:
                         continue
+                    if batch.status == "cancelled":
+                        if self._active_batch_id == batch_id:
+                            self._active_batch_id = None
+                        continue
                     chapter_statuses = [c.status for c in batch.chapters]
                     if all(s == "completed" for s in chapter_statuses):
                         batch.status = "completed"
@@ -681,9 +721,13 @@ class BedReadService:
                     self._persist_jobs()
 
                 if batch_finished:
-                    self._active_batch_id = None
+                    with self._lock:
+                        if self._active_batch_id == batch_id:
+                            self._active_batch_id = None
                     self._process_next_in_queue()
-                    if self._active_batch_id is None:
+                    with self._lock:
+                        no_active_batch = self._active_batch_id is None
+                    if no_active_batch:
                         with self._lock:
                             self._poll_running = False
                         return
@@ -736,10 +780,18 @@ class BedReadService:
                 if ch.job_id:
                     self.tts_service.cancel_job(ch.job_id)
 
-        if self._active_batch_id is None:
+        should_restart_poll = False
+        with self._lock:
+            no_active_batch = self._active_batch_id is None
+
+        if no_active_batch:
             self._process_next_in_queue()
+            with self._lock:
+                should_restart_poll = self._active_batch_id is not None
 
         self._persist_jobs()
+        if should_restart_poll:
+            self._start_poll_thread()
         logger.info("BedRead batch %s cancelled", batch_id)
         return True
 

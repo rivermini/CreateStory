@@ -493,6 +493,13 @@ class TTSService:
                         if j and j.status == "cancelled":
                             continue
 
+                with self._lock:
+                    j = self._jobs.get(job_id)
+                    if j and j.status == "cancelled":
+                        j.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        logger.info("Worker %d job %s finished cancellation cleanup.", worker_id, job_id)
+                        continue
+
                 if not all_samples:
                     raise ValueError("No audio chunks were generated.")
 
