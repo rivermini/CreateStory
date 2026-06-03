@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import html
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -164,6 +166,426 @@ class MainBEClientMixin:
     def _json_body(payload: dict) -> bytes:
         """Serialize a dict to UTF-8 JSON with Unicode characters preserved."""
         return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    def _main_be_headers(self, include_content_type: bool = False) -> dict[str, str]:
+        """Build headers for the configured main BE API."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        headers = {
+            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
+            "x-user-id": self._config.main_be_user_id or "",
+        }
+        if include_content_type:
+            headers["Content-Type"] = "application/json"
+        return headers
+
+    @staticmethod
+    def _unwrap_api_data(body: Any) -> Any:
+        """Return the useful data payload from common API response envelopes."""
+        if isinstance(body, dict) and "data" in body:
+            return body.get("data")
+        return body
+
+    @classmethod
+    def _extract_api_items(cls, body: Any) -> list[Any]:
+        """Extract a list from common paginated/list API response shapes."""
+        data = cls._unwrap_api_data(body)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("items", "stories", "chapters", "results", "data"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    return value
+            if data.get("id"):
+                return [data]
+        return []
+
+    @staticmethod
+    def _story_ref_from_api(story: dict) -> dict:
+        """Coerce a story payload into the frontend's ServerStoryRef shape."""
+        max_chapter = (
+            story.get("maxChapter")
+            or story.get("chapterCount")
+            or story.get("totalChapters")
+            or story.get("chaptersCount")
+            or 0
+        )
+        try:
+            max_chapter = int(max_chapter)
+        except Exception:
+            max_chapter = 0
+        return {
+            "id": str(story.get("id") or story.get("storyId") or ""),
+            "title": str(story.get("title") or story.get("name") or ""),
+            "maxChapter": max_chapter,
+        }
+
+    @staticmethod
+    def _normalize_story_title(title: str) -> str:
+        """Normalize a story title for exact matching."""
+        for ch in ("\u2019", "\u2018", "\u201A", "\u201B", "\u02BC", "\u02BB", "\uFF07"):
+            title = title.replace(ch, "'")
+        return re.sub(r"\s+", " ", title).strip().lower()
+
+    @staticmethod
+    def _plain_text_from_html_or_text(value: str) -> str:
+        """Convert simple HTML or text into comparable plain text."""
+        value = html.unescape(value or "")
+        value = re.sub(r"<\s*br\s*/?\s*>", "\n", value, flags=re.IGNORECASE)
+        value = re.sub(r"</\s*p\s*>", "\n", value, flags=re.IGNORECASE)
+        value = re.sub(r"<[^>]+>", "", value)
+        return value
+
+    @classmethod
+    def _normalize_chapter_text(cls, value: str) -> str:
+        """Normalize chapter text for equality checks while ignoring whitespace noise."""
+        value = cls._plain_text_from_html_or_text(value)
+        value = value.replace("\ufeff", "").replace("\r\n", "\n").replace("\r", "\n")
+        value = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", value)
+        lines = [re.sub(r"[ \t]+", " ", line).strip() for line in value.split("\n")]
+        lines = [line for line in lines if line]
+        return "\n".join(lines)
+
+    @staticmethod
+    def _plain_content_from_markdown(content: str) -> str:
+        """Build a main-BE plainContent value from a Drive markdown chapter."""
+        content = (content or "").strip().replace("\ufeff", "")
+        content = content.replace("\r\n", "\n").replace("\r", "\n")
+        content = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", content)
+        content = re.sub(r"\*\*(.+?)\*\*", r"\1", content)
+        content = re.sub(r"\*(.+?)\*", r"\1", content)
+        blocks: list[str] = []
+        for block in re.split(r"\n\s*\n+", content):
+            lines = [line.strip() for line in block.split("\n") if line.strip()]
+            if lines:
+                blocks.append("\n".join(lines))
+        return "\n".join(blocks)
+
+    def search_server_stories(self, keyword: str) -> list[dict]:
+        """Search stories on the configured main BE using api/v1/story/?keyword=."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        keyword = keyword.strip()
+        if not keyword:
+            return []
+        url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/"
+        headers = self._main_be_headers()
+        params = {"keyword": keyword, "page": 1, "limit": 20}
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(url, headers=headers, params=params)
+            if resp.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"Story search failed HTTP {resp.status_code}: {resp.text[:200]}")
+            items = self._extract_api_items(resp.json())
+        return [self._story_ref_from_api(item) for item in items if isinstance(item, dict) and (item.get("id") or item.get("storyId"))]
+
+    def get_server_story_detail(self, story_id: str) -> dict:
+        """Fetch one story from the configured main BE."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}"
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(url, headers=self._main_be_headers())
+            if resp.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"Story detail failed HTTP {resp.status_code}: {resp.text[:200]}")
+            data = self._unwrap_api_data(resp.json())
+        if not isinstance(data, dict):
+            raise RuntimeError("Story detail response did not contain a story object.")
+        return self._story_ref_from_api(data)
+
+    def get_server_chapter_numbers(self, story_id: str, max_chapter: int = 0) -> list[int]:
+        """Fetch chapter numbers for a server story."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter"
+        numbers: list[int] = []
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(url, headers=self._main_be_headers())
+            if resp.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"Chapter list failed HTTP {resp.status_code}: {resp.text[:200]}")
+            items = self._extract_api_items(resp.json())
+        for item in items:
+            raw = item
+            if isinstance(item, dict):
+                raw = (
+                    item.get("index")
+                    or item.get("chapterNumber")
+                    or item.get("chapter_number")
+                    or item.get("number")
+                )
+            try:
+                n = int(raw)
+            except Exception:
+                continue
+            if n > 0:
+                numbers.append(n)
+        if not numbers and max_chapter > 0:
+            numbers = list(range(1, max_chapter + 1))
+        return sorted(set(numbers))
+
+    def get_server_chapter_detail(self, story_id: str, chapter_number: int) -> dict:
+        """Fetch one chapter detail from the configured main BE."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter/{chapter_number}"
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(url, headers=self._main_be_headers())
+            if resp.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"Chapter {chapter_number} detail failed HTTP {resp.status_code}: {resp.text[:200]}")
+            data = self._unwrap_api_data(resp.json())
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Chapter {chapter_number} response did not contain a chapter object.")
+        return data
+
+    def put_server_chapter_content(self, story_id: str, chapter_number: int, content: str, plain_content: str) -> bool:
+        """PUT content/plainContent for one chapter on the configured main BE."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter/{chapter_number}"
+        payload = {"content": content, "plainContent": plain_content}
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.put(url, content=self._json_body(payload), headers=self._main_be_headers(include_content_type=True))
+            if resp.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"Chapter {chapter_number} update failed HTTP {resp.status_code}: {resp.text[:300]}")
+        return True
+
+    def find_extended_drive_folder_for_story(self, title: str) -> Optional[dict]:
+        """Find the EXTENDED_ Drive folder whose display name exactly matches a story title."""
+        target = self._normalize_story_title(title)
+        folders, _ = self.list_drive_folders(limit=10000, offset=0)
+        for folder in folders:
+            if folder.get("prefix") == "EXTENDED" and self._normalize_story_title(folder.get("display_name", "")) == target:
+                return folder
+        return None
+
+    def find_drive_folder_by_name(self, folder_name: str) -> Optional[dict]:
+        """Find a Drive story folder by its pasted folder name."""
+        target = self._normalize_story_title(folder_name)
+        folders, _ = self.list_drive_folders(limit=10000, offset=0)
+        for folder in folders:
+            if self._normalize_story_title(folder.get("name", "")) == target:
+                return folder
+        for folder in folders:
+            if self._normalize_story_title(folder.get("display_name", "")) == target:
+                return folder
+        return None
+
+    def find_server_story_by_title_exact(self, title: str) -> Optional[dict]:
+        """Find a main-BE story whose title exactly matches the parsed Drive story title."""
+        target = self._normalize_story_title(title)
+        for story in self.search_server_stories(title):
+            if self._normalize_story_title(story.get("title", "")) == target:
+                return story
+        for story in self.get_all_server_stories():
+            if self._normalize_story_title(story.get("title", "")) == target:
+                return self._story_ref_from_api(story)
+        return None
+
+    def get_drive_extended_chapters(self, folder_id: str) -> dict[int, dict]:
+        """Download and parse chapters from a story folder's chapters-extended subfolder."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        drive_service = self._build_drive_service()
+        chapters_ext = self._find_chapters_extended_folder(drive_service, folder_id)
+        if not chapters_ext:
+            raise RuntimeError("No chapters-extended subfolder found for this Drive folder.")
+
+        files = self._list_files_in_folder(drive_service, chapters_ext["id"])
+        md_files = [f for f in files if f.get("name", "").lower().endswith(".md")]
+        chapters: dict[int, dict] = {}
+        for file_info in sorted(md_files, key=lambda f: f.get("name", "")):
+            filename = file_info.get("name", "")
+            chapter_number = self._extract_chapter_index(filename)
+            if chapter_number is None:
+                continue
+            raw_content = self._get_file_content(drive_service, file_info["id"])
+            _, title, html_content = self._parse_chapter_file(raw_content, filename)
+            plain_content = self._plain_content_from_markdown(raw_content)
+            chapters[chapter_number] = {
+                "chapterNumber": chapter_number,
+                "title": title,
+                "fileName": filename,
+                "content": html_content,
+                "plainContent": plain_content,
+                "plainLength": len(plain_content),
+                "normalizedPlainContent": self._normalize_chapter_text(plain_content),
+            }
+        return chapters
+
+    def inspect_drive_folder_for_content_update(self, folder_name: str) -> dict:
+        """Resolve a pasted Drive folder name, matching server story, and list updateable Drive chapters."""
+        folder = self.find_drive_folder_by_name(folder_name)
+        if folder is None:
+            return {
+                "found": False,
+                "story": None,
+                "folder": None,
+                "chapters": [],
+                "summary": {"total": 0, "same": 0, "different": 0, "missingDrive": 0, "driveOnly": 0, "errors": 0},
+                "message": "Drive folder not found.",
+            }
+
+        story_title = folder.get("display_name") or self._extract_story_name(folder.get("name", ""))
+        story = self.find_server_story_by_title_exact(story_title)
+        if story is None:
+            return {
+                "found": False,
+                "story": None,
+                "folder": folder,
+                "chapters": [],
+                "summary": {"total": 0, "same": 0, "different": 0, "missingDrive": 0, "driveOnly": 0, "errors": 0},
+                "message": f"Drive folder found, but story '{story_title}' was not found on the server.",
+            }
+
+        try:
+            drive_chapters = self.get_drive_extended_chapters(folder["id"])
+        except Exception as exc:
+            return {
+                "found": False,
+                "story": story,
+                "folder": folder,
+                "chapters": [],
+                "summary": {"total": 0, "same": 0, "different": 0, "missingDrive": 0, "driveOnly": 0, "errors": 1},
+                "message": str(exc),
+            }
+        chapters: list[dict] = []
+        for chapter_number, drive_chapter in sorted(drive_chapters.items()):
+            chapters.append({
+                "chapterNumber": chapter_number,
+                "title": drive_chapter.get("title") or "",
+                "status": "ready",
+                "fileName": drive_chapter.get("fileName"),
+                "serverLength": 0,
+                "driveLength": drive_chapter.get("plainLength") or 0,
+                "message": None,
+            })
+
+        return {
+            "found": True,
+            "story": story,
+            "folder": folder,
+            "chapters": chapters,
+            "summary": {
+                "total": len(chapters),
+                "same": 0,
+                "different": len(chapters),
+                "missingDrive": 0,
+                "driveOnly": 0,
+                "errors": 0,
+            },
+            "message": "Folder and server story found.",
+        }
+
+    def scan_server_story_against_drive(self, story_id: str, story_title: Optional[str] = None) -> dict:
+        """Compare server chapter details against Drive chapters-extended files."""
+        story = self.get_server_story_detail(story_id)
+        if story_title:
+            story["title"] = story_title
+        folder = self.find_extended_drive_folder_for_story(story["title"])
+        if folder is None:
+            return {
+                "story": story,
+                "folder": None,
+                "chapters": [],
+                "summary": {"total": 0, "same": 0, "different": 0, "missingDrive": 0, "driveOnly": 0, "errors": 0},
+                "message": "No matching EXTENDED_ Drive folder found.",
+            }
+
+        drive_chapters = self.get_drive_extended_chapters(folder["id"])
+        server_numbers = self.get_server_chapter_numbers(story_id, story.get("maxChapter") or 0)
+        chapters: list[dict] = []
+        summary = {"total": len(server_numbers), "same": 0, "different": 0, "missingDrive": 0, "driveOnly": 0, "errors": 0}
+
+        for chapter_number in server_numbers:
+            drive_chapter = drive_chapters.get(chapter_number)
+            if drive_chapter is None:
+                summary["missingDrive"] += 1
+                chapters.append({
+                    "chapterNumber": chapter_number,
+                    "title": "",
+                    "status": "missing_drive",
+                    "fileName": None,
+                    "serverLength": 0,
+                    "driveLength": 0,
+                    "message": "No matching Drive chapter file.",
+                })
+                continue
+
+            try:
+                server_chapter = self.get_server_chapter_detail(story_id, chapter_number)
+                server_plain = server_chapter.get("plainContent") or self._plain_text_from_html_or_text(server_chapter.get("content", ""))
+                server_normalized = self._normalize_chapter_text(server_plain)
+                same = server_normalized == drive_chapter["normalizedPlainContent"]
+                status = "same" if same else "different"
+                summary[status] += 1
+                chapters.append({
+                    "chapterNumber": chapter_number,
+                    "title": str(server_chapter.get("title") or drive_chapter.get("title") or ""),
+                    "status": status,
+                    "fileName": drive_chapter["fileName"],
+                    "serverLength": len(server_plain or ""),
+                    "driveLength": drive_chapter["plainLength"],
+                    "message": None,
+                })
+            except Exception as exc:
+                summary["errors"] += 1
+                chapters.append({
+                    "chapterNumber": chapter_number,
+                    "title": drive_chapter.get("title") or "",
+                    "status": "error",
+                    "fileName": drive_chapter["fileName"],
+                    "serverLength": 0,
+                    "driveLength": drive_chapter["plainLength"],
+                    "message": str(exc),
+                })
+
+        server_number_set = set(server_numbers)
+        for chapter_number, drive_chapter in sorted(drive_chapters.items()):
+            if chapter_number in server_number_set:
+                continue
+            summary["driveOnly"] += 1
+            chapters.append({
+                "chapterNumber": chapter_number,
+                "title": drive_chapter.get("title") or "",
+                "status": "drive_only",
+                "fileName": drive_chapter["fileName"],
+                "serverLength": 0,
+                "driveLength": drive_chapter["plainLength"],
+                "message": "Drive chapter has no matching server chapter.",
+            })
+
+        chapters.sort(key=lambda item: item["chapterNumber"])
+        return {
+            "story": story,
+            "folder": folder,
+            "chapters": chapters,
+            "summary": summary,
+            "message": "Scan complete.",
+        }
+
+    def update_server_chapter_from_drive(self, story_id: str, chapter_number: int, folder_id: str) -> dict:
+        """Replace one server chapter's content from its matching Drive chapter file."""
+        drive_chapters = self.get_drive_extended_chapters(folder_id)
+        drive_chapter = drive_chapters.get(chapter_number)
+        if drive_chapter is None:
+            raise RuntimeError(f"Chapter {chapter_number} was not found in chapters-extended.")
+        self.put_server_chapter_content(
+            story_id,
+            chapter_number,
+            drive_chapter["content"],
+            drive_chapter["plainContent"],
+        )
+        return drive_chapter
 
     def _post_chapter(self, story_id: str, index: int, title: str, content: str, max_retries: int = 3) -> bool:
         """POST a chapter to main BE /api/v1/story/{id}/chapter. Returns True on success."""
@@ -340,10 +762,11 @@ class MainBEClientMixin:
         max_chapter: Optional[int] = None,
         free_chapters_count: Optional[int] = None,
         tags: Optional[list[str]] = None,
-    ) -> bool:
-        """PUT story metadata (freeChaptersCount, maxChapter, and/or tags) on the main BE."""
+    ) -> tuple[bool, Optional[str]]:
+        """PUT story metadata (freeChaptersCount, maxChapter, and/or tags) on the main BE.
+        Returns (success, error_detail). error_detail is None on success."""
         if self._config is None:
-            return False
+            return (False, "Backend client not configured")
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}"
         headers = {
             "Content-Type": "application/json",
@@ -358,17 +781,20 @@ class MainBEClientMixin:
         if tags is not None:
             payload["tags"] = tags
         if not payload:
-            return True
+            return (True, None)
         try:
             with httpx.Client(timeout=30.0) as client:
                 resp = client.put(url, content=self._json_body(payload), headers=headers)
                 if resp.status_code in (200, 201):
                     self._append_log("info", f"Story metadata updated: freeChaptersCount={free_chapters_count}, maxChapter={max_chapter}")
-                    return True
-                self._append_log("warning", f"Story metadata PUT failed {resp.status_code}: {resp.text[:200]}")
+                    return (True, None)
+                detail = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                self._append_log("warning", f"Story metadata PUT failed {detail}")
+                return (False, detail)
         except Exception as exc:
+            detail = str(exc)
             self._append_log("error", f"Story metadata PUT exception: {exc}")
-        return False
+            return (False, detail)
 
     def _sync_new_chapters_from_extended_folder(
         self,
@@ -488,11 +914,11 @@ class MainBEClientMixin:
 
         new_max_chapter = max(existing_indices) if existing_indices else None
         if free_chapters_count is not None or new_max_chapter is not None or tags is not None:
-            ok = self.put_story_metadata(story_id, max_chapter=new_max_chapter, free_chapters_count=free_chapters_count, tags=tags)
+            ok, err_detail = self.put_story_metadata(story_id, max_chapter=new_max_chapter, free_chapters_count=free_chapters_count, tags=tags)
             if ok:
                 self._append_log("info", f"[update] Story metadata updated", display_name, job_id=job_id)
             else:
-                self._append_log("warning", "[update] Failed to update story metadata on server", display_name, job_id=job_id)
+                self._append_log("warning", f"[update] Failed to update story metadata on server — {err_detail}", display_name, job_id=job_id)
 
         return (chapters_added, chapters_skipped, 1)
 

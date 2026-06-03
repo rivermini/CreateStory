@@ -639,3 +639,162 @@ async def update_chapters(folder_id: str) -> JobCreateResponse:
         status=job.status,
         message=f"Update job enqueued. Will update chapters for '{display_name}' shortly.",
     )
+
+
+class ContentUpdateStoryRef(BaseModel):
+    id: str
+    title: str
+    maxChapter: int = 0
+
+
+class ContentUpdateSearchResponse(BaseModel):
+    found: bool
+    exact_match: Optional[ContentUpdateStoryRef] = None
+    stories: list[ContentUpdateStoryRef] = []
+    message: str
+
+
+class ContentUpdateSummary(BaseModel):
+    total: int = 0
+    same: int = 0
+    different: int = 0
+    missingDrive: int = 0
+    driveOnly: int = 0
+    errors: int = 0
+
+
+class ContentUpdateFolderRef(BaseModel):
+    id: str
+    name: str
+    prefix: str
+    display_name: str
+    is_completed: bool = True
+    chapter_count: Optional[int] = None
+    extended_chapter_count: Optional[int] = None
+    modified_time: Optional[str] = None
+
+
+class ContentUpdateChapterStatus(BaseModel):
+    chapterNumber: int
+    title: str = ""
+    status: str
+    fileName: Optional[str] = None
+    serverLength: int = 0
+    driveLength: int = 0
+    message: Optional[str] = None
+
+
+class ContentUpdateScanResponse(BaseModel):
+    found: bool = True
+    story: Optional[ContentUpdateStoryRef] = None
+    folder: Optional[ContentUpdateFolderRef] = None
+    chapters: list[ContentUpdateChapterStatus] = []
+    summary: ContentUpdateSummary
+    message: str
+
+
+class ContentUpdateChapterRequest(BaseModel):
+    story_id: str
+    folder_id: str
+    chapter_number: int
+
+
+class ContentUpdateChapterResponse(BaseModel):
+    success: bool
+    message: str
+    chapter: Optional[ContentUpdateChapterStatus] = None
+
+
+@router.get("/content-update/search", response_model=ContentUpdateSearchResponse, tags=["Drive Sync"])
+async def search_content_update_story(keyword: str) -> ContentUpdateSearchResponse:
+    """Search stories on the configured main BE for chapter content replacement."""
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    keyword = keyword.strip()
+    if not keyword:
+        return ContentUpdateSearchResponse(found=False, stories=[], message="Enter a story title.")
+
+    try:
+        stories_raw = await asyncio.to_thread(service.search_server_stories, keyword)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Story search failed: {exc}")
+
+    stories = [ContentUpdateStoryRef(**story) for story in stories_raw]
+    target = service._normalize_story_title(keyword)
+    exact = next((story for story in stories if service._normalize_story_title(story.title) == target), None)
+    return ContentUpdateSearchResponse(
+        found=exact is not None,
+        exact_match=exact,
+        stories=stories,
+        message="Story found." if exact else "No exact story title match found.",
+    )
+
+
+@router.get("/content-update/folder", response_model=ContentUpdateScanResponse, tags=["Drive Sync"])
+async def inspect_content_update_folder(folder_name: str) -> ContentUpdateScanResponse:
+    """Resolve a pasted Drive folder name, matching server story, and list Drive chapter files."""
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    folder_name = folder_name.strip()
+    if not folder_name:
+        raise HTTPException(status_code=400, detail="Folder name is required.")
+
+    try:
+        result = await asyncio.to_thread(service.inspect_drive_folder_for_content_update, folder_name)
+        return ContentUpdateScanResponse(**result)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Folder check failed: {exc}")
+
+
+@router.get("/content-update/scan/{story_id}", response_model=ContentUpdateScanResponse, tags=["Drive Sync"])
+async def scan_content_update_story(story_id: str) -> ContentUpdateScanResponse:
+    """Compare server chapter content with matching Drive chapters-extended files."""
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    try:
+        scan = await asyncio.to_thread(service.scan_server_story_against_drive, story_id)
+        return ContentUpdateScanResponse(**scan)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Update scan failed: {exc}")
+
+
+@router.post("/content-update/update-chapter", response_model=ContentUpdateChapterResponse, tags=["Drive Sync"])
+async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUpdateChapterResponse:
+    """Replace one server chapter's content/plainContent from Drive."""
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    try:
+        updated = await asyncio.to_thread(
+            service.update_server_chapter_from_drive,
+            body.story_id,
+            body.chapter_number,
+            body.folder_id,
+        )
+        chapter = ContentUpdateChapterStatus(
+            chapterNumber=body.chapter_number,
+            title=updated.get("title") or "",
+            status="updated",
+            fileName=updated.get("fileName"),
+            serverLength=updated.get("plainLength") or 0,
+            driveLength=updated.get("plainLength") or 0,
+            message="Updated from Drive.",
+        )
+        return ContentUpdateChapterResponse(success=True, message=f"Chapter {body.chapter_number} updated.", chapter=chapter)
+    except RuntimeError as exc:
+        return ContentUpdateChapterResponse(success=False, message=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Chapter update failed: {exc}")
