@@ -799,7 +799,7 @@ export async function searchContentUpdateStory(keyword: string): Promise<Content
 export async function inspectContentUpdateFolder(folderName: string): Promise<ContentUpdateScanResponse> {
   return apiFetch<ContentUpdateScanResponse>(
     `/api/drive-sync/content-update/folder?folder_name=${encodeURIComponent(folderName)}`,
-    { timeout: 600000 }
+    { timeout: 120000 }
   );
 }
 
