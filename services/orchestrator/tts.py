@@ -36,9 +36,9 @@ class TTSClient:
         except Exception:
             return None
 
-    def poll_until_done(self, job_id: str, timeout: int = 3600) -> tuple[bool, Optional[Path]]:
+    def poll_until_done(self, job_id: str, timeout: int = 0) -> tuple[bool, Optional[Path]]:
         start = time.time()
-        while time.time() - start < timeout:
+        while timeout <= 0 or time.time() - start < timeout:
             job = self.get_job(job_id)
             if job is None:
                 return False, None

@@ -21,12 +21,12 @@ class BatchPoller:
         self,
         session: AutoAudioSession,
         batch_id: str,
-        timeout_seconds: int = 3600,
+        timeout_seconds: int = 0,
     ) -> tuple[bool, list[dict]]:
         start = time.time()
         completed_files: list[dict] = []
 
-        while time.time() - start < timeout_seconds:
+        while timeout_seconds <= 0 or time.time() - start < timeout_seconds:
             if session._stopping:
                 session.add_log(
                     4,
@@ -98,9 +98,16 @@ class BatchPoller:
             session.set_step(5, f"Generating audio ({done}/{total})", story=session.current_story)
             time.sleep(5)
 
-        session.add_log(
-            4,
-            f"Batch job {batch_id} timed out after {timeout_seconds}s",
-            level="error",
-        )
+        if timeout_seconds > 0:
+            session.add_log(
+                4,
+                f"Batch job {batch_id} timed out after {timeout_seconds}s",
+                level="error",
+            )
+        else:
+            session.add_log(
+                4,
+                f"Batch job {batch_id} polling ended (stop requested)",
+                level="warning",
+            )
         return False, completed_files

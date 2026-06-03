@@ -382,13 +382,14 @@ class AutoAudioService:
         except Exception:
             return None
 
-    def _tts_poll_until_done(self, job_id: str, timeout: int = 3600) -> tuple[bool, Optional[Path]]:
+    def _tts_poll_until_done(self, job_id: str, timeout: int = 0) -> tuple[bool, Optional[Path]]:
         """
         Poll a TTS job until completed or timeout.
+        When timeout <= 0, polls indefinitely until the job completes or fails.
         Returns (success, output_path).
         """
         start = time.time()
-        while time.time() - start < timeout:
+        while timeout <= 0 or time.time() - start < timeout:
             job = self._tts_get_job(job_id)
             if job is None:
                 return False, None
@@ -703,7 +704,7 @@ class AutoAudioService:
             return False, None
 
         session.add_log(4, f"Chapter {chapter_num}: TTS job {job_id} started")
-        success, output_path = self._tts_poll_until_done(job_id, timeout=3600)
+        success, output_path = self._tts_poll_until_done(job_id)
         if not success or output_path is None:
             session.add_log(4, f"Chapter {chapter_num}: TTS job failed or timed out", level="error")
             return False, None
