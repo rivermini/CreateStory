@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import json
 import logging
 import html
@@ -834,7 +835,7 @@ class MainBEClientMixin:
 
         Returns (chapters_added, chapters_skipped, story_id_found).
         """
-        from api.services.drive_service._parsers import _natural_sort_key as _ns
+        from api.services.drive_service._parsers import _natural_sort_key as _ns, _extract_chapter_index_from_filename
 
         self._append_log("info", f"[update] Starting update sync for: {display_name}", display_name, job_id=job_id)
 
@@ -890,7 +891,15 @@ class MainBEClientMixin:
         chapters_added = 0
         chapters_skipped = 0
 
-        for file_info in chapter_files_sorted:
+        # Binary search: find the first file whose chapter index >= next_index,
+        # so we skip all known-existing chapters without iterating them.
+        if existing_indices:
+            chapter_indices = [_extract_chapter_index_from_filename(f["name"]) for f in chapter_files_sorted]
+            lo = bisect.bisect_left(chapter_indices, next_index)
+        else:
+            lo = 0
+
+        for file_info in chapter_files_sorted[lo:]:
             if chapters_count is not None and chapters_added >= chapters_count:
                 self._append_log("info", f"[update] Stopped after {chapters_added} chapter(s) per user request.", display_name, job_id=job_id)
                 break
@@ -898,10 +907,8 @@ class MainBEClientMixin:
             file_name = file_info["name"]
 
             ch_idx = self._extract_chapter_index(file_name)
-            if ch_idx is not None and ch_idx <= server_max:
-                self._append_log("debug", f"[update] Skipped {file_name} — chapter {ch_idx} already on server", display_name, job_id=job_id)
-                chapters_skipped += 1
-                continue
+            # Files with no chapter index (ch_idx is None) are always processed —
+            # they can't be detected as duplicates since they have no index.
 
             try:
                 content = self._get_file_content(drive_service, file_id)
