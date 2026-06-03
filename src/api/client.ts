@@ -334,6 +334,7 @@ export interface SettingsResponse {
   crawl_auto_max_chapters: boolean;
   auto_audio_rest_seconds: number;
   auto_audio_upload_workers: number;
+  auto_audio_batch_window: number;
   auto_audio_external_api_base: string;
   auto_audio_test_story_ids: string[];
   tts_concurrency: number | null;

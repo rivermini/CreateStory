@@ -33,6 +33,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [crawlAutoMaxChapters, setCrawlAutoMaxChapters] = useState(false);
   const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(0);
   const [autoAudioUploadWorkers, setAutoAudioUploadWorkers] = useState(3);
+  const [autoAudioBatchWindow, setAutoAudioBatchWindow] = useState(2);
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
   const [ttsConcurrency, setTtsConcurrency] = useState<number | null>(null);
@@ -69,6 +70,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         setCrawlAutoMaxChapters(s.crawl_auto_max_chapters ?? false);
         setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 0);
         setAutoAudioUploadWorkers(s.auto_audio_upload_workers ?? 3);
+        setAutoAudioBatchWindow(s.auto_audio_batch_window ?? 2);
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
         setTtsConcurrency(s.tts_concurrency ?? null);
@@ -276,6 +278,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         crawl_auto_max_chapters: crawlAutoMaxChapters,
         auto_audio_rest_seconds: autoAudioRestSeconds,
         auto_audio_upload_workers: autoAudioUploadWorkers,
+        auto_audio_batch_window: autoAudioBatchWindow,
         auto_audio_test_story_ids: autoAudioTestStoryIds,
         tts_concurrency: ttsConcurrency,
       });
@@ -649,11 +652,11 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Auto Audio Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure backoff, upload workers, and test story IDs</p>
+              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure backoff, pipeline window, upload workers, and test story IDs</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
             <div>
               <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
                 Backoff after failed story (seconds)
@@ -699,6 +702,32 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               </div>
               <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
                 Handles download, compression, and upload in parallel.
+              </p>
+            </div>
+
+            <div>
+              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                Batch window
+              </label>
+              <div className={`flex flex-wrap items-center gap-2 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
+                {[1, 2].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setAutoAudioBatchWindow(v)}
+                    className={`min-w-10 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      autoAudioBatchWindow === v
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                        : isDark
+                          ? 'text-white/40 hover:text-white/70'
+                          : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
+                Max story batches started or queued at once. Use 2 for one-story lookahead.
               </p>
             </div>
           </div>
