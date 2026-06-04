@@ -125,7 +125,7 @@ function JobCard({ job, order, isSelected, isExpanded, deleteMode, isDark, c, on
       <div className="flex-1 min-w-0 flex flex-col">
         <div
           className={`px-5 py-4 flex flex-col sm:flex-row items-start gap-4 ${!deleteMode ? 'cursor-pointer' : ''}`}
-          onClick={() => deleteMode ? onToggleSelect(job.id) : onToggleExpand(job.id)}
+          onClick={(e) => { if (deleteMode) { e.stopPropagation(); onToggleSelect(job.id); } else { onToggleExpand(job.id); } }}
         >
           <div className="flex-shrink-0 mt-1 flex items-center gap-2">
             <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />
