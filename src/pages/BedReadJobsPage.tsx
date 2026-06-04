@@ -22,6 +22,35 @@ function formatDuration(start: string | null, finish: string | null): string {
     } catch { return '—'; }
 }
 
+function getTimestampMs(iso: string | null): number | null {
+    if (!iso) return null;
+    const direct = new Date(iso).getTime();
+    if (Number.isFinite(direct)) return direct;
+    const normalized = new Date(iso.replace(' ', 'T')).getTime();
+    return Number.isFinite(normalized) ? normalized : null;
+}
+
+function formatGenerationDuration(start: string | null, finish: string | null, nowMs: number, live: boolean): string {
+    if (start && finish) return formatDuration(start, finish);
+    if (!start || (!finish && !live)) return '-';
+    if (!start || (!finish && !live)) return 'â€”';
+    const startMs = getTimestampMs(start);
+    const finishMs = finish ? getTimestampMs(finish) : nowMs;
+    if (startMs === null || finishMs === null) return '-';
+    if (startMs === null || finishMs === null) return 'â€”';
+    const secs = Math.max(0, Math.floor((finishMs - startMs) / 1000));
+    const hours = Math.floor(secs / 3600);
+    if (hours > 0) return `${hours}h ${Math.floor((secs % 3600) / 60)}m ${secs % 60}s`;
+    if (secs < 60) return `${secs}s`;
+    return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
+function getGenerationStart(job: BatchJob): string | null {
+    if (job.processing_started_at) return job.processing_started_at;
+    if (job.status === 'queued' || job.status === 'pending') return null;
+    return job.started_at;
+}
+
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
     pending:   (d) => d ? 'bg-white/30' : 'bg-gray-400',
     queued:    (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-400 animate-pulse',
@@ -71,10 +100,11 @@ interface JobCardProps {
     onCancel: (batchId: string, storyTitle: string) => void;
     onDownloadChapter: (batchId: string, chapterNum: number) => void;
     onDownloadZip: (batchId: string) => void;
+    nowMs: number;
     c: (key: string) => string;
 }
 
-function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, onCancel, onDownloadChapter, onDownloadZip, c }: JobCardProps) {
+function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, onCancel, onDownloadChapter, onDownloadZip, nowMs, c }: JobCardProps) {
     const [expanded, setExpanded] = useState(false);
 
     const dotFn = STATUS_DOT_MAP[job.status] ?? STATUS_DOT_MAP.pending;
@@ -89,6 +119,8 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
     const progressPct = job.progress_pct;
     const allDone = completedCount === totalCount && totalCount > 0;
     const isAutoMode = job.from_auto_mode === true;
+    const generationStartedAt = getGenerationStart(job);
+    const generationDuration = formatGenerationDuration(generationStartedAt, job.finished_at, nowMs, job.status === 'running');
 
     const cardBg = deleteMode && isSelected
         ? isDark ? 'bg-red-500/10 border border-red-500/30' : 'bg-red-50 border border-red-200'
@@ -183,13 +215,18 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                     </div>
 
                     <div className={`flex flex-col sm:items-end gap-2 text-xs ${c('textSub')}`}>
-                        <span>Started {formatDate(job.started_at)}</span>
-                        {job.finished_at && (
+                        <span>Queued {formatDate(job.started_at)}</span>
+                        {generationStartedAt ? (
                             <>
-                                <span>Finished {formatDate(job.finished_at)}</span>
-                                <span>{formatDuration(job.started_at, job.finished_at)}</span>
+                                <span>{job.status === 'running' ? 'Generating since' : 'Generated from'} {formatDate(generationStartedAt)}</span>
+                                {job.finished_at && <span>Finished {formatDate(job.finished_at)}</span>}
+                                <span className={`font-medium ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                                    Generation {generationDuration}
+                                </span>
                             </>
-                        )}
+                        ) : job.status === 'queued' ? (
+                            <span className={isDark ? 'text-amber-400' : 'text-amber-600'}>Waiting to generate</span>
+                        ) : null}
                     </div>
 
                     {job.error && <p className={`text-xs mt-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{job.error}</p>}
@@ -258,6 +295,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     const [specificDate, setSpecificDate] = useState<string>('');
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const [lastRefresh, setLastRefresh] = useState(new Date());
+    const [nowMs, setNowMs] = useState(() => Date.now());
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; ids: string[]; hasRunning: boolean }>({ open: false, ids: [], hasRunning: false });
@@ -280,6 +318,11 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
         const interval = setInterval(fetchJobs, 1000);
         return () => clearInterval(interval);
     }, [fetchJobs]);
+
+    useEffect(() => {
+        const interval = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     const timeCutoff = (() => {
         if (timeRange === 'all') return null;
@@ -555,6 +598,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                                 onCancel={handleCancel}
                                 onDownloadChapter={handleDownloadChapter}
                                 onDownloadZip={handleDownloadZip}
+                                nowMs={nowMs}
                                 c={c}
                             />
                         ))}

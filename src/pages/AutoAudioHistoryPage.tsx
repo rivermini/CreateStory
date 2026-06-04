@@ -57,6 +57,42 @@ function formatDuration(startedAt: string | null, finishedAt: string | null): st
     } catch { return '—'; }
 }
 
+function getTimestampMs(iso: string | null): number | null {
+    if (!iso) return null;
+    const direct = new Date(iso).getTime();
+    if (Number.isFinite(direct)) return direct;
+    const normalized = new Date(iso.replace(' ', 'T')).getTime();
+    return Number.isFinite(normalized) ? normalized : null;
+}
+
+function formatDurationSeconds(totalSeconds: number): string {
+    if (totalSeconds <= 0) return '-';
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function isActiveSessionStatus(status: string): boolean {
+    return status === 'running' || status === 'paused' || status === 'stopping';
+}
+
+function getActiveDurationLabel(status: string): string {
+    if (status === 'paused') return 'Paused';
+    if (status === 'stopping') return 'Stopping';
+    return 'Running';
+}
+
+function formatSessionDuration(startedAt: string | null, finishedAt: string | null, nowMs: number, isActive: boolean): string {
+    if (finishedAt) return formatDuration(startedAt, finishedAt);
+    if (!isActive) return '-';
+    const startMs = getTimestampMs(startedAt);
+    if (startMs === null) return '-';
+    return formatDurationSeconds(Math.floor((nowMs - startMs) / 1000));
+}
+
 function formatTotalDuration(totalSeconds: number): string {
     if (totalSeconds <= 0) return '—';
     const d = Math.floor(totalSeconds / 86400);
@@ -76,17 +112,20 @@ interface SessionCardProps {
     isDark: boolean;
     deleteMode: boolean;
     isSelected: boolean;
+    nowMs: number;
     onToggleExpand: (sessionId: string) => void;
     onToggleSelect: (sessionId: string) => void;
 }
 
 function SessionCard({
     session, order, isExpanded, expandedSession, loadingDetail,
-    isDark, deleteMode, isSelected, onToggleExpand, onToggleSelect,
+    isDark, deleteMode, isSelected, nowMs, onToggleExpand, onToggleSelect,
 }: SessionCardProps) {
     const dotFn = STATUS_DOT_MAP[session.status] ?? STATUS_DOT_MAP.idle;
     const dot = dotFn(isDark);
     const label = STATUS_LABEL_MAP[session.status] ?? session.status;
+    const isActive = isActiveSessionStatus(session.status);
+    const duration = formatSessionDuration(session.started_at, session.finished_at, nowMs, isActive);
 
     const cardBg = deleteMode && isSelected
         ? (isDark ? 'bg-red-500/10 border border-red-500/30' : 'bg-red-50 border border-red-200')
@@ -159,13 +198,11 @@ function SessionCard({
                             </svg>
                             <span>Started {formatTime(session.started_at)}</span>
                         </div>
-                        {session.finished_at && (
-                            <>
-                                <span>Finished {formatTime(session.finished_at)}</span>
-                                <span className={`text-xs font-medium ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
-                                    {formatDuration(session.started_at, session.finished_at)}
-                                </span>
-                            </>
+                        {session.finished_at && <span>Finished {formatTime(session.finished_at)}</span>}
+                        {(session.finished_at || isActive) && (
+                            <span className={`text-xs font-medium ${isActive ? (isDark ? 'text-blue-400' : 'text-blue-600') : (isDark ? 'text-indigo-400' : 'text-indigo-600')}`}>
+                                {isActive ? `${getActiveDurationLabel(session.status)} ${duration}` : duration}
+                            </span>
                         )}
                     </div>
                 </div>
@@ -196,7 +233,16 @@ function SessionCard({
                                         ['Session ID', expandedSession.session_id, true],
                                         ['Started', formatTime(expandedSession.started_at), false],
                                         ['Finished', formatTime(expandedSession.finished_at), false],
-                                        ['Duration', formatDuration(expandedSession.started_at, expandedSession.finished_at), false],
+                                        [
+                                            'Duration',
+                                            formatSessionDuration(
+                                                expandedSession.started_at,
+                                                expandedSession.finished_at,
+                                                nowMs,
+                                                isActiveSessionStatus(expandedSession.status)
+                                            ),
+                                            false
+                                        ],
                                     ] as [string, string, boolean][]).map(([label, value, mono]) => (
                                         <div key={String(label)}>
                                             <p className={`text-[10px] uppercase tracking-wider font-semibold ${isDark ? 'text-white/20' : 'text-[rgba(0,0,0,0.2)]'}`}>{label}</p>
@@ -301,6 +347,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     const [deleteMode, setDeleteMode] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; ids: string[] }>({ open: false, ids: [] });
+    const [nowMs, setNowMs] = useState(() => Date.now());
 
     const loadHistory = useCallback(async () => {
         setLoading(true);
@@ -316,6 +363,11 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     }, []);
 
     useEffect(() => { loadHistory(); }, [loadHistory]);
+
+    useEffect(() => {
+        const interval = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         const hasRunning = sessions.some(s => s.status === 'running' || s.status === 'paused' || s.status === 'stopping');
@@ -432,6 +484,8 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
         error: filtered.filter(s => s.status === 'error').length,
         stopped: filtered.filter(s => s.status === 'stopped').length,
     };
+    const activeSessions = filtered.filter(s => isActiveSessionStatus(s.status));
+    const primaryActiveSession = activeSessions[0];
 
     const totalChapters = filtered.reduce((sum, s) => sum + (s.total_chapters || 0), 0);
     const totalSeconds = filtered.reduce((sum, s) => {
@@ -546,14 +600,19 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                     )}
 
                     {/* Running Banner */}
-                    {filtered.filter(s => s.status === 'running' || s.status === 'paused').length > 0 && (
+                    {activeSessions.length > 0 && (
                         <div className={`rounded-2xl p-4 flex items-center gap-3 ${isDark
                             ? 'bg-blue-500/10 border border-blue-500/20'
                             : 'bg-blue-50 border border-blue-200'}`}>
                             <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
                             <span className={`text-sm ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
-                                <span className="font-medium">{filtered.filter(s => s.status === 'running' || s.status === 'paused').length} session(s)</span>
+                                <span className="font-medium">{activeSessions.length} session(s)</span>
                                 {' '}currently active
+                                {primaryActiveSession && (
+                                    <span className={isDark ? 'text-blue-200' : 'text-blue-800'}>
+                                        {' '} | {getActiveDurationLabel(primaryActiveSession.status)} {formatSessionDuration(primaryActiveSession.started_at, primaryActiveSession.finished_at, nowMs, true)}
+                                    </span>
+                                )}
                             </span>
                         </div>
                     )}
@@ -721,6 +780,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                                 isDark={isDark}
                                 deleteMode={deleteMode}
                                 isSelected={selectedIds.has(session.session_id)}
+                                nowMs={nowMs}
                                 onToggleExpand={handleToggleExpand}
                                 onToggleSelect={handleToggleSelect}
                             />

@@ -1072,6 +1072,7 @@ export interface BatchJob {
   status: 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress_pct: number;
   started_at: string | null;
+  processing_started_at?: string | null;
   finished_at: string | null;
   error: string;
   chapters: BatchJobChapter[];
