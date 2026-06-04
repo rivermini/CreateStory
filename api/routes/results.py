@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from urllib.parse import quote
 
 from api.models.crawl_request import CrawlResult, OutputFile
-from api.services.crawler_service import get_crawl_service
+from api.services.crawler_service import chapter_record_from_output_file, get_crawl_service
 from api.services.file_service import get_file_service
 from utils.sanitize import sanitize_filename
 
@@ -378,12 +378,14 @@ async def combine_chapters(crawl_id: str) -> dict:
     md_filename = f"{sanitize_filename(base_name)}.md"
     md_path = output_dir / md_filename
     md_parts: list[str] = []
+    chapters_data: list[dict] = []
     for file_meta in files_sorted:
         filepath = output_dir / file_meta.filename
         try:
             raw = filepath.read_text(encoding="utf-8").strip()
             if raw:
                 md_parts.append(raw)
+            chapters_data.append(chapter_record_from_output_file(filepath, file_meta.chapter_number))
         except OSError:
             continue
     md_text = "\n\n---\n\n".join(md_parts).rstrip()
@@ -394,6 +396,18 @@ async def combine_chapters(crawl_id: str) -> dict:
         raise HTTPException(status_code=500, detail=f"Failed to write combined Markdown: {exc}")
 
     combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
+    combined_path = output_dir / combined_name
+    combined_payload = {
+        "crawl_id": crawl_id,
+        "chapter_count": len(files_sorted),
+        "chapters": chapters_data,
+    }
+    try:
+        with open(combined_path, "w", encoding="utf-8") as fh:
+            json.dump(combined_payload, fh, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to write combined JSON: {exc}")
+
     try:
         size_bytes = md_path.stat().st_size
     except OSError:

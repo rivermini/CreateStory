@@ -11,6 +11,7 @@ import re
 import threading
 import time
 import urllib.parse
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -144,17 +145,26 @@ class NovelWormApiClient:
 
     def story_slug_from_url(self, url_or_slug: str) -> str:
         param = self.path_param_from_url(url_or_slug)
-        return param.split("/", 1)[0] if param else "unknown"
+        return urllib.parse.unquote(param.split("/", 1)[0]) if param else "unknown"
 
     def match_url(self, url_or_slug: str) -> dict[str, Any]:
         param = self.path_param_from_url(url_or_slug)
         if not param:
             raise NovelWormApiError("Missing NovelWorm story path")
 
-        data = self._get_decrypted("/book/matchId", {"param": param})
-        if not isinstance(data, dict) or not data.get("bookId"):
-            raise NovelWormApiError("NovelWorm did not return a book id")
-        return data
+        last_error: Exception | None = None
+        for candidate in self._match_param_candidates(param):
+            try:
+                data = self._get_decrypted("/book/matchId", {"param": candidate})
+            except Exception as exc:
+                last_error = exc
+                continue
+            if isinstance(data, dict) and data.get("bookId"):
+                return data
+
+        if last_error:
+            raise NovelWormApiError(str(last_error))
+        raise NovelWormApiError("NovelWorm did not return a book id")
 
     def get_book_detail(self, book_id: str) -> dict[str, Any]:
         data = self._get_decrypted(f"/book/queryBookDetail/{book_id}")
@@ -231,7 +241,7 @@ class NovelWormApiClient:
         book_id = str(match["bookId"])
         detail = self.get_book_detail(book_id)
         chapters = self.get_index_list(book_id)
-        slug = self.story_slug_from_url(url_or_slug) or str(detail.get("link") or "unknown")
+        slug = str(detail.get("link") or "") or self.story_slug_from_url(url_or_slug) or "unknown"
         title = str(detail.get("bookName") or slug)
         author = str(detail.get("authorName") or "")
         metadata = self.metadata_from_detail(detail, total_chapters=len(chapters))
@@ -294,6 +304,184 @@ class NovelWormApiClient:
         lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines()]
         return "\n\n".join(line for line in lines if line)
 
+    def chapter_html_to_text(self, html: str, chapter_number: Optional[int] = None) -> str:
+        paragraphs = self.html_to_paragraphs(html)
+        return self.clean_chapter_text("\n\n".join(paragraphs), chapter_number=chapter_number)
+
+    def extract_chapter_heading(self, html: str) -> Optional[str]:
+        return self.extract_chapter_heading_from_text("\n\n".join(self.html_to_paragraphs(html)))
+
+    @classmethod
+    def extract_chapter_heading_from_text(cls, text: str) -> Optional[str]:
+        for paragraph in cls.text_to_paragraphs(text):
+            if cls._is_chapter_heading(paragraph):
+                return cls._strip_markdown_emphasis(paragraph)
+        return None
+
+    @classmethod
+    def clean_chapter_text(cls, text: str, chapter_number: Optional[int] = None) -> str:
+        paragraphs = cls.text_to_paragraphs(text)
+        if not paragraphs:
+            return ""
+
+        start = 0
+        found_body_start = False
+        for idx, paragraph in enumerate(paragraphs):
+            if cls._is_chapter_heading(paragraph):
+                start = idx + 1
+                found_body_start = True
+                break
+        if not found_body_start:
+            for idx, paragraph in enumerate(paragraphs):
+                if cls._is_title_marker(paragraph):
+                    start = idx + 1
+                    break
+
+        end = len(paragraphs)
+        found_tail_marker = False
+        for idx in range(start, len(paragraphs)):
+            if cls._is_tail_boilerplate(paragraphs[idx]):
+                end = idx
+                found_tail_marker = True
+                break
+
+        body = paragraphs[start:end]
+        if found_tail_marker:
+            trimmed = 0
+            while body and trimmed < 4 and cls._is_afterword_paragraph(body[-1]):
+                body.pop()
+                trimmed += 1
+
+        return "\n\n".join(cls._strip_markdown_emphasis(p) for p in body if p.strip()).strip()
+
+    @staticmethod
+    def html_to_paragraphs(html: str) -> list[str]:
+        if not html:
+            return []
+        soup = BeautifulSoup(html, "html.parser")
+        paragraph_tags = soup.find_all("p")
+        paragraphs: list[str] = []
+
+        if paragraph_tags:
+            for tag in paragraph_tags:
+                if tag.find("p"):
+                    continue
+                text = tag.get_text(" ", strip=True)
+                if text:
+                    paragraphs.append(text)
+            return paragraphs
+
+        lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines()]
+        return [line for line in lines if line]
+
+    @staticmethod
+    def text_to_paragraphs(text: str) -> list[str]:
+        if not text:
+            return []
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        return [part.strip() for part in re.split(r"\n\s*\n+", normalized) if part.strip()]
+
+    @staticmethod
+    def _strip_markdown_emphasis(text: str) -> str:
+        stripped = text.strip()
+        while len(stripped) >= 4 and stripped.startswith("**") and stripped.endswith("**"):
+            stripped = stripped[2:-2].strip()
+        return stripped
+
+    @classmethod
+    def _is_chapter_heading(cls, text: str) -> bool:
+        normalized = cls._strip_markdown_emphasis(text)
+        return bool(re.match(r"^(?:chapter|chap\.?)\s*\d+\b(?:\s*[:：.\-–—].*)?$", normalized, re.IGNORECASE))
+
+    @classmethod
+    def _is_title_marker(cls, text: str) -> bool:
+        normalized = cls._strip_markdown_emphasis(text).strip()
+        return bool(re.match(r"^title\s*[:：]\s*\S", normalized, re.IGNORECASE))
+
+    @classmethod
+    def _is_tail_boilerplate(cls, text: str) -> bool:
+        lower = cls._strip_markdown_emphasis(text).strip().lower()
+        if not lower:
+            return False
+        return (
+            lower.startswith("what to expect in")
+            or lower.startswith("in the next chapter")
+            or lower.startswith("in the upcoming chapter")
+            or lower.startswith("expect unexpected")
+            or lower in {"comments", "write comments", "share"}
+            or bool(re.match(r"^\d+\s*/\s*\d+$", lower))
+            or lower.startswith("readers can expect")
+            or lower.startswith("as the dust settles")
+            or lower.startswith("as the chapter closes")
+            or lower.startswith("as the chapter concludes")
+            or lower.startswith("as the chapter progresses")
+            or lower.startswith("as the chapter unfolds")
+            or lower.startswith("by the end of the chapter")
+            or lower.startswith("ultimately, the chapter")
+            or lower.startswith("this chapter")
+            or "readers can expect" in lower
+            or "leaving readers" in lower
+            or " is a passionate storyteller " in lower
+            or "storyteller known for" in lower
+            or "novels that keep readers hooked" in lower
+            or bool(re.match(r"^[a-z][a-z .'-]{2,80}\s+is\s+a\b.*\bwriter\b", lower))
+        )
+
+    @classmethod
+    def _is_afterword_paragraph(cls, text: str) -> bool:
+        lower = cls._strip_markdown_emphasis(text).strip().lower()
+        if not lower:
+            return False
+        if any(
+            marker in lower
+            for marker in (
+                " in the wake of the chaos",
+                "in this chapter",
+                "the chapter",
+                "readers",
+                "protagonist",
+                "what lies ahead",
+                "stage is set",
+                "sets the stage",
+                "journey",
+                "narrative",
+                "self-discovery",
+                "as the dust settles",
+                "chapter of my life",
+            )
+        ):
+            return True
+        if lower in {"-", "—", "--", "---"}:
+            return True
+        return lower.startswith(
+            (
+                "in this moment",
+                "in the whirlwind of emotions",
+                "in the chaotic aftermath",
+                "in the chaotic whirlwind",
+                "in the aftermath",
+                "in the suffocating silence",
+                "in that charged silence",
+                "in the wake of the chaos",
+                "as the door swung open",
+                "as the tension",
+                "as the tension in the room",
+                "yet, ",
+                "yet, as ",
+                "it all began with",
+                "the whirlwind of emotions",
+                "i hope they",
+                "as we waited",
+                "as the whirlwind of emotions",
+                "in that moment, i realized",
+                "in that instant, i realized",
+                "as the evening unfolded",
+                "as we settled into",
+                "yet, as the night wore on",
+                "as the night wore on",
+            )
+        )
+
     @staticmethod
     def _split_tags(value: Any) -> list[str]:
         if isinstance(value, list):
@@ -315,6 +503,31 @@ class NovelWormApiClient:
             return int(float(str(value).replace(",", "")))
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _match_param_candidates(param: str) -> list[str]:
+        candidates: list[str] = []
+
+        def add(value: str) -> None:
+            if value and value not in candidates:
+                candidates.append(value)
+
+        add(param)
+        current = param
+        for _ in range(3):
+            decoded = urllib.parse.unquote(current)
+            add(decoded)
+            if decoded == current:
+                break
+            current = decoded
+
+        for value in list(candidates):
+            normalized = unicodedata.normalize("NFC", value)
+            add(normalized)
+            add(unicodedata.normalize("NFKC", value))
+            add(urllib.parse.quote(normalized, safe="/-._~"))
+
+        return candidates
 
     @staticmethod
     def _completed_from_detail(detail: dict[str, Any]) -> Optional[bool]:

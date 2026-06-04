@@ -121,6 +121,38 @@ _LOG_LINE_RE = re.compile(
 _TOTAL_RE = re.compile(r"found (?P<total>\d+) chapter links.*target=[^(]+\((?P<count>\d+)\)", re.IGNORECASE)
 _ERROR_RE = re.compile(r"(?i)\b(error|exception|failed|traceback|critical)\b", re.IGNORECASE)
 _WARNING_RE = re.compile(r"(?i)\b(warning|retry|retrying)\b", re.IGNORECASE)
+_MD_CHAPTER_HEADER_RE = re.compile(r"^(?P<filename>.+?_chapter_(?P<number>\d+)\.md):\s*(?P<title>.*)$")
+
+
+def chapter_record_from_output_file(filepath: Path, chapter_number: int) -> dict:
+    raw = filepath.read_text(encoding="utf-8").strip()
+
+    if filepath.suffix.lower() == ".json":
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            return {
+                "content": str(data.get("content") or ""),
+                "chapter_number": int(data.get("chapter_number") or chapter_number),
+                "title": str(data.get("title") or data.get("chapter_title") or ""),
+                "source_url": data.get("source_url"),
+                "novel_title": data.get("novel_title"),
+                "novel_slug": data.get("novel_slug"),
+            }
+
+    title = ""
+    content = raw
+    if filepath.suffix.lower() == ".md" and raw:
+        first_line, sep, rest = raw.partition("\n")
+        match = _MD_CHAPTER_HEADER_RE.match(first_line.strip())
+        if match:
+            title = match.group("title").strip()
+            content = rest.strip() if sep else ""
+
+    return {
+        "content": content,
+        "chapter_number": chapter_number,
+        "title": title,
+    }
 
 
 @dataclass
@@ -543,7 +575,7 @@ class CrawlService:
                 raw = filepath.read_text(encoding="utf-8").strip()
                 if raw:
                     md_parts.append(raw)
-                chapters_data.append({"content": raw, "chapter_number": file_meta.chapter_number})
+                chapters_data.append(chapter_record_from_output_file(filepath, file_meta.chapter_number))
             except OSError:
                 continue
         md_text = "\n\n---\n\n".join(md_parts).rstrip()

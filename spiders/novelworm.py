@@ -215,15 +215,20 @@ class NovelWormSpider(BaseSpider):
             return None
         self._seen_urls.add(url_normalized)
 
-        content = self._api_client.html_to_text(chapter_data.content_html)
+        content = self._api_client.chapter_html_to_text(
+            chapter_data.content_html,
+            chapter_number=ref.chapter_number,
+        )
         cleaned_content = clean_chapter_content(content)
         word_count = len(cleaned_content.split())
+        heading = self._api_client.extract_chapter_heading(chapter_data.content_html)
+        chapter_title = heading or chapter_data.title or ref.title
 
         if word_count < 100:
             self.logger.warning(
                 "Chapter %d '%s' has only %d words.",
                 ref.chapter_number,
-                chapter_data.title or ref.title,
+                chapter_title,
                 word_count,
             )
 
@@ -233,14 +238,14 @@ class NovelWormSpider(BaseSpider):
             self._chapters_crawled,
             self.limit,
             ref.chapter_number,
-            chapter_data.title or ref.title,
+            chapter_title,
         )
 
         return Chapter(
             novel_slug=story.slug,
             novel_title=story.title,
             chapter_number=ref.chapter_number,
-            title=chapter_data.title or ref.title,
+            title=chapter_title,
             content=cleaned_content,
             source_url=ref.url,
             novel_metadata=story.metadata,
@@ -565,6 +570,9 @@ class NovelWormSpider(BaseSpider):
 
         self._chapters_crawled += 1
         content = self._extract_chapter_content(response)
+        heading = self._api_client.extract_chapter_heading_from_text(content)
+        if heading:
+            chapter_title = heading
         cleaned_content = clean_chapter_content(content)
 
         word_count = len(cleaned_content.split())
@@ -642,12 +650,12 @@ class NovelWormSpider(BaseSpider):
         if hasattr(response, "_scroll_paragraphs") and response._scroll_paragraphs:
             paragraphs = response._scroll_paragraphs
             self.logger.debug("[novelworm] Using %d pre-scrolled paragraphs", len(paragraphs))
-            return "\n\n".join(paragraphs)
+            return self._api_client.clean_chapter_text("\n\n".join(paragraphs))
 
         paragraphs = self._extract_via_beautifulsoup(response.text, response.url)
         if paragraphs:
             self.logger.debug("[novelworm] BeautifulSoup parsed %d paragraphs", len(paragraphs))
-            return "\n\n".join(paragraphs)
+            return self._api_client.clean_chapter_text("\n\n".join(paragraphs))
 
         # Scroll returned empty or failed — try additional selectors as last resort
         seen: set[str] = set()
@@ -681,7 +689,7 @@ class NovelWormSpider(BaseSpider):
                 )
             else:
                 self.logger.debug("[novelworm] Fallback selectors parsed %d paragraphs", len(paragraphs))
-                return "\n\n".join(paragraphs)
+                return self._api_client.clean_chapter_text("\n\n".join(paragraphs))
         paragraphs = []
 
         self.logger.warning("[novelworm] No chapter content found on %s", response.url)
