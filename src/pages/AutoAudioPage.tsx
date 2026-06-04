@@ -29,6 +29,14 @@ function formatTime(ts: string | null): string {
   }
 }
 
+function formatElapsed(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 const PHASES = [
   { id: 'phase1', label: 'Needing Update', desc: 'Stories with missing audio in the dashboard.' },
   { id: 'phase2', label: 'Recently Updated', desc: 'Most recently updated stories.' },
@@ -68,6 +76,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
   const [stopConfirmText, setStopConfirmText] = useState('');
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
+  const [elapsed, setElapsed] = useState(0);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const prevLogLenRef = useRef(0);
@@ -133,6 +142,18 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
       prevLogLenRef.current = session.logs.length;
     }
   }, [session?.logs]);
+
+  useEffect(() => {
+    if (!session?.started_at || !isLive) {
+      setElapsed(0);
+      return;
+    }
+    const startMs = new Date(session.started_at).getTime();
+    const tick = () => setElapsed(Math.floor((Date.now() - startMs) / 1000));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [session?.started_at, isLive]);
 
   const handleStart = async () => {
     setError('');
@@ -248,6 +269,11 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
               <p className={`text-sm mt-1 ${c('textMuted')}`}>Discover stories with missing audio and generate TTS automatically</p>
             </div>
             <div className="flex-shrink-0 flex items-center gap-2">
+              {isLive && elapsed > 0 && (
+                <span className="lg-chip lg-chip-neutral tabular-nums">
+                  {formatElapsed(elapsed)}
+                </span>
+              )}
               {session && (
                 <span className={statusChipClass()}>
                   {isRunning && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />}
