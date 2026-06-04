@@ -91,7 +91,7 @@ class MainBEClientMixin:
         if job_id:
             self.append_job_log(job_id, "info", f"Story POST payload: {payload}")
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=600.0) as client:
                 resp = client.post(url, content=self._json_body(payload), headers=headers)
                 if resp.status_code in (200, 201):
                     data = resp.json()
@@ -139,11 +139,11 @@ class MainBEClientMixin:
         page = 1
         try:
             while True:
-                with httpx.Client(timeout=30.0) as client:
+                with httpx.Client(timeout=600.0) as client:
                     resp = client.get(
                         f"{self._config.main_be_api_base_url}/api/v1/story",
                         headers=headers,
-                        params={"page": page, "limit": 100},
+                        params={"page": page, "limit": 1000},
                     )
                     if resp.status_code not in (200, 201):
                         self._append_log("debug", f"_find_story_by_title: page {page} returned {resp.status_code}", title)
@@ -273,7 +273,7 @@ class MainBEClientMixin:
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/"
         headers = self._main_be_headers()
         params = {"keyword": keyword, "page": 1, "limit": 20}
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=600.0) as client:
             resp = client.get(url, headers=headers, params=params)
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -287,7 +287,7 @@ class MainBEClientMixin:
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}"
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=600.0) as client:
             resp = client.get(url, headers=self._main_be_headers())
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -304,7 +304,7 @@ class MainBEClientMixin:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter"
         numbers: list[int] = []
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=600.0) as client:
             resp = client.get(url, headers=self._main_be_headers())
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -335,7 +335,7 @@ class MainBEClientMixin:
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter/{chapter_number}"
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=600.0) as client:
             resp = client.get(url, headers=self._main_be_headers())
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -357,7 +357,7 @@ class MainBEClientMixin:
             "content": content,
             "plainContent": plain_content,
         }
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=600.0) as client:
             resp = client.put(url, content=self._json_body(payload), headers=self._main_be_headers(include_content_type=True))
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -625,7 +625,7 @@ class MainBEClientMixin:
 
         def _attempt(attempt_num: int) -> tuple[bool, str]:
             try:
-                with httpx.Client(timeout=30.0) as client:
+                with httpx.Client(timeout=600.0) as client:
                     resp = client.post(url, content=self._json_body(payload), headers=headers)
                     if resp.status_code in (200, 201):
                         return True, ""
@@ -679,7 +679,7 @@ class MainBEClientMixin:
             "x-user-id": self._config.main_be_user_id,
         }
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers)
                 if resp.status_code in (200, 201):
                     data = resp.json()
@@ -703,7 +703,7 @@ class MainBEClientMixin:
             "x-user-id": self._config.main_be_user_id,
         }
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers)
                 if resp.status_code in (200, 201):
                     data = resp.json()
@@ -732,11 +732,11 @@ class MainBEClientMixin:
         page = 1
         try:
             while True:
-                with httpx.Client(timeout=30.0) as client:
+                with httpx.Client(timeout=600.0) as client:
                     resp = client.get(
                         f"{self._config.main_be_api_base_url}/api/v1/story",
                         headers=headers,
-                        params={"page": page, "limit": 100},
+                        params={"page": page, "limit": 1000},
                     )
                     if resp.status_code == 401:
                         raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -774,7 +774,7 @@ class MainBEClientMixin:
         }
         payload = {"maxChapter": max_chapter}
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=600.0) as client:
                 resp = client.put(url, content=self._json_body(payload), headers=headers)
                 return resp.status_code in (200, 201)
         except Exception:
@@ -1010,7 +1010,7 @@ class MainBEClientMixin:
             params["endDate"] = end_date
 
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=600.0) as client:
                 resp = client.get(
                     f"{self._config.main_be_api_base_url}/api/v1/dashboard/stories-needing-update",
                     headers=headers,
@@ -1049,7 +1049,7 @@ class MainBEClientMixin:
             "x-user-id": self._config.main_be_user_id,
         }
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers, params={"page": 1, "limit": 1})
                 if resp.status_code == 401:
                     return (False, resp.status_code, "Unauthorized: Invalid or expired bearer token.")
