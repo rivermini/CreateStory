@@ -98,5 +98,5 @@ def _is_valid_upload_format(folder_name: str) -> bool:
     if prefix_end == -1 or dash_pos <= prefix_end:
         return False
     between = folder_name[prefix_end:dash_pos]
-    source_suffix = re.compile(r"wp|gd|Goodnovel", re.IGNORECASE)
+    source_suffix = re.compile(r"wp|gd|Goodnovel|nw|ink", re.IGNORECASE)
     return source_suffix.search(between) is not None
