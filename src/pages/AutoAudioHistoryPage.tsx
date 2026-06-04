@@ -227,12 +227,16 @@ function SessionCard({
                                             Story Results
                                         </p>
                                         <div className="space-y-1 max-h-[250px] overflow-y-auto">
-                                            {expandedSession.story_results.map((r, i) => (
+                                            {expandedSession.story_results.map((r, i) => {
+                                                const expected = r.chapters_expected
+                                                    ?? expandedSession.stories_missing_audio.find(s => s.storyId === r.story_id)?.missingCount
+                                                    ?? r.chapters_generated;
+                                                return (
                                                 <div key={i} className={`py-2 px-2 rounded-lg ${isDark ? 'bg-white/[0.02]' : 'bg-[rgba(0,0,0,0.02)]'}`}>
                                                     <div className="flex items-center justify-between gap-3">
                                                         <span className={`text-sm font-medium truncate ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>{r.story_title}</span>
                                                         <span className={`text-xs flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-                                                            {r.chapters_uploaded}/{r.chapters_generated} uploaded
+                                                            {r.chapters_uploaded}/{expected} uploaded
                                                         </span>
                                                     </div>
                                                     {r.upload_errors.length > 0 && (
@@ -244,7 +248,7 @@ function SessionCard({
                                                         <p className={`text-xs mt-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{r.error}</p>
                                                     )}
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     </div>
                                 )}

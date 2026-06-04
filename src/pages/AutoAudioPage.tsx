@@ -554,14 +554,18 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                       ...session.story_results,
                       ...(currentId && !processedIds.has(currentId) ? [{ story_id: currentId, story_title: currentId, chapters_generated: 0, chapters_uploaded: 0, upload_errors: [], error: '', _processing: true }] : []),
                     ];
-                    return displayResults.map((result: any) => (
+                    return displayResults.map((result: any) => {
+                      const expected = result.chapters_expected
+                        ?? session.stories_missing_audio.find(s => s.storyId === result.story_id)?.missingCount
+                        ?? result.chapters_generated;
+                      return (
                       <div key={result.story_id} className={`flex items-start justify-between px-3 py-2.5 rounded-xl ${c('rowBg')}`} style={{ border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}>
                         <div className="flex-1 min-w-0 mr-3">
                           <p className={`text-sm font-medium truncate ${c('textBody')}`}>{result.story_title}</p>
                           {result._processing ? (
                             <p className="text-xs mt-0.5" style={{ color: runningAccent }}>Processing…</p>
                           ) : (
-                            <p className="text-xs mt-0.5" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>Gen: {result.chapters_generated} · Up: {result.chapters_uploaded}</p>
+                            <p className="text-xs mt-0.5" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>Gen: {result.chapters_generated} · Up: {result.chapters_uploaded}/{expected}</p>
                           )}
                           {result.error && <p className="text-xs mt-0.5" style={{ color: isDark ? '#f87171' : '#ef4444' }}>{result.error}</p>}
                         </div>
@@ -573,7 +577,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                           </span>
                         ) : null}
                       </div>
-                    ));
+                    )});
                   })()}
                 </div>
               )}

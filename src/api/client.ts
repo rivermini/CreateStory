@@ -1186,6 +1186,7 @@ export interface AutoAudioStoryPreview {
 export interface AutoAudioStoryResult {
   story_id: string;
   story_title: string;
+  chapters_expected?: number;
   chapters_generated: number;
   chapters_uploaded: number;
   upload_errors: string[];
