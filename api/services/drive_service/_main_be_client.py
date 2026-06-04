@@ -806,19 +806,28 @@ class MainBEClientMixin:
             payload["tags"] = tags
         if not payload:
             return (True, None)
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.put(url, content=self._json_body(payload), headers=headers)
-                if resp.status_code in (200, 201):
-                    self._append_log("info", f"Story metadata updated: freeChaptersCount={free_chapters_count}, maxChapter={max_chapter}")
-                    return (True, None)
-                detail = f"HTTP {resp.status_code}: {resp.text[:200]}"
-                self._append_log("warning", f"Story metadata PUT failed {detail}")
-                return (False, detail)
-        except Exception as exc:
-            detail = str(exc)
-            self._append_log("error", f"Story metadata PUT exception: {exc}")
-            return (False, detail)
+        max_retries = 3
+        base_timeout = 120.0
+        last_exc: Exception | None = None
+        for attempt in range(max_retries):
+            timeout = base_timeout * (2 ** attempt)
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    resp = client.put(url, content=self._json_body(payload), headers=headers)
+                    if resp.status_code in (200, 201):
+                        self._append_log("info", f"Story metadata updated: freeChaptersCount={free_chapters_count}, maxChapter={max_chapter}")
+                        return (True, None)
+                    detail = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                    self._append_log("warning", f"Story metadata PUT failed {detail}")
+                    return (False, detail)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_retries - 1:
+                    self._append_log("warning", f"Story metadata PUT attempt {attempt + 1}/{max_retries} failed ({exc}), retrying...")
+                    time.sleep(2 ** attempt)
+        detail = str(last_exc)
+        self._append_log("error", f"Story metadata PUT exception after {max_retries} attempts: {last_exc}")
+        return (False, detail)
 
     def _sync_new_chapters_from_extended_folder(
         self,
