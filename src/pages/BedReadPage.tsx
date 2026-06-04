@@ -366,7 +366,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
       <div className="lg-orb lg-orb-3" />
 
       <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
           {/* Page Header */}
           <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
@@ -385,7 +385,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
             onConfigure={() => window.location.href = '/settings/drive-sync'}
           />
 
-          <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 items-start">
+          <div className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6 items-start">
 
             {/* Left Column: Story List */}
             <section className="lg-glass-card">
@@ -470,7 +470,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
               </div>
 
               {/* Story list */}
-              <div className="max-h-[50vh] overflow-y-auto">
+              <div className="max-h-[70vh] xl:max-h-[50vh] overflow-y-auto">
                 {storiesLoading && (
                   <div className={`flex flex-col items-center justify-center py-16 ${c('textMuted')} text-sm`}>
                     <svg className={`w-8 h-8 mb-3 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -554,7 +554,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
 
               {/* Pagination */}
               <div className={`border-t px-4 py-3 ${c('rowBorder')}`}>
-                <div className="flex items-center justify-center gap-1 flex-wrap">
+                <div className="flex items-center justify-center gap-0.5 sm:gap-1 flex-wrap">
                   {storiesLoading ? (
                     <div className="flex items-center gap-2">
                       <svg className={`w-4 h-4 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">

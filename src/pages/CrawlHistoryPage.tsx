@@ -417,11 +417,11 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
             )}
 
             <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-                <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
+                <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
 
                     {/* Page Header */}
                     <div className="lg-glass-deep px-6 py-5">
-                        <h1 className={`text-2xl font-bold tracking-tight ${c('text')}`}>All Results</h1>
+                        <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${c('text')}`}>All Results</h1>
                         <p className={`text-sm mt-1 ${c('textMuted')}`}>
                             {filtered.length} of {sessions.length} sessions
                             {filter !== 'all' && ` · ${filter}`}

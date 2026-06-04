@@ -300,7 +300,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
 
           {/* ── Phase Selector ── */}
           <div className="lg-glass-nav p-1.5">
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
               {PHASES.map(phase => {
                 const isSelected = selectedPhase === phase.id;
                 const isSessionPhase = session?.phase === phase.id;
@@ -339,7 +339,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
               </div>
 
               {/* Action buttons */}
-              <div className="flex-shrink-0 flex items-center gap-2">
+              <div className="flex-shrink-0 flex flex-wrap items-center gap-2">
                 {!isLive ? (
                   !showStartConfirm ? (
                     <button

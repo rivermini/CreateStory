@@ -319,7 +319,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
       <div className="lg-orb lg-orb-3" />
 
       <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
           {/* Page Header */}
           <div className="lg-glass-deep px-6 py-5">

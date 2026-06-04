@@ -192,12 +192,12 @@ export function BatchPage({ themeMode }: BatchPageProps) {
       <div className="lg-orb lg-orb-3" />
 
       <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+        <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
 
           {/* Page Header */}
           <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
             <div>
-              <h1 className={`text-2xl font-bold tracking-tight ${c('text')}`}>Batch Crawl</h1>
+              <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${c('text')}`}>Batch Crawl</h1>
               <p className={`text-sm mt-1 ${c('textMuted')}`}>Crawl multiple novels at once</p>
             </div>
           </div>
@@ -358,13 +358,13 @@ export function BatchPage({ themeMode }: BatchPageProps) {
               {entries.map((entry, idx) => {
                 const isPaywalled = entry.novelMetadata?.is_paywalled === true;
                 return (
-                  <div key={entry.id} className={`flex items-center gap-3 text-sm py-2 border-b last:border-0 ${c('rowBorder')}`}>
+                  <div key={entry.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 text-sm py-2 border-b last:border-0 ${c('rowBorder')}`}>
                     <span className={`w-5 text-xs font-mono ${c('textMuted')}`}>{idx + 1}.</span>
                     {entry.isValid ? (
                       <>
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isPaywalled ? (isDark ? 'bg-amber-400' : 'bg-amber-500') : (isDark ? 'bg-emerald-400' : 'bg-emerald-500')}`} />
-                        <span className={`font-medium ${c('textBodyStrong')}`}>{entry.siteInfo?.site_name}</span>
-                        {entry.storyTitle && <span className={c('textMuted')}>— {entry.storyTitle}</span>}
+                        <span className={`font-medium truncate max-w-[120px] sm:max-w-none ${c('textBodyStrong')}`}>{entry.siteInfo?.site_name}</span>
+                        {entry.storyTitle && <span className={`truncate max-w-[150px] sm:max-w-[200px] ${c('textMuted')}`}>— {entry.storyTitle}</span>}
                         {entry.totalChapterCount != null && (
                           <span className={`ml-auto text-xs ${c('textMuted')}`}>{entry.totalChapterCount.toLocaleString()} ch</span>
                         )}

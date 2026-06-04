@@ -213,7 +213,7 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h1 className={`text-2xl sm:text-3xl font-bold ${textMain}`}>Chapter Content Update</h1>
+                <h1 className={`text-xl sm:text-2xl font-bold ${textMain}`}>Chapter Content Update</h1>
                 <p className={`mt-1 text-sm sm:text-base ${textSub}`}>Paste a Drive folder name, verify its server story, then push chapter files one at a time.</p>
               </div>
               {selectedStory && (
@@ -313,7 +313,7 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
                     </div>
                   </div>
 
-                  <div className="max-h-[calc(100vh-430px)] min-h-[340px] overflow-y-auto p-4 space-y-2">
+                  <div className="max-h-[50vh] sm:max-h-[calc(100vh-430px)] min-h-[200px] sm:min-h-[340px] overflow-y-auto p-4 space-y-2">
                     {scanData.chapters.length === 0 ? (
                       <EmptyPanel isDark={isDark} />
                     ) : (

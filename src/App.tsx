@@ -162,7 +162,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
           isDark ? 'bg-slate-950' : 'bg-gray-50'
         }`}
       >
-        <div className={`pt-14 lg:pt-0 ${sidebarCollapsed ? 'pl-[72px]' : 'pl-[248px]'} min-h-screen transition-all duration-300`}>
+        <div className={`pt-14 lg:pt-0 ${sidebarCollapsed ? 'pl-[72px] lg:pl-[72px]' : 'pl-0 lg:pl-[248px]'} min-h-screen transition-all duration-300`}>
           <Suspense fallback={
             <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
               Loading...
