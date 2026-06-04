@@ -51,11 +51,13 @@ class StoryResult:
     chapters_uploaded: int
     upload_errors: list[str]
     error: str = ""
+    chapters_expected: int = 0
 
     def to_dict(self) -> dict:
         return {
             "story_id": self.story_id,
             "story_title": self.story_title,
+            "chapters_expected": self.chapters_expected,
             "chapters_generated": self.chapters_generated,
             "chapters_uploaded": self.chapters_uploaded,
             "upload_errors": self.upload_errors,

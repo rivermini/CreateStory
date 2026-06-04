@@ -60,6 +60,7 @@ class StoryPipeline:
         result = StoryResult(
             story_id=story.story_id,
             story_title=story.story_title,
+            chapters_expected=len(story.missing_chapters),
             chapters_generated=0,
             chapters_uploaded=0,
             upload_errors=[],
@@ -196,6 +197,7 @@ class StoryPipeline:
             result = StoryResult(
                 story_id=story.story_id,
                 story_title=story.story_title,
+                chapters_expected=len(story.missing_chapters),
                 chapters_generated=0,
                 chapters_uploaded=0,
                 upload_errors=[],
@@ -228,6 +230,7 @@ class StoryPipeline:
             result=StoryResult(
                 story_id=story.story_id,
                 story_title=story.story_title,
+                chapters_expected=len(story.missing_chapters),
                 chapters_generated=0,
                 chapters_uploaded=0,
                 upload_errors=[],
@@ -273,11 +276,12 @@ class StoryPipeline:
             )
             return
 
-        if not success and not completed_files:
+        if not success:
             state.result.error = "Batch job failed or timed out"
             session.add_log(
                 4,
-                f"Batch job for '{state.story.story_title}' failed",
+                f"Batch job for '{state.story.story_title}' failed or timed out "
+                f"({state.result.chapters_uploaded}/{len(state.story.missing_chapters)} uploaded)",
                 level="error",
             )
 
@@ -380,7 +384,7 @@ class StoryPipeline:
     def _finish_batch_upload(self, session: AutoAudioSession, state: BatchState) -> None:
         session.set_step(
             6,
-            f"Uploaded {state.result.chapters_uploaded}/{len(state.completed_files)} audio files "
+            f"Uploaded {state.result.chapters_uploaded}/{len(state.story.missing_chapters)} audio files "
             f"for {state.story.story_title}",
             story=state.story.story_title,
         )
@@ -389,8 +393,22 @@ class StoryPipeline:
         if temp_batch_dir.exists():
             self._upload.delete_batch_output_dir(session, state.batch_id, temp_batch_dir)
 
-        self._br.delete_batch_output(state.batch_id)
-        session.add_log(9, f"Deleted BedReadVoices batch {state.batch_id} output directory")
+        expected_uploads = len(state.story.missing_chapters)
+        fully_uploaded = (
+            expected_uploads > 0
+            and state.result.chapters_uploaded >= expected_uploads
+            and not state.result.error
+            and not state.result.upload_errors
+        )
+        if fully_uploaded:
+            self._br.delete_batch_output(state.batch_id)
+            session.add_log(9, f"Deleted BedReadVoices batch {state.batch_id} output directory")
+        else:
+            session.add_log(
+                9,
+                f"Kept BedReadVoices batch {state.batch_id} output directory for retry/recovery",
+                level="warning",
+            )
 
     def _download_and_upload_chapter(
         self,
@@ -571,5 +589,5 @@ class StoryPipeline:
         session.add_log(
             7,
             f"Done: generated={result.chapters_generated}, "
-            f"uploaded={result.chapters_uploaded}",
+            f"uploaded={result.chapters_uploaded}/{expected_uploads}",
         )

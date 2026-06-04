@@ -22,14 +22,27 @@ class BatchPoller:
         session: AutoAudioSession,
         batch_id: str,
         timeout_seconds: int = 3600,
+        idle_timeout_seconds: int = 7200,
         on_completed_files: Optional[Callable[[list[dict]], None]] = None,
         on_poll_tick: Optional[Callable[[], None]] = None,
     ) -> tuple[bool, list[dict]]:
         start = time.time()
+        last_progress = start
+        last_signature = ""
         completed_files: list[dict] = []
         completed_indices: set[int] = set()
 
-        while time.time() - start < timeout_seconds:
+        while True:
+            now = time.time()
+            if now - last_progress >= idle_timeout_seconds:
+                session.add_log(
+                    4,
+                    f"Batch job {batch_id} timed out after "
+                    f"{idle_timeout_seconds}s without progress",
+                    level="error",
+                )
+                return False, completed_files
+
             if session._stopping:
                 session.add_log(
                     4,
@@ -99,9 +112,38 @@ class BatchPoller:
                 session.add_log(4, f"Batch job {batch_id} not found", level="error")
                 return False, completed_files
 
+            if job.get("status") == "queued":
+                last_progress = time.time()
+                queue_position = job.get("queue_position", 0)
+                queue_desc = f"position {queue_position}" if queue_position else "waiting"
+                session.set_step(
+                    5,
+                    f"Waiting for BedRead batch queue ({queue_desc})",
+                    story=session.current_story,
+                )
+                if on_poll_tick:
+                    try:
+                        on_poll_tick()
+                    except Exception as exc:
+                        session.add_log(
+                            6,
+                            f"Failed to process completed chapter upload: {exc}",
+                            level="error",
+                        )
+                        return False, completed_files
+                time.sleep(5)
+                continue
+
             statuses = [c.get("status") for c in job.get("chapters", [])]
             done = sum(1 for s in statuses if s == "completed")
             total = len(statuses)
+            signature = "|".join(
+                f"{c.get('chapter_number')}:{c.get('status')}:{c.get('progress_pct', 0)}:{c.get('output_filename', '')}"
+                for c in job.get("chapters", [])
+            )
+            if signature != last_signature:
+                last_signature = signature
+                last_progress = time.time()
 
             new_completed_files: list[dict] = []
             for ch in job.get("chapters", []):
@@ -148,10 +190,3 @@ class BatchPoller:
 
             session.set_step(5, f"Generating audio ({done}/{total})", story=session.current_story)
             time.sleep(5)
-
-        session.add_log(
-            4,
-            f"Batch job {batch_id} timed out after {timeout_seconds}s",
-            level="error",
-        )
-        return False, completed_files
