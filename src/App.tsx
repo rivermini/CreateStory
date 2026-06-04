@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState, lazy, Suspense } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { MobileSidebar } from './components/MobileSidebar';
 import { ToastContainer } from './components/Toast';
-import { getAutoAudioStatus, type AutoAudioSession } from './api/client';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -63,55 +62,10 @@ function App() {
   );
 }
 
-const SESSION_STORAGE_KEY = 'autoaudio_last_session';
-
 function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChange: (mode: ThemeMode) => void }) {
   const isDark = themeMode === 'dark';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-
-  const [autoAudioSession, setAutoAudioSession] = useState<AutoAudioSession | null>(() => {
-    try {
-      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const loadAutoAudioStatus = useCallback(async () => {
-    try {
-      const data = await getAutoAudioStatus({ compact: true });
-      if (data) {
-        setAutoAudioSession(data);
-        if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
-          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
-        } else {
-          localStorage.removeItem(SESSION_STORAGE_KEY);
-        }
-      } else if (data === null) {
-        const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          const isDone = parsed.status === 'completed' || parsed.status === 'error' || parsed.status === 'stopped';
-          if (isDone) {
-            setAutoAudioSession(parsed);
-          } else {
-            localStorage.removeItem(SESSION_STORAGE_KEY);
-            setAutoAudioSession(null);
-          }
-        } else {
-          setAutoAudioSession(null);
-        }
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    loadAutoAudioStatus();
-    const interval = setInterval(loadAutoAudioStatus, 5000);
-    return () => clearInterval(interval);
-  }, [loadAutoAudioStatus]);
 
   return (
     <>
@@ -120,7 +74,6 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
         onThemeChange={onThemeChange}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-        autoAudioSession={autoAudioSession}
       />
 
       <MobileSidebar
@@ -128,7 +81,6 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
         onThemeChange={onThemeChange}
         isOpen={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
-        autoAudioSession={autoAudioSession}
       />
 
       {/* Mobile header */}
@@ -179,7 +131,7 @@ function Shell({ themeMode, onThemeChange }: { themeMode: ThemeMode; onThemeChan
               <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync/content-update" element={<ChapterContentUpdatePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode} onThemeChange={onThemeChange} autoAudioSession={autoAudioSession} onAutoAudioSessionUpdate={setAutoAudioSession} />} />
+              <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/auto-audio/history" element={<AutoAudioHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/settings" element={<SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} onThemeChange={onThemeChange} />} />

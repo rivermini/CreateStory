@@ -3,7 +3,6 @@ import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
 import { ThemeToggle, type ThemeMode } from './ThemeToggle';
-import { type AutoAudioSession } from '../api/client';
 
 interface SidebarProps {
     themeMode: ThemeMode;
@@ -11,7 +10,6 @@ interface SidebarProps {
     rightActions?: React.ReactNode;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
-    autoAudioSession?: AutoAudioSession | null;
 }
 
 const PHASE_ACCENT = '#6366f1';
@@ -132,22 +130,17 @@ const NAV_SECTIONS = [
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ] as const;
 
-export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = false, onToggleCollapse, autoAudioSession }: SidebarProps) {
+export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = false, onToggleCollapse }: SidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
-    const autoAudioRunning = autoAudioSession?.status === 'running';
-    const autoAudioPaused = autoAudioSession?.status === 'paused';
-    const autoAudioStopping = autoAudioSession?.status === 'stopping';
-    const autoAudioBadgeActive = autoAudioRunning || autoAudioPaused || autoAudioStopping;
-    const activeAccent = autoAudioBadgeActive ? '#10b981' : PHASE_ACCENT;
+    const activeAccent = PHASE_ACCENT;
 
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
     const makeNavItem = (item: NavItem) => {
         const active = navActive(location.pathname, item.to);
         const hovered = hoveredItem === item.to;
-        const showAutoAudioBadge = item.to === '/auto-audio' && autoAudioBadgeActive;
 
         const showHover = hovered && !active;
         const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.07)';
@@ -185,15 +178,11 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                             ? `linear-gradient(135deg, ${activeAccent}18, ${activeAccent}10)`
                             : showHover
                             ? hoverBg
-                            : showAutoAudioBadge
-                            ? 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.06))'
                             : 'transparent',
                         border: active
                             ? `1px solid ${activeAccent}30`
                             : showHover
                             ? `1px solid ${hoverBorderColor}`
-                            : showAutoAudioBadge
-                            ? '1px solid rgba(16,185,129,0.2)'
                             : '1px solid transparent',
                         boxShadow: active
                             ? `0 2px 12px ${activeAccent}15, inset 0 1px 0 rgba(255,255,255,0.05)`
@@ -220,21 +209,8 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                                 {item.label}
                             </span>
 
-                            {/* Auto Audio pulsing badge */}
-                            {showAutoAudioBadge && (
-                                <span
-                                    className="ml-auto flex items-center gap-1.5"
-                                    style={{ color: '#10b981' }}
-                                >
-                                    <span
-                                        className="w-2 h-2 rounded-full animate-pulse"
-                                        style={{ background: '#10b981', boxShadow: '0 0 6px #10b98180' }}
-                                    />
-                                </span>
-                            )}
-
-                            {/* Active dot for non-badge active items */}
-                            {!showAutoAudioBadge && active && (
+                            {/* Active dot */}
+                            {active && (
                                 <span className="ml-auto">
                                     <span
                                         className="block rounded-full"

@@ -15,8 +15,6 @@ import { type ThemeMode } from '../components/ThemeToggle';
 interface AutoAudioPageProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
-  autoAudioSession: AutoAudioSession | null;
-  onAutoAudioSessionUpdate: (session: AutoAudioSession | null) => void;
 }
 
 function formatTime(ts: string | null): string {
@@ -63,11 +61,22 @@ const STEP_NAMES: Record<number, string> = {
   11: 'Complete',
 };
 
-export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAudioSession, onAutoAudioSessionUpdate }: AutoAudioPageProps) {
+export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: AutoAudioPageProps) {
   const isDark = themeMode === 'dark';
 
-  const [session, setSession] = useState<AutoAudioSession | null>(() => autoAudioSession);
-  const [selectedPhase, setSelectedPhase] = useState<string>(() => autoAudioSession?.phase ?? 'phase1');
+  const [session, setSession] = useState<AutoAudioSession | null>(() => {
+    try {
+      const stored = localStorage.getItem('autoaudio_last_session');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.status === 'completed' || parsed.status === 'error' || parsed.status === 'stopped') {
+          return parsed;
+        }
+      }
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [selectedPhase, setSelectedPhase] = useState<string>(() => 'phase1');
   const [phase2Limit, setPhase2Limit] = useState(20);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -90,32 +99,8 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
   const currentPhaseInfo = PHASES.find(p => p.id === selectedPhase)!;
   const runningAccent = PHASE_ACCENT[session?.phase || 'phase1'] || '#6366f1';
 
-  const sessionRef = useRef(autoAudioSession);
-  useEffect(() => { sessionRef.current = autoAudioSession; }, [autoAudioSession]);
-  useEffect(() => {
-    setSession(prev => {
-      if (!autoAudioSession) return null;
-      if (prev?.session_id === autoAudioSession.session_id) {
-        return {
-          ...autoAudioSession,
-          logs: autoAudioSession.logs.length ? autoAudioSession.logs : prev.logs,
-          story_results: autoAudioSession.story_results.length ? autoAudioSession.story_results : prev.story_results,
-        };
-      }
-      return autoAudioSession;
-    });
-  }, [autoAudioSession]);
-  useEffect(() => {
-    if (session === null && autoAudioSession === null) {
-      const stored = localStorage.getItem('autoaudio_last_session');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.status === 'completed' || parsed.status === 'error' || parsed.status === 'stopped') {
-          setSession(parsed);
-        }
-      }
-    }
-  }, [session, autoAudioSession]);
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
@@ -124,14 +109,13 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
         if (!cancelled) {
           if (data === null && sessionRef.current !== null) return;
           setSession(data);
-          if (data !== null) onAutoAudioSessionUpdate(data);
         }
       } catch { /* ignore */ }
     };
     poll();
     const t = setInterval(poll, isLive ? 2000 : 5000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [isLive, onAutoAudioSessionUpdate]);
+  }, [isLive]);
   useEffect(() => { getDriveSyncConfig().then(cfg => setConfig(cfg)).catch(() => {}).finally(() => setConfigLoading(false)); }, []);
   useEffect(() => {
     if (session?.phase && (session.status === 'running' || session.status === 'paused')) setSelectedPhase(session.phase);
@@ -163,7 +147,6 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
       await startAutoAudio({ phase: selectedPhase, test_mode: selectedPhase === 'phase3', limit: selectedPhase === 'phase2' ? phase2Limit : undefined });
       const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
       setSession(data);
-      onAutoAudioSessionUpdate(data);
       setShowStartConfirm(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start session.');
@@ -181,7 +164,6 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
       await stopAutoAudio();
       const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
       setSession(data);
-      onAutoAudioSessionUpdate(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to stop session.');
     }
@@ -197,7 +179,6 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
       }
       const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
       setSession(data);
-      onAutoAudioSessionUpdate(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update pause state.');
     }
@@ -540,7 +521,6 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange, autoAu
                     try {
                       const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
                       setSession(data);
-                      onAutoAudioSessionUpdate(data);
                     } catch { /* ignore */ }
                   }}
                   disabled={isLive}
