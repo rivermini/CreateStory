@@ -150,10 +150,10 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
         const showAutoAudioBadge = item.to === '/auto-audio' && autoAudioBadgeActive;
 
         const showHover = hovered && !active;
-        const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
-        const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
-        const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)';
-        const hoverBorderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+        const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.07)';
+        const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.72)';
+        const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(15,23,42,0.86)';
+        const hoverBorderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.14)';
 
         return (
             <Link
@@ -205,7 +205,7 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                     {/* Icon */}
                     <span
                         className="flex-shrink-0 transition-colors duration-200"
-                        style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)') }}
+                        style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
                     >
                         {item.icon}
                     </span>
@@ -215,7 +215,7 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                         <>
                             <span
                                 className="text-sm font-medium truncate transition-colors duration-200"
-                                style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)') }}
+                                style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
                             >
                                 {item.label}
                             </span>
@@ -256,15 +256,15 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                 width: isCollapsed ? 72 : 248,
                 background: isDark
                     ? 'rgba(15, 15, 35, 0.55)'
-                    : 'rgba(255, 255, 255, 0.72)',
+                    : 'rgba(248, 250, 252, 0.9)',
                 backdropFilter: 'blur(32px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(32px) saturate(180%)',
                 borderRight: isDark
                     ? '1px solid rgba(255,255,255,0.07)'
-                    : '1px solid rgba(255,255,255,0.5)',
+                    : '1px solid rgba(15,23,42,0.12)',
                 boxShadow: isDark
                     ? '0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)'
-                    : '0 16px 48px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
+                    : '0 18px 48px rgba(15,23,42,0.13), inset 0 1px 0 rgba(255,255,255,0.9)',
             }}
         >
             {/* Brand */}
@@ -272,7 +272,7 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                 className="flex items-center gap-3"
                 style={{
                     padding: isCollapsed ? '20px 12px' : '20px 16px',
-                    borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+                    borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
                 }}
             >
                 <AppIcon size={isCollapsed ? 'md' : 'xl'} className="flex-shrink-0" />
@@ -280,11 +280,11 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                     <div className="flex-1 min-w-0">
                         <h1
                             className="text-base font-bold truncate"
-                            style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)' }}
+                            style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)' }}
                         >
                             Novel Crawler
                         </h1>
-                        <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }}>
+                        <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.58)' }}>
                             Content Fetcher
                         </p>
                     </div>
@@ -301,7 +301,7 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                             width: 14,
                             height: 14,
                             transform: isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
-                            color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
+                            color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)',
                         }}
                         fill="none"
                         stroke="currentColor"
@@ -325,7 +325,7 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                         {!isCollapsed && (
                             <p
                                 className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-widest"
-                                style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' }}
+                                style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.46)' }}
                             >
                                 {section.label}
                             </p>
@@ -341,7 +341,7 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
             <div
                 style={{
                     padding: isCollapsed ? '12px 10px' : '12px 12px',
-                    borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+                    borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
                 }}
             >
                 {rightActions && !isCollapsed && (

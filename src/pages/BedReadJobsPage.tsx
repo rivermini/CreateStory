@@ -52,20 +52,20 @@ function getGenerationStart(job: BatchJob): string | null {
 }
 
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending:   (d) => d ? 'bg-white/30' : 'bg-gray-400',
-    queued:    (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-400 animate-pulse',
-    running:   (d) => d ? 'bg-blue-400' : 'bg-blue-500',
+    pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
+    queued: (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-400 animate-pulse',
+    running: (d) => d ? 'bg-blue-400' : 'bg-blue-500',
     completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
-    failed:    (d) => d ? 'bg-red-400' : 'bg-red-500',
+    failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
     cancelled: (d) => d ? 'bg-amber-400' : 'bg-amber-500',
 };
 
 const STATUS_TEXT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending:   (d) => d ? 'text-white/40' : 'text-gray-500',
-    queued:    (d) => d ? 'text-amber-400' : 'text-amber-600',
-    running:   (d) => d ? 'text-blue-400' : 'text-blue-600',
+    pending: (d) => d ? 'text-white/40' : 'text-gray-500',
+    queued: (d) => d ? 'text-amber-400' : 'text-amber-600',
+    running: (d) => d ? 'text-blue-400' : 'text-blue-600',
     completed: (d) => d ? 'text-emerald-400' : 'text-emerald-600',
-    failed:    (d) => d ? 'text-red-400' : 'text-red-600',
+    failed: (d) => d ? 'text-red-400' : 'text-red-600',
     cancelled: (d) => d ? 'text-amber-400' : 'text-amber-600',
 };
 
@@ -75,19 +75,19 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 };
 
 const CHAPTER_STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending:    (d) => d ? 'bg-white/30' : 'bg-gray-400',
-    queued:     (d) => d ? 'bg-indigo-400 animate-pulse' : 'bg-indigo-400 animate-pulse',
+    pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
+    queued: (d) => d ? 'bg-indigo-400 animate-pulse' : 'bg-indigo-400 animate-pulse',
     processing: (d) => d ? 'bg-blue-400 animate-pulse' : 'bg-blue-500 animate-pulse',
-    completed:  (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
-    failed:     (d) => d ? 'bg-red-400' : 'bg-red-500',
+    completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
+    failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
 };
 
 const CHAPTER_STATUS_TEXT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending:    (d) => d ? 'text-white/40' : 'text-gray-500',
-    queued:     (d) => d ? 'text-indigo-400' : 'text-indigo-600',
+    pending: (d) => d ? 'text-white/40' : 'text-gray-500',
+    queued: (d) => d ? 'text-indigo-400' : 'text-indigo-600',
     processing: (d) => d ? 'text-blue-400' : 'text-blue-600',
-    completed:  (d) => d ? 'text-emerald-400' : 'text-emerald-600',
-    failed:     (d) => d ? 'text-red-400' : 'text-red-600',
+    completed: (d) => d ? 'text-emerald-400' : 'text-emerald-600',
+    failed: (d) => d ? 'text-red-400' : 'text-red-600',
 };
 
 interface JobCardProps {
@@ -178,7 +178,7 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                 <span className={`px-3 py-1.5 text-xs font-medium rounded-xl ${isDark
                                     ? 'text-amber-300 bg-amber-500/10 border border-amber-500/20'
                                     : 'text-amber-700 bg-amber-50 border border-amber-200'
-                                }`}>
+                                    }`}>
                                     Auto Mode — Files Deleted
                                 </span>
                             )}
@@ -195,7 +195,7 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                 className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${isDark
                                     ? 'text-white/40 border-white/5 hover:text-white/70 hover:bg-white/[0.04]'
                                     : 'text-[rgba(0,0,0,0.4)] border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'
-                                }`}
+                                    }`}
                             >
                                 {expanded ? 'Hide' : `${totalCount}C`}
                             </button>
@@ -266,7 +266,7 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                                     className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${isDark
                                                         ? 'text-white/70 bg-white/[0.04] hover:bg-white/[0.06]'
                                                         : 'text-[rgba(0,0,0,0.7)] bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]'
-                                                    }`}>
+                                                        }`}>
                                                     Download
                                                 </button>
                                             )}
@@ -421,6 +421,33 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
             <div className="lg-orb lg-orb-1" />
             <div className="lg-orb lg-orb-2" />
             <div className="lg-orb lg-orb-3" />
+            {deleteConfirmation.open && (
+                <div className="lg-modal-overlay">
+                    <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">
+                        <h3 className={`text-lg font-semibold ${c('text')}`}>
+                            {deleteConfirmation.hasRunning ? 'Warning' : 'Confirm Delete'}
+                        </h3>
+                        {deleteConfirmation.hasRunning ? (
+                            <div className="space-y-3">
+                                <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                                    You are about to delete {deleteConfirmation.ids.length} job{deleteConfirmation.ids.length !== 1 ? 's' : ''}, including running job(s).
+                                </p>
+                                <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>This action cannot be undone.</p>
+                            </div>
+                        ) : (
+                            <p className={`text-sm ${c('textBody')}`}>
+                                Are you sure you want to delete {deleteConfirmation.ids.length} job{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+                            </p>
+                        )}
+                        <div className="flex gap-2 justify-end pt-2">
+                            <button onClick={() => setDeleteConfirmation({ open: false, ids: [], hasRunning: false })} disabled={isDeleting} className="lg-btn-ghost">Cancel</button>
+                            <button onClick={handleConfirmDelete} disabled={isDeleting} className="lg-btn-danger" style={{ opacity: isDeleting ? 0.4 : 1 }}>
+                                {isDeleting ? 'Removing...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
                 <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
@@ -476,7 +503,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                             className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${deleteMode
                                 ? isDark ? 'text-red-300 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20' : 'text-red-600 border border-red-300 bg-red-50 hover:bg-red-100'
                                 : isDark ? 'text-white/50 border border-white/5 hover:text-white/70 hover:bg-white/[0.04]' : 'text-[rgba(0,0,0,0.4)] border border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'
-                            }`}>
+                                }`}>
                             {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
                         </button>
                         {deleteMode && (
@@ -611,40 +638,11 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                                 className={`px-4 py-2 text-sm border rounded-xl transition-colors ${isDark
                                     ? 'text-white/40 hover:text-white/70 border-white/5 hover:bg-white/[0.04]'
                                     : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)] border-black/5 hover:bg-[rgba(0,0,0,0.04)]'
-                                }`}>
+                                    }`}>
                                 Refresh
                             </button>
                         </div>
                     )}
-
-                    {deleteConfirmation.open && (
-                        <div className="lg-modal-overlay">
-                            <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">
-                                <h3 className={`text-lg font-semibold ${c('text')}`}>
-                                    {deleteConfirmation.hasRunning ? 'Warning' : 'Confirm Delete'}
-                                </h3>
-                                {deleteConfirmation.hasRunning ? (
-                                    <div className="space-y-3">
-                                        <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                                            You are about to delete {deleteConfirmation.ids.length} job{deleteConfirmation.ids.length !== 1 ? 's' : ''}, including running job(s).
-                                        </p>
-                                        <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>This action cannot be undone.</p>
-                                    </div>
-                                ) : (
-                                    <p className={`text-sm ${c('textBody')}`}>
-                                        Are you sure you want to delete {deleteConfirmation.ids.length} job{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
-                                    </p>
-                                )}
-                                <div className="flex gap-2 justify-end pt-2">
-                                    <button onClick={() => setDeleteConfirmation({ open: false, ids: [], hasRunning: false })} disabled={isDeleting} className="lg-btn-ghost">Cancel</button>
-                                    <button onClick={handleConfirmDelete} disabled={isDeleting} className="lg-btn-danger" style={{ opacity: isDeleting ? 0.4 : 1 }}>
-                                        {isDeleting ? 'Removing...' : 'Delete'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {cancelConfirmation.open && (
                         <div className="lg-modal-overlay">
                             <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">

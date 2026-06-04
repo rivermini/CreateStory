@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
-import { listJobs, deleteJob, deleteJobs, type SyncJob, type JobLogEntry } from '../api/client';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { deleteJob, deleteJobs, listJobs, type JobLogEntry, type SyncJob } from '../api/client';
+import { DatePicker } from '../components/DatePicker';
 import { type ThemeMode } from '../components/ThemeToggle';
 
-const PRODUCTION_URL = 'https://api-novel.santngo.com/';
-const PRODUCTION_URL_V2 = 'https://api-novel.santngo.com';
+const PRODUCTION_API_BASE = 'https://api-novel.santngo.com';
 
 interface DriveSyncHistoryPageProps {
   themeMode: ThemeMode;
@@ -12,270 +13,691 @@ interface DriveSyncHistoryPageProps {
 
 type FilterStatus = 'all' | 'queued' | 'running' | 'success' | 'error' | 'cancelled';
 type FilterKind = 'all' | 'upload_single' | 'update_single';
+type SortOrder = 'newest' | 'oldest';
+type TimeRange = 'all' | 'today' | 'week' | 'month' | 'specific';
 
-const STATUS_CONFIG_DARK: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
-  success:  { label: 'Success',   dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-950/40',   border: 'border-emerald-800/40'   },
-  error:    { label: 'Error',     dot: 'bg-red-400',     text: 'text-red-400',     bg: 'bg-red-950/40',     border: 'border-red-800/40'     },
-  running:  { label: 'Running',   dot: 'bg-blue-400',    text: 'text-blue-400',    bg: 'bg-blue-950/40',    border: 'border-blue-800/40'    },
-  queued:   { label: 'Queued',    dot: 'bg-amber-400',   text: 'text-amber-400',  bg: 'bg-amber-950/40',   border: 'border-amber-800/40'   },
-  cancelled:{ label: 'Cancelled', dot: 'bg-slate-500',   text: 'text-slate-400',  bg: 'bg-slate-800/40',   border: 'border-slate-700/40'   },
+const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
+  queued: (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-500 animate-pulse',
+  running: (d) => d ? 'bg-blue-400 animate-pulse' : 'bg-blue-500 animate-pulse',
+  success: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
+  error: (d) => d ? 'bg-red-400' : 'bg-red-500',
+  cancelled: (d) => d ? 'bg-white/30' : 'bg-gray-500',
 };
 
-const STATUS_CONFIG_LIGHT: Record<string, { label: string; dot: string; text: string; bg: string; border: string }> = {
-  success:  { label: 'Success',   dot: 'bg-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50',     border: 'border-emerald-200' },
-  error:    { label: 'Error',     dot: 'bg-red-500',     text: 'text-red-600',     bg: 'bg-red-50',       border: 'border-red-200'   },
-  running:  { label: 'Running',   dot: 'bg-blue-500',    text: 'text-blue-600',    bg: 'bg-blue-50',      border: 'border-blue-200'   },
-  queued:   { label: 'Queued',    dot: 'bg-amber-500',   text: 'text-amber-600',  bg: 'bg-amber-50',     border: 'border-amber-200'  },
-  cancelled:{ label: 'Cancelled', dot: 'bg-gray-400',    text: 'text-gray-500',   bg: 'bg-gray-100',     border: 'border-gray-200'   },
+const STATUS_TEXT_MAP: Record<string, (isDark: boolean) => string> = {
+  queued: (d) => d ? 'text-amber-400' : 'text-amber-700',
+  running: (d) => d ? 'text-blue-400' : 'text-blue-700',
+  success: (d) => d ? 'text-emerald-400' : 'text-emerald-700',
+  error: (d) => d ? 'text-red-400' : 'text-red-700',
+  cancelled: (d) => d ? 'text-white/45' : 'text-gray-600',
 };
+
+const STATUS_LABEL_MAP: Record<string, string> = {
+  queued: 'Queued',
+  running: 'Running',
+  success: 'Success',
+  error: 'Error',
+  cancelled: 'Cancelled',
+};
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '-';
+  try {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function formatDuration(startedAt: string | null, finishedAt: string | null): string {
+  if (!startedAt) return '-';
+  try {
+    const endMs = finishedAt ? new Date(finishedAt).getTime() : Date.now();
+    const startMs = new Date(startedAt).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return '-';
+    const secs = Math.max(0, Math.floor((endMs - startMs) / 1000));
+    if (secs < 60) return `${secs}s`;
+    const minutes = Math.floor(secs / 60);
+    const seconds = secs % 60;
+    return `${minutes}m ${seconds}s`;
+  } catch {
+    return '-';
+  }
+}
+
+function getTimestampMs(iso: string | null): number | null {
+  if (!iso) return null;
+  const direct = new Date(iso).getTime();
+  if (Number.isFinite(direct)) return direct;
+  const normalized = new Date(iso.replace(' ', 'T')).getTime();
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
+function isProductionApi(baseUrl?: string): boolean {
+  if (!baseUrl) return false;
+  return baseUrl.replace(/\/+$/, '') === PRODUCTION_API_BASE;
+}
+
+function getDisplayName(job: SyncJob): string {
+  return job.display_name || job.folder_name || job.id;
+}
+
+interface JobCardProps {
+  job: SyncJob;
+  order: number;
+  isSelected: boolean;
+  isExpanded: boolean;
+  deleteMode: boolean;
+  isDark: boolean;
+  c: (key: string) => string;
+  onToggleExpand: (jobId: string) => void;
+  onToggleSelect: (jobId: string) => void;
+}
+
+function JobCard({ job, order, isSelected, isExpanded, deleteMode, isDark, c, onToggleExpand, onToggleSelect }: JobCardProps) {
+  const dotFn = STATUS_DOT_MAP[job.status] ?? STATUS_DOT_MAP.cancelled;
+  const textFn = STATUS_TEXT_MAP[job.status] ?? STATUS_TEXT_MAP.cancelled;
+  const dot = dotFn(isDark);
+  const text = textFn(isDark);
+  const label = STATUS_LABEL_MAP[job.status] ?? job.status;
+  const displayName = getDisplayName(job);
+  const production = isProductionApi(job.main_be_api_base_url);
+  const hasChapterStats = job.chapters_added > 0 || job.chapters_skipped > 0 || !!job.chapters_count;
+
+  const cardBg = deleteMode && isSelected
+    ? isDark ? 'bg-red-500/10 border border-red-500/30' : 'bg-red-50 border border-red-200'
+    : isDark ? 'lg-glass-card border border-white/[0.05]' : 'lg-glass-card border border-black/5';
+
+  const orderBg = deleteMode && isSelected
+    ? isDark ? 'bg-red-500/10 border-r border-r-red-500/30 text-red-300' : 'bg-red-100 border-r border-r-red-200 text-red-700'
+    : isDark ? 'bg-indigo-500/10 border-r border-r-white/5 text-indigo-300' : 'bg-indigo-50 border-r border-r-indigo-100 text-indigo-700';
+
+  return (
+    <div
+      className={`rounded-2xl overflow-hidden flex transition-all duration-200 ${cardBg} ${deleteMode ? 'cursor-pointer select-none' : ''}`}
+      onClick={deleteMode ? () => onToggleSelect(job.id) : undefined}
+    >
+      <div className={`w-12 flex-shrink-0 border-r flex flex-col items-center justify-center rounded-l-2xl transition-colors duration-200 ${orderBg}`}>
+        <span className="text-base font-bold select-none">#{order}</span>
+      </div>
+
+      <div className="flex-1 min-w-0 flex flex-col">
+        <div
+          className={`px-5 py-4 flex flex-col sm:flex-row items-start gap-4 ${!deleteMode ? 'cursor-pointer' : ''}`}
+          onClick={() => deleteMode ? onToggleSelect(job.id) : onToggleExpand(job.id)}
+        >
+          <div className="flex-shrink-0 mt-1 flex items-center gap-2">
+            <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />
+          </div>
+
+          <div className="flex-1 min-w-0 w-full">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${isDark
+                ? 'bg-white/[0.06] text-white/70'
+                : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
+                {label}
+              </span>
+              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${job.kind === 'upload_single'
+                ? isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-100 text-blue-700 border border-blue-200'
+                : isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
+                {job.kind === 'upload_single' ? 'Upload' : 'Update'}
+              </span>
+              {job.main_be_api_base_url && (
+                <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${production
+                  ? isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  : isDark ? 'bg-white/[0.04] text-white/45' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                  {production ? 'Production' : 'Test'}
+                </span>
+              )}
+              <span className={`text-xs font-mono ${isDark ? 'text-white/20' : 'text-slate-400'}`}>{job.id.slice(0, 8)}</span>
+            </div>
+
+            <h3 className={`mt-1.5 text-sm sm:text-base font-semibold truncate ${c('textBodyStrong')}`}>
+              {displayName}
+            </h3>
+
+            <div className={`flex items-center gap-3 mt-1.5 text-xs flex-wrap ${c('textMuted')}`}>
+              <span className={text}>{label}</span>
+              <span>{job.folder_name}</span>
+              {hasChapterStats && (
+                <>
+                  {job.chapters_added > 0 && <span className={isDark ? 'text-emerald-400' : 'text-emerald-700'}>+{job.chapters_added} added</span>}
+                  {job.chapters_skipped > 0 && <span className={isDark ? 'text-amber-400' : 'text-amber-700'}>{job.chapters_skipped} skipped</span>}
+                  {job.chapters_count ? <span>{job.chapters_count} chapter limit</span> : null}
+                </>
+              )}
+            </div>
+
+            {job.result_message && !job.error && (
+              <p className={`text-xs truncate mt-2 ${c('textSub')}`}>{job.result_message}</p>
+            )}
+            {job.error && (
+              <p className={`text-xs truncate mt-2 ${isDark ? 'text-red-400' : 'text-red-700'}`}>{job.error}</p>
+            )}
+          </div>
+
+          <div className={`flex flex-col sm:items-end gap-1 text-xs ${c('textSub')}`}>
+            <div className="flex items-center gap-2">
+              {!deleteMode && (
+                <svg
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''} ${c('textSub')}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              )}
+              <span>Created {formatDate(job.created_at)}</span>
+            </div>
+            {job.started_at && <span>Started {formatDate(job.started_at)}</span>}
+            {job.finished_at && <span>Finished {formatDate(job.finished_at)}</span>}
+            {(job.started_at || job.finished_at) && (
+              <span className={`font-medium ${job.status === 'running'
+                ? isDark ? 'text-blue-400' : 'text-blue-700'
+                : isDark ? 'text-indigo-400' : 'text-indigo-700'}`}>
+                {formatDuration(job.started_at, job.finished_at)}
+              </span>
+            )}
+            {job.logs.length > 0 && (
+              <span className={c('textMuted')}>{job.logs.length} log{job.logs.length !== 1 ? 's' : ''}</span>
+            )}
+          </div>
+        </div>
+
+        {isExpanded && !deleteMode && (
+          <div className={`border-t px-5 py-4 ${isDark ? 'border-white/[0.05] bg-white/[0.01]' : 'border-black/5 bg-[rgba(0,0,0,0.02)]'}`}>
+            <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${c('textSub')}`}>
+              Job Log
+            </p>
+            {job.logs.length > 0 ? (
+              <div className="lg-log-container max-h-[260px]">
+                {job.logs.map((log, index) => (
+                  <LogLine key={`${log.timestamp}-${index}`} log={log} isDark={isDark} />
+                ))}
+              </div>
+            ) : (
+              <div className={`text-sm ${c('textMuted')}`}>No log entries for this job.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   const isDark = themeMode === 'dark';
+  const PAGE_SIZE = 15;
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [filterKind, setFilterKind] = useState<FilterKind>('all');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [timeRange, setTimeRange] = useState<TimeRange>('all');
+  const [specificDate, setSpecificDate] = useState('');
   const [search, setSearch] = useState('');
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SyncJob | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkDeleteTarget, setBulkDeleteTarget] = useState<SyncJob[] | null>(null);
-  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-
-  const statusConfig = isDark ? STATUS_CONFIG_DARK : STATUS_CONFIG_LIGHT;
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; ids: string[]; hasRunning: boolean }>({ open: false, ids: [], hasRunning: false });
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const pageBg = isDark
     ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
-    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
+    : 'linear-gradient(135deg, #e9f1ff 0%, #eaf7f1 38%, #fff1e5 72%, #f2ecff 100%)';
 
   const c = (key: string) => {
     const map: Record<string, [string, string]> = {
-      text:      ['text-white/90',      'text-[rgba(0,0,0,0.85)]'],
-      textMuted: ['text-white/40',       'text-[rgba(0,0,0,0.4)]'],
-      textSub:   ['text-white/25',       'text-[rgba(0,0,0,0.25)]'],
-      textBody:  ['text-white/70',       'text-[rgba(0,0,0,0.65)]'],
-      textBodyStrong: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
-      glassBg:   ['bg-white/[0.03]',     'bg-white/70'],
-      glassBorder: ['border-white/[0.06]','border-black/[0.06]'],
-      glassHover:['hover:bg-white/[0.05]','hover:bg-white/80'],
-      rowBg:     ['bg-white/[0.04]',     'bg-[rgba(0,0,0,0.04)]'],
-      rowBorder:  ['border-white/[0.05]', 'border-black/[0.05]'],
-      divider:   ['border-white/[0.06]', 'border-black/[0.06]'],
-      glassNav:  ['bg-[#0f0f1e]/90',    'bg-white/80'],
+      text: ['text-white/90', 'text-slate-950'],
+      textMuted: ['text-white/40', 'text-slate-600'],
+      textSub: ['text-white/30', 'text-slate-500'],
+      textBody: ['text-white/70', 'text-slate-700'],
+      textBodyStrong: ['text-white/85', 'text-slate-900'],
+      divider: ['bg-white/6', 'bg-slate-300'],
     };
     return map[key]?.[isDark ? 0 : 1] ?? '';
   };
 
-  const loadJobs = useCallback(async () => {
-    setLoading(true);
+  const loadJobs = useCallback(async (): Promise<void> => {
     setError('');
     try {
       const data = await listJobs(200, 0);
       setJobs(data.jobs);
+      setLastRefresh(new Date());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load history.');
-    } finally {
-      setLoading(false);
+      setError(e instanceof Error ? e.message : 'Failed to load sync history.');
     }
   }, []);
 
-  useEffect(() => { loadJobs(); }, [loadJobs]);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void loadJobs().finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [loadJobs]);
 
   useEffect(() => {
-    const hasRunning = jobs.some(j => j.status === 'queued' || j.status === 'running');
-    if (!hasRunning) return;
-    const interval = setInterval(loadJobs, 10000);
+    const hasActiveJobs = jobs.some(job => job.status === 'queued' || job.status === 'running');
+    if (!hasActiveJobs) return;
+    const interval = setInterval(loadJobs, 5000);
     return () => clearInterval(interval);
   }, [jobs, loadJobs]);
 
-  useEffect(() => {
-    setSelectedIds(prev => {
-      const liveIds = new Set(jobs.map(j => j.id));
-      const next = new Set(prev);
-      let changed = false;
-      next.forEach(id => { if (!liveIds.has(id)) { next.delete(id); changed = true; } });
-      return changed ? next : prev;
+  const timeCutoff = (() => {
+    if (timeRange === 'all') return null;
+    const now = new Date();
+    if (timeRange === 'today') {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      return start;
+    }
+    if (timeRange === 'week') {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 7);
+      return start;
+    }
+    if (timeRange === 'month') {
+      const start = new Date(now);
+      start.setMonth(start.getMonth() - 1);
+      return start;
+    }
+    if (timeRange === 'specific' && specificDate) {
+      return {
+        start: new Date(`${specificDate}T00:00:00`),
+        end: new Date(`${specificDate}T23:59:59`),
+      };
+    }
+    return null;
+  })();
+
+  const searchText = search.trim().toLowerCase();
+  const baseFiltered = jobs
+    .filter(job => {
+      if (filterKind !== 'all' && job.kind !== filterKind) return false;
+      if (searchText) {
+        const haystack = `${job.display_name} ${job.folder_name} ${job.id} ${job.result_message ?? ''} ${job.error ?? ''}`.toLowerCase();
+        if (!haystack.includes(searchText)) return false;
+      }
+      if (timeCutoff) {
+        const time = getTimestampMs(job.created_at);
+        if (time === null) return false;
+        if (timeCutoff instanceof Date) return time >= timeCutoff.getTime();
+        return time >= timeCutoff.start.getTime() && time <= timeCutoff.end.getTime();
+      }
+      return true;
     });
-  }, [jobs]);
+
+  const filtered = baseFiltered
+    .filter(job => filter === 'all' || job.status === filter)
+    .sort((a, b) => {
+      const aTime = getTimestampMs(a.created_at) ?? 0;
+      const bTime = getTimestampMs(b.created_at) ?? 0;
+      return sortOrder === 'newest' ? bTime - aTime : aTime - bTime;
+    });
+
+  const visibleJobs = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+  const liveJobIds = new Set(jobs.map(job => job.id));
+  const liveSelectedIds = new Set(Array.from(selectedIds).filter(id => liveJobIds.has(id)));
+  const allVisibleSelected = visibleJobs.length > 0 && visibleJobs.every(job => liveSelectedIds.has(job.id));
+  const activeJobs = jobs.filter(job => job.status === 'queued' || job.status === 'running');
+  const primaryActiveJob = jobs.find(job => job.status === 'running') ?? jobs.find(job => job.status === 'queued') ?? null;
+
+  const filteredCounts = {
+    all: baseFiltered.length,
+    running: baseFiltered.filter(job => job.status === 'running').length,
+    queued: baseFiltered.filter(job => job.status === 'queued').length,
+    success: baseFiltered.filter(job => job.status === 'success').length,
+    error: baseFiltered.filter(job => job.status === 'error').length,
+    cancelled: baseFiltered.filter(job => job.status === 'cancelled').length,
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisibleCount(PAGE_SIZE), 0);
+    return () => window.clearTimeout(timer);
+  }, [PAGE_SIZE, filter, filterKind, sortOrder, timeRange, specificDate, search]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSelectedIds(new Set()), 0);
+    return () => window.clearTimeout(timer);
+  }, [filter, filterKind, timeRange, specificDate, search]);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount(prev => Math.min(prev + PAGE_SIZE, filtered.length));
+        }
+      },
+      { rootMargin: '300px 0px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [PAGE_SIZE, filtered.length, hasMore]);
+
+  const toggleDeleteMode = () => {
+    if (deleteMode) {
+      setDeleteMode(false);
+      setSelectedIds(new Set());
+    } else {
+      setDeleteMode(true);
+      setExpandedJobId(null);
+    }
+  };
+
+  const handleToggleSelect = (jobId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+  };
+
+  const handleDeleteClick = () => {
+    if (liveSelectedIds.size === 0) return;
+    const ids = Array.from(liveSelectedIds);
+    const hasRunning = ids.some(id => {
+      const job = jobs.find(item => item.id === id);
+      return job?.status === 'queued' || job?.status === 'running';
+    });
+    setDeleteConfirmation({ open: true, ids, hasRunning });
+  };
 
   const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-    setIsDeleting(true);
+    if (deleteConfirmation.ids.length === 0) return;
     try {
-      await deleteJob(deleteTarget.id);
-      setJobs(prev => prev.filter(j => j.id !== deleteTarget.id));
-      setDeleteTarget(null);
-    } catch {
-      // ignore
+      setIsDeleting(true);
+      if (deleteConfirmation.ids.length === 1) {
+        await deleteJob(deleteConfirmation.ids[0]);
+      } else {
+        await deleteJobs(deleteConfirmation.ids);
+      }
+      const deletedIds = new Set(deleteConfirmation.ids);
+      setJobs(prev => prev.filter(job => !deletedIds.has(job.id)));
+      setSelectedIds(new Set());
+      setDeleteMode(false);
+      setDeleteConfirmation({ open: false, ids: [], hasRunning: false });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete sync jobs.');
+      setDeleteConfirmation({ open: false, ids: [], hasRunning: false });
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const handleConfirmBulkDelete = async () => {
-    if (!bulkDeleteTarget || bulkDeleteTarget.length === 0) return;
-    setIsBulkDeleting(true);
-    try {
-      const ids = bulkDeleteTarget.map(j => j.id);
-      await deleteJobs(ids);
-      const deletedSet = new Set(ids);
-      setJobs(prev => prev.filter(j => !deletedSet.has(j.id)));
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        ids.forEach(id => next.delete(id));
-        return next;
-      });
-      setBulkDeleteTarget(null);
-    } catch {
-      // ignore
-    } finally {
-      setIsBulkDeleting(false);
-    }
+  const handleToggleExpand = (jobId: string) => {
+    setExpandedJobId(prev => prev === jobId ? null : jobId);
   };
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  const handleRefresh = () => {
+    setLoading(true);
+    loadJobs().finally(() => setLoading(false));
   };
 
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filtered.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map(j => j.id)));
-    }
-  };
+  const selectedJobs = deleteConfirmation.ids
+    .map(id => jobs.find(job => job.id === id))
+    .filter((job): job is SyncJob => !!job);
 
-  const filtered = jobs.filter(job => {
-    if (filter !== 'all' && job.status !== filter) return false;
-    if (filterKind !== 'all' && job.kind !== filterKind) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      if (!job.display_name.toLowerCase().includes(q) && !job.folder_name.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
-
-  useEffect(() => { setSelectedIds(new Set()); }, [filter, filterKind, search]);
-
-  const formatTime = (iso: string | null): string => {
-    if (!iso) return '—';
-    try { return new Date(iso).toLocaleString(); } catch { return iso; }
-  };
-
-  const formatDuration = (started?: string | null, finished?: string | null): string => {
-    if (!started) return '—';
-    const end = finished ? new Date(finished).getTime() : Date.now();
-    const secs = Math.floor((end - new Date(started).getTime()) / 1000);
-    if (secs < 0) return '—';
-    if (secs < 60) return `${secs}s`;
-    return `${Math.floor(secs / 60)}m ${secs % 60}s`;
-  };
-
-  const stats = {
-    total: jobs.length,
-    success:  jobs.filter(j => j.status === 'success').length,
-    error:    jobs.filter(j => j.status === 'error').length,
-    running:  jobs.filter(j => j.status === 'queued' || j.status === 'running').length,
-  };
-
-  const statCards: { label: string; value: number; color: string; dot: string }[] = [
-    { label: 'Total',   value: stats.total,   color: c('textBodyStrong'), dot: isDark ? 'bg-slate-400'   : 'bg-gray-400'   },
-    { label: 'Success', value: stats.success,  color: isDark ? 'text-emerald-400' : 'text-emerald-600', dot: isDark ? 'bg-emerald-400' : 'bg-emerald-500' },
-    { label: 'Errors',  value: stats.error,    color: isDark ? 'text-red-400' : 'text-red-600',    dot: isDark ? 'bg-red-400'     : 'bg-red-500'     },
-    { label: 'Running', value: stats.running,  color: isDark ? 'text-blue-400' : 'text-blue-600',   dot: isDark ? 'bg-blue-400'    : 'bg-blue-500'    },
-  ];
+  const filterBarBase = 'lg-glass-nav p-1.5';
+  const filterBtnActive = 'bg-indigo-600 text-white';
+  const filterBtnInactive = isDark ? 'text-white/40 hover:text-white/70' : 'text-slate-500 hover:text-slate-800';
 
   return (
     <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
       <div className="lg-orb lg-orb-1" />
       <div className="lg-orb lg-orb-2" />
       <div className="lg-orb lg-orb-3" />
-      <main className="relative z-10 w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col flex-1 gap-5">
 
-        {/* ── Page Header ───────────────────────────────── */}
-        <div className="lg-glass-deep px-6 py-5">
-          <h1 className={`text-2xl sm:text-3xl font-bold ${c('text')}`}>
-            Sync History
-          </h1>
-          <p className={`mt-1 text-sm sm:text-base ${c('textMuted')}`}>
-            View and manage your sync job history
-          </p>
+      {deleteConfirmation.open && (
+        <div className="lg-modal-overlay">
+          <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">
+            <h3 className={`text-lg font-semibold ${c('text')}`}>
+              {deleteConfirmation.hasRunning ? 'Warning' : 'Confirm Delete'}
+            </h3>
+            {deleteConfirmation.hasRunning ? (
+              <div className="space-y-3">
+                <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+                  You are about to delete {deleteConfirmation.ids.length} sync job{deleteConfirmation.ids.length !== 1 ? 's' : ''}, including active job(s).
+                </p>
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+                  This action cannot be undone.
+                </p>
+              </div>
+            ) : (
+              <p className={`text-sm ${c('textBody')}`}>
+                Are you sure you want to delete {deleteConfirmation.ids.length} sync job{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+              </p>
+            )}
+            {selectedJobs.length > 0 && (
+              <div className={`max-h-40 overflow-y-auto rounded-xl p-3 space-y-1 ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100/80'}`}>
+                {selectedJobs.slice(0, 6).map(job => (
+                  <div key={job.id} className={`flex items-center gap-2 text-xs ${c('textBody')}`}>
+                    <span className={`font-mono ${c('textSub')}`}>{job.id.slice(0, 6)}</span>
+                    <span className="truncate">{getDisplayName(job)}</span>
+                    <span className={`ml-auto shrink-0 ${STATUS_TEXT_MAP[job.status]?.(isDark) ?? c('textMuted')}`}>{STATUS_LABEL_MAP[job.status] ?? job.status}</span>
+                  </div>
+                ))}
+                {selectedJobs.length > 6 && (
+                  <div className={`text-xs ${c('textSub')}`}>+{selectedJobs.length - 6} more</div>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => setDeleteConfirmation({ open: false, ids: [], hasRunning: false })}
+                disabled={isDeleting}
+                className="lg-btn-ghost"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="lg-btn-danger"
+                style={{ opacity: isDeleting ? 0.4 : 1 }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
+      )}
 
-        {/* ── Stats bar ─────────────────────────────────────────────────── */}
-        {!loading && jobs.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {statCards.map(({ label, value, color, dot }) => (
-              <button
-                key={label}
-                onClick={() => {
-                  if (label === 'Total')   setFilter('all');
-                  if (label === 'Success') setFilter('success');
-                  if (label === 'Errors')  setFilter('error');
-                  if (label === 'Running') setFilter('running');
-                }}
-                className={`lg-glass-card flex items-center gap-3 px-4 py-4 rounded-xl text-left group transition-all duration-200 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
-              >
-                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dot} ${label === 'Running' && value > 0 ? 'animate-pulse' : ''}`} />
-                <div>
-                  <div className={`text-xl font-bold ${color} tabular-nums leading-none`}>{value}</div>
-                  <div className={`text-xs mt-0.5 ${c('textSub')}`}>{label}</div>
+      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
+        <main className="w-full xl:w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+          <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
+            <div>
+              <h1 className={`text-2xl font-bold tracking-tight ${c('text')}`}>Sync History</h1>
+              <p className={`text-sm mt-1 ${c('textMuted')}`}>
+                {filtered.length} of {jobs.length} jobs
+                {filter !== 'all' && ` | ${filter}`}
+                {filterKind !== 'all' && ` | ${filterKind === 'upload_single' ? 'upload' : 'update'}`}
+                {timeRange !== 'all' && ` | ${timeRange === 'today' ? 'today' : timeRange === 'week' ? '7 days' : timeRange === 'month' ? '30 days' : specificDate || 'date'}`}
+                {` | refreshed ${lastRefresh.toLocaleTimeString()}`}
+              </p>
+            </div>
+          </div>
+
+          {activeJobs.length > 0 && (
+            <div className="lg-glass p-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+                  <span className={`text-sm ${c('textBody')}`}>
+                    <span className={`font-medium ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
+                      {activeJobs.length} active sync job{activeJobs.length !== 1 ? 's' : ''}
+                    </span>
+                    {primaryActiveJob && (
+                      <span className={`${c('textMuted')} ml-2`}>
+                        - {primaryActiveJob.status === 'running' ? 'Processing' : 'Queued'}: {getDisplayName(primaryActiveJob)}
+                      </span>
+                    )}
+                  </span>
                 </div>
-              </button>
-            ))}
-          </div>
-        )}
+              </div>
+            </div>
+          )}
 
-        {/* ── Controls ──────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-2">
-
-          {/* Kind filter */}
-          <div className={`flex items-center gap-1 p-1 rounded-xl ${c('glassBg')} ${c('glassBorder')}`}>
-            <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Type:</span>
-            {([
-              ['all', 'All'],
-              ['upload_single', 'Upload'],
-              ['update_single', 'Update'],
-            ] as const).map(([value, label]) => (
+          <div className="flex flex-wrap items-center justify-start gap-2">
+            <button onClick={() => navigate('/drive-sync')} className="lg-btn-primary shadow-lg shadow-indigo-600/30">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12" />
+              </svg>
+              New Sync
+            </button>
+            <button
+              onClick={toggleDeleteMode}
+              className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${deleteMode
+                ? isDark ? 'text-red-300 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20' : 'text-red-700 border border-red-300 bg-red-50 hover:bg-red-100'
+                : isDark ? 'text-white/50 border border-white/5 hover:text-white/70 hover:bg-white/[0.04]' : 'text-slate-500 border border-slate-300 hover:text-slate-800 hover:bg-slate-100/70'}`}
+            >
+              {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
+            </button>
+            {deleteMode && (
               <button
-                key={value}
-                onClick={() => setFilterKind(value)}
-                className={`px-3 py-1 text-xs rounded-lg transition-colors ${filterKind === value
-                  ? 'bg-indigo-600 text-white'
-                  : `${c('textMuted')} hover:${isDark ? '!text-white/80' : '!text-black/80'}`
-                }`}
+                onClick={() => allVisibleSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(visibleJobs.map(job => job.id)))}
+                className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark ? 'text-white/50 border border-white/5 hover:text-white/70 hover:bg-white/[0.04]' : 'text-slate-500 border border-slate-300 hover:text-slate-800 hover:bg-slate-100/70'}`}
               >
-                {label}
+                {allVisibleSelected ? 'Unselect All' : 'Select All'}
               </button>
-            ))}
+            )}
+            {deleteMode && liveSelectedIds.size > 0 && (
+              <button
+                onClick={handleDeleteClick}
+                disabled={isDeleting}
+                className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 shadow-lg ${isDeleting
+                  ? isDark ? 'text-red-400 bg-red-500/20 cursor-not-allowed shadow-none' : 'text-red-500 bg-red-100 cursor-not-allowed shadow-none'
+                  : 'text-white bg-red-600 hover:bg-red-500 shadow-red-600/30'}`}
+              >
+                {isDeleting ? 'Deleting...' : `Delete (${liveSelectedIds.size})`}
+              </button>
+            )}
           </div>
 
-          {/* Search */}
-          <div className="relative flex-1 min-w-[180px]">
-            <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {deleteMode && (
+            <div className={`rounded-2xl p-3 flex items-center justify-between gap-3 ${isDark
+              ? 'bg-red-500/10 border border-red-500/20'
+              : 'bg-red-50 border border-red-200'}`}>
+              <div className="flex items-center gap-2">
+                <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-800'}`}>Delete Mode Active</span>
+                {liveSelectedIds.size > 0 && <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>({liveSelectedIds.size} selected)</span>}
+              </div>
+              <button onClick={toggleDeleteMode} className={`text-xs underline ${isDark ? 'text-red-300 hover:text-white' : 'text-red-600 hover:text-red-800'}`}>
+                Exit Delete Mode
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+            <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
+              {([
+                ['all', `All (${filteredCounts.all})`],
+                ['running', `Running (${filteredCounts.running})`],
+                ['queued', `Queued (${filteredCounts.queued})`],
+                ['success', `Done (${filteredCounts.success})`],
+                ['error', `Error (${filteredCounts.error})`],
+                ['cancelled', `Cancelled (${filteredCounts.cancelled})`],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setFilter(value)}
+                  className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${filter === value ? filterBtnActive : filterBtnInactive}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
+              <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Type:</span>
+              {([
+                ['all', 'All'],
+                ['upload_single', 'Upload'],
+                ['update_single', 'Update'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setFilterKind(value)}
+                  className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${filterKind === value ? filterBtnActive : filterBtnInactive}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
+              <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Sort:</span>
+              <button onClick={() => setSortOrder('newest')} className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${sortOrder === 'newest' ? filterBtnActive : filterBtnInactive}`}>Newest</button>
+              <button onClick={() => setSortOrder('oldest')} className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${sortOrder === 'oldest' ? filterBtnActive : filterBtnInactive}`}>Oldest</button>
+            </div>
+
+            <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
+              <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Time:</span>
+              {(['all', 'today', 'week', 'month'] as const).map(value => (
+                <button
+                  key={value}
+                  onClick={() => { setTimeRange(value); setSpecificDate(''); }}
+                  className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === value ? filterBtnActive : filterBtnInactive}`}
+                >
+                  {value === 'all' ? 'All' : value === 'today' ? 'Today' : value === 'week' ? '7d' : '30d'}
+                </button>
+              ))}
+            </div>
+
+            <DatePicker
+              value={specificDate}
+              onDateChange={(date) => {
+                setSpecificDate(date);
+                setTimeRange(date ? 'specific' : 'all');
+              }}
+              isDark={isDark}
+            />
+
+            <button onClick={handleRefresh} className="lg-icon-btn" title="Refresh now">
+              <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="relative">
+            <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${c('textMuted')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               type="text"
-              placeholder="Search by story name..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
-              className={`w-full pl-9 pr-4 py-2 border rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${
-                isDark
-                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
-                  : 'bg-[rgba(0,0,0,0.04)] border-black/[0.06] text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
-              }`}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Search by story, folder, job ID, or message..."
+              className={`w-full pl-10 pr-10 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isDark
+                ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder-white/30'
+                : 'bg-white/70 border-slate-300 text-slate-900 placeholder:text-slate-400'}`}
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className={`absolute right-3 top-1/2 -translate-y-1/2 ${c('textSub')} hover:${isDark ? '!text-white/80' : '!text-black/80'}`}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-white/30 hover:text-white/70' : 'text-slate-400 hover:text-slate-700'}`}
+                title="Clear search"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -284,357 +706,102 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
             )}
           </div>
 
-          {/* Refresh */}
-          <button
-            onClick={() => { setLoading(true); loadJobs(); }}
-            className={`lg-glass px-3 py-2 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
-          >
-            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-          </button>
-
-          {/* Bulk delete */}
-          {selectedIds.size > 0 && (
-            <button
-              onClick={() => setBulkDeleteTarget(filtered.filter(j => selectedIds.has(j.id)))}
-              className={`lg-glass px-3 py-2 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark
-                ? 'text-red-400 hover:bg-red-900/20'
-                : 'text-red-600 hover:bg-red-50'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          {loading && jobs.length === 0 && (
+            <div className={`flex items-center justify-center py-16 gap-3 ${c('textMuted')}`}>
+              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Delete ({selectedIds.size})
-            </button>
+              <span>Loading sync history...</span>
+            </div>
           )}
-        </div>
 
-        {/* ── Select All ───────────────────────────────────────────────── */}
-        {!loading && filtered.length > 0 && (
-          <div className="flex items-center gap-2 px-1">
-            <input
-              type="checkbox"
-              checked={selectedIds.size === filtered.length && filtered.length > 0}
-              ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length; }}
-              onChange={toggleSelectAll}
-              className={`w-4 h-4 rounded cursor-pointer ${isDark
-                ? 'border-white/20 bg-white/5 text-indigo-400 focus:ring-indigo-500 focus:ring-offset-0'
-                : 'border-black/20 bg-black/5 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0'
-              }`}
-            />
-            <span className={`text-xs ${c('textSub')}`}>
-              {selectedIds.size > 0 ? `${selectedIds.size} selected` : `Select all ${filtered.length}`}
-            </span>
-          </div>
-        )}
+          {error && (
+            <div className={`flex items-center justify-between gap-3 p-4 rounded-2xl text-sm ${isDark
+              ? 'bg-red-500/10 border border-red-500/20 text-red-400'
+              : 'bg-red-50 border border-red-200 text-red-700'}`}>
+              <span>{error}</span>
+              <button onClick={handleRefresh} className="underline hover:no-underline shrink-0">Retry</button>
+            </div>
+          )}
 
-        {/* ── Error ────────────────────────────────────────────────────── */}
-        {error && (
-          <div className={`flex items-center justify-between gap-3 p-4 rounded-2xl text-sm ${isDark ? 'bg-red-900/20 border border-red-800/30 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
-            <span>{error}</span>
-            <button onClick={loadJobs} className="underline hover:no-underline shrink-0">Retry</button>
-          </div>
-        )}
+          {!loading && jobs.length === 0 && (
+            <div className={`text-center py-20 space-y-3 ${c('textMuted')}`}>
+              <div className="flex justify-center">
+                <svg className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12" />
+                </svg>
+              </div>
+              <p className={c('textMuted')}>No sync jobs yet.</p>
+              <button onClick={() => navigate('/drive-sync')} className={`text-sm underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-700 hover:text-indigo-900'}`}>
+                Start your first sync
+              </button>
+            </div>
+          )}
 
-        {/* ── Loading ──────────────────────────────────────────────────── */}
-        {loading && jobs.length === 0 && (
-          <div className={`flex items-center justify-center py-20 gap-3 ${c('textMuted')}`}>
-            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span>Loading sync history...</span>
-          </div>
-        )}
+          {!loading && jobs.length > 0 && filtered.length === 0 && (
+            <div className={`text-center py-20 space-y-3 ${c('textMuted')}`}>
+              <div className="flex justify-center">
+                <svg className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <p className={c('textMuted')}>No jobs match your filters.</p>
+              <button
+                onClick={() => { setFilter('all'); setFilterKind('all'); setSortOrder('newest'); setTimeRange('all'); setSpecificDate(''); setSearch(''); }}
+                className={`text-sm underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-700 hover:text-indigo-900'}`}
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
 
-        {/* ── Empty ────────────────────────────────────────────────────── */}
-        {!loading && jobs.length === 0 && (
-          <div className={`flex flex-col items-center justify-center py-24 space-y-3 ${c('textSub')}`}>
-            <svg className={`w-14 h-14 ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <p className={c('textMuted')}>No sync jobs yet.</p>
-            <p className={`text-sm ${c('textSub')}`}>Upload a story from the Drive Sync page to get started.</p>
-          </div>
-        )}
-
-        {/* ── Job list ────────────────────────────────────────────────── */}
-        {filtered.length > 0 && (
           <div className="space-y-3">
-            {filtered.map((job) => {
-              const statusCfg = statusConfig[job.status] ?? {
-                label: job.status,
-                dot: isDark ? 'bg-slate-500' : 'bg-gray-400',
-                text: isDark ? 'text-slate-400' : 'text-gray-500',
-                bg: isDark ? 'bg-slate-900/40' : 'bg-gray-50',
-                border: isDark ? 'border-slate-800/40' : 'border-gray-200',
-              };
-              const isExpanded = expandedJobId === job.id;
-
-              return (
-                <div
-                  key={job.id}
-                  className={`lg-glass-card rounded-2xl border transition-all duration-200 ${statusCfg.bg} ${statusCfg.border}
-                    ${selectedIds.has(job.id) ? 'ring-1 ring-indigo-500/50' : ''}`}
-                >
-                  {/* Card header */}
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    {/* Checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(job.id)}
-                      onChange={() => toggleSelect(job.id)}
-                      className={`w-4 h-4 rounded shrink-0 cursor-pointer ${isDark
-                        ? 'border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0'
-                        : 'border-gray-300 bg-white text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0'
-                      }`}
-                    />
-
-                    {/* Status dot */}
-                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusCfg.dot} ${job.status === 'running' ? 'animate-pulse' : ''}`} />
-
-                    {/* Title */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className={`text-sm font-semibold truncate pr-2 ${c('textBodyStrong')}`}>
-                        {job.display_name || job.folder_name}
-                      </h3>
-                      {job.result_message && !job.error && (
-                        <p className={`text-xs truncate mt-0.5 pr-4 ${c('textSub')}`}>{job.result_message}</p>
-                      )}
-                      {job.error && (
-                        <p className={`text-xs truncate mt-0.5 pr-4 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{job.error}</p>
-                      )}
-                    </div>
-
-                    {/* Type badge */}
-                    <span className={`shrink-0 inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border ${
-                      job.kind === 'upload_single'
-                        ? isDark
-                          ? 'bg-blue-900/40 text-blue-400 border-blue-800/40'
-                          : 'bg-blue-50 text-blue-600 border-blue-200'
-                        : isDark
-                          ? 'bg-amber-900/40 text-amber-400 border-amber-800/40'
-                          : 'bg-amber-50 text-amber-600 border-amber-200'
-                    }`}>
-                      {job.kind === 'upload_single' ? 'Upload' : 'Update'}
-                    </span>
-
-                    {/* Server badge */}
-                    {job.main_be_api_base_url && (() => {
-                      const normalizedUrl = job.main_be_api_base_url!.endsWith('/') ? job.main_be_api_base_url!.slice(0, -1) : job.main_be_api_base_url!;
-                      const isProduction = normalizedUrl === PRODUCTION_URL_V2 || normalizedUrl === PRODUCTION_URL;
-                      return (
-                        <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border ${
-                          isProduction
-                            ? isDark
-                              ? 'bg-emerald-900/40 text-emerald-400 border-emerald-800/40'
-                              : 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                            : isDark
-                              ? 'bg-slate-800/60 text-slate-400 border-slate-700/40'
-                              : 'bg-gray-100 text-gray-600 border-gray-200'
-                        }`}>
-                          {isProduction ? (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          )}
-                          {isProduction ? 'Prod' : 'Test'}
-                        </span>
-                      );
-                    })()}
-
-                    {/* Stats badges */}
-                    {job.chapters_added > 0 && (
-                      <span className={`shrink-0 text-xs font-medium hidden sm:inline ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                        +{job.chapters_added} added
-                      </span>
-                    )}
-                    {job.chapters_skipped > 0 && (
-                      <span className={`shrink-0 text-xs font-medium hidden sm:inline ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                        {job.chapters_skipped} skipped
-                      </span>
-                    )}
-
-                    {/* Duration pill (completed) */}
-                    {job.started_at && job.finished_at && (
-                      <span className={`shrink-0 hidden md:inline-flex items-center px-2.5 py-1 rounded-lg text-xs ${
-                        isDark
-                          ? 'bg-indigo-900/30 text-indigo-400 border border-indigo-800/40'
-                          : 'bg-indigo-50 text-indigo-600 border border-indigo-200'
-                      }`}>
-                        {formatDuration(job.started_at, job.finished_at)}
-                      </span>
-                    )}
-
-                    {/* Time */}
-                    <span className={`shrink-0 text-xs hidden lg:inline ${c('textSub')}`}>
-                      {formatTime(job.created_at)}
-                    </span>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
-                        className={`lg-glass px-3 py-1.5 text-xs rounded-xl transition-colors flex items-center gap-1 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}
-                        title={isExpanded ? 'Hide logs' : 'Show logs'}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d={isExpanded
-                              ? "M9 5l7 7-7 7"
-                              : "M19 9l-7 7-7-7"} />
-                        </svg>
-                        {job.logs.length}
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(job)}
-                        className={`lg-glass p-1.5 rounded-xl transition-colors ${isDark
-                          ? 'text-white/40 hover:text-red-400 hover:bg-red-900/20'
-                          : 'text-black/40 hover:text-red-600 hover:bg-red-50'
-                        }`}
-                        title="Delete job"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded logs */}
-                  {isExpanded && job.logs.length > 0 && (
-                    <div className={`border-t px-4 py-3 ${c('rowBg')}`}>
-                      <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${c('textSub')}`}>Logs</p>
-                      <div className="space-y-1 max-h-48 overflow-y-auto">
-                        {job.logs.map((log, i) => (
-                          <LogLine key={i} log={log} isDark={isDark} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {visibleJobs.map((job, index) => (
+              <JobCard
+                key={job.id}
+                job={job}
+                order={index + 1}
+                isSelected={liveSelectedIds.has(job.id)}
+                isExpanded={expandedJobId === job.id}
+                deleteMode={deleteMode}
+                isDark={isDark}
+                c={c}
+                onToggleExpand={handleToggleExpand}
+                onToggleSelect={handleToggleSelect}
+              />
+            ))}
+            {hasMore && <div ref={loadMoreRef} className={`py-6 text-center text-xs ${c('textSub')}`}>Loading more jobs...</div>}
           </div>
-        )}
 
-        {/* ── No results ─────────────────────────────────────────────── */}
-        {!loading && jobs.length > 0 && filtered.length === 0 && (
-          <div className={`text-center py-20 space-y-3 ${c('textSub')}`}>
-            <svg className={`w-12 h-12 mx-auto ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <p className={c('textMuted')}>No jobs match your filters or search.</p>
-            <button onClick={() => { setFilter('all'); setFilterKind('all'); setSearch(''); }}
-              className={`text-sm ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}>
-              Clear all filters
-            </button>
-          </div>
-        )}
-
-        {/* ── Bottom refresh ───────────────────────────────────────────── */}
-        {!loading && jobs.length > 0 && (
-          <div className="flex justify-center pt-2">
-            <button onClick={loadJobs}
-              className={`lg-glass px-4 py-2 text-sm rounded-xl transition-colors ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}>
-              Refresh
-            </button>
-          </div>
-        )}
-
-        {/* ── Delete modal ─────────────────────────────────────────────── */}
-        {deleteTarget && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className={`lg-glass-card rounded-2xl p-6 max-w-sm w-full shadow-2xl`}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className={`p-2 rounded-xl ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
-                  <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </div>
-                <h3 className={`text-base font-semibold ${c('text')}`}>Delete Job</h3>
-              </div>
-              <p className={`text-sm mb-5 ${c('textMuted')}`}>
-                Permanently delete{' '}
-                <span className={`font-medium ${c('textBodyStrong')}`}>{deleteTarget.display_name || deleteTarget.folder_name}</span>?
-                This cannot be undone.
-              </p>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setDeleteTarget(null)} disabled={isDeleting}
-                  className={`lg-glass px-4 py-2 text-sm rounded-xl transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}>
-                  Cancel
-                </button>
-                <button onClick={handleConfirmDelete} disabled={isDeleting}
-                  className={`px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 rounded-xl transition-colors`}>
-                  {isDeleting ? 'Deleting...' : 'Delete'}
-                </button>
-              </div>
+          {!loading && filtered.length > 0 && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={handleRefresh}
+                className={`px-4 py-2 text-sm border rounded-xl transition-colors ${isDark
+                  ? 'text-white/40 hover:text-white/70 border-white/5 hover:bg-white/[0.04]'
+                  : 'text-slate-500 hover:text-slate-800 border-slate-300 hover:bg-slate-100/70'}`}
+              >
+                Refresh
+              </button>
             </div>
-          </div>
-        )}
-
-        {/* ── Bulk delete modal ───────────────────────────────────────── */}
-        {bulkDeleteTarget && bulkDeleteTarget.length > 0 && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className={`lg-glass-card rounded-2xl p-6 max-w-sm w-full shadow-2xl`}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className={`p-2 rounded-xl ${isDark ? 'bg-red-900/30' : 'bg-red-50'}`}>
-                  <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </div>
-                <h3 className={`text-base font-semibold ${c('text')}`}>Delete {bulkDeleteTarget.length} Jobs</h3>
-              </div>
-              <p className={`text-sm mb-4 ${c('textMuted')}`}>
-                Permanently delete <span className={`font-medium ${c('textBodyStrong')}`}>{bulkDeleteTarget.length} selected jobs</span>?
-                This cannot be undone.
-              </p>
-              <div className={`max-h-44 overflow-y-auto rounded-xl p-3 space-y-1 mb-5 ${c('rowBg')}`}>
-                {bulkDeleteTarget.map(job => (
-                  <div key={job.id} className={`flex items-center gap-2 text-xs py-1 ${c('textBody')}`}>
-                    <span className={`font-mono ${c('textSub')}`}>{job.id.slice(0, 6)}</span>
-                    <span className="truncate">{job.display_name || job.folder_name}</span>
-                    <span className={`ml-auto shrink-0 ${c('textSub')}`}>({job.status})</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setBulkDeleteTarget(null)} disabled={isBulkDeleting}
-                  className={`lg-glass px-4 py-2 text-sm rounded-xl transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-white/[0.07]' : 'hover:bg-white/90'}`}>
-                  Cancel
-                </button>
-                <button onClick={handleConfirmBulkDelete} disabled={isBulkDeleting}
-                  className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 rounded-xl transition-colors">
-                  {isBulkDeleting ? 'Deleting...' : `Delete ${bulkDeleteTarget.length} Jobs`}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
 
 function LogLine({ log, isDark }: { log: JobLogEntry; isDark: boolean }) {
-  const colors = isDark
-    ? { info: 'text-slate-400', warning: 'text-amber-400', error: 'text-red-400', debug: 'text-slate-600' }
-    : { info: 'text-gray-500', warning: 'text-amber-600', error: 'text-red-600', debug: 'text-gray-400' };
+  const colors: Record<JobLogEntry['level'], string> = isDark
+    ? { info: 'text-slate-300', warning: 'text-amber-400', error: 'text-red-400', debug: 'text-slate-500' }
+    : { info: 'text-slate-700', warning: 'text-amber-700', error: 'text-red-700', debug: 'text-slate-500' };
+
   return (
-    <div className={`text-xs font-mono ${colors[log.level] || (isDark ? 'text-slate-400' : 'text-gray-500')}`}>
-      <span className={isDark ? 'text-slate-600' : 'text-gray-400'}>{new Date(log.timestamp).toLocaleTimeString()}</span>
-      {' '}<span className={`uppercase text-[10px] font-bold opacity-60`}>[{log.level}]</span>{' '}{log.message}
+    <div className={`text-xs font-mono ${colors[log.level]}`}>
+      <span className={isDark ? 'text-slate-500' : 'text-slate-400'}>{new Date(log.timestamp).toLocaleTimeString()}</span>
+      {' '}<span className="uppercase text-[10px] font-bold opacity-70">[{log.level}]</span>{' '}
+      {log.message}
     </div>
   );
 }

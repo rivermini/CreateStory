@@ -148,9 +148,9 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
         const showAutoAudioBadge = item.to === '/auto-audio' && autoAudioBadgeActive;
 
         const showHover = hovered && !active;
-        const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
-        const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
-        const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)';
+        const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.07)';
+        const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.72)';
+        const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(15,23,42,0.86)';
 
         return (
             <Link
@@ -185,7 +185,7 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
                         border: active
                             ? `1px solid ${activeAccent}30`
                             : showHover
-                            ? '1px solid rgba(0,0,0,0)'
+                            ? isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.14)'
                             : showAutoAudioBadge
                             ? '1px solid rgba(16,185,129,0.2)'
                             : '1px solid transparent',
@@ -198,13 +198,13 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
                 >
                     <span
                         className="flex-shrink-0 transition-colors duration-200"
-                        style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)') }}
+                        style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
                     >
                         {item.icon}
                     </span>
                     <span
                         className="text-sm font-medium truncate transition-colors duration-200"
-                        style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)') }}
+                        style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
                     >
                         {item.label}
                     </span>
@@ -244,13 +244,13 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
                     width: 280,
                     background: isDark
                         ? 'rgba(15, 15, 35, 0.82)'
-                        : 'rgba(255, 255, 255, 0.82)',
+                        : 'rgba(248, 250, 252, 0.92)',
                     backdropFilter: 'blur(40px) saturate(200%)',
                     WebkitBackdropFilter: 'blur(40px) saturate(200%)',
-                    borderRight: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(255,255,255,0.6)',
+                    borderRight: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(15,23,42,0.12)',
                     boxShadow: isDark
                         ? '0 32px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)'
-                        : '0 32px 64px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)',
+                        : '0 32px 64px rgba(15,23,42,0.16), inset 0 1px 0 rgba(255,255,255,0.95)',
                     transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
                 }}
             >
@@ -259,15 +259,15 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
                     className="flex items-center gap-3 shrink-0"
                     style={{
                         padding: '20px 16px',
-                        borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+                        borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
                     }}
                 >
                     <AppIcon size="xl" className="flex-shrink-0" />
                     <div className="min-w-0 flex-1">
-                        <h1 className="text-base font-bold truncate" style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)' }}>
+                        <h1 className="text-base font-bold truncate" style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)' }}>
                             Novel Crawler
                         </h1>
-                        <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }}>
+                        <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.58)' }}>
                             Content Fetcher
                         </p>
                     </div>
@@ -276,7 +276,7 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
                         className="lg-icon-btn flex-shrink-0"
                         title="Close sidebar"
                     >
-                        <svg className="" style={{ width: 14, height: 14, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="" style={{ width: 14, height: 14, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
@@ -288,7 +288,7 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
                         <div key={section.label}>
                             <p
                                 className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-widest"
-                                style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)' }}
+                                style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.46)' }}
                             >
                                 {section.label}
                             </p>
@@ -303,7 +303,7 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose, autoA
                 <div
                     style={{
                         padding: '12px 12px',
-                        borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+                        borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
                     }}
                 >
                     <ThemeToggle mode={themeMode} onChange={onThemeChange} />
