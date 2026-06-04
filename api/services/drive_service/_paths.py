@@ -41,7 +41,7 @@ _SHARED_CREDENTIALS_DIR = (
 _RE_STATUS_PREFIX = re.compile(r"^(DONE_|ING_|INCOMPLETE_|EXTENDED_)")
 
 _RE_SOURCE_SUFFIX = re.compile(
-    r"_(?:wp|gd|Goodnovel)(?![a-zA-Z0-9_])|_-_?novel(?=\s|_|\s-\s|$)", re.IGNORECASE
+    r"_(?:wp|gd|Goodnovel|nw|ink)(?![a-zA-Z0-9_])|_-_?novel(?=\s|_|\s-\s|$)", re.IGNORECASE
 )
 
 # -------------------------------------------------------------------------
@@ -52,6 +52,10 @@ _PLATFORM_TO_ENUM: dict[str, str] = {
     "wattpad": "Wattpad",
     "gd": "Goodnovel",
     "goodnovel": "Goodnovel",
+    "nw": "NovelWorm",
+    "novelworm": "NovelWorm",
+    "ink": "Inkitt",
+    "inkitt": "Inkitt",
 }
 
 _CATEGORY_MAP: dict[str, tuple[str, str | None]] = {
