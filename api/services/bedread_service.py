@@ -103,6 +103,7 @@ class BatchJob:
     status: str = "pending"
     output_dir: Optional[Path] = None
     started_at: Optional[str] = None
+    processing_started_at: Optional[str] = None
     finished_at: Optional[str] = None
     error: str = ""
     queue_position: int = 0
@@ -128,6 +129,7 @@ class BatchJob:
             "status": self.status,
             "progress_pct": self.progress_pct,
             "started_at": self.started_at,
+            "processing_started_at": self.processing_started_at,
             "finished_at": self.finished_at,
             "error": self.error,
             "chapters": [
@@ -210,6 +212,7 @@ class BedReadService:
                     status=entry.get("status", "pending"),
                     output_dir=Path(entry["output_dir"]) if entry.get("output_dir") else None,
                     started_at=entry.get("started_at"),
+                    processing_started_at=entry.get("processing_started_at"),
                     finished_at=entry.get("finished_at"),
                     error=entry.get("error", ""),
                     from_auto_mode=entry.get("from_auto_mode", False),
@@ -451,6 +454,8 @@ class BedReadService:
 
             batch.status = "running"
             batch.queue_position = 0
+            if not batch.processing_started_at:
+                batch.processing_started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             for i, bid in enumerate(self._batch_queue):
                 b = self._batch_jobs.get(bid)
@@ -464,6 +469,8 @@ class BedReadService:
             speed = batch.speed
             format = batch.format
             chapters = list(batch.chapters)
+
+        self._persist_jobs()
 
         # Fetch all chapters at once — the /chapter endpoint includes content for each chapter
         chapter_map: dict[int, dict] = {}
