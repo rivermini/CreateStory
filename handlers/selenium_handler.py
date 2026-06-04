@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -103,7 +104,7 @@ class _SeleniumBrowser:
 
         chromedriver_path = self._resolve_chromedriver()
         logger.info("Starting Chrome. Binary=%s Driver=%s", options.binary_location or "auto-detect", chromedriver_path)
-        service = Service(executable_path=chromedriver_path)
+        service = Service(executable_path=chromedriver_path) if chromedriver_path else Service()
         driver = webdriver.Chrome(service=service, options=options)
         driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": _CDP_STEALTH})
         return driver, service
@@ -166,34 +167,146 @@ class _SeleniumBrowser:
         except Exception:
             return None
 
-    def _resolve_chromedriver(self) -> str:
+    @staticmethod
+    def _extract_major_version(text: str) -> int | None:
+        match = re.search(r"\b(\d+)\.\d+\.\d+\.\d+\b", text or "")
+        return int(match.group(1)) if match else None
+
+    @staticmethod
+    def _run_version_command(command: list[str]) -> str:
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+            return (result.stdout or result.stderr or "").strip()
+        except Exception:
+            return ""
+
+    def _chrome_major_version(self) -> int | None:
+        if platform.system() == "Windows":
+            registry_major = self._windows_chrome_major_version()
+            if registry_major:
+                return registry_major
+
+        candidates: list[str] = []
+        env_bin = os.environ.get("CHROME_BIN")
+        if env_bin:
+            candidates.append(env_bin)
+
+        if platform.system() == "Windows":
+            candidates.extend(
+                [
+                    str(Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "Google" / "Chrome" / "Application" / "chrome.exe"),
+                    str(Path(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")) / "Google" / "Chrome" / "Application" / "chrome.exe"),
+                    str(Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "Application" / "chrome.exe"),
+                ]
+            )
+        else:
+            candidates.extend(
+                [
+                    "/usr/bin/google-chrome",
+                    "/usr/bin/google-chrome-stable",
+                    "/usr/bin/chromium",
+                    "/usr/bin/chromium-browser",
+                ]
+            )
+
+        for name in ("chrome", "chrome.exe", "google-chrome", "chromium", "chromium-browser"):
+            found = shutil.which(name)
+            if found:
+                candidates.append(found)
+
+        seen: set[str] = set()
+        for candidate in candidates:
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            if not Path(candidate).exists() and shutil.which(candidate) is None:
+                continue
+            major = self._extract_major_version(self._run_version_command([candidate, "--version"]))
+            if major:
+                return major
+        return None
+
+    def _windows_chrome_major_version(self) -> int | None:
+        try:
+            import winreg
+        except Exception:
+            return None
+
+        roots = (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE)
+        subkeys = (
+            r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+            r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        )
+        for root in roots:
+            for subkey in subkeys:
+                try:
+                    with winreg.OpenKey(root, subkey) as parent:
+                        for idx in range(winreg.QueryInfoKey(parent)[0]):
+                            try:
+                                child_name = winreg.EnumKey(parent, idx)
+                                with winreg.OpenKey(parent, child_name) as child:
+                                    display_name = str(winreg.QueryValueEx(child, "DisplayName")[0])
+                                    if "google chrome" not in display_name.lower():
+                                        continue
+                                    version = str(winreg.QueryValueEx(child, "DisplayVersion")[0])
+                                    major = self._extract_major_version(version)
+                                    if major:
+                                        return major
+                            except OSError:
+                                continue
+                except OSError:
+                    continue
+        return None
+
+    def _chromedriver_major_version(self, driver_path: str) -> int | None:
+        return self._extract_major_version(self._run_version_command([driver_path, "--version"]))
+
+    def _driver_matches_installed_chrome(self, driver_path: str) -> bool:
+        chrome_major = self._chrome_major_version()
+        driver_major = self._chromedriver_major_version(driver_path)
+        if not chrome_major or not driver_major:
+            return True
+        if chrome_major == driver_major:
+            return True
+        logger.info(
+            "Ignoring ChromeDriver %s because driver major %s does not match Chrome major %s.",
+            driver_path,
+            driver_major,
+            chrome_major,
+        )
+        return False
+
+    def _cache_chromedriver(self, driver_path: str) -> str:
+        self._chromedriver_path = driver_path
+        return driver_path
+
+    def _resolve_chromedriver(self) -> str | None:
         if self._chromedriver_path:
             return self._chromedriver_path
 
         if os.environ.get("CHROMEDRIVER_PATH"):
-            self._chromedriver_path = os.environ["CHROMEDRIVER_PATH"]
-            return self._chromedriver_path
+            driver_path = os.environ["CHROMEDRIVER_PATH"]
+            if self._driver_matches_installed_chrome(driver_path):
+                return self._cache_chromedriver(driver_path)
+            logger.warning("CHROMEDRIVER_PATH points to an incompatible ChromeDriver; trying auto-resolution.")
 
         if platform.system() == "Windows":
             try:
                 result = subprocess.run(["where", "chromedriver"], capture_output=True, text=True, timeout=5)
                 if result.returncode == 0:
                     path = os.path.normpath(result.stdout.strip().splitlines()[0])
-                    if os.path.exists(path):
-                        self._chromedriver_path = path
-                        return self._chromedriver_path
+                    if os.path.exists(path) and self._driver_matches_installed_chrome(path):
+                        return self._cache_chromedriver(path)
             except Exception:
                 pass
         else:
             for candidate in ("/usr/bin/chromedriver", "/usr/local/bin/chromedriver"):
-                if Path(candidate).exists():
-                    self._chromedriver_path = candidate
-                    return self._chromedriver_path
+                if Path(candidate).exists() and self._driver_matches_installed_chrome(candidate):
+                    return self._cache_chromedriver(candidate)
 
         wdm_driver = self._get_wdm_cached_driver()
-        if wdm_driver:
-            self._chromedriver_path = wdm_driver
-            return self._chromedriver_path
+        if wdm_driver and self._driver_matches_installed_chrome(wdm_driver):
+            return self._cache_chromedriver(wdm_driver)
 
         self._clean_wdm_locks()
         try:
@@ -214,17 +327,19 @@ class _SeleniumBrowser:
 
             t = threading.Thread(target=_download, daemon=True)
             t.start()
-            t.join(timeout=5)
+            t.join(timeout=20)
 
             if result:
                 driver_path = os.path.normpath(os.path.abspath(result[0]))
-                self._chromedriver_path = driver_path
-                return self._chromedriver_path
+                if self._driver_matches_installed_chrome(driver_path):
+                    return self._cache_chromedriver(driver_path)
         except Exception as exc:
-            logger.warning("webdriver-manager could not resolve ChromeDriver (%s) — falling back to 'chromedriver' in PATH.", exc)
+            logger.warning(
+                "webdriver-manager could not resolve ChromeDriver (%s); falling back to Selenium Manager.",
+                exc,
+            )
 
-        self._chromedriver_path = "chromedriver"
-        return self._chromedriver_path
+        return None
 
     def _start(self, domain: str = "") -> None:
         with self._lock:

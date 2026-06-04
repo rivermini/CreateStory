@@ -346,13 +346,20 @@ class NovelWormApiClient:
                 break
 
         body = paragraphs[start:end]
+        while body and cls._is_refusal_placeholder(body[0]):
+            body.pop(0)
+
         if found_tail_marker:
             trimmed = 0
-            while body and trimmed < 4 and cls._is_afterword_paragraph(body[-1]):
+            while body and trimmed < 4 and len(body) > 2 and cls._is_afterword_paragraph(body[-1]):
                 body.pop()
                 trimmed += 1
 
-        return "\n\n".join(cls._strip_markdown_emphasis(p) for p in body if p.strip()).strip()
+        return "\n\n".join(
+            cls._strip_markdown_emphasis(p)
+            for p in body
+            if p.strip() and not cls._is_refusal_placeholder(p)
+        ).strip()
 
     @staticmethod
     def html_to_paragraphs(html: str) -> list[str]:
@@ -399,6 +406,20 @@ class NovelWormApiClient:
         return bool(re.match(r"^title\s*[:：]\s*\S", normalized, re.IGNORECASE))
 
     @classmethod
+    def _is_refusal_placeholder(cls, text: str) -> bool:
+        lower = cls._strip_markdown_emphasis(text).strip().lower().replace("’", "'")
+        return bool(
+            lower
+            and "sorry" in lower
+            and (
+                "can't assist" in lower
+                or "cannot assist" in lower
+                or "can't help" in lower
+                or "cannot help" in lower
+            )
+        )
+
+    @classmethod
     def _is_tail_boilerplate(cls, text: str) -> bool:
         lower = cls._strip_markdown_emphasis(text).strip().lower()
         if not lower:
@@ -437,18 +458,18 @@ class NovelWormApiClient:
             for marker in (
                 " in the wake of the chaos",
                 "in this chapter",
-                "the chapter",
-                "readers",
-                "protagonist",
                 "what lies ahead",
                 "stage is set",
                 "sets the stage",
-                "journey",
-                "narrative",
-                "self-discovery",
                 "as the dust settles",
-                "chapter of my life",
             )
+        ):
+            return True
+        if "readers" in lower and (
+            "expect" in lower
+            or "left" in lower
+            or "leaving" in lower
+            or "wonder" in lower
         ):
             return True
         if lower in {"-", "—", "--", "---"}:
