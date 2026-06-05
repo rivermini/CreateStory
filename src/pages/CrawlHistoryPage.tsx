@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDownloadCombinedUrl, getDownloadAllUrl, listAllResults, deleteCrawlSessions, getDownloadAllCombinedUrl, type CrawlSessionSummary } from '../api/client';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { DatePicker } from '../components/DatePicker';
 
 function formatDate(iso: string | null): string {

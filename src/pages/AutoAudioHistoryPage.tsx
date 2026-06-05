@@ -7,7 +7,7 @@ import {
     type AutoAudioSession,
     type AutoAudioLogEntry,
 } from '../api/client';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { DatePicker } from '../components/DatePicker';
 
 interface AutoAudioHistoryPageProps {

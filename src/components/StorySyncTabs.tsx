@@ -3,7 +3,7 @@ import {
   type DriveSyncConfig,
   type UpdatableStoryEntry,
 } from '../api/client';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { BatchConfirmDialog } from './BatchConfirmDialog';
 import { UploadTab } from './UploadTab';
 import { UpdateTab } from './UpdateTab';

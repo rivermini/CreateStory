@@ -19,7 +19,7 @@ import {
   type TrackedJob,
   type StoriesNeedingUpdateEntry,
 } from '../api/client';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
 import { ServerModeBanner } from '../components/ServerModeBanner';

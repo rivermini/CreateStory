@@ -7,16 +7,104 @@ export const FIXED_JSON_PREFIX = 'data/credentials/';
 
 type FetchOptions = RequestInit & { timeout?: number };
 
-async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+const ACCESS_TOKEN_KEY = 'create_story_access_token';
+const REFRESH_TOKEN_KEY = 'create_story_refresh_token';
+const AUTH_USER_KEY = 'create_story_auth_user';
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
+  is_active: boolean;
+}
+
+export interface AuthTokensResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+export function getStoredAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+export function getStoredRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function getStoredAuthUser(): AuthUser | null {
+  const raw = localStorage.getItem(AUTH_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+function storeAuth(tokens: AuthTokensResponse) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(tokens.user));
+}
+
+export function clearAuth() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+}
+
+function authHeaders(existing?: HeadersInit): Headers {
+  const headers = new Headers(existing);
+  const token = getStoredAccessToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return headers;
+}
+
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+      clearAuth();
+      return false;
+    }
+    const tokens = await res.json() as AuthTokensResponse;
+    storeAuth(tokens);
+    return true;
+  } catch {
+    clearAuth();
+    return false;
+  }
+}
+
+async function requestWithAuth(path: string, fetchOptions: RequestInit, signal: AbortSignal): Promise<Response> {
+  return fetch(`${BASE_URL}${path}`, {
+    ...fetchOptions,
+    headers: authHeaders(fetchOptions.headers),
+    signal,
+  });
+}
+
+async function apiFetch<T>(path: string, options: FetchOptions = {}, allowRetry = true): Promise<T> {
   const { timeout = 10000, ...fetchOptions } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch(`${BASE_URL}${path}`, {
-      ...fetchOptions,
-      signal: controller.signal,
-    });
+    let res = await requestWithAuth(path, fetchOptions, controller.signal);
+
+    if (res.status === 401 && allowRetry && await refreshAccessToken()) {
+      res = await requestWithAuth(path, fetchOptions, controller.signal);
+    }
 
     if (!res.ok) {
       let message = `HTTP ${res.status}`;
@@ -36,6 +124,55 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function login(email: string, password: string): Promise<AuthTokensResponse> {
+  const tokens = await apiFetch<AuthTokensResponse>('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  }, false);
+  storeAuth(tokens);
+  return tokens;
+}
+
+export async function register(email: string, password: string): Promise<AuthTokensResponse> {
+  const tokens = await apiFetch<AuthTokensResponse>('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  }, false);
+  storeAuth(tokens);
+  return tokens;
+}
+
+export async function logout(): Promise<void> {
+  const refreshToken = getStoredRefreshToken();
+  if (refreshToken) {
+    try {
+      await apiFetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      }, false);
+    } catch {
+      // Best effort only; local auth state is cleared either way.
+    }
+  }
+  clearAuth();
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const user = await apiFetch<AuthUser>('/api/auth/me');
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  return user;
+}
+
+function withAccessToken(url: string): string {
+  const token = getStoredAccessToken();
+  if (!token) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}access_token=${encodeURIComponent(token)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,23 +384,23 @@ export async function getFileContent(crawlId: string, filename: string): Promise
 }
 
 export function getDownloadUrl(crawlId: string, filename: string): string {
-  return `${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`;
+  return withAccessToken(`${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`);
 }
 
 export function getDownloadAllUrl(crawlId: string): string {
-  return `${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download-all`;
+  return withAccessToken(`${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download-all`);
 }
 
 export function getDownloadAllSessionsUrl(): string {
-  return `${BASE_URL}/api/results/download-all`;
+  return withAccessToken(`${BASE_URL}/api/results/download-all`);
 }
 
 export function getDownloadCombinedUrl(crawlId: string, filename: string): string {
-  return `${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`;
+  return withAccessToken(`${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`);
 }
 
 export function getDownloadAllCombinedUrl(): string {
-  return `${BASE_URL}/api/results/download-combined-all`;
+  return withAccessToken(`${BASE_URL}/api/results/download-combined-all`);
 }
 
 export interface CrawlSessionSummary {
@@ -538,10 +675,18 @@ export interface UploadCredentialsResponse {
 export async function uploadDriveCredentials(file: File): Promise<UploadCredentialsResponse> {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch(`${BASE_URL}/api/drive-sync/credentials/upload`, {
+  let res = await fetch(`${BASE_URL}/api/drive-sync/credentials/upload`, {
     method: 'POST',
+    headers: authHeaders(),
     body: formData,
   });
+  if (res.status === 401 && await refreshAccessToken()) {
+    res = await fetch(`${BASE_URL}/api/drive-sync/credentials/upload`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: formData,
+    });
+  }
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -554,7 +699,14 @@ export async function uploadDriveCredentials(file: File): Promise<UploadCredenti
 }
 
 export async function checkCredentialsExists(filename: string): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/api/drive-sync/credentials/exists?filename=${encodeURIComponent(filename)}`);
+  let res = await fetch(`${BASE_URL}/api/drive-sync/credentials/exists?filename=${encodeURIComponent(filename)}`, {
+    headers: authHeaders(),
+  });
+  if (res.status === 401 && await refreshAccessToken()) {
+    res = await fetch(`${BASE_URL}/api/drive-sync/credentials/exists?filename=${encodeURIComponent(filename)}`, {
+      headers: authHeaders(),
+    });
+  }
   if (!res.ok) return false;
   const body = await res.json() as { exists: boolean };
   return body.exists;
@@ -996,7 +1148,7 @@ export async function cancelTTSJob(jobId: string): Promise<{ job_id: string; sta
 }
 
 export function getTTSAudioUrl(jobId: string): string {
-  return `${BASE_URL}/api/tts/jobs/${encodeURIComponent(jobId)}/audio`;
+  return withAccessToken(`${BASE_URL}/api/tts/jobs/${encodeURIComponent(jobId)}/audio`);
 }
 
 export async function getTTSQueue(): Promise<{
@@ -1160,11 +1312,11 @@ export async function removeBatchJob(batchId: string): Promise<{ batch_id: strin
 }
 
 export function getChapterAudioUrl(batchId: string, chapterNum: number): string {
-  return `${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/download?chapter=${chapterNum}`;
+  return withAccessToken(`${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/download?chapter=${chapterNum}`);
 }
 
 export function getBatchZipUrl(batchId: string): string {
-  return `${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/zip`;
+  return withAccessToken(`${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/zip`);
 }
 
 // ---------------------------------------------------------------------------

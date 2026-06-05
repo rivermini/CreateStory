@@ -2,7 +2,7 @@ import { useState } from 'react';
 import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
-import { ThemeToggle, type ThemeMode } from './ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 interface MobileSidebarProps {
     themeMode: ThemeMode;
@@ -128,7 +128,7 @@ const NAV_SECTIONS = [
     },
 ] as const;
 
-export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose }: MobileSidebarProps) {
+export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen, onClose }: MobileSidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
@@ -290,9 +290,7 @@ export function MobileSidebar({ themeMode, onThemeChange, isOpen, onClose }: Mob
                         padding: '12px 12px',
                         borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
                     }}
-                >
-                    <ThemeToggle mode={themeMode} onChange={onThemeChange} />
-                </div>
+                />
             </aside>
         </>
     );

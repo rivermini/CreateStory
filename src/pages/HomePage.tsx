@@ -6,7 +6,7 @@ import { NovelInfoPanel } from '../components/NovelInfoPanel';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
 import { useSiteDetection } from '../hooks/useSiteDetection';
 import { useNovelInfo } from '../hooks/useNovelInfo';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 interface HomePageProps {
   themeMode: ThemeMode;

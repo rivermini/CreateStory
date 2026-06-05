@@ -1,5 +1,5 @@
 import { useState, useEffect, type JSX } from 'react';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { listSites, type SiteInfoResponse } from '../api/client';
 
 interface SupportedSitesPageProps {

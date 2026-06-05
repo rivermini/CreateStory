@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { deleteJob, deleteJobs, listJobs, type JobLogEntry, type SyncJob } from '../api/client';
 import { DatePicker } from '../components/DatePicker';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 const PRODUCTION_API_BASE = 'https://api-novel.santngo.com';
 

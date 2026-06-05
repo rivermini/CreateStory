@@ -5,7 +5,7 @@ import { useCrawlStream } from '../hooks/useCrawlStream';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatsPanel } from '../components/StatsPanel';
 import { CrawlLog } from '../components/CrawlLog';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 interface CrawlPageProps {
   themeMode: ThemeMode;

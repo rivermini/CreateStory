@@ -8,7 +8,7 @@ import {
   getDriveFileContent,
   type DriveFileContentResponse,
 } from '../api/client';
-import { type ThemeMode } from './ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { ValidationErrorBadge, EmptyState } from './SyncTabShared';
 
 interface UpdateTabProps {

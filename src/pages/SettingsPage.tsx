@@ -10,7 +10,7 @@ import {
   FIXED_JSON_PREFIX,
 } from '../api/client';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { showToast } from '../components/Toast';
 
 interface SettingsPageProps {

@@ -3,7 +3,7 @@ import {
   type DriveSyncConfig,
   uploadDriveCredentials,
 } from '../api/client';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 export interface ConfigFormData {
   folder_id: string;

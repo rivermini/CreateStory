@@ -15,7 +15,7 @@ import {
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
 import { ServerModeBanner } from '../components/ServerModeBanner';
 import { showToast } from '../components/Toast';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 interface ChapterContentUpdatePageProps {
   themeMode: ThemeMode;

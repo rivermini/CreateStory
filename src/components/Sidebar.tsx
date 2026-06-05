@@ -2,7 +2,7 @@ import { useState } from 'react';
 import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
-import { ThemeToggle, type ThemeMode } from './ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 interface SidebarProps {
     themeMode: ThemeMode;
@@ -130,7 +130,7 @@ const NAV_SECTIONS = [
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ] as const;
 
-export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = false, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions, isCollapsed = false, onToggleCollapse }: SidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
@@ -323,7 +323,6 @@ export function Sidebar({ themeMode, onThemeChange, rightActions, isCollapsed = 
                 {rightActions && !isCollapsed && (
                     <div className="mb-2">{rightActions}</div>
                 )}
-                <ThemeToggle mode={themeMode} onChange={onThemeChange} />
             </div>
         </aside>
     );

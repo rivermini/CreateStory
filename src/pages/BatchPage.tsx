@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { startBatchCrawl, type CrawlRequest, detectSite, getNovelChapters, listSites, type NovelMetadata, type SiteInfoResponse } from '../api/client';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 interface BatchPageProps {
   themeMode: ThemeMode;

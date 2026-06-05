@@ -3,7 +3,7 @@ import {
   type CheckUploadableResponse,
   type DriveFolderEntry,
 } from '../api/client';
-import { type ThemeMode } from './ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 import { ValidationErrorBadge, StatusBadge, EmptyState } from './SyncTabShared';
 
 interface UploadTabProps {

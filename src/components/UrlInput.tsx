@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import { useSiteDetection } from '../hooks/useSiteDetection';
-import { type ThemeMode } from './ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 export interface UrlInputProps {
   onSlugDetected?: (slug: string) => void;

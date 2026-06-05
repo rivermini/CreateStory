@@ -10,7 +10,7 @@ import {
   type DriveSyncConfig,
 } from '../api/client';
 import { ServerModeBanner } from '../components/ServerModeBanner';
-import { type ThemeMode } from '../components/ThemeToggle';
+import type { ThemeMode } from '../types/theme';
 
 interface AutoAudioPageProps {
   themeMode: ThemeMode;
