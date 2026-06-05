@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import auto_audio
+from core.db import init_db
 
 
 @asynccontextmanager
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
     # Pre-initialize the service at startup to avoid cold-start on first HTTP request.
     # This eagerly loads the history and instantiates downstream clients.
     _logger.info("AutoAudio startup: pre-initializing service...")
+    init_db()
     from core.service import get_auto_audio_service
     svc = get_auto_audio_service()
     _ = svc.get_history()  # triggers _session_mgr.load_history()

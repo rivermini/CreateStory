@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Optional
 
-from core.config import _AUTO_AUDIO_LOGS_DIR_NAME, _OUTPUT_BASE_NAME
+from core.db import init_db
 from core.models import AutoAudioSession
+from core.repositories import AutoAudioRepository
 
 logger = logging.getLogger(__name__)
 
@@ -18,30 +18,27 @@ class SessionManager:
 
     def __init__(self, logs_dir: Path) -> None:
         self._logs_dir = logs_dir
+        self._logs_dir.mkdir(parents=True, exist_ok=True)
         self._history_file = logs_dir / "sessions.json"
         self._by_id: dict[str, dict] = {}
         self._history_cache_time: float = 0.0
+        init_db()
+        self._repo = AutoAudioRepository()
+        self._repo.import_existing_logs(logs_dir)
 
     def get_completed_stories_path(self, phase: str) -> Path:
         return self._logs_dir / f"completed_stories_{phase}.json"
 
     def load_completed_stories(self, phase: str) -> set[str]:
-        path = self.get_completed_stories_path(phase)
-        if not path.exists():
-            return set()
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return set(data.get("story_ids", []))
-        except Exception:
+            return self._repo.load_completed_stories(phase)
+        except Exception as exc:
+            logger.warning("Failed to load completed stories for phase %s: %s", phase, exc)
             return set()
 
     def save_completed_stories(self, phase: str, completed: set[str]) -> None:
-        path = self.get_completed_stories_path(phase)
         try:
-            path.write_text(
-                json.dumps({"story_ids": sorted(completed)}, indent=2),
-                encoding="utf-8",
-            )
+            self._repo.save_completed_stories(phase, completed)
         except Exception as exc:
             logger.warning("Failed to save completed stories for phase %s: %s", phase, exc)
 
@@ -68,37 +65,31 @@ class SessionManager:
 
     def save_session_log(self, session: AutoAudioSession) -> None:
         try:
-            log_path = self._logs_dir / f"session_{session.session_id}.json"
-            with open(log_path, "w", encoding="utf-8") as fh:
-                json.dump(session.to_dict(), fh, indent=2)
+            self._by_id[session.session_id] = session.to_summary_dict()
+            self._repo.save_session(session.to_dict())
         except Exception as exc:
             logger.warning("Failed to save session log: %s", exc)
 
     def load_history(self) -> list[dict]:
-        if not self._history_file.exists():
-            return []
         try:
-            with open(self._history_file, "r", encoding="utf-8") as fh:
-                history = json.load(fh)
+            history = self._repo.load_history()
             self._by_id = {s.get("session_id", ""): s for s in history}
             self._history_cache_time = Path(__file__).stat().st_mtime
             return history
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to load auto audio session history: %s", exc)
             return []
 
     def get_session(self, session_id: str) -> Optional[dict]:
-        # Check individual session log file first — it always has the full data.
-        log_path = self._logs_dir / f"session_{session_id}.json"
-        if log_path.exists():
-            try:
-                with open(log_path, "r", encoding="utf-8") as fh:
-                    return json.load(fh)
-            except Exception:
-                pass
-        # Fallback to history (summary only, no story_results or logs).
+        try:
+            data = self._repo.get_session(session_id)
+            if data is not None:
+                return data
+        except Exception as exc:
+            logger.warning("Failed to load auto audio session %s: %s", session_id, exc)
+
         if session_id in self._by_id:
             return self._by_id[session_id]
-        # Last resort: scan the full history file
         for session_data in self.load_history():
             if session_data.get("session_id") == session_id:
                 return session_data
@@ -113,52 +104,29 @@ class SessionManager:
 
     def persist_history(self, session: AutoAudioSession) -> None:
         try:
-            # Use summary dict to avoid bloating the history file with per-story detail.
             self._by_id[session.session_id] = session.to_summary_dict()
             if len(self._by_id) > 100:
                 ordered_ids = list(self._by_id.keys())
                 for old_id in ordered_ids[:-100]:
                     self._by_id.pop(old_id, None)
-            self._persist_sessions(list(self._by_id.values()))
+                    self._repo.delete_session(old_id)
+            self._repo.save_session(session.to_dict())
         except Exception as exc:
             logger.warning("Failed to persist auto audio session history: %s", exc)
 
     def delete_session(self, session_id: str) -> bool:
-        # Use in-memory _by_id dict directly — no file read needed.
-        if session_id not in self._by_id:
-            return False
         self._by_id.pop(session_id, None)
-        self._persist_sessions(list(self._by_id.values()))
-        log_path = self._logs_dir / f"session_{session_id}.json"
-        if log_path.exists():
-            try:
-                log_path.unlink()
-            except Exception:
-                pass
-        return True
+        return self._repo.delete_session(session_id)
 
     def delete_sessions_batch(self, session_ids: list[str]) -> int:
         if not session_ids:
             return 0
-        # Use in-memory _by_id dict directly — no file read needed.
-        id_set = set(session_ids)
-        before = sum(1 for sid in self._by_id if sid in id_set)
-        if before == 0:
-            return 0
         for sid in session_ids:
             self._by_id.pop(sid, None)
-            log_path = self._logs_dir / f"session_{sid}.json"
-            if log_path.exists():
-                try:
-                    log_path.unlink()
-                except Exception:
-                    pass
-        self._persist_sessions(list(self._by_id.values()))
-        return before
+        return self._repo.delete_sessions_batch(session_ids)
 
     def _persist_sessions(self, sessions: list[dict]) -> None:
         try:
-            with open(self._history_file, "w", encoding="utf-8") as fh:
-                json.dump(sessions, fh, indent=2)
+            self._repo.save_sessions(sessions)
         except Exception as exc:
             logger.warning("Failed to persist auto audio sessions: %s", exc)
