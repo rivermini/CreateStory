@@ -65,6 +65,8 @@ from api.models.drive_sync import (
     JobStatus,
     SyncJob,
 )
+from api.db import init_db
+from api.repositories.drive_sync_repository import DriveSyncRepository
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,8 @@ _service_instance: Optional[DriveSyncService] = None
 def get_drive_sync_service() -> DriveSyncService:
     global _service_instance
     if _service_instance is None:
+        init_db()
+        DriveSyncRepository().import_existing_files(_HISTORY_FILE, _JOBS_FILE, _STATUS_FILE)
         _service_instance = DriveSyncService()
     return _service_instance
 

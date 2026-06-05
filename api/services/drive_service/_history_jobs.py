@@ -474,6 +474,9 @@ class HistoryJobsMixin:
     def _load_history(self) -> list["HistoryEntry"]:
         from api.models.drive_sync import HistoryEntry
 
+        if hasattr(self, "_repo"):
+            raw = self._repo.load_history()
+            return [HistoryEntry(**e) for e in raw]
         if not _HISTORY_FILE.exists():
             return []
         try:
@@ -484,6 +487,9 @@ class HistoryJobsMixin:
             return []
 
     def _save_history(self, entries: list["HistoryEntry"]) -> None:
+        if hasattr(self, "_repo"):
+            self._repo.save_history(entries)
+            return
         _DATA_DIR.mkdir(parents=True, exist_ok=True)
         _HISTORY_FILE.write_text(
             json.dumps([e.model_dump() for e in entries], indent=2, ensure_ascii=False),
@@ -600,6 +606,9 @@ class HistoryJobsMixin:
     def _load_jobs_raw(self) -> list["SyncJob"]:
         from api.models.drive_sync import SyncJob
 
+        if hasattr(self, "_repo"):
+            raw = self._repo.load_jobs()
+            return [SyncJob(**j) for j in raw]
         if not _JOBS_FILE.exists():
             return []
         try:
@@ -614,6 +623,9 @@ class HistoryJobsMixin:
         Execute fn inside an exclusive file lock on _JOBS_LOCK_FILE.
         Uses fcntl on Unix/Linux/macOS and msvcrt on Windows.
         """
+        if hasattr(self, "_repo"):
+            return self._repo.with_jobs_lock(fn)
+
         lock_path = str(_JOBS_LOCK_FILE)
         _DATA_DIR.mkdir(parents=True, exist_ok=True)
         lock_fd = open(lock_path, "w")

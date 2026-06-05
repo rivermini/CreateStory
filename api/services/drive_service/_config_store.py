@@ -15,6 +15,7 @@ from api.services.drive_service._paths import (
     _DATA_DIR,
     _STATUS_FILE,
 )
+from api.repositories.drive_sync_repository import DriveSyncRepository
 
 _DRIVE_SYNC_CONFIG_EXAMPLE = {
     "folder_id": "REPLACE_WITH_YOUR_GOOGLE_DRIVE_FOLDER_ID",
@@ -43,6 +44,7 @@ class ConfigStoreMixin:
         self._status: "DriveSyncStatus" = None  # type: ignore[assignment]
         self._current_sync_id: Optional[str] = None
         self._current_log: list["DriveSyncLogEntry"] = []
+        self._repo = DriveSyncRepository()
         self._load_config()
         self._load_status()
 
@@ -86,7 +88,13 @@ class ConfigStoreMixin:
     def _load_status(self) -> None:
         from api.models.drive_sync import DriveSyncStatus
 
+        raw = self._repo.load_status()
+        if raw:
+            self._status = DriveSyncStatus(**raw)
+            return
         if not _STATUS_FILE.exists():
+            self._status = DriveSyncStatus(enabled=self._config.enabled if self._config else True)
+            self._save_status()
             return
         try:
             raw = json.loads(_STATUS_FILE.read_text(encoding="utf-8"))
@@ -95,11 +103,7 @@ class ConfigStoreMixin:
             logger.warning("Failed to load drive sync status: %s", exc)
 
     def _save_status(self) -> None:
-        _DATA_DIR.mkdir(parents=True, exist_ok=True)
-        _STATUS_FILE.write_text(
-            json.dumps(self._status.model_dump(mode="json"), indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        self._repo.save_status(self._status)
 
     def get_config(self) -> Optional["DriveSyncConfig"]:
         return self._config

@@ -3,6 +3,7 @@
 import logging
 import sys
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
 logging.getLogger("api.services.drive_service").setLevel(logging.INFO)
@@ -20,12 +21,25 @@ if str(_project_root) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.db import init_db
 from api.routes.drive_sync import router as drive_sync_router
+from api.repositories.drive_sync_repository import DriveSyncRepository
+from api.services.drive_service._paths import _HISTORY_FILE, _JOBS_FILE, _STATUS_FILE
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("BedReadDriveSync startup: initializing database...")
+    init_db()
+    DriveSyncRepository().import_existing_files(_HISTORY_FILE, _JOBS_FILE, _STATUS_FILE)
+    logger.info("BedReadDriveSync startup: database ready.")
+    yield
 
 app = FastAPI(
     title="BedReadDriveSync",
     description="Google Drive folder sync + Main BE API sync service.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
