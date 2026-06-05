@@ -7,9 +7,6 @@ import type { ThemeMode } from '../types/theme';
 interface SidebarProps {
     themeMode: ThemeMode;
     onThemeChange: (mode: ThemeMode) => void;
-    rightActions?: React.ReactNode;
-    isCollapsed?: boolean;
-    onToggleCollapse?: () => void;
 }
 
 const PHASE_ACCENT = '#6366f1';
@@ -29,6 +26,11 @@ interface NavItem {
     to: string;
     label: string;
     icon: React.ReactNode;
+}
+
+interface NavSection {
+    label: string;
+    items: NavItem[];
 }
 
 const navIcons: Record<string, React.ReactNode> = {
@@ -122,15 +124,15 @@ const NAV_ITEMS_SYSTEM: NavItem[] = [
     { to: '/settings', label: 'Settings', icon: navIcons['/settings'] },
 ];
 
-const NAV_SECTIONS = [
+const NAV_SECTIONS: NavSection[] = [
     { label: 'Novel Crawler', items: NAV_ITEMS_CRAWL },
     { label: 'Audio', items: NAV_ITEMS_AUDIO },
     { label: 'DriveSync', items: NAV_ITEMS_BEDREADS },
     { label: 'Auto Audio', items: NAV_ITEMS_AUTO_AUDIO },
     { label: 'System', items: NAV_ITEMS_SYSTEM },
-] as const;
+];
 
-export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions, isCollapsed = false, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ themeMode, onThemeChange: _onThemeChange }: SidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
@@ -153,7 +155,6 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions
                 key={item.to}
                 to={item.to}
                 className="group relative flex items-center gap-3 transition-all duration-200"
-                title={isCollapsed ? item.label : undefined}
                 style={{ textDecoration: 'none' }}
                 onMouseEnter={() => setHoveredItem(item.to)}
                 onMouseLeave={() => setHoveredItem(null)}
@@ -173,7 +174,7 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions
                 <span
                     className="relative flex items-center gap-3 rounded-[14px] transition-all duration-200 w-full"
                     style={{
-                        padding: isCollapsed ? '10px 12px' : '10px 14px',
+                        padding: '10px 14px',
                         background: active
                             ? `linear-gradient(135deg, ${activeAccent}18, ${activeAccent}10)`
                             : showHover
@@ -191,7 +192,6 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions
                             : 'none',
                     }}
                 >
-                    {/* Icon */}
                     <span
                         className="flex-shrink-0 transition-colors duration-200"
                         style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
@@ -199,26 +199,20 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions
                         {item.icon}
                     </span>
 
-                    {/* Label + badge — only when expanded */}
-                    {!isCollapsed && (
-                        <>
-                            <span
-                                className="text-sm font-medium truncate transition-colors duration-200"
-                                style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
-                            >
-                                {item.label}
-                            </span>
+                    <span
+                        className="text-sm font-medium truncate transition-colors duration-200"
+                        style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
+                    >
+                        {item.label}
+                    </span>
 
-                            {/* Active dot */}
-                            {active && (
-                                <span className="ml-auto">
-                                    <span
-                                        className="block rounded-full"
-                                        style={{ width: 6, height: 6, background: activeAccent, boxShadow: `0 0 6px ${activeAccent}80` }}
-                                    />
-                                </span>
-                            )}
-                        </>
+                    {active && (
+                        <span className="ml-auto">
+                            <span
+                                className="block rounded-full"
+                                style={{ width: 6, height: 6, background: activeAccent, boxShadow: `0 0 6px ${activeAccent}80` }}
+                            />
+                        </span>
                     )}
                 </span>
             </Link>
@@ -229,7 +223,7 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions
         <aside
             className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-50 transition-all duration-300"
             style={{
-                width: isCollapsed ? 72 : 248,
+                width: 248,
                 background: isDark
                     ? 'rgba(15, 15, 35, 0.55)'
                     : 'rgba(248, 250, 252, 0.9)',
@@ -243,87 +237,55 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange, rightActions
                     : '0 18px 48px rgba(15,23,42,0.13), inset 0 1px 0 rgba(255,255,255,0.9)',
             }}
         >
-            {/* Brand */}
             <div
                 className="flex items-center gap-3"
                 style={{
-                    padding: isCollapsed ? '20px 12px' : '20px 16px',
+                    padding: '20px 16px',
                     borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
                 }}
             >
-                <AppIcon size={isCollapsed ? 'md' : 'xl'} className="flex-shrink-0" />
-                {!isCollapsed && (
-                    <div className="flex-1 min-w-0">
-                        <h1
-                            className="text-base font-bold truncate"
-                            style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)' }}
-                        >
-                            Novel Crawler
-                        </h1>
-                        <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.58)' }}>
-                            Content Fetcher
-                        </p>
-                    </div>
-                )}
-                <button
-                    onClick={onToggleCollapse ?? undefined}
-                    className="lg-icon-btn flex-shrink-0"
-                    style={isCollapsed ? { width: 28, height: 28, borderRadius: 8 } : {}}
-                    title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                >
-                    <svg
-                        className="transition-transform duration-300"
-                        style={{
-                            width: 14,
-                            height: 14,
-                            transform: isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
-                            color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)',
-                        }}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <AppIcon size="xl" className="flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                    <h1
+                        className="text-base font-bold truncate"
+                        style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)' }}
                     >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                    </svg>
-                </button>
+                        Novel Crawler
+                    </h1>
+                    <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.58)' }}>
+                        Content Fetcher
+                    </p>
+                </div>
             </div>
 
-            {/* Nav */}
             <nav
                 className="flex-1 overflow-y-auto py-4 space-y-5"
                 style={{
-                    paddingLeft: isCollapsed ? 10 : 12,
-                    paddingRight: isCollapsed ? 10 : 12,
+                    paddingLeft: 12,
+                    paddingRight: 12,
                 }}
             >
                 {NAV_SECTIONS.map((section) => (
                     <div key={section.label}>
-                        {!isCollapsed && (
-                            <p
-                                className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-widest"
-                                style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.46)' }}
-                            >
-                                {section.label}
-                            </p>
-                        )}
+                        <p
+                            className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-widest"
+                            style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.46)' }}
+                        >
+                            {section.label}
+                        </p>
                         <div className="space-y-0.5">
                             {section.items.map((item) => makeNavItem(item))}
                         </div>
                     </div>
                 ))}
             </nav>
-
-            {/* Bottom: Theme */}
+{/* 
             <div
                 style={{
-                    padding: isCollapsed ? '12px 10px' : '12px 12px',
+                    padding: '12px 12px',
                     borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
                 }}
-            >
-                {rightActions && !isCollapsed && (
-                    <div className="mb-2">{rightActions}</div>
-                )}
-            </div>
+            /> */}
         </aside>
     );
 }

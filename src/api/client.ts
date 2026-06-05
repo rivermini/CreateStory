@@ -25,6 +25,29 @@ export interface AuthTokensResponse {
   user: AuthUser;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminUserCreateRequest {
+  email: string;
+  password: string;
+  role: 'admin' | 'user';
+  is_active: boolean;
+}
+
+export interface AdminUserUpdateRequest {
+  email?: string;
+  password?: string;
+  role?: 'admin' | 'user';
+  is_active?: boolean;
+}
+
 export function getStoredAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
@@ -166,6 +189,32 @@ export async function getCurrentUser(): Promise<AuthUser> {
   const user = await apiFetch<AuthUser>('/api/auth/me');
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
   return user;
+}
+
+export async function listAdminUsers(): Promise<AdminUser[]> {
+  return apiFetch<AdminUser[]>('/api/admin/users');
+}
+
+export async function createAdminUser(request: AdminUserCreateRequest): Promise<AdminUser> {
+  return apiFetch<AdminUser>('/api/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+}
+
+export async function updateAdminUser(userId: string, request: AdminUserUpdateRequest): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+}
+
+export async function deleteAdminUser(userId: string): Promise<{ deleted: boolean; id: string }> {
+  return apiFetch<{ deleted: boolean; id: string }>(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
 }
 
 export interface ClearBackendDataResponse {

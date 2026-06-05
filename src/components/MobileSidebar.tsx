@@ -13,6 +13,17 @@ interface MobileSidebarProps {
 
 const PHASE_ACCENT = '#6366f1';
 
+interface NavItem {
+    to: string;
+    label: string;
+    icon: React.ReactNode;
+}
+
+interface NavSection {
+    label: string;
+    items: NavItem[];
+}
+
 function navActive(locationPath: string, expect: string) {
     if (expect === '/results/all') {
         return locationPath.startsWith('/results');
@@ -88,7 +99,7 @@ const navIcons: Record<string, React.ReactNode> = {
     ),
 };
 
-const NAV_SECTIONS = [
+const NAV_SECTIONS: NavSection[] = [
     {
         label: 'Crawl',
         items: [
@@ -126,7 +137,7 @@ const NAV_SECTIONS = [
             { to: '/settings', label: 'Settings', icon: navIcons['/settings'] },
         ],
     },
-] as const;
+] ;
 
 export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen, onClose }: MobileSidebarProps) {
     const location = useLocation();
@@ -136,7 +147,7 @@ export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen
 
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
-    const makeNavItem = (item: { to: string; label: string; icon: React.ReactNode }) => {
+    const makeNavItem = (item: NavItem) => {
         const active = navActive(location.pathname, item.to);
         const hovered = hoveredItem === item.to;
 
