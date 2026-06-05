@@ -17,6 +17,9 @@ from typing import Optional
 
 import httpx
 
+from api.db import init_db
+from api.repositories.audio_repository import BedReadJobRepository
+
 logger = logging.getLogger(__name__)
 
 
@@ -128,6 +131,7 @@ class BatchJob:
             "format": self.format,
             "status": self.status,
             "progress_pct": self.progress_pct,
+            "output_dir": str(self.output_dir) if self.output_dir else None,
             "started_at": self.started_at,
             "processing_started_at": self.processing_started_at,
             "finished_at": self.finished_at,
@@ -170,16 +174,17 @@ class BedReadService:
         self._output_base = self._project_root / "output" / "bedread"
         self._output_base.mkdir(parents=True, exist_ok=True)
         self._jobs_file = self._output_base / "jobs.json"
+        init_db()
+        self._job_repo = BedReadJobRepository()
+        self._job_repo.import_existing_file(self._jobs_file)
 
         self._load_jobs()
         self._tts_service = None
 
     def _load_jobs(self) -> None:
-        if not self._jobs_file.exists():
-            return
         try:
-            with open(self._jobs_file, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
+            data = self._job_repo.load_jobs()
+            needs_persist = False
             for entry in data:
                 batch_id = entry.get("batch_id", "")
                 if not batch_id:
@@ -188,6 +193,7 @@ class BedReadService:
                 if status in ("running", "queued"):
                     entry["status"] = "failed"
                     entry["error"] = "Job was interrupted by server restart"
+                    needs_persist = True
                 chapters = [
                     ChapterTask(
                         chapter_number=c.get("chapter_number", 0),
@@ -231,17 +237,19 @@ class BedReadService:
                         if old_zip.exists():
                             old_zip.rename(expected_zip_path)
                             batch.zip_path = expected_zip_path
+                            needs_persist = True
                             logger.info("Renamed zip for batch %s: %s -> %s", batch_id, old_zip.name, expected_zip_path.name)
 
-            logger.info("Loaded %d persisted job(s) from %s", len(self._batch_jobs), self._jobs_file)
+            if needs_persist:
+                self._persist_jobs()
+            logger.info("Loaded %d persisted BedRead job(s) from PostgreSQL", len(self._batch_jobs))
         except Exception as exc:
             logger.warning("Failed to load persisted jobs: %s", exc)
 
     def _persist_jobs(self) -> None:
         try:
             entries = [b.to_dict() for b in self._batch_jobs.values()]
-            with open(self._jobs_file, "w", encoding="utf-8") as fh:
-                json.dump(entries, fh, indent=2)
+            self._job_repo.save_jobs(entries)
         except Exception as exc:
             logger.warning("Failed to persist jobs: %s", exc)
 

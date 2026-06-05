@@ -13,6 +13,9 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Optional
 
+from api.db import init_db
+from api.repositories.audio_repository import GeneratedAudioRepository
+
 logger = logging.getLogger(__name__)
 MIN_KOKORO_CONCURRENCY = 1
 MAX_KOKORO_CONCURRENCY = 2
@@ -188,6 +191,10 @@ class TTSService:
         self._project_root = Path(__file__).parent.parent.parent.resolve()
         self._output_base = self._project_root / "output" / "tts"
         self._output_base.mkdir(parents=True, exist_ok=True)
+        init_db()
+        self._job_repo = GeneratedAudioRepository()
+        self._job_repo.import_existing_output_dir(self._output_base)
+        self._load_persisted_jobs()
         self._model_path: Optional[Path] = None
         self._voices_path: Optional[Path] = None
 
@@ -203,6 +210,57 @@ class TTSService:
             self.CHUNK_SIZE,
             self.SAVE_CHUNKS,
         )
+
+    def _load_persisted_jobs(self) -> None:
+        try:
+            interrupted_jobs: list[TTSJob] = []
+            for entry in self._job_repo.load_jobs():
+                job_id = entry.get("job_id", "")
+                if not job_id:
+                    continue
+                status = entry.get("status", "queued")
+                if status in ("queued", "processing"):
+                    status = "interrupted"
+                    was_interrupted = True
+                else:
+                    was_interrupted = False
+                job = TTSJob(
+                    job_id=job_id,
+                    status=status,
+                    text=entry.get("text", ""),
+                    voice=entry.get("voice", "af_sarah"),
+                    lang=entry.get("lang", "en-us"),
+                    speed=entry.get("speed", 1.0),
+                    format=entry.get("format", "wav"),
+                    output_dir=entry.get("output_dir", ""),
+                    chunks_total=entry.get("chunks_total", 0),
+                    chunks_done=entry.get("chunks_done", 0),
+                    progress_pct=entry.get("progress_pct", 0),
+                    error=entry.get("error", ""),
+                    output_filename=entry.get("output_filename", ""),
+                    started_at=entry.get("started_at"),
+                    finished_at=entry.get("finished_at"),
+                )
+                self._jobs[job_id] = job
+                if was_interrupted:
+                    interrupted_jobs.append(job)
+            for job in interrupted_jobs:
+                self._persist_job(job)
+            logger.info("Loaded %d generated audio job(s) from PostgreSQL.", len(self._jobs))
+        except Exception as exc:
+            logger.warning("Failed to load generated audio jobs from PostgreSQL: %s", exc)
+
+    def _persist_job(self, job: TTSJob, queue_position: int = 0) -> None:
+        try:
+            data = job.to_dict(queue_position=queue_position)
+            output_path = ""
+            if job.output_dir and job.output_filename:
+                output_path = str(Path(job.output_dir) / job.output_filename)
+            data["output_path"] = output_path
+            data["text"] = job.text
+            self._job_repo.save_job(data)
+        except Exception as exc:
+            logger.warning("Failed to persist TTS job %s: %s", job.job_id, exc)
 
     def _resolve_paths(self) -> tuple[Path, Path]:
         if self._model_path is None:
@@ -469,7 +527,9 @@ class TTSService:
         with self._lock:
             self._jobs[job_id] = job
             self._queue.append(job_id)
+            queue_position = len(self._queue)
 
+        self._persist_job(job, queue_position=queue_position)
         logger.info("TTS job %s queued.", job_id)
         return job_id
 
@@ -511,8 +571,11 @@ class TTSService:
             if job.status in ("completed", "failed", "cancelled"):
                 return False
             job.status = "cancelled"
+            job.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if job_id in self._queue:
                 self._queue.remove(job_id)
+            persist_job = job
+        self._persist_job(persist_job)
         logger.info("TTS job %s cancelled.", job_id)
         self.release_idle_models()
         return True
@@ -634,6 +697,9 @@ class TTSService:
                 self._busy_workers.add(worker_id)
                 job.status = "processing"
                 job.started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                persist_job = job
+
+            self._persist_job(persist_job)
 
             logger.info("Worker %d picked TTS job %s.", worker_id, job_id)
 
@@ -691,6 +757,12 @@ class TTSService:
                         if j:
                             j.chunks_done = i + 1
                             j.progress_pct = int((i + 1) * 100 / len(chunks))
+                            persist_job = j
+                        else:
+                            persist_job = None
+
+                    if persist_job:
+                        self._persist_job(persist_job)
 
                     with self._lock:
                         j = self._jobs.get(job_id)
@@ -699,10 +771,14 @@ class TTSService:
 
                 with self._lock:
                     j = self._jobs.get(job_id)
+                    persist_job = None
                     if j and j.status == "cancelled":
                         j.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        persist_job = j
                         logger.info("Worker %d job %s finished cancellation cleanup.", worker_id, job_id)
-                        continue
+                if persist_job:
+                    self._persist_job(persist_job)
+                    continue
 
                 if not all_samples:
                     raise ValueError("No audio chunks were generated.")
@@ -718,6 +794,7 @@ class TTSService:
                 job.output_filename = safe_name
                 job.progress_pct = 100
                 job.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self._persist_job(job)
 
                 logger.info("Worker %d job %s completed: %s", worker_id, job_id, merged_path)
 
@@ -729,6 +806,11 @@ class TTSService:
                         j.status = "failed"
                         j.error = repr(exc)
                         j.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        persist_job = j
+                    else:
+                        persist_job = None
+                if persist_job:
+                    self._persist_job(persist_job)
             finally:
                 all_samples.clear()
                 chunks.clear()

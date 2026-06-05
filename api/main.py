@@ -1,5 +1,6 @@
 """BedReadVoices FastAPI application entry point."""
 
+from contextlib import asynccontextmanager
 import logging
 import sys
 from pathlib import Path
@@ -18,7 +19,20 @@ if str(_project_root) not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.db import init_db
 from api.routes import tts, bedread, auto_audio
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    try:
+        from api.services.bedread_service import get_bedread_service
+        get_bedread_service()
+    except Exception as exc:
+        logger.warning("BedRead job metadata initialization skipped: %s", exc)
+    yield
+
 
 app = FastAPI(
     title="BedReadVoices API",
@@ -28,6 +42,7 @@ app = FastAPI(
         "batch story audio generation, and BedRead story discovery."
     ),
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
