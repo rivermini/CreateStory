@@ -243,12 +243,14 @@ function AccountMenu({
   onClose: () => void;
   onLogout: () => void;
 }) {
+  const isAdmin = authUser.role === 'admin';
+
   return (
     <div className="fixed right-4 top-3 z-[70]">
       <button
         type="button"
         onClick={onToggle}
-        className={`relative w-10 h-10 rounded-xl border inline-flex items-center justify-center transition-colors ${
+        className={`group relative inline-flex h-10 items-center gap-2 rounded-xl border px-2.5 transition-all ${
           isDark
             ? 'border-white/[0.08] bg-slate-950/80 text-slate-200 hover:bg-slate-900'
             : 'border-black/10 bg-white/90 text-slate-700 hover:bg-slate-50 shadow-sm'
@@ -256,16 +258,31 @@ function AccountMenu({
         title="Account"
         aria-label="Account menu"
       >
-        <span className={`absolute -top-1.5 -right-1.5 rounded px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide ${
-          authUser.role === 'admin'
-            ? 'bg-indigo-600 text-white'
-            : isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'
-        }`}>
+        <span
+          className={`inline-flex h-7.5 w-7.5 items-center justify-center rounded-lg border ${
+            isDark
+              ? 'border-white/[0.08] bg-white/[0.04] text-slate-200'
+              : 'border-black/5 bg-slate-100 text-slate-700'
+          }`}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0" />
+          </svg>
+        </span>
+
+        <span
+          className={`hidden sm:inline-flex items-center rounded-full px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] ${
+            isAdmin
+              ? isDark
+                ? 'bg-indigo-500/18 text-indigo-200 ring-1 ring-inset ring-indigo-400/30'
+                : 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200'
+              : isDark
+                ? 'bg-slate-800 text-slate-300 ring-1 ring-inset ring-white/10'
+                : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+          }`}
+        >
           {authUser.role}
         </span>
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0" />
-        </svg>
       </button>
 
       {isOpen && (
@@ -281,9 +298,25 @@ function AccountMenu({
               ? 'border-white/[0.08] bg-slate-950/95 text-slate-200'
               : 'border-black/10 bg-white/95 text-slate-800'
           }`}>
-            <div className={`px-3 py-2 rounded-lg ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.03]'}`}>
-              <div className="truncate text-sm font-semibold">{authUser.email}</div>
-              <div className={`mt-1 text-xs uppercase ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{authUser.role}</div>
+            <div className={`px-3 py-3 rounded-xl ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.03]'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold">{authUser.email}</div>
+                </div>
+                <span
+                  className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.18em] ${
+                    isAdmin
+                      ? isDark
+                        ? 'bg-indigo-500/18 text-indigo-200 ring-1 ring-inset ring-indigo-400/30'
+                        : 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200'
+                      : isDark
+                        ? 'bg-slate-800 text-slate-300 ring-1 ring-inset ring-white/10'
+                        : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+                  }`}
+                >
+                  {authUser.role}
+                </span>
+              </div>
             </div>
             <div className="mt-2 space-y-1">
               {authUser.role === 'admin' && (
