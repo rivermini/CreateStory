@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,19 +17,6 @@ from api.repositories.shared_state import SETTINGS_KEY, SharedStateRepository
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
-
-SETTINGS_FILE = Path(__file__).parent.parent.parent / "data" / "user_settings.json"
-
-
-def _write_example_file(path: Path, example: dict) -> None:
-    """Write example defaults to disk for local visibility."""
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(example, f, indent=2)
-    except Exception:
-        pass
-
 
 _SETTINGS_EXAMPLE = {
     "theme": "light",
@@ -69,23 +54,12 @@ def _propagate_tts_concurrency(concurrency: int | None) -> None:
 
 
 def _load_settings(db: Session) -> dict:
-    """Load settings from PostgreSQL, seeding from disk/defaults when needed."""
+    """Load settings from PostgreSQL, seeding defaults when needed."""
     repo = SharedStateRepository(db)
     stored = repo.get_setting(SETTINGS_KEY)
     if stored is not None:
         return {**_SETTINGS_EXAMPLE, **stored}
 
-    try:
-        SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        if SETTINGS_FILE.exists():
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                data = {**_SETTINGS_EXAMPLE, **json.load(f)}
-                repo.upsert_setting(SETTINGS_KEY, data)
-                return data
-    except Exception as exc:
-        logger.warning("Failed to load settings, using defaults: %s", exc)
-
-    _write_example_file(SETTINGS_FILE, _SETTINGS_EXAMPLE)
     repo.upsert_setting(SETTINGS_KEY, _SETTINGS_EXAMPLE)
     return _SETTINGS_EXAMPLE
 
@@ -154,4 +128,3 @@ async def update_settings(
     _save_settings(db, data)
     logger.info("Settings updated: %s", data)
     return SettingsResponse(**data)
-

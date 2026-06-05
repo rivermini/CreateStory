@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.auth import require_active_user
 from api.config import load_external_api_config
+from api.db import get_db
 
 router = APIRouter(prefix="/api/bedread", tags=["BedRead"])
 _AUTH = [Depends(require_active_user)]
@@ -140,12 +141,12 @@ async def download_batch_zip(batch_id: str) -> StreamingResponse:
 
 
 @router.get("/config/external-api")
-async def get_external_api_config() -> JSONResponse:
+async def get_external_api_config(db=Depends(get_db)) -> JSONResponse:
     """Serve external API config to downstream services (e.g. BedReadVoices).
-    The config is sourced from the drive_sync_config.json saved by the FE.
+    The config is sourced from PostgreSQL app_settings saved by the FE.
     """
     try:
-        config = load_external_api_config()
+        config = load_external_api_config(db)
         return JSONResponse(content={
             "external_api_base_url": config["main_be_api_base_url"],
             "external_api_token": config["main_be_bearer_token"],

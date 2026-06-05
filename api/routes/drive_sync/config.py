@@ -19,7 +19,7 @@ router = APIRouter(tags=["Drive Sync"])
 
 _DRIVE_SYNC_CONFIG_EXAMPLE = {
     "folder_id": "REPLACE_WITH_YOUR_GOOGLE_DRIVE_FOLDER_ID",
-    "service_account_json_path": "data/credentials/google-service-account.json",
+    "service_account_json_path": "db://external_credentials/google-service-account.json",
     "main_be_api_base_url": "REPLACE_WITH_YOUR_API_BASE_URL",
     "main_be_user_id": "REPLACE_WITH_YOUR_USER_ID",
     "enabled": True,
@@ -177,4 +177,3 @@ async def get_main_be_url(
 @router.get("/config/validate-token")
 async def validate_bearer_token(_admin=Depends(require_admin)) -> JSONResponse:
     return await _proxy_get("/api/drive-sync/config/validate-token")
-

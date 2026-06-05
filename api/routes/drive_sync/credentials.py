@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -15,15 +14,7 @@ from api.repositories.shared_state import DRIVE_CREDENTIAL_NAME, SharedStateRepo
 
 router = APIRouter(tags=["Drive Sync"])
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_FASTAPI_CREDS_DIR = _PROJECT_ROOT / "data" / "credentials"
 _FIXED_CREDENTIALS_FILENAME = "google-service-account.json"
-
-
-def _get_creds_dir() -> Path:
-    path = _FASTAPI_CREDS_DIR
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 @router.post("/credentials/upload")
@@ -52,7 +43,7 @@ async def upload_credentials(
     return JSONResponse(content={
         "success": True,
         "filename": _FIXED_CREDENTIALS_FILENAME,
-        "path": f"data/credentials/{_FIXED_CREDENTIALS_FILENAME}",
+        "path": f"db://external_credentials/{_FIXED_CREDENTIALS_FILENAME}",
     })
 
 
@@ -65,9 +56,4 @@ async def check_credentials_exists(
     stored = SharedStateRepository(db).get_credential(DRIVE_CREDENTIAL_NAME)
     if stored is not None:
         return JSONResponse(content={"exists": True, "filename": _FIXED_CREDENTIALS_FILENAME})
-
-    creds_dir = _get_creds_dir()
-    check_name = _FIXED_CREDENTIALS_FILENAME if filename else _FIXED_CREDENTIALS_FILENAME
-    exists = (creds_dir / check_name).is_file()
-    return JSONResponse(content={"exists": exists, "filename": check_name})
-
+    return JSONResponse(content={"exists": False, "filename": _FIXED_CREDENTIALS_FILENAME})

@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import SessionLocal, init_db
 from api.migration import import_existing_shared_state
-from api.routes import auth, auto_audio, bedread, crawl, results, settings, sites, drive_sync, tts
+from api.routes import auth, auto_audio, bedread, crawl, dev, results, settings, sites, drive_sync, tts
 from api.routes.drive_sync.config import _DRIVE_SYNC_CONFIG_EXAMPLE
 from api.routes.settings import _SETTINGS_EXAMPLE
 
@@ -66,6 +66,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(settings.router)
+app.include_router(dev.router)
 app.include_router(sites.router)
 app.include_router(crawl.router)
 app.include_router(results.router)

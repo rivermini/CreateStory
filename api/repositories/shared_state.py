@@ -9,7 +9,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.app_config import DATA_DIR
 from api.models.db_models import AppSetting, ExternalCredential, MigrationAudit, SharedJsonDocument
 
 SETTINGS_KEY = "user_settings"
@@ -34,17 +33,13 @@ class SharedStateRepository:
         else:
             row.value = value
         self.db.commit()
-        if key == SETTINGS_KEY:
-            mirror_settings_file(value)
         return value
 
     def get_drive_config(self) -> dict[str, Any] | None:
         return self.get_setting(DRIVE_SYNC_CONFIG_KEY)
 
     def upsert_drive_config(self, value: dict[str, Any]) -> dict[str, Any]:
-        saved = self.upsert_setting(DRIVE_SYNC_CONFIG_KEY, value)
-        mirror_drive_config_file(saved)
-        return saved
+        return self.upsert_setting(DRIVE_SYNC_CONFIG_KEY, value)
 
     def upsert_credential(self, name: str, filename: str, content: bytes, content_type: str | None = None) -> ExternalCredential:
         row = self.db.scalar(select(ExternalCredential).where(ExternalCredential.name == name))
@@ -57,7 +52,6 @@ class SharedStateRepository:
             row.content_type = content_type
         self.db.commit()
         self.db.refresh(row)
-        mirror_drive_credential_file(row.content)
         return row
 
     def get_credential(self, name: str) -> ExternalCredential | None:
@@ -85,14 +79,20 @@ class SharedStateRepository:
 
 
 def drive_config_path() -> Path:
+    from api.app_config import DATA_DIR
+
     return DATA_DIR / "drive_sync_config.json"
 
 
 def settings_path() -> Path:
+    from api.app_config import DATA_DIR
+
     return DATA_DIR / "user_settings.json"
 
 
 def drive_credentials_path() -> Path:
+    from api.app_config import DATA_DIR
+
     return DATA_DIR / "credentials" / DRIVE_CREDENTIAL_FILENAME
 
 
@@ -102,22 +102,3 @@ def read_json_file(path: Path) -> dict[str, Any] | list[Any] | None:
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
-
-def mirror_drive_config_file(config: dict[str, Any]) -> None:
-    path = drive_config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(config, fh, indent=2, ensure_ascii=False)
-
-
-def mirror_settings_file(settings: dict[str, Any]) -> None:
-    path = settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(settings, fh, indent=2, ensure_ascii=False)
-
-
-def mirror_drive_credential_file(content: bytes) -> None:
-    path = drive_credentials_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
