@@ -67,3 +67,11 @@ def api_info() -> dict:
         "docs_url": "/docs",
         "redoc_url": "/redoc",
     }
+
+
+@app.post("/api/dev/reset-state", tags=["Development"])
+def reset_runtime_state() -> dict:
+    from api.services.drive_service import get_drive_sync_service
+
+    get_drive_sync_service().reset_runtime_state()
+    return {"reset": True}

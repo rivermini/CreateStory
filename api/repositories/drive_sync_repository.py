@@ -10,7 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from api.db import SessionLocal
-from api.models.db_models import DriveSyncHistoryRecord, DriveSyncJobRecord, DriveSyncStatusRecord
+from api.models.db_models import AppSetting, DriveSyncHistoryRecord, DriveSyncJobRecord, DriveSyncStatusRecord, ExternalCredential
 
 if TYPE_CHECKING:
     from api.models.drive_sync import DriveSyncStatus, HistoryEntry, SyncJob
@@ -35,6 +35,28 @@ class DriveSyncRepository:
             else:
                 row.data = data
             db.commit()
+
+    def load_drive_config(self) -> dict | None:
+        with self.session_factory() as db:
+            row = db.get(AppSetting, "drive_sync_config")
+            return dict(row.value) if row is not None else None
+
+    def save_drive_config(self, config: dict) -> None:
+        with self.session_factory() as db:
+            row = db.get(AppSetting, "drive_sync_config")
+            if row is None:
+                row = AppSetting(key="drive_sync_config", value=config)
+                db.add(row)
+            else:
+                row.value = config
+            db.commit()
+
+    def load_drive_credential(self) -> tuple[str, bytes] | None:
+        with self.session_factory() as db:
+            row = db.scalar(select(ExternalCredential).where(ExternalCredential.name == "google_service_account"))
+            if row is None:
+                return None
+            return row.filename, bytes(row.content)
 
     def load_history(self) -> list[dict]:
         with self.session_factory() as db:
@@ -149,4 +171,3 @@ class DriveSyncRepository:
             "main_be_api_base_url": row.main_be_api_base_url,
             "chapters_count": row.chapters_count,
         }
-

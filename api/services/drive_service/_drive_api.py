@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import ssl
 import threading
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     pass
 
 from google.auth import load_credentials_from_file
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 from api.services.drive_service._paths import (
@@ -25,6 +27,8 @@ from api.services.drive_service._paths import (
     _RE_STATUS_PREFIX,
     _SHARED_CREDENTIALS_DIR,
 )
+
+_DRIVE_SCOPES = ("https://www.googleapis.com/auth/drive",)
 
 
 class DriveAPIMixin:
@@ -55,7 +59,7 @@ class DriveAPIMixin:
         """
         Build an authenticated Google Drive service object.
         Each thread gets its own httplib2 transport to prevent SSL session corruption.
-        Tries the configured path first, then falls back to the shared FastAPIServer/credentials folder.
+        Uses the DB-stored service account first, with legacy file paths as fallback.
         """
         service = getattr(self._tls, "drive_service", None)
         if service is not None:
@@ -66,11 +70,24 @@ class DriveAPIMixin:
                 return service
             if self._config is None:
                 raise RuntimeError("Drive sync config not set.")
+
+            if hasattr(self, "_repo"):
+                stored_credential = self._repo.load_drive_credential()
+                if stored_credential is not None:
+                    _filename, content = stored_credential
+                    info = json.loads(content.decode("utf-8"))
+                    creds = service_account.Credentials.from_service_account_info(
+                        info,
+                        scopes=list(_DRIVE_SCOPES),
+                    )
+                    self._tls.drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
+                    return self._tls.drive_service
+
             creds_path = Path(self._config.service_account_json_path)
             if creds_path.is_absolute():
                 pass  # use as-is
             elif creds_path.name:
-                # Strip "data/credentials/" prefix and resolve under _SHARED_CREDENTIALS_DIR
+                # Legacy fallback for old data/credentials paths.
                 stripped = creds_path.name
                 creds_path = _SHARED_CREDENTIALS_DIR / stripped
             if not creds_path.is_file():

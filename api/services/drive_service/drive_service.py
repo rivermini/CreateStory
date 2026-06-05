@@ -12,7 +12,6 @@ behaviour while preserving the original method surface.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import ssl
@@ -37,8 +36,6 @@ except ImportError:
 
 import httpx
 import httplib2
-from google.auth import load_credentials_from_file
-from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 if TYPE_CHECKING:
@@ -71,8 +68,6 @@ from api.repositories.drive_sync_repository import DriveSyncRepository
 logger = logging.getLogger(__name__)
 
 from api.services.drive_service._paths import (
-    _DATA_DIR,
-    _CONFIG_FILE,
     _STATUS_FILE,
     _HISTORY_FILE,
     _JOBS_FILE,
@@ -143,7 +138,7 @@ def init_drive_sync_config(
     main_category_id: str = "154971fe-7da7-41c4-91ee-b2a9613d6fa0",
     main_be_bearer_token: Optional[str] = None,
 ) -> DriveSyncConfig:
-    """Initialize (or update) the drive sync config and save to disk."""
+    """Initialize (or update) the drive sync config in PostgreSQL."""
     global _service_instance
     config = DriveSyncConfig(
         folder_id=folder_id,
@@ -154,11 +149,7 @@ def init_drive_sync_config(
         main_category_id=main_category_id,
         main_be_bearer_token=main_be_bearer_token,
     )
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _CONFIG_FILE.write_text(
-        json.dumps(config.model_dump(), indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    DriveSyncRepository().save_drive_config(config.model_dump(mode="json"))
     if _service_instance is not None:
         _service_instance._config = config
     logger.info("Drive sync config initialised (folder=%s).", folder_id)
