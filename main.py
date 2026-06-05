@@ -77,3 +77,11 @@ def api_info() -> dict:
             "BedReadDriveSync": "http://localhost:8003",
         },
     }
+
+
+@app.post("/api/dev/reset-state", tags=["Development"])
+def reset_runtime_state() -> dict:
+    from core.service import get_auto_audio_service
+
+    get_auto_audio_service().reset_runtime_state()
+    return {"reset": True}

@@ -125,6 +125,11 @@ class SessionManager:
             self._by_id.pop(sid, None)
         return self._repo.delete_sessions_batch(session_ids)
 
+    def reset_runtime_state(self) -> None:
+        """Clear in-memory session cache after the gateway development cleanup."""
+        self._by_id.clear()
+        self._history_cache_time = 0.0
+
     def _persist_sessions(self, sessions: list[dict]) -> None:
         try:
             self._repo.save_sessions(sessions)

@@ -7,7 +7,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,22 +31,18 @@ def _get_service_url(key: str, fallback: str) -> str:
     return urls.get(key, fallback).rstrip("/")
 
 
-def _get_settings_file() -> Path:
-    """Path to the user settings file. Falls back to FastAPIServer/data/user_settings.json."""
-    env_path = os.environ.get("USER_SETTINGS_PATH", "").strip()
-    if env_path:
-        p = Path(env_path)
-        return p if p.is_absolute() else (Path(__file__).parent.parent.parent / p).resolve()
-    return Path(__file__).parent.parent.parent / "FastAPIServer" / "data" / "user_settings.json"
+def _get_app_setting(key: str) -> dict:
+    try:
+        from core.db import SessionLocal, init_db
+        from core.db_models import AppSetting
 
-
-def _get_drive_sync_config_path() -> Path:
-    """Path to the drive sync config. Falls back to FastAPIServer/data/drive_sync_config.json."""
-    env_path = os.environ.get("DRIVE_SYNC_CONFIG_PATH", "").strip()
-    if env_path:
-        p = Path(env_path)
-        return p if p.is_absolute() else (Path(__file__).parent.parent.parent / p).resolve()
-    return Path(__file__).parent.parent.parent / "FastAPIServer" / "data" / "drive_sync_config.json"
+        init_db()
+        with SessionLocal() as db:
+            row = db.get(AppSetting, key)
+            return dict(row.value) if row is not None else {}
+    except Exception as exc:
+        logger.warning("Failed to load %s from PostgreSQL: %s", key, exc)
+        return {}
 
 
 def _get_settings() -> dict:
@@ -55,16 +50,8 @@ def _get_settings() -> dict:
     now = time.time()
     if _settings_cache is not None and (now - _settings_cache_time) < _SETTINGS_CACHE_TTL:
         return _settings_cache
-    settings_file = _get_settings_file()
-    try:
-        if settings_file.exists():
-            with open(settings_file, "r", encoding="utf-8") as f:
-                _settings_cache = json.load(f)
-                _settings_cache_time = now
-                return _settings_cache
-    except Exception:
-        pass
-    _settings_cache = {}
+    _settings_cache = _get_app_setting("user_settings")
+    _settings_cache_time = now
     return _settings_cache
 
 
@@ -82,28 +69,15 @@ class AutoAudioConfigError(Exception):
 
 def _get_external_api_config() -> tuple[str, dict]:
     """
-    Load external API config from drive_sync_config.json.
+    Load external API config from PostgreSQL app_settings.
 
     Returns (api_base_url, auth_headers).
-    Raises AutoAudioConfigError if the file is missing or required fields are absent.
+    Raises AutoAudioConfigError if required fields are absent.
     """
-    config_path = _get_drive_sync_config_path()
-
-    if not config_path.exists():
-        raise AutoAudioConfigError(
-            f"Drive sync config not found at {config_path}. "
-            "Please configure your Drive Sync settings in Settings > Drive Sync Configuration."
-        )
-
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except Exception as exc:
-        raise AutoAudioConfigError(f"Failed to read drive sync config: {exc}") from exc
-
+    config = _get_app_setting("drive_sync_config")
     if not config:
         raise AutoAudioConfigError(
-            "Drive sync config is empty. "
+            "Drive sync config is not configured. "
             "Please configure your Drive Sync settings in Settings > Drive Sync Configuration."
         )
 

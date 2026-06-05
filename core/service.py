@@ -468,6 +468,13 @@ class AutoAudioService:
     def delete_sessions_batch(self, session_ids: list[str]) -> int:
         return self._session_mgr.delete_sessions_batch(session_ids)
 
+    def reset_runtime_state(self) -> None:
+        """Clear in-memory AutoAudio state after development cleanup."""
+        if self._active_session is not None:
+            self._active_session.request_stop()
+        self._active_session = None
+        self._session_mgr.reset_runtime_state()
+
 
 _auto_audio_service: Optional[AutoAudioService] = None
 
