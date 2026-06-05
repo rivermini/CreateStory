@@ -509,6 +509,36 @@ class MainBEClientMixin:
             }
         return chapters
 
+    def get_drive_extended_chapter(self, folder_id: str, chapter_number: int) -> Optional[dict]:
+        """Download and parse only the requested chapter from chapters-extended."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        drive_service = self._build_drive_service()
+        chapters_ext = self._find_chapters_extended_folder(drive_service, folder_id)
+        if not chapters_ext:
+            raise RuntimeError("No chapters-extended subfolder found for this Drive folder.")
+
+        files = self._list_files_in_folder(drive_service, chapters_ext["id"])
+        for file_info in files:
+            filename = file_info.get("name", "")
+            if not filename.lower().endswith(".md"):
+                continue
+            if self._extract_chapter_index(filename) != chapter_number:
+                continue
+            raw_content = self._get_file_content(drive_service, file_info["id"])
+            _, title, html_content = self._parse_chapter_file(raw_content, filename)
+            plain_content = self._plain_content_from_markdown(raw_content)
+            return {
+                "chapterNumber": chapter_number,
+                "title": title,
+                "fileName": filename,
+                "content": html_content,
+                "plainContent": plain_content,
+                "plainLength": len(plain_content),
+                "normalizedPlainContent": self._normalize_chapter_text(plain_content),
+            }
+        return None
+
     def list_drive_extended_chapter_files(self, folder_id: str) -> list[dict]:
         """List chapter files in chapters-extended without downloading their content."""
         if self._config is None:
@@ -682,8 +712,7 @@ class MainBEClientMixin:
 
     def update_server_chapter_from_drive(self, story_id: str, chapter_number: int, folder_id: str) -> dict:
         """Replace one server chapter's content from its matching Drive chapter file."""
-        drive_chapters = self.get_drive_extended_chapters(folder_id)
-        drive_chapter = drive_chapters.get(chapter_number)
+        drive_chapter = self.get_drive_extended_chapter(folder_id, chapter_number)
         if drive_chapter is None:
             raise RuntimeError(f"Chapter {chapter_number} was not found in chapters-extended.")
         self.put_server_chapter_content(
