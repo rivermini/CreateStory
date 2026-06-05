@@ -219,12 +219,20 @@ class CrawlService:
             for entry in data:
                 crawl_id = entry.get("crawl_id", "")
                 if crawl_id and crawl_id not in self._sessions:
+                    log_lines = [
+                        LogEntry(**log)
+                        for log in entry.get("log_lines", [])
+                        if isinstance(log, dict)
+                    ]
                     self._sessions[crawl_id] = CrawlProgress(
                         crawl_id=crawl_id,
                         site_name=entry.get("site_name", ""),
                         novel_name=entry.get("novel_name", ""),
                         chapters_crawled=entry.get("chapters_crawled", 0),
                         chapters_total=entry.get("chapters_total", 0),
+                        current_title=entry.get("current_title", ""),
+                        log_lines=log_lines[-500:],
+                        errors=list(entry.get("errors", [])),
                         status=entry.get("status", "completed"),
                         started_at=entry.get("started_at"),
                         finished_at=entry.get("finished_at"),
@@ -252,6 +260,9 @@ class CrawlService:
                     "status": p.status,
                     "started_at": p.started_at,
                     "finished_at": p.finished_at,
+                    "current_title": p.current_title,
+                    "errors": list(p.errors),
+                    "log_lines": [entry.model_dump() for entry in p.log_lines[-500:]],
                     "error_message": p.error_message,
                     "combined_file": p.combined_file,
                     "combined_md_file": p.combined_md_file,
@@ -377,6 +388,8 @@ class CrawlService:
                 if line.strip():
                     saw_output = True
                 self._parse_line(crawl_id, line)
+                if line.strip():
+                    self._persist_index()
 
             try:
                 process.wait(timeout=5)
@@ -681,6 +694,17 @@ class CrawlService:
 
         self._persist_index()
         return deleted_count
+
+    def reset_runtime_state(self) -> None:
+        """Clear in-memory crawl state after the gateway development cleanup."""
+        with self._lock:
+            running_ids = [
+                crawl_id
+                for crawl_id, progress in self._sessions.items()
+                if progress.status == "running"
+            ]
+            self._sessions.clear()
+            self._cancel_flags = {crawl_id: True for crawl_id in running_ids}
 
 
 _crawl_service: Optional[CrawlService] = None

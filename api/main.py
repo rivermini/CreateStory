@@ -87,3 +87,11 @@ def api_info() -> dict:
         "docs_url": "/docs",
         "redoc_url": "/redoc",
     }
+
+
+@app.post("/api/dev/reset-state", tags=["Development"])
+def reset_runtime_state() -> dict:
+    from api.services.crawler_service import get_crawl_service
+
+    get_crawl_service().reset_runtime_state()
+    return {"reset": True}
