@@ -97,7 +97,7 @@ class ExternalAPIClient:
         return all_stories
 
     def fetch_recent_stories(self, limit: int = 20) -> list[dict]:
-        data = self.get("/api/v1/story/discover", {"sort": "recently_updated", "limit": limit})
+        data = self.get("/api/v1/story", {"sort": "-updatedAt", "limit": limit})
         if isinstance(data, dict):
             nested = data.get("data", {})
             items = nested.get("items", []) if isinstance(nested, dict) else []
