@@ -14,7 +14,9 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Optional
 
+from api.db import init_db
 from api.models.crawl_request import LogEntry, ProgressUpdate
+from api.repositories.crawl_repository import CrawlOutputRepository, CrawlSessionRepository
 from utils.sanitize import sanitize_filename
 
 logger = logging.getLogger(__name__)
@@ -205,14 +207,15 @@ class CrawlService:
         self._lock = Lock()
         self._project_root = Path(__file__).parent.parent.parent.resolve()
         self._index_file = self._project_root / "api" / "data" / "crawl_sessions.json"
+        init_db()
+        self._repo = CrawlSessionRepository()
+        self._output_repo = CrawlOutputRepository()
+        self._repo.import_existing_file(self._index_file)
         self._load_index()
 
     def _load_index(self) -> None:
-        if not self._index_file.exists():
-            return
         try:
-            with open(self._index_file, "r", encoding="utf-8") as fh:
-                data: list[dict] = json.load(fh)
+            data = self._repo.load_sessions()
             for entry in data:
                 crawl_id = entry.get("crawl_id", "")
                 if crawl_id and crawl_id not in self._sessions:
@@ -238,7 +241,6 @@ class CrawlService:
 
     def _persist_index(self) -> None:
         try:
-            self._index_file.parent.mkdir(parents=True, exist_ok=True)
             entries: list[dict] = []
             for p in self._sessions.values():
                 entries.append({
@@ -257,8 +259,7 @@ class CrawlService:
                     "output_format": p.output_format,
                     "source_url": p.source_url,
                 })
-            with open(self._index_file, "w", encoding="utf-8") as fh:
-                json.dump(entries, fh, indent=2)
+            self._repo.save_sessions(entries)
         except Exception as exc:
             logger.warning("Failed to persist session index: %s", exc)
 
@@ -614,6 +615,10 @@ class CrawlService:
                 p.combined_md_file = md_filename
                 p.add_log(f"[COMBINE] Created '{md_filename}' with {len(chapter_files_sorted)} chapters.", "info")
                 self._persist_index()
+        try:
+            self._output_repo.scan_output_dir(crawl_id, output_dir, ext=output_format)
+        except Exception as exc:
+            logger.warning("Failed to index crawl output files for %s: %s", crawl_id, exc)
 
     def cancel_crawl(self, crawl_id: str) -> bool:
         with self._lock:
@@ -668,6 +673,11 @@ class CrawlService:
                     logger.info("Deleted output directory for crawl %s", crawl_id)
             except Exception as exc:
                 logger.warning("Failed to delete output directory for %s: %s", crawl_id, exc)
+
+        try:
+            self._output_repo.delete_for_crawls(crawl_ids)
+        except Exception as exc:
+            logger.warning("Failed to delete crawl output metadata: %s", exc)
 
         self._persist_index()
         return deleted_count

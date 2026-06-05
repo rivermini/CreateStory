@@ -5,11 +5,13 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from api.models.crawl_request import OutputFile
+from api.repositories.crawl_repository import CrawlOutputRepository
 
 
 class FileService:
     def __init__(self) -> None:
         self._project_root = Path(__file__).parent.parent.parent.resolve()
+        self._output_repo = CrawlOutputRepository()
 
     def get_output_dir(self, crawl_id: str, custom_dir: Optional[str] = None) -> Path:
         if custom_dir:
@@ -43,6 +45,10 @@ class FileService:
                 size_bytes=size,
                 chapter_number=self._chapter_number_from_filename(fp.name),
             ))
+        try:
+            self._output_repo.scan_output_dir(crawl_id, output_dir, ext=ext)
+        except Exception:
+            pass
         return result
 
     def read_file_preview(self, filepath: Path, max_lines: int = 30) -> tuple[str, int]:

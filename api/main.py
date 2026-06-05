@@ -3,6 +3,7 @@
 import logging
 import signal
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(name)s | %(levelname)s | %(message)s")
@@ -20,12 +21,32 @@ _project_root = Path(__file__).parent.parent.resolve()
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+from api.db import init_db
 from api.routes import crawl, results, sites
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("NovelCrawler startup: initializing database...")
+    init_db()
+    try:
+        from api.services.crawler_service import get_crawl_service
+        _ = get_crawl_service()
+    except Exception as exc:
+        logger.warning("Crawler service preload failed: %s", exc)
+    try:
+        from handlers.selenium_handler import _get_browser
+        browser = _get_browser()
+        browser._resolve_chromedriver()
+    except Exception as exc:
+        logger.warning("Startup ChromeDriver preload failed: %s", exc)
+    yield
 
 app = FastAPI(
     title="Nova NovelCrawler API",
     description="REST + SSE API for multi-site novel scraping. Handles site detection and Scrapy crawl execution.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -44,16 +65,6 @@ app.include_router(results.router)
 @app.get("/", tags=["Health"])
 def root() -> dict:
     return {"status": "ok", "service": "Nova NovelCrawler API", "version": "1.0.0"}
-
-
-@app.on_event("startup")
-async def on_startup():
-    try:
-        from handlers.selenium_handler import _get_browser
-        browser = _get_browser()
-        browser._resolve_chromedriver()
-    except Exception as exc:
-        logger.warning("Startup ChromeDriver preload failed: %s", exc)
 
 
 @app.on_event("shutdown")
