@@ -840,6 +840,18 @@ class BedReadService:
         logger.info("BedRead batch %s removed", batch_id)
         return True
 
+    def reset_runtime_state(self) -> None:
+        """Clear in-memory BedRead batch state after development cleanup."""
+        with self._lock:
+            for batch in self._batch_jobs.values():
+                if batch.status in ("pending", "queued", "running"):
+                    batch.status = "cancelled"
+                    batch.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._batch_jobs.clear()
+            self._batch_queue.clear()
+            self._active_batch_id = None
+            self._poll_running = False
+
     def get_output_dir(self, batch_id: str) -> Optional[Path]:
         with self._lock:
             batch = self._batch_jobs.get(batch_id)

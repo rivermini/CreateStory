@@ -660,6 +660,17 @@ class TTSService:
             logger.info("Released idle Kokoro model sessions.")
         return released
 
+    def reset_runtime_state(self) -> None:
+        """Clear in-memory job state after the gateway development cleanup."""
+        with self._lock:
+            for job in self._jobs.values():
+                if job.status in ("queued", "processing"):
+                    job.status = "cancelled"
+                    job.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._jobs.clear()
+            self._queue.clear()
+        self.release_idle_models(force=True)
+
     def _worker_loop(self, worker_id: int) -> None:
         import numpy as np
         import time

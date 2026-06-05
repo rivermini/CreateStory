@@ -1,52 +1,30 @@
-"""Shared config helpers used across multiple services."""
+"""Shared config helpers used across BedReadVoices."""
 
 from __future__ import annotations
 
-import json
-import logging
-from pathlib import Path
-from typing import Optional
-
-logger = logging.getLogger(__name__)
-
-
-def get_drive_sync_config_path() -> Path:
-    """Return the path to the drive_sync_config.json file.
-    This file lives in FastAPIServer/data/ and is the single source of truth
-    for external API credentials shared by all services.
-    """
-    # BedReadVoices/api/config.py -> BedReadVoices/ -> Services/ -> FastAPIServer/data/
-    return Path(__file__).parent.parent.parent / "FastAPIServer" / "data" / "drive_sync_config.json"
+from api.db import SessionLocal, init_db
+from api.models.db_models import AppSetting
 
 
 def load_external_api_config() -> dict:
     """
-    Load the external API config from drive_sync_config.json.
+    Load external API config from PostgreSQL app_settings.
 
     Returns a dict with:
       - main_be_api_base_url: str
       - main_be_user_id: str
       - main_be_bearer_token: str (may be empty)
 
-    Raises DriveSyncConfigError if the file is missing or required fields are absent.
+    Raises DriveSyncConfigError if required fields are absent.
     """
-    config_path = get_drive_sync_config_path()
-
-    if not config_path.exists():
-        raise DriveSyncConfigError(
-            f"Drive sync config not found at {config_path}. "
-            "Please configure your settings in the Drive Sync Configuration modal."
-        )
-
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except Exception as exc:
-        raise DriveSyncConfigError(f"Failed to read drive sync config: {exc}") from exc
+    init_db()
+    with SessionLocal() as db:
+        row = db.get(AppSetting, "drive_sync_config")
+        config = dict(row.value) if row is not None else {}
 
     if not config:
         raise DriveSyncConfigError(
-            "Drive sync config is empty. "
+            "Drive sync config is not configured. "
             "Please configure your settings in the Drive Sync Configuration modal."
         )
 
@@ -73,4 +51,3 @@ def load_external_api_config() -> dict:
 
 class DriveSyncConfigError(Exception):
     """Raised when required drive-sync configuration is missing or invalid."""
-    pass

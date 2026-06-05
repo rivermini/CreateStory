@@ -72,3 +72,16 @@ def api_info() -> dict:
         "docs_url": "/docs",
         "redoc_url": "/redoc",
     }
+
+
+@app.post("/api/dev/reset-state", tags=["Development"])
+def reset_runtime_state() -> dict:
+    from api.services.bedread_service import get_bedread_service
+    from api.services.tts_service import get_tts_service
+
+    get_bedread_service().reset_runtime_state()
+    get_tts_service().reset_runtime_state()
+    globals_dict = sys.modules["api.routes.bedread"].__dict__
+    globals_dict["_stories_cache"] = None
+    globals_dict["_stories_cache_time"] = 0.0
+    return {"reset": True}
