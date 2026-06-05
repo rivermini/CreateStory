@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
+  clearBackendData,
   getSettings,
   updateSettings,
   getDriveSyncConfig,
   initDriveSyncConfig,
   checkCredentialsExists,
+  getStoredAuthUser,
   type SettingsResponse,
   type DriveSyncConfig,
   FIXED_JSON_PREFIX,
@@ -38,6 +40,10 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
   const [ttsConcurrency, setTtsConcurrency] = useState(1);
   const ttsConcurrencyOptions = [1, 2];
+  const [clearState, setClearState] = useState<'idle' | 'clearing'>('idle');
+  const [clearConfirm, setClearConfirm] = useState('');
+  const authUser = getStoredAuthUser();
+  const isAdmin = authUser?.role === 'admin';
 
   // Drive Sync Config Modal
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
@@ -290,6 +296,31 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
     } catch {
       setError('Failed to save settings.');
       setSaveState('idle');
+    }
+  };
+
+  const handleClearBackendData = async () => {
+    if (clearConfirm.trim() !== 'CLEAR_BACKEND_DATA') {
+      showToast('Type CLEAR_BACKEND_DATA before clearing.', 'warning', 2200, 'top-center');
+      return;
+    }
+    setClearState('clearing');
+    setError('');
+    try {
+      const result = await clearBackendData();
+      setClearConfirm('');
+      showToast(
+        `Cleared ${result.cleared_tables.length} tables, deleted ${result.deleted_paths.length} paths, and cleared ${result.cleared_logs.length} logs.`,
+        'success',
+        3500,
+        'top-center',
+      );
+      window.setTimeout(() => window.location.assign('/'), 600);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear backend data.');
+      showToast('Failed to clear backend data.', 'error', 3000, 'top-center');
+    } finally {
+      setClearState('idle');
     }
   };
 
@@ -842,6 +873,73 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               />
             </button>
           </div>
+        </section>
+
+        {/* Development Cleanup Section */}
+        <section className="lg-glass p-5 sm:p-6 space-y-5">
+          <div className="flex items-start gap-3">
+            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-red-500/10 text-red-300' : 'bg-red-50 text-red-600'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m3 0V5a2 2 0 012-2h0a2 2 0 012 2v2" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Development Cleanup</h2>
+              <p className={`mt-1 text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                Clear runtime histories, generated outputs, sessions, jobs, logs, settings, Drive credentials, and saved tokens. Admin accounts are preserved, then this browser signs out.
+              </p>
+            </div>
+          </div>
+
+          {!isAdmin ? (
+            <div className={`rounded-xl border px-4 py-3 text-sm ${isDark ? 'border-white/[0.08] bg-white/[0.03] text-white/45' : 'border-black/8 bg-[rgba(0,0,0,0.03)] text-[rgba(0,0,0,0.45)]'}`}>
+              Admin access is required.
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1 max-w-md">
+                <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                  Confirmation
+                </label>
+                <input
+                  type="text"
+                  value={clearConfirm}
+                  onChange={e => setClearConfirm(e.target.value)}
+                  placeholder="CLEAR_BACKEND_DATA"
+                  className={`w-full px-4 py-3 border rounded-xl font-mono text-sm
+                    focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent
+                    ${isDark
+                      ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/25'
+                      : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.25)]'
+                    }`}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleClearBackendData}
+                disabled={clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA'}
+                className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+                  clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA'
+                    ? isDark
+                      ? 'bg-white/[0.05] text-white/25 cursor-not-allowed'
+                      : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
+                    : 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/25'
+                }`}
+              >
+                {clearState === 'clearing' ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Clearing...
+                  </>
+                ) : (
+                  'Clear Backend Data'
+                )}
+              </button>
+            </div>
+          )}
         </section>
 
         {/* Save Button */}

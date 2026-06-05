@@ -3,7 +3,7 @@
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
-export const FIXED_JSON_PREFIX = 'data/credentials/';
+export const FIXED_JSON_PREFIX = 'db://external_credentials/';
 
 type FetchOptions = RequestInit & { timeout?: number };
 
@@ -166,6 +166,26 @@ export async function getCurrentUser(): Promise<AuthUser> {
   const user = await apiFetch<AuthUser>('/api/auth/me');
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
   return user;
+}
+
+export interface ClearBackendDataResponse {
+  cleared_tables: string[];
+  deleted_paths: string[];
+  cleared_logs: string[];
+  reset_files: string[];
+  reset_services: string[];
+  skipped_paths: string[];
+}
+
+export async function clearBackendData(): Promise<ClearBackendDataResponse> {
+  const result = await apiFetch<ClearBackendDataResponse>('/api/dev/clear-data', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmation: 'CLEAR_BACKEND_DATA' }),
+    timeout: 120000,
+  });
+  clearAuth();
+  return result;
 }
 
 function withAccessToken(url: string): string {

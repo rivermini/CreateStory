@@ -1,11 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { MobileSidebar } from './components/MobileSidebar';
 import { ToastContainer } from './components/Toast';
-import { clearAuth, getCurrentUser, getStoredAuthUser, login, logout, register, type AuthUser } from './api/client';
+import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api/client';
 import { type ThemeMode } from './types/theme';
 
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const CrawlPage = lazy(() => import('./pages/CrawlPage').then(m => ({ default: m.CrawlPage })));
 const ResultPage = lazy(() => import('./pages/ResultPage').then(m => ({ default: m.ResultPage })));
@@ -39,6 +40,7 @@ function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeCookie() ?? 'light');
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredAuthUser());
   const [authChecked, setAuthChecked] = useState(false);
+  const loginThemeMode: ThemeMode = 'light';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -92,11 +94,13 @@ function App() {
           onLogout={handleLogout}
         />
       ) : (
-        <AuthScreen
-          themeMode={themeMode}
-          onThemeChange={handleThemeChange}
-          onAuthenticated={(user) => setAuthUser(user)}
-        />
+        <Suspense fallback={<AuthLoading themeMode={loginThemeMode} />}>
+          <LoginPage
+            themeMode={loginThemeMode}
+            onThemeChange={handleThemeChange}
+            onAuthenticated={(user) => setAuthUser(user)}
+          />
+        </Suspense>
       )}
     </BrowserRouter>
   );
@@ -217,144 +221,6 @@ function AuthLoading({ themeMode }: { themeMode: ThemeMode }) {
     <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-gray-50 text-gray-600'}`}>
       Loading...
     </div>
-  );
-}
-
-function AuthScreen({
-  themeMode,
-  onThemeChange,
-  onAuthenticated,
-}: {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
-  onAuthenticated: (user: AuthUser) => void;
-}) {
-  const isDark = themeMode === 'dark';
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const tokens = mode === 'login'
-        ? await login(email, password)
-        : await register(email, password);
-      onAuthenticated(tokens.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <main className={`min-h-screen flex items-center justify-center px-4 ${isDark ? 'bg-slate-950' : 'bg-gray-50'}`}>
-      <div className="w-full max-w-sm">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-950'}`}>
-              CreateStory
-            </h1>
-            <p className={`mt-1 text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-              {mode === 'login' ? 'Sign in to continue.' : 'Create the first account to initialize admin access.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onThemeChange(themeMode === 'dark' ? 'light' : 'dark')}
-            className={`h-9 w-9 rounded-md border flex items-center justify-center ${
-              isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-900' : 'border-gray-300 text-gray-600 hover:bg-white'
-            }`}
-            title="Toggle theme"
-          >
-            {themeMode === 'dark' ? (
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M18.5 18.5 20 20M5 19l1.5-1.5M18.5 6.5 20 5" />
-              </svg>
-            ) : (
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" />
-              </svg>
-            )}
-          </button>
-        </div>
-
-        <form
-          onSubmit={submit}
-          className={`rounded-lg border p-5 shadow-sm ${
-            isDark ? 'border-slate-800 bg-slate-900' : 'border-gray-200 bg-white'
-          }`}
-        >
-          <div className={`grid grid-cols-2 rounded-md p-1 mb-5 ${isDark ? 'bg-slate-950' : 'bg-gray-100'}`}>
-            <button
-              type="button"
-              onClick={() => setMode('login')}
-              className={`h-9 rounded text-sm font-medium transition-colors ${mode === 'login' ? 'bg-indigo-600 text-white' : isDark ? 'text-slate-400' : 'text-gray-600'}`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('register')}
-              className={`h-9 rounded text-sm font-medium transition-colors ${mode === 'register' ? 'bg-indigo-600 text-white' : isDark ? 'text-slate-400' : 'text-gray-600'}`}
-            >
-              Create
-            </button>
-          </div>
-
-          <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`} htmlFor="auth-email">
-            Email
-          </label>
-          <input
-            id="auth-email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            required
-            className={`w-full h-11 rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 ${
-              isDark ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-gray-300 bg-white text-gray-900'
-            }`}
-          />
-
-          <label className={`block text-sm font-medium mt-4 mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`} htmlFor="auth-password">
-            Password
-          </label>
-          <input
-            id="auth-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            minLength={mode === 'register' ? 8 : undefined}
-            required
-            className={`w-full h-11 rounded-md border px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 ${
-              isDark ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-gray-300 bg-white text-gray-900'
-            }`}
-          />
-
-          {error && (
-            <div className={`mt-4 rounded-md border px-3 py-2 text-sm ${isDark ? 'border-red-900 bg-red-950 text-red-200' : 'border-red-200 bg-red-50 text-red-700'}`}>
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={busy}
-            className="mt-5 w-full h-11 rounded-md bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {busy ? 'Working...' : mode === 'login' ? 'Sign in' : 'Create account'}
-          </button>
-        </form>
-      </div>
-    </main>
   );
 }
 
