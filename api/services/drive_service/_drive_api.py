@@ -16,6 +16,8 @@ from google.auth import load_credentials_from_file
 from googleapiclient.discovery import build
 
 from api.services.drive_service._paths import (
+    _CHECK_BATCH_CHUNK_SIZE,
+    _CHECK_BATCH_PAGE_SIZE,
     _DRIVE_CALL_BACKOFF_BASE,
     _DRIVE_CALL_CONCURRENCY,
     _DRIVE_CALL_RETRIES,
@@ -390,10 +392,7 @@ class DriveAPIMixin:
 
     def _batch_get_chapter_counts(self, drive_service: Any, folder_ids: list[str]) -> list[Optional[int]]:
         """
-        For each folder ID, count all .md chapter files across:
-          - Root level of the story folder
-          - 'chapters' subfolder
-          - 'chapters-extended' subfolder
+        For each folder ID, count chapter files in the 'chapters-extended' subfolder.
         """
         if not folder_ids:
             return []
@@ -406,7 +405,7 @@ class DriveAPIMixin:
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
-                    f"and (name='chapters' or name='chapters-extended') and trashed=false",
+                    f"and name='chapters-extended' and trashed=false",
                     fields="files(id, name, parents)",
                     pageSize=500,
                     pageToken=_pt,
@@ -425,16 +424,15 @@ class DriveAPIMixin:
             if not page_token:
                 break
 
-        story_chapters: dict[str, Optional[str]] = {fid: None for fid in folder_ids}
         story_extended: dict[str, Optional[str]] = {fid: None for fid in folder_ids}
         for sub_id, story_id in chapters_sub.items():
             sub_name_lower = next((f.get("name", "").lower() for f in found_files if f["id"] == sub_id), "")
             if sub_name_lower == "chapters-extended":
                 story_extended[story_id] = sub_id
-            elif sub_name_lower == "chapters":
-                story_chapters[story_id] = sub_id
 
-        all_parent_ids = list(chapters_sub.keys()) + folder_ids
+        all_parent_ids = list(chapters_sub.keys())
+        if not all_parent_ids:
+            return [None for _ in folder_ids]
         all_parents_clause = " or ".join(f'"{pid}" in parents' for pid in all_parent_ids)
 
         files_by_parent: dict[str, list[dict]] = {pid: [] for pid in all_parent_ids}
@@ -473,12 +471,7 @@ class DriveAPIMixin:
 
         result: list[Optional[int]] = []
         for folder_id in folder_ids:
-            root_chapters = sum(1 for f in files_by_parent.get(folder_id, []) if _is_chapter_file(f.get("name", "")))
-            total = (
-                root_chapters
-                + len(files_by_parent.get(story_chapters.get(folder_id), []))
-                + len(files_by_parent.get(story_extended.get(folder_id), []))
-            )
+            total = len(files_by_parent.get(story_extended.get(folder_id), []))
             result.append(total if total > 0 else None)
         return result
 
@@ -579,12 +572,12 @@ class DriveAPIMixin:
         dict[str, list[tuple[int, str]]],
     ]:
         """
-        Combined duplicate-check + chapter-count in a single pair of Drive API calls.
+        Combined duplicate-check + chapter-count for chapters-extended files.
 
         For each folder_id returns:
           - duplicates: (has_duplicates, duplicate_indices)
           - ext_count: chapter count from chapters-extended subfolder only
-          - chapter_count: total chapter count across ALL subfolders
+          - chapter_count: total chapter count in chapters-extended
           - first_chapter_index: the first chapter number found
           - format_errors: filenames in chapters-extended that don't match format
           - sequential_errors: list of missing chapter numbers (gaps)
@@ -618,71 +611,40 @@ class DriveAPIMixin:
                 return True
             return False
 
-        _CHUNK_SIZE = 15
+        _CHUNK_SIZE = _CHECK_BATCH_CHUNK_SIZE
         folder_ids = list(folder_ids)
 
         chapters_sub: dict[str, tuple[str, str]] = {}
 
-        if check_extended_only:
-            for chunk_start in range(0, len(folder_ids), _CHUNK_SIZE):
-                chunk = folder_ids[chunk_start: chunk_start + _CHUNK_SIZE]
-                parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
-                q = (
-                    f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
-                    "and name contains 'chapters-extended' and trashed=false"
-                )
-                page_token = None
-                while True:
-                    _pt = page_token
-                    def _call() -> dict:
-                        return drive_service.files().list(
-                            q=q,
-                            fields="files(id, name, parents)",
-                            pageSize=500,
-                            pageToken=_pt,
-                        ).execute()
-                    try:
-                        response = self._retry_drive_call(_call)
-                    except (ssl.SSLError, TimeoutError):
-                        break
-                    for f in response.get("files", []):
-                        for parent in f.get("parents", []):
-                            if parent in folder_ids:
-                                chapters_sub[f["id"]] = (parent, f.get("name", ""))
-                                break
-                    page_token = response.get("nextPageToken")
-                    if not page_token:
-                        break
-        else:
-            for chunk_start in range(0, len(folder_ids), _CHUNK_SIZE):
-                chunk = folder_ids[chunk_start: chunk_start + _CHUNK_SIZE]
-                parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
-                q = (
-                    f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
-                    "and (name='chapters' or name='chapters-extended') and trashed=false"
-                )
-                page_token = None
-                while True:
-                    _pt = page_token
-                    def _call() -> dict:
-                        return drive_service.files().list(
-                            q=q,
-                            fields="files(id, name, parents)",
-                            pageSize=500,
-                            pageToken=_pt,
-                        ).execute()
-                    try:
-                        response = self._retry_drive_call(_call)
-                    except (ssl.SSLError, TimeoutError):
-                        break
-                    for f in response.get("files", []):
-                        for parent in f.get("parents", []):
-                            if parent in folder_ids:
-                                chapters_sub[f["id"]] = (parent, f.get("name", ""))
-                                break
-                    page_token = response.get("nextPageToken")
-                    if not page_token:
-                        break
+        for chunk_start in range(0, len(folder_ids), _CHUNK_SIZE):
+            chunk = folder_ids[chunk_start: chunk_start + _CHUNK_SIZE]
+            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            q = (
+                f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
+                "and name='chapters-extended' and trashed=false"
+            )
+            page_token = None
+            while True:
+                _pt = page_token
+                def _call() -> dict:
+                    return drive_service.files().list(
+                        q=q,
+                        fields="files(id, name, parents)",
+                        pageSize=_CHECK_BATCH_PAGE_SIZE,
+                        pageToken=_pt,
+                    ).execute()
+                try:
+                    response = self._retry_drive_call(_call)
+                except (ssl.SSLError, TimeoutError):
+                    break
+                for f in response.get("files", []):
+                    for parent in f.get("parents", []):
+                        if parent in folder_ids:
+                            chapters_sub[f["id"]] = (parent, f.get("name", ""))
+                            break
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
 
         if not chapters_sub:
             dupe_result = {fid: (False, []) for fid in folder_ids}
@@ -707,7 +669,7 @@ class DriveAPIMixin:
                     return drive_service.files().list(
                         q=q,
                         fields="files(id, name, parents)",
-                        pageSize=500,
+                        pageSize=_CHECK_BATCH_PAGE_SIZE,
                         pageToken=_pt,
                     ).execute()
                 try:
@@ -724,37 +686,6 @@ class DriveAPIMixin:
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     break
-
-        empty_sub_ids = [sid for sid, files in files_by_sub.items() if not files]
-        if empty_sub_ids:
-            for chunk_start in range(0, len(empty_sub_ids), _CHUNK_SIZE):
-                chunk = empty_sub_ids[chunk_start: chunk_start + _CHUNK_SIZE]
-                parents_clause = " or ".join(f'"{sid}" in parents' for sid in chunk)
-                q = f"({parents_clause}) and name contains '.md' and trashed=false"
-                page_token = None
-                while True:
-                    _pt = page_token
-                    def _fallback_call() -> dict:
-                        return drive_service.files().list(
-                            q=q,
-                            fields="files(id, name, parents)",
-                            pageSize=500,
-                            pageToken=_pt,
-                        ).execute()
-                    try:
-                        response = self._retry_drive_call(_fallback_call)
-                    except (ssl.SSLError, TimeoutError):
-                        break
-                    for f in response.get("files", []):
-                        if not f.get("name", "").lower().endswith(".md"):
-                            continue
-                        for parent in f.get("parents", []):
-                            if parent in files_by_sub:
-                                files_by_sub[parent].append(f)
-                                break
-                    page_token = response.get("nextPageToken")
-                    if not page_token:
-                        break
 
         for folder_id in folder_ids:
             indices: list[int] = []
@@ -795,10 +726,7 @@ class DriveAPIMixin:
             first_chapter_result[folder_id] = sorted(indices)[0] if indices else None
             ext_indices_result[folder_id] = indices_extended
 
-            if check_extended_only:
-                check_indices = [i[0] for i in indices_extended]
-            else:
-                check_indices = indices
+            check_indices = [i[0] for i in indices_extended]
             if len(check_indices) >= 2:
                 sorted_indices = sorted(check_indices)
                 first = sorted_indices[0]
@@ -822,7 +750,7 @@ class DriveAPIMixin:
         if not folder_ids:
             return (has_free, has_tags)
 
-        _CHUNK_SIZE = 15
+        _CHUNK_SIZE = _CHECK_BATCH_CHUNK_SIZE
 
         for chunk_start in range(0, len(folder_ids), _CHUNK_SIZE):
             chunk = folder_ids[chunk_start: chunk_start + _CHUNK_SIZE]
@@ -838,7 +766,7 @@ class DriveAPIMixin:
                     return drive_service.files().list(
                         q=q,
                         fields="files(id, name, parents)",
-                        pageSize=500,
+                        pageSize=_CHECK_BATCH_PAGE_SIZE,
                         pageToken=_pt,
                     ).execute()
                 try:

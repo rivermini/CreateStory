@@ -39,23 +39,32 @@ async def _get_last_update_times(service, names: list[str]) -> dict[str, Optiona
         return {}
 
     def _load() -> dict[str, Optional[str]]:
-        return {name: service.get_last_update_time(name) for name in unique_names}
+        names_by_lower = {name.lower(): name for name in unique_names}
+        latest_by_lower: dict[str, Optional[str]] = {name.lower(): None for name in unique_names}
+        for job in service._load_jobs_raw():
+            if job.kind != "update_single" or job.status != "success" or job.finished_at is None:
+                continue
+            key = job.display_name.lower()
+            if key not in latest_by_lower:
+                continue
+            latest = latest_by_lower[key]
+            if latest is None or job.finished_at > latest:
+                latest_by_lower[key] = job.finished_at
+        return {original: latest_by_lower[lower] for lower, original in names_by_lower.items()}
 
     return await asyncio.to_thread(_load)
 
 
-def _run_chapter_batch_check(service, folder_ids: list[str], check_extended_only: bool):
+def _run_chapter_batch_check(service, folder_ids: list[str]):
     if not folder_ids:
         return service._batch_check_duplicates_and_count_extended(
             None,
             [],
-            check_extended_only=check_extended_only,
         )
     drive_service = service._build_drive_service()
     return service._batch_check_duplicates_and_count_extended(
         drive_service,
         folder_ids,
-        check_extended_only=check_extended_only,
     )
 
 
@@ -96,22 +105,14 @@ async def check_uploadable() -> CheckUploadableResponse:
     candidate_folders = [f for f in drive_folders_raw if f.get("prefix") in uploadable_prefixes]
     server_titles = {_normalize(s["title"]) for s in server_stories}
 
-    candidate_ids = [f["id"] for f in candidate_folders]
-    dup_check_results, ext_count_by_folder_id, chapter_count_by_folder_id, first_chapter_by_id, format_errors, sequential_errors, _ = await asyncio.to_thread(
-        _run_chapter_batch_check,
-        service,
-        candidate_ids,
-        False,
-    )
-
     uploadable = []
     already_on_server = []
     invalid = []
+    validation_candidates: list[dict] = []
+
     for folder in candidate_folders:
         folder["is_valid_format"] = _is_valid_upload_format(folder.get("name", ""))
         folder["validation_errors"] = []
-        folder["chapter_count"] = chapter_count_by_folder_id.get(folder["id"])
-        folder["extended_chapter_count"] = ext_count_by_folder_id.get(folder["id"])
         entry = DriveFolderEntry(**folder)
         title_lower = _normalize(folder.get("display_name", ""))
 
@@ -123,6 +124,20 @@ async def check_uploadable() -> CheckUploadableResponse:
             folder["validation_errors"].append("WRONG FORMAT")
             invalid.append(DriveFolderEntry(**folder))
             continue
+
+        validation_candidates.append(folder)
+
+    candidate_ids = [f["id"] for f in validation_candidates]
+    dup_check_results, ext_count_by_folder_id, chapter_count_by_folder_id, first_chapter_by_id, format_errors, sequential_errors, _ = await asyncio.to_thread(
+        _run_chapter_batch_check,
+        service,
+        candidate_ids,
+    )
+
+    for folder in validation_candidates:
+        folder["chapter_count"] = chapter_count_by_folder_id.get(folder["id"])
+        folder["extended_chapter_count"] = ext_count_by_folder_id.get(folder["id"])
+        entry = DriveFolderEntry(**folder)
 
         has_duplicates, dupes = dup_check_results.get(folder["id"], (False, []))
         if has_duplicates:
@@ -192,17 +207,26 @@ async def check_updatable() -> CheckUpdatableResponse:
         except Exception as exc:
             logger.warning("Skipping malformed server story: %s", exc)
 
-    extended_ids = [f["id"] for f in extended_folders]
+    matched_extended_folders = [
+        f for f in extended_folders
+        if _normalize(f.get("display_name", "")) in server_by_title
+    ]
+    no_server_match = []
+    for folder in extended_folders:
+        if _normalize(folder.get("display_name", "")) not in server_by_title:
+            try:
+                no_server_match.append(DriveFolderEntry(**folder))
+            except Exception as exc:
+                logger.warning("Skipping malformed drive folder: %s", exc)
+
+    extended_ids = [f["id"] for f in matched_extended_folders]
 
     try:
-        chapter_check_task = asyncio.to_thread(
+        chapter_check_result = await asyncio.to_thread(
             _run_chapter_batch_check,
             service,
             extended_ids,
-            True,
         )
-        free_tag_task = asyncio.to_thread(_run_free_tag_batch_check, service, extended_ids)
-        chapter_check_result, free_tag_result = await asyncio.gather(chapter_check_task, free_tag_task, return_exceptions=True)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {exc}")
 
@@ -210,23 +234,18 @@ async def check_updatable() -> CheckUpdatableResponse:
         raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {chapter_check_result}")
     dup_check_results, ext_count_by_folder_id, _, _, format_errors, _, ext_indices = chapter_check_result
 
-    if isinstance(free_tag_result, Exception):
-        has_free_by_folder = {fid: False for fid in extended_ids}
-        has_tags_by_folder = {fid: False for fid in extended_ids}
-    else:
-        has_free_by_folder, has_tags_by_folder = free_tag_result
-
     last_updated_by_name = await _get_last_update_times(
         service,
-        [f.get("display_name", "") for f in extended_folders],
+        [f.get("display_name", "") for f in matched_extended_folders],
     )
 
     updatable = []
+    updatable_folder_ids: list[str] = []
     no_update_needed = []
     invalid = []
-    no_server_match = []
     empty_extended = []
-    for folder in extended_folders:
+    pending_updatable: list[tuple[dict, DriveFolderEntry, ServerStoryRef, list[int], str | None]] = []
+    for folder in matched_extended_folders:
         folder_id = folder["id"]
         folder["extended_chapter_count"] = ext_count_by_folder_id.get(folder_id, 0)
         try:
@@ -235,10 +254,7 @@ async def check_updatable() -> CheckUpdatableResponse:
             logger.warning("Skipping malformed drive folder: %s", exc)
             continue
         title_lower = _normalize(folder.get("display_name", ""))
-        server_story = server_by_title.get(title_lower)
-        if server_story is None:
-            no_server_match.append(entry)
-            continue
+        server_story = server_by_title[title_lower]
 
         display_name = folder.get("display_name", "")
         last_updated = last_updated_by_name.get(display_name)
@@ -250,8 +266,8 @@ async def check_updatable() -> CheckUpdatableResponse:
                 entry.validation_errors.append(f"DUPLICATE CHAPTER: {d}")
             invalid.append(UpdatableStoryEntry(
                 folder=entry, server_story=server_story, free_chapters_count=None, tags=None,
-                has_free_md=has_free_by_folder.get(folder_id, False),
-                has_tags_md=has_tags_by_folder.get(folder_id, False), last_updated=last_updated,
+                has_free_md=False,
+                has_tags_md=False, last_updated=last_updated,
             ))
             continue
 
@@ -261,8 +277,8 @@ async def check_updatable() -> CheckUpdatableResponse:
                 entry.validation_errors.append(f"WRONG CHAPTER FORMAT: {name}")
             invalid.append(UpdatableStoryEntry(
                 folder=entry, server_story=server_story, free_chapters_count=None, tags=None,
-                has_free_md=has_free_by_folder.get(folder_id, False),
-                has_tags_md=has_tags_by_folder.get(folder_id, False), last_updated=last_updated,
+                has_free_md=False,
+                has_tags_md=False, last_updated=last_updated,
             ))
             continue
 
@@ -275,13 +291,11 @@ async def check_updatable() -> CheckUpdatableResponse:
 
         free_chapters_count: Optional[int] = None
         tags: Optional[list[str]] = None
-        has_free_md = has_free_by_folder.get(folder_id, False)
-        has_tags_md = has_tags_by_folder.get(folder_id, False)
 
         if not new_entries:
             no_update_needed.append(UpdatableStoryEntry(
                 folder=entry, server_story=server_story, free_chapters_count=free_chapters_count,
-                tags=tags, has_free_md=has_free_md, has_tags_md=has_tags_md, last_updated=last_updated,
+                tags=tags, has_free_md=False, has_tags_md=False, last_updated=last_updated,
             ))
             continue
 
@@ -292,7 +306,7 @@ async def check_updatable() -> CheckUpdatableResponse:
             )
             invalid.append(UpdatableStoryEntry(
                 folder=entry, server_story=server_story, free_chapters_count=free_chapters_count,
-                tags=tags, has_free_md=has_free_md, has_tags_md=has_tags_md, last_updated=last_updated,
+                tags=tags, has_free_md=False, has_tags_md=False, last_updated=last_updated,
             ))
             continue
 
@@ -306,7 +320,7 @@ async def check_updatable() -> CheckUpdatableResponse:
             )
             invalid.append(UpdatableStoryEntry(
                 folder=entry, server_story=server_story, free_chapters_count=free_chapters_count,
-                tags=tags, has_free_md=has_free_md, has_tags_md=has_tags_md, last_updated=last_updated,
+                tags=tags, has_free_md=False, has_tags_md=False, last_updated=last_updated,
             ))
             continue
 
@@ -320,14 +334,26 @@ async def check_updatable() -> CheckUpdatableResponse:
             entry.validation_errors.append(f"NON_SEQUENTIAL: Missing chapters {chapter_list}")
             invalid.append(UpdatableStoryEntry(
                 folder=entry, server_story=server_story, free_chapters_count=free_chapters_count,
-                tags=tags, has_free_md=has_free_md, has_tags_md=has_tags_md, last_updated=last_updated,
+                tags=tags, has_free_md=False, has_tags_md=False, last_updated=last_updated,
             ))
             continue
 
+        pending_updatable.append((folder, entry, server_story, new_indices, last_updated))
+        updatable_folder_ids.append(folder_id)
+
+    try:
+        has_free_by_folder, has_tags_by_folder = await asyncio.to_thread(_run_free_tag_batch_check, service, updatable_folder_ids)
+    except Exception:
+        has_free_by_folder = {fid: False for fid in updatable_folder_ids}
+        has_tags_by_folder = {fid: False for fid in updatable_folder_ids}
+
+    for folder, entry, server_story, new_indices, last_updated in pending_updatable:
+        folder_id = folder["id"]
         updatable.append(UpdatableStoryEntry(
             folder=entry, server_story=server_story, new_chapters_count=len(new_indices),
-            free_chapters_count=free_chapters_count, tags=tags,
-            has_free_md=has_free_md, has_tags_md=has_tags_md, last_updated=last_updated,
+            free_chapters_count=None, tags=None,
+            has_free_md=has_free_by_folder.get(folder_id, False),
+            has_tags_md=has_tags_by_folder.get(folder_id, False), last_updated=last_updated,
         ))
 
     return CheckUpdatableResponse(
@@ -417,7 +443,6 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
             _run_chapter_batch_check,
             service,
             matched_ids,
-            True,
         )
         free_tag_task = asyncio.to_thread(_run_free_tag_batch_check, service, matched_ids)
         chapter_check_result, free_tag_result = await asyncio.gather(chapter_check_task, free_tag_task, return_exceptions=True)
