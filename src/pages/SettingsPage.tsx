@@ -12,6 +12,7 @@ import {
   FIXED_JSON_PREFIX,
 } from '../api/client';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
+import { Icon, appIcons } from '../components/Icon';
 import type { ThemeMode } from '../types/theme';
 import { showToast } from '../components/Toast';
 
@@ -332,10 +333,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <div className="lg-orb lg-orb-3" />
         <div className="relative z-10 flex items-center justify-center min-h-screen">
           <div className="flex items-center gap-3" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.5)' }}>
-            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
             <span>Loading settings...</span>
           </div>
         </div>
@@ -368,9 +366,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
             ? 'bg-red-900/20 border border-red-800/30 text-red-400'
             : 'bg-red-50 border border-red-200 text-red-600'
           }`}>
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <Icon icon={appIcons.info} className="w-5 h-5 flex-shrink-0" />
             {error}
           </div>
         )}
@@ -379,9 +375,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <section className="lg-glass p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
+              <Icon icon={appIcons.moon} className="w-5 h-5" />
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Appearance</h2>
@@ -401,9 +395,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                     : 'border-black/8 hover:border-indigo-200 bg-[rgba(0,0,0,0.02)]'
               }`}
             >
-              <svg className={`w-6 h-6 ${localTheme === 'light' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
+              <Icon icon={appIcons.themeLight} className={`w-6 h-6 ${localTheme === 'light' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} />
               <span className={`text-sm font-medium ${localTheme === 'light' ? 'text-indigo-300' : isDark ? 'text-white/35' : 'text-gray-500'}`}>Light</span>
             </button>
 
@@ -418,9 +410,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                     : 'border-black/8 hover:border-indigo-200 bg-[rgba(0,0,0,0.02)]'
               }`}
             >
-              <svg className={`w-6 h-6 ${localTheme === 'dark' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
+              <Icon icon={appIcons.themeDark} className={`w-6 h-6 ${localTheme === 'dark' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} />
               <span className={`text-sm font-medium ${localTheme === 'dark' ? 'text-indigo-300' : isDark ? 'text-white/35' : 'text-gray-500'}`}>Dark</span>
             </button>
           </div>
@@ -430,9 +420,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <section className="lg-glass p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-              </svg>
+              <Icon icon={appIcons.sync} className="w-5 h-5" />
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Drive Sync Configuration</h2>
@@ -452,15 +440,9 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               } disabled:opacity-50`}
             >
               {configLoading ? (
-                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+                <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
               ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                <Icon icon={appIcons.settings} className="w-4 h-4" />
               )}
               Configure
             </button>
@@ -471,9 +453,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                 ? 'bg-white/[0.06] hover:bg-white/[0.08] text-white/70 border border-white/[0.08]'
                 : 'bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)] text-[rgba(0,0,0,0.6)] border border-black/8'
             }`}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <Icon icon={appIcons.uploadFile} className="w-4 h-4" />
               Upload JSON Preset
               <input
                 type="file"
@@ -521,9 +501,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           {/* Upload Error */}
           {uploadError && (
             <div className={`text-sm ${isDark ? 'text-red-400' : 'text-red-500'} flex items-center gap-2`}>
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+              <Icon icon={appIcons.statusWarning} className="w-4 h-4 flex-shrink-0" />
               {uploadError}
             </div>
           )}
@@ -566,10 +544,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <section className="lg-glass p-5 sm:p-6 space-y-5">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <Icon icon={appIcons.settings} className="w-5 h-5" />
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Default Crawl Settings</h2>
@@ -677,9 +652,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <section className="lg-glass p-5 sm:p-6 space-y-5">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+              <Icon icon={appIcons.autoAudio} className="w-5 h-5" />
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Auto Audio Settings</h2>
@@ -797,9 +770,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <section className="lg-glass p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-              </svg>
+              <Icon icon={appIcons.music} className="w-5 h-5" />
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>TTS Concurrency</h2>
@@ -838,9 +809,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <section className="lg-glass p-5 sm:p-6 space-y-5">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <Icon icon={appIcons.uploadFile} className="w-5 h-5" />
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Crawl Auto Settings</h2>
@@ -879,9 +848,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         <section className="lg-glass p-5 sm:p-6 space-y-5">
           <div className="flex items-start gap-3">
             <div className={`p-2.5 rounded-xl ${isDark ? 'bg-red-500/10 text-red-300' : 'bg-red-50 text-red-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m3 0V5a2 2 0 012-2h0a2 2 0 012 2v2" />
-              </svg>
+              <Icon icon={appIcons.delete} className="w-5 h-5" />
             </div>
             <div className="min-w-0 flex-1">
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Development Cleanup</h2>
@@ -928,10 +895,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
               >
                 {clearState === 'clearing' ? (
                   <>
-                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
+                    <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
                     Clearing...
                   </>
                 ) : (
@@ -959,24 +923,17 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           >
             {saveState === 'saving' ? (
               <>
-                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+                <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
                 Saving...
               </>
             ) : saveState === 'saved' ? (
               <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+                <Icon icon={appIcons.check} className="w-5 h-5" />
                 Saved!
               </>
             ) : (
               <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                </svg>
+                <Icon icon={appIcons.save} className="w-5 h-5" />
                 Save Settings
               </>
             )}

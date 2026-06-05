@@ -5,6 +5,7 @@ import {
 } from '../api/client';
 import type { ThemeMode } from '../types/theme';
 import { BatchConfirmDialog } from './BatchConfirmDialog';
+import { Icon, appIcons } from './Icon';
 import { UploadTab } from './UploadTab';
 import { UpdateTab } from './UpdateTab';
 
@@ -135,9 +136,7 @@ export function StorySyncTabs({
               background: activeTab === 'uploadable' ? (isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)') : 'transparent',
             }}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
+            <Icon icon={appIcons.uploadFile} className="w-5 h-5" />
             <span>Upload to Drive</span>
             {uploadableCount > 0 ? (
               <span className="lg-chip lg-chip-blue" style={activeTab !== 'uploadable' ? (isDark ? { background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.05)', borderColor: 'rgba(0,0,0,0.1)', color: 'rgba(0,0,0,0.35)' }) : undefined}>
@@ -163,9 +162,7 @@ export function StorySyncTabs({
               background: activeTab === 'updatable' ? (isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)') : 'transparent',
             }}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
+            <Icon icon={appIcons.trends} className="w-5 h-5" />
             <span>Update Chapters</span>
             {updatableCount > 0 ? (
               <span className="lg-chip lg-chip-amber" style={activeTab !== 'updatable' ? (isDark ? { background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.05)', borderColor: 'rgba(0,0,0,0.1)', color: 'rgba(0,0,0,0.35)' }) : undefined}>

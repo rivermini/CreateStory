@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDownloadCombinedUrl, getDownloadAllUrl, listAllResults, deleteCrawlSessions, getDownloadAllCombinedUrl, type CrawlSessionSummary } from '../api/client';
-import type { ThemeMode } from '../types/theme';
 import { DatePicker } from '../components/DatePicker';
+import { Icon, appIcons } from '../components/Icon';
+import type { ThemeMode } from '../types/theme';
 
 function formatDate(iso: string | null): string {
     if (!iso) return '—';
@@ -150,9 +151,7 @@ function SessionCard({ session, order, isSelected, onToggleSelect, deleteMode, i
                                     className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors flex items-center gap-1.5 shadow-lg shadow-emerald-600/30"
                                     title="Download combined file"
                                 >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                    </svg>
+                                    <Icon icon={appIcons.download} className="w-3 h-3" />
                                     Combined
                                 </button>
                             )}
@@ -205,9 +204,7 @@ function SessionCard({ session, order, isSelected, onToggleSelect, deleteMode, i
                                 className="px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 shadow-lg bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/30"
                                 title="Retry this crawl with the same URL"
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
+                                <Icon icon={appIcons.autoAudio} className="w-4 h-4" />
                                 Retry Crawl
                             </button>
                         </div>
@@ -515,18 +512,13 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
 
                         <button onClick={() => { setIsLoading(true); fetchSessions().finally(() => setIsLoading(false)); }}
                             className="lg-icon-btn" title="Refresh now">
-                            <svg className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
+                            <Icon icon={appIcons.refresh} className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
                         </button>
                     </div>
 
                     {isLoading && sessions.length === 0 && (
                         <div className={`flex items-center justify-center py-16 gap-3 ${c('textMuted')}`}>
-                            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
+                            <Icon icon={appIcons.refresh} className="animate-spin h-5 w-5" />
                             <span>Loading...</span>
                         </div>
                     )}
@@ -543,9 +535,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                     {!isLoading && filtered.length === 0 && (
                         <div className={`text-center py-20 space-y-3 ${c('textMuted')}`}>
                             <div className="flex justify-center">
-                                <svg className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-[rgba(0,0,0,0.1)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
+                                <Icon icon={appIcons.document} className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-[rgba(0,0,0,0.1)]'}`} />
                             </div>
                             <p className={c('textMuted')}>
                                 {filter === 'all' ? 'No crawl sessions yet.' : `No ${filter} sessions.`}

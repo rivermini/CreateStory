@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from './AppIcon';
+import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../types/theme';
 
 interface MobileSidebarProps {
@@ -12,17 +12,6 @@ interface MobileSidebarProps {
 }
 
 const PHASE_ACCENT = '#6366f1';
-
-interface NavItem {
-    to: string;
-    label: string;
-    icon: React.ReactNode;
-}
-
-interface NavSection {
-    label: string;
-    items: NavItem[];
-}
 
 function navActive(locationPath: string, expect: string) {
     if (expect === '/results/all') {
@@ -35,109 +24,71 @@ function navActive(locationPath: string, expect: string) {
     return locationPath === expect || locationPath.startsWith(expect + '/') || locationPath.startsWith(expect + '?');
 }
 
-const navIcons: Record<string, React.ReactNode> = {
-    '/': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-        </svg>
-    ),
-    '/batch': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-    ),
-    '/results/all': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-    ),
-    '/bedread': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-        </svg>
-    ),
-    '/bedread/jobs': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-        </svg>
-    ),
-    '/drive-sync': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12" />
-        </svg>
-    ),
-    '/drive-sync/history': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-    ),
-    '/drive-sync/content-update': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h8M8 11h8m-8 4h5M5 5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5z" />
-        </svg>
-    ),
-    '/auto-audio': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-        </svg>
-    ),
-    '/auto-audio/history': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-    ),
-    '/supported-sites': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" />
-        </svg>
-    ),
-    '/settings': (
-        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-    ),
-};
+interface NavItem {
+    to: string;
+    label: string;
+    iconKey: (typeof NAV_ICONS_MOBILE)[keyof typeof NAV_ICONS_MOBILE];
+}
+
+interface NavSection {
+    label: string;
+    items: NavItem[];
+}
+
+const NAV_ICONS_MOBILE = {
+    '/': 'add',
+    '/batch': 'batch',
+    '/results/all': 'crawlHistory',
+    '/bedread': 'bookOpen',
+    '/bedread/jobs': 'audioJobs',
+    '/drive-sync': 'sync',
+    '/drive-sync/history': 'syncHistory',
+    '/drive-sync/content-update': 'contentUpdate',
+    '/auto-audio': 'autoAudio',
+    '/auto-audio/history': 'syncHistory',
+    '/supported-sites': 'supportedSites',
+    '/settings': 'settings',
+} as const;
 
 const NAV_SECTIONS: NavSection[] = [
     {
         label: 'Crawl',
         items: [
-            { to: '/', label: 'New Crawl', icon: navIcons['/'] },
-            { to: '/batch', label: 'Batch', icon: navIcons['/batch'] },
-            { to: '/results/all', label: 'Crawl History', icon: navIcons['/results/all'] },
+            { to: '/', label: 'New Crawl', iconKey: NAV_ICONS_MOBILE['/'] },
+            { to: '/batch', label: 'Batch', iconKey: NAV_ICONS_MOBILE['/batch'] },
+            { to: '/results/all', label: 'Crawl History', iconKey: NAV_ICONS_MOBILE['/results/all'] },
         ],
     },
     {
         label: 'Audio',
         items: [
-            { to: '/bedread', label: 'BedReads', icon: navIcons['/bedread'] },
-            { to: '/bedread/jobs', label: 'Audio Jobs', icon: navIcons['/bedread/jobs'] },
+            { to: '/bedread', label: 'BedReads', iconKey: NAV_ICONS_MOBILE['/bedread'] },
+            { to: '/bedread/jobs', label: 'Audio Jobs', iconKey: NAV_ICONS_MOBILE['/bedread/jobs'] },
         ],
     },
     {
         label: 'BedReads',
         items: [
-            { to: '/drive-sync', label: 'Drive Sync', icon: navIcons['/drive-sync'] },
-            { to: '/drive-sync/content-update', label: 'Content Update', icon: navIcons['/drive-sync/content-update'] },
-            { to: '/drive-sync/history', label: 'Sync History', icon: navIcons['/drive-sync/history'] },
+            { to: '/drive-sync', label: 'Drive Sync', iconKey: NAV_ICONS_MOBILE['/drive-sync'] },
+            { to: '/drive-sync/content-update', label: 'Content Update', iconKey: NAV_ICONS_MOBILE['/drive-sync/content-update'] },
+            { to: '/drive-sync/history', label: 'Sync History', iconKey: NAV_ICONS_MOBILE['/drive-sync/history'] },
         ],
     },
     {
         label: 'Auto Audio',
         items: [
-            { to: '/auto-audio', label: 'Auto Audio', icon: navIcons['/auto-audio'] },
-            { to: '/auto-audio/history', label: 'Audio History', icon: navIcons['/auto-audio/history'] },
+            { to: '/auto-audio', label: 'Auto Audio', iconKey: NAV_ICONS_MOBILE['/auto-audio'] },
+            { to: '/auto-audio/history', label: 'Audio History', iconKey: NAV_ICONS_MOBILE['/auto-audio/history'] },
         ],
     },
     {
         label: 'System',
         items: [
-            { to: '/supported-sites', label: 'Supported Sites', icon: navIcons['/supported-sites'] },
-            { to: '/settings', label: 'Settings', icon: navIcons['/settings'] },
+            { to: '/supported-sites', label: 'Supported Sites', iconKey: NAV_ICONS_MOBILE['/supported-sites'] },
+            { to: '/settings', label: 'Settings', iconKey: NAV_ICONS_MOBILE['/settings'] },
         ],
     },
-] ;
+];
 
 export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen, onClose }: MobileSidebarProps) {
     const location = useLocation();
@@ -200,7 +151,7 @@ export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen
                         className="flex-shrink-0 transition-colors duration-200"
                         style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
                     >
-                        {item.icon}
+                        <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-5 h-5 flex-shrink-0" />
                     </span>
                     <span
                         className="text-sm font-medium truncate transition-colors duration-200"
@@ -272,9 +223,7 @@ export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen
                         className="lg-icon-btn flex-shrink-0"
                         title="Close sidebar"
                     >
-                        <svg className="" style={{ width: 14, height: 14, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <Icon icon={appIcons.close} className="" style={{ width: 14, height: 14, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)' }} />
                     </button>
                 </div>
 

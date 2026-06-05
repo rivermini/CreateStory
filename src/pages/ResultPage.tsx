@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getCrawlResult, getCombinedResult, getDownloadUrl, getDownloadCombinedUrl, getDownloadAllUrl, listAllResults, type CrawlSessionSummary } from '../api/client';
 import { FilePreview } from '../components/FilePreview';
+import { Icon, appIcons } from '../components/Icon';
 import type { ThemeMode } from '../types/theme';
 
 interface ResultPageProps {
@@ -140,10 +141,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
         <div className="lg-orb lg-orb-3" />
         <div className="relative z-10 min-h-screen flex items-center justify-center">
           <div className="lg-glass-card px-6 py-5 flex items-center gap-3">
-            <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24" style={{ color: isDark ? 'rgba(129,140,248,0.8)' : 'rgba(99,102,241,0.8)' }}>
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <Icon icon={appIcons.spinner} className="animate-spin h-6 w-6" style={{ color: isDark ? 'rgba(129,140,248,0.8)' : 'rgba(99,102,241,0.8)' }} />
             <span className={isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}>Loading results...</span>
           </div>
         </div>
@@ -160,9 +158,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
         <div className="relative z-10 min-h-screen flex items-center justify-center">
           <div className="lg-glass-card p-8 text-center space-y-4 max-w-sm">
             <div className="flex items-center justify-center gap-2" style={{ color: isDark ? '#f87171' : '#ef4444' }}>
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Icon icon={appIcons.info} className="w-6 h-6" />
               <span>{error || 'Results not found'}</span>
             </div>
             <button
@@ -268,9 +264,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 style={showHistory ? { background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#818cf8' } : {}}
                 title={showHistory ? 'Hide History' : 'Session History'}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Icon icon={appIcons.clock} className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -281,9 +275,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.15)' }}>
-                    <svg width="16" height="16" fill="none" stroke="#34d399" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    <Icon icon={appIcons.checkCircle} className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div>
                     <h2 className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
@@ -296,9 +288,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                   onClick={handleDownloadCombined}
                   className="lg-btn-primary"
                 >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
+                  <Icon icon={appIcons.download} className="w-3.5 h-3.5" />
                   Download Combined
                 </button>
               </div>
@@ -330,19 +320,14 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                     className="lg-icon-btn"
                     title="Refresh"
                   >
-                    <svg className={`w-4 h-4 ${historyLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    <Icon icon={appIcons.refresh} className={`w-4 h-4 ${historyLoading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
               </div>
 
               {historyLoading && otherSessions.length === 0 ? (
                 <div className={`flex items-center justify-center gap-2 py-8 text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+                  <Icon icon={appIcons.spinner} className="animate-spin h-4 w-4" />
                   Loading history...
                 </div>
               ) : otherSessions.length === 0 ? (
@@ -383,9 +368,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                             )}
                           </div>
                         </div>
-                        <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
+                        <Icon icon={appIcons.chevronRight} className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`} />
                       </div>
                     );
                   })}
@@ -448,9 +431,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                   }}
                   className="lg-btn-primary"
                 >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
+                  <Icon icon={appIcons.download} className="w-3.5 h-3.5" />
                   Download All
                 </button>
               )}
@@ -508,9 +489,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                   onClick={() => setShowIndividualFiles(v => !v)}
                   className="lg-icon-btn"
                 >
-                  <svg className={`h-3.5 w-3.5 transition-transform ${showIndividualFiles ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <Icon icon={appIcons.chevronDown} className={`h-3.5 w-3.5 transition-transform ${showIndividualFiles ? 'rotate-180' : ''}`} />
                 </button>
               </div>
 
@@ -543,9 +522,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
           <section className="lg-glass p-6 space-y-3">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl" style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
+                <Icon icon={appIcons.share} className="w-5 h-5" />
               </div>
               <h2 className={`text-base font-medium ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Send to Company Backend</h2>
             </div>

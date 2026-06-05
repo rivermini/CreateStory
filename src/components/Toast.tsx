@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { Icon, appIcons } from './Icon';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 export type ToastPosition = 'bottom-right' | 'top-center';
@@ -96,41 +97,25 @@ function ToastItem({ toast }: { toast: toast }) {
       bg: isDark ? 'rgba(5,150,105,0.9)' : 'rgba(255,255,255,0.95)',
       border: isDark ? 'rgba(52,211,153,0.4)' : 'rgba(52,211,153,0.3)',
       text: isDark ? 'rgba(209,250,229,1)' : 'rgba(5,46,22,0.9)',
-      icon: (
-        <svg className="w-5 h-5" style={{ color: '#34d399' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        </svg>
-      ),
+      icon: <Icon icon={appIcons.check} className="w-5 h-5" style={{ color: '#34d399' }} />,
     },
     error: {
       bg: isDark ? 'rgba(127,29,29,0.9)' : 'rgba(255,255,255,0.95)',
       border: isDark ? 'rgba(248,113,113,0.4)' : 'rgba(248,113,113,0.3)',
       text: isDark ? 'rgba(254,215,215,1)' : 'rgba(39,5,5,0.9)',
-      icon: (
-        <svg className="w-5 h-5" style={{ color: '#f87171' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      ),
+      icon: <Icon icon={appIcons.close} className="w-5 h-5" style={{ color: '#f87171' }} />,
     },
     warning: {
       bg: isDark ? 'rgba(113,63,18,0.9)' : 'rgba(255,255,255,0.95)',
       border: isDark ? 'rgba(251,191,36,0.4)' : 'rgba(251,191,36,0.3)',
       text: isDark ? 'rgba(254,243,199,1)' : 'rgba(40,21,0,0.9)',
-      icon: (
-        <svg className="w-5 h-5" style={{ color: '#fbbf24' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-      ),
+      icon: <Icon icon={appIcons.statusWarning} className="w-5 h-5" style={{ color: '#fbbf24' }} />,
     },
     info: {
       bg: isDark ? 'rgba(30,58,138,0.9)' : 'rgba(255,255,255,0.95)',
       border: isDark ? 'rgba(96,165,250,0.4)' : 'rgba(96,165,250,0.3)',
       text: isDark ? 'rgba(219,234,254,1)' : 'rgba(8,25,55,0.9)',
-      icon: (
-        <svg className="w-5 h-5" style={{ color: '#60a5fa' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
+      icon: <Icon icon={appIcons.info} className="w-5 h-5" style={{ color: '#60a5fa' }} />,
     },
   };
 
@@ -155,9 +140,7 @@ function ToastItem({ toast }: { toast: toast }) {
         onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
         onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
+        <Icon icon={appIcons.close} className="w-4 h-4" />
       </button>
     </div>
   );

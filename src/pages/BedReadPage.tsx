@@ -18,6 +18,7 @@ import {
   type TTSLanguage,
   type TTSVoice,
 } from '../api/client';
+import { Icon, appIcons } from '../components/Icon';
 import { ServerModeBanner } from '../components/ServerModeBanner';
 
 interface BedReadPageProps {
@@ -307,25 +308,12 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const statusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return (
-          <svg className={'w-4 h-4 ' + (isDark ? 'text-emerald-400' : 'text-emerald-600')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        );
+        return <Icon icon={appIcons.check} className={'w-4 h-4 ' + (isDark ? 'text-emerald-400' : 'text-emerald-600')} />;
       case 'failed':
-        return (
-          <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        );
+        return <Icon icon={appIcons.close} className="w-4 h-4 text-red-400" />;
       case 'processing':
       case 'queued':
-        return (
-          <svg className={'w-4 h-4 animate-spin ' + (isDark ? 'text-indigo-400' : 'text-indigo-600')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        );
+        return <Icon icon={appIcons.refresh} className={'w-4 h-4 animate-spin ' + (isDark ? 'text-indigo-400' : 'text-indigo-600')} />;
       default:
         return <div className={'w-4 h-4 rounded-full border ' + (isDark ? 'border-white/20' : 'border-gray-300')} />;
     }
@@ -409,9 +397,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                           : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200'}`}>
                         {isLoadingAll ? (
                           <span className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
+                            <Icon icon={appIcons.refresh} className="w-3.5 h-3.5 animate-spin" />
                             Loading...
                           </span>
                         ) : (
@@ -430,18 +416,14 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                       className={`p-1.5 rounded-lg transition-colors lg-icon-btn disabled:opacity-50`}
                       title="Refresh story list"
                     >
-                      <svg className={`w-4 h-4 ${c('textMuted')} ${storiesLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
+                      <Icon icon={appIcons.refresh} className={`w-4 h-4 ${c('textMuted')} ${storiesLoading ? 'animate-spin' : ''}`} />
                     </button>
                   </div>
                 </div>
 
                 {/* Search */}
                 <div className="relative">
-                  <svg className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
+                  <Icon icon={appIcons.search} className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${c('textSub')}`} />
                   <input
                     type="text"
                     value={searchKeyword}
@@ -473,9 +455,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
               <div className="max-h-[70vh] xl:max-h-[50vh] overflow-y-auto">
                 {storiesLoading && (
                   <div className={`flex flex-col items-center justify-center py-16 ${c('textMuted')} text-sm`}>
-                    <svg className={`w-8 h-8 mb-3 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    <Icon icon={appIcons.refresh} className={`w-8 h-8 mb-3 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
                     Loading stories...
                   </div>
                 )}
@@ -490,9 +470,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                 )}
                 {!storiesLoading && !storiesError && filteredStories.length === 0 && (
                   <div className={`flex flex-col items-center justify-center py-16 ${c('textSub')} text-sm`}>
-                    <svg className={`w-12 h-12 mb-3 ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    <Icon icon={appIcons.close} className={`w-12 h-12 mb-3 ${c('textSub')}`} />
                     <p>No stories found</p>
                   </div>
                 )}
@@ -525,9 +503,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                         <div className={`w-14 h-[4.5rem] rounded-xl flex-shrink-0 flex items-center justify-center ${isDark
                           ? 'bg-indigo-600/10'
                           : 'bg-indigo-100'}`}>
-                          <svg className={`w-6 h-6 ${c('textMuted')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                          </svg>
+                          <Icon icon={appIcons.book} className={`w-6 h-6 ${c('textMuted')}`} />
                         </div>
                       )}
                       <div className="min-w-0 flex-1 py-0.5">
@@ -557,9 +533,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                 <div className="flex items-center justify-center gap-0.5 sm:gap-1 flex-wrap">
                   {storiesLoading ? (
                     <div className="flex items-center gap-2">
-                      <svg className={`w-4 h-4 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
+                      <Icon icon={appIcons.refresh} className={`w-4 h-4 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
                       <span className={`text-xs ${c('textSub')}`}>Loading stories...</span>
                     </div>
                   ) : (
@@ -571,9 +545,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                           ? `${c('rowBg')} ${c('textSub')} opacity-40 cursor-not-allowed`
                           : `${c('rowBg')} ${c('textBody')} hover:${isDark ? 'bg-white/[0.06]' : 'bg-[rgba(0,0,0,0.06)]'} active:scale-95`}`}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
+                        <Icon icon={appIcons.chevronLeft} className="w-4 h-4" />
                       </button>
 
                       {(() => {
@@ -613,9 +585,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                           ? `${c('rowBg')} ${c('textSub')} opacity-40 cursor-not-allowed`
                           : `${c('rowBg')} ${c('textBody')} hover:${isDark ? 'bg-white/[0.06]' : 'bg-[rgba(0,0,0,0.06)]'} active:scale-95`}`}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
+                        <Icon icon={appIcons.chevronRight} className="w-4 h-4" />
                       </button>
                     </>
                   )}
@@ -823,9 +793,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
 
                   {batchJob && !isGenerating && batchJob.status === 'completed' && (
                     <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <Icon icon={appIcons.check} className="w-5 h-5" />
                       All chapters generated successfully!
                     </div>
                   )}
@@ -841,9 +809,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                             : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed shadow-none border border-black/5'
                           : 'bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'}`}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
+                        <Icon icon={appIcons.play} className="w-4 h-4" />
                         Generate Audio
                       </button>
                     )}
@@ -852,9 +818,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                         onClick={handleCancel}
                         className="px-6 py-2.5 text-white font-semibold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/30"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                        </svg>
+                        <Icon icon={appIcons.stop} className="w-4 h-4" />
                         Cancel
                       </button>
                     )}
@@ -865,9 +829,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                           ? 'text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10'
                           : 'text-indigo-600 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50'}`}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
+                        <Icon icon={appIcons.download} className="w-4 h-4" />
                         Download All (ZIP)
                       </button>
                     )}
@@ -890,14 +852,10 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                         {ch.status === 'completed' && (
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <button onClick={() => handleListenChapter(ch.chapter_number)} title="Listen" className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-600/10' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'}`}>
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                              </svg>
+                              <Icon icon={appIcons.play} className="w-3.5 h-3.5" />
                             </button>
                             <button onClick={() => handleDownloadChapter(ch.chapter_number)} title="Download" className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-600/10' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'}`}>
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                              </svg>
+                              <Icon icon={appIcons.download} className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         )}
@@ -910,9 +868,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
               {/* Empty State */}
               {!selectedStory && (
                 <section className="lg-glass-card p-8 text-center">
-                  <svg className={`w-12 h-12 mx-auto mb-4 ${c('textSub')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
+                  <Icon icon={appIcons.book} className={`w-12 h-12 mx-auto mb-4 ${c('textSub')}`} />
                   <p className={`text-sm ${c('textMuted')}`}>Select a story from the list to get started.</p>
                 </section>
               )}

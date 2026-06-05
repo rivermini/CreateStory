@@ -13,6 +13,7 @@ import {
   type DriveSyncConfig,
 } from '../api/client';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
+import { Icon, appIcons } from '../components/Icon';
 import { ServerModeBanner } from '../components/ServerModeBanner';
 import { showToast } from '../components/Toast';
 import type { ThemeMode } from '../types/theme';
@@ -478,33 +479,17 @@ function getChapterStatus(status: ContentUpdateChapterStatus['status'], isDark: 
 }
 
 function Spinner({ className }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className ?? ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-    </svg>
-  );
+  return <Icon icon={appIcons.spinner} className={`animate-spin ${className ?? ''}`} />;
 }
 
 function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-    </svg>
-  );
+  return <Icon icon={appIcons.search} className={className} />;
 }
 
 function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-    </svg>
-  );
+  return <Icon icon={appIcons.trends} className={className} />;
 }
 
 function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  );
+  return <Icon icon={appIcons.check} className={className} />;
 }

@@ -4,6 +4,7 @@ import { listSites, startCrawl, getSettings } from '../api/client';
 import type { SiteInfoResponse } from '../api/client';
 import { NovelInfoPanel } from '../components/NovelInfoPanel';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
+import { Icon, appIcons } from '../components/Icon';
 import { useSiteDetection } from '../hooks/useSiteDetection';
 import { useNovelInfo } from '../hooks/useNovelInfo';
 import type { ThemeMode } from '../types/theme';
@@ -222,7 +223,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         onError={(e) => e.currentTarget.style.display = 'none'}
                       />
                     ) : (
-                      <span className="text-xl">📖</span>
+                      <Icon icon={appIcons.bookOpen} className={`text-xl ${c('textMuted')}`} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
@@ -231,9 +232,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                       <p className={`text-sm ${c('textMuted')}`}>{totalChapterCount.toLocaleString()} chapters</p>
                     )}
                   </div>
-                  <svg className={`w-5 h-5 flex-shrink-0 ${c('textMuted')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                  <Icon icon={appIcons.chevronRight} className={`w-5 h-5 flex-shrink-0 ${c('textMuted')}`} />
                 </button>
               )}
 
@@ -260,9 +259,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     }`}
                     title="Crawl multiple novels at once"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                    </svg>
+                    <Icon icon={appIcons.list} className="w-4 h-4" />
                     Batch
                   </button>
                 </div>
@@ -286,10 +283,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     />
                     {isLoading && (
                       <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                        <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
+                        <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5 text-indigo-400" />
                       </div>
                     )}
                   </div>
@@ -302,9 +296,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     : 'bg-emerald-50 border border-emerald-200'
                   }`}>
                     <div className="flex items-center gap-2">
-                      <svg className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                      <Icon icon={appIcons.checkCircle} className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
                       <span className={`font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>{siteInfo.site_name}</span>
                       {storyTitle && (
                         <span className={c('textBody')}>— {storyTitle}</span>
@@ -326,9 +318,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     ? 'bg-red-500/10 border border-red-500/20 text-red-400'
                     : 'bg-red-50 border border-red-200 text-red-600'
                   }`}>
-                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    <Icon icon={appIcons.info} className="w-5 h-5 flex-shrink-0" />
                     <span>{error}</span>
                   </div>
                 )}
@@ -480,9 +470,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                   ? 'bg-red-500/10 border border-red-500/20 text-red-400'
                   : 'bg-red-50 border border-red-200 text-red-600'
                 }`}>
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                  <Icon icon={appIcons.info} className="w-5 h-5 flex-shrink-0" />
                   {startError}
                 </div>
               )}
@@ -501,17 +489,12 @@ export function HomePage({ themeMode }: HomePageProps) {
               >
                 {isStarting ? (
                   <>
-                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
+                    <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
                     Starting crawl...
                   </>
                 ) : (
                   <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
+                    <Icon icon={appIcons.trends} className="w-5 h-5" />
                     Start Crawl
                   </>
                 )}

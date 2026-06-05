@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { deleteJob, deleteJobs, listJobs, type JobLogEntry, type SyncJob } from '../api/client';
 import { DatePicker } from '../components/DatePicker';
+import { Icon, appIcons } from '../components/Icon';
 import type { ThemeMode } from '../types/theme';
 
 const PRODUCTION_API_BASE = 'https://api-novel.santngo.com';
@@ -180,14 +181,10 @@ function JobCard({ job, order, isSelected, isExpanded, deleteMode, isDark, c, on
           <div className={`flex flex-col sm:items-end gap-1 text-xs ${c('textSub')}`}>
             <div className="flex items-center gap-2">
               {!deleteMode && (
-                <svg
+                <Icon
+                  icon={appIcons.chevronDown}
                   className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''} ${c('textSub')}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                />
               )}
               <span>Created {formatDate(job.created_at)}</span>
             </div>
@@ -557,9 +554,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
           <div className="flex flex-wrap items-center justify-start gap-2">
             <button onClick={() => navigate('/drive-sync')} className="lg-btn-primary shadow-lg shadow-indigo-600/30">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12" />
-              </svg>
+              <Icon icon={appIcons.uploadFile} className="w-3.5 h-3.5" />
               New Sync
             </button>
             <button
@@ -596,9 +591,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
               ? 'bg-red-500/10 border border-red-500/20'
               : 'bg-red-50 border border-red-200'}`}>
               <div className="flex items-center gap-2">
-                <svg className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <Icon icon={appIcons.delete} className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
                 <span className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-800'}`}>Delete Mode Active</span>
                 {liveSelectedIds.size > 0 && <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>({liveSelectedIds.size} selected)</span>}
               </div>
@@ -674,16 +667,12 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
             />
 
             <button onClick={handleRefresh} className="lg-icon-btn" title="Refresh now">
-              <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <Icon icon={appIcons.refresh} className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
 
           <div className="relative">
-            <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${c('textMuted')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <Icon icon={appIcons.search} className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${c('textMuted')}`} />
             <input
               type="text"
               value={search}
@@ -699,19 +688,14 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                 className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-white/30 hover:text-white/70' : 'text-slate-400 hover:text-slate-700'}`}
                 title="Clear search"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <Icon icon={appIcons.close} className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {loading && jobs.length === 0 && (
+            {loading && jobs.length === 0 && (
             <div className={`flex items-center justify-center py-16 gap-3 ${c('textMuted')}`}>
-              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
               <span>Loading sync history...</span>
             </div>
           )}
@@ -728,9 +712,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
           {!loading && jobs.length === 0 && (
             <div className={`text-center py-20 space-y-3 ${c('textMuted')}`}>
               <div className="flex justify-center">
-                <svg className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12" />
-                </svg>
+                <Icon icon={appIcons.uploadFile} className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-slate-300'}`} />
               </div>
               <p className={c('textMuted')}>No sync jobs yet.</p>
               <button onClick={() => navigate('/drive-sync')} className={`text-sm underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-700 hover:text-indigo-900'}`}>
@@ -742,9 +724,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
           {!loading && jobs.length > 0 && filtered.length === 0 && (
             <div className={`text-center py-20 space-y-3 ${c('textMuted')}`}>
               <div className="flex justify-center">
-                <svg className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Icon icon={appIcons.search} className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-slate-300'}`} />
               </div>
               <p className={c('textMuted')}>No jobs match your filters.</p>
               <button

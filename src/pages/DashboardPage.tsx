@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppIcon } from '../components/AppIcon';
+import { Icon, appIcons } from '../components/Icon';
 import type { AuthUser } from '../api/client';
 import type { ThemeMode } from '../types/theme';
 import { AdminUsersPanel } from './AdminUsersPage';
@@ -96,9 +97,7 @@ function DashboardSidebar({ themeMode, authUser }: { themeMode: ThemeMode; authU
               }}
             >
               <span className="flex-shrink-0 transition-colors duration-200" style={{ color: active ? DASHBOARD_ACCENT : isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)' }}>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m0-4a4 4 0 100-8 4 4 0 000 8zm8 0a4 4 0 100-8 4 4 0 000 8z" />
-                </svg>
+                <Icon icon={appIcons.users} className="w-5 h-5 flex-shrink-0" />
               </span>
               <span
                 className="text-sm font-medium truncate transition-colors duration-200"
@@ -129,9 +128,7 @@ function DashboardSidebar({ themeMode, authUser }: { themeMode: ThemeMode; authU
           }`}
           style={{ textDecoration: 'none' }}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
+          <Icon icon={appIcons.back} className="w-4 h-4" />
           Back to app
         </Link>
       </div>

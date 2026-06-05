@@ -1,6 +1,7 @@
 import { useState, useEffect, type JSX } from 'react';
 import type { ThemeMode } from '../types/theme';
 import { listSites, type SiteInfoResponse } from '../api/client';
+import { Icon, appIcons } from '../components/Icon';
 
 interface SupportedSitesPageProps {
   themeMode: ThemeMode;
@@ -19,21 +20,15 @@ const SITE_DESCRIPTIONS: Record<string, string> = {
 
 const SITE_ICONS: Record<string, JSX.Element> = {
   wattpad: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-    </svg>
+    <Icon icon={appIcons.trends} className="w-6 h-6" />
   ),
   novelworm: (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-    </svg>
+    <Icon icon={appIcons.book} className="w-6 h-6" />
   ),
 };
 
 const FALLBACK_ICON = (
-  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
-  </svg>
+  <Icon icon={appIcons.globe} className="w-6 h-6" />
 );
 
 export function SupportedSitesPage({ themeMode }: SupportedSitesPageProps) {
@@ -95,10 +90,7 @@ export function SupportedSitesPage({ themeMode }: SupportedSitesPageProps) {
           {/* Sites Grid */}
           {loading ? (
             <div className="lg-glass p-8 flex items-center justify-center">
-              <svg className="w-8 h-8 animate-spin text-indigo-400" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Icon icon={appIcons.refresh} className="w-8 h-8 animate-spin text-indigo-400" />
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -149,9 +141,7 @@ export function SupportedSitesPage({ themeMode }: SupportedSitesPageProps) {
                 }`}>
                   <div className="flex items-start gap-4">
                     <div className={`p-3 rounded-xl ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-gray-100 text-gray-500'}`}>
-                      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                      </svg>
+                      <Icon icon={appIcons.add} className="w-6 h-6" />
                     </div>
                     <div className="flex-1">
                       <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>More Coming Soon</h3>
@@ -171,9 +161,7 @@ export function SupportedSitesPage({ themeMode }: SupportedSitesPageProps) {
           }`}>
             <div className="flex items-start gap-4">
               <div className={`p-2.5 rounded-xl ${isDark ? 'bg-blue-600/20 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Icon icon={appIcons.info} className="w-5 h-5" />
               </div>
               <div>
                 <h3 className={`text-sm font-semibold mb-1 ${isDark ? 'text-slate-200' : 'text-gray-900'}`}>Need another platform?</h3>

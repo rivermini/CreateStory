@@ -4,7 +4,9 @@ import { Sidebar } from './components/Sidebar';
 import { MobileSidebar } from './components/MobileSidebar';
 import { ToastContainer } from './components/Toast';
 import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api/client';
+import { Icon, appIcons } from './components/Icon';
 import { type ThemeMode } from './types/theme';
+import { faUser } from '@fortawesome/free-solid-svg-icons';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
@@ -167,9 +169,7 @@ function Shell({
             }`}
             title="Open menu"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+            <Icon icon={appIcons.menu} className="w-5 h-5" />
           </button>
           <h1 className={`text-base font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
             Novel Crawler
@@ -258,16 +258,14 @@ function AccountMenu({
         title="Account"
         aria-label="Account menu"
       >
-        <span
+          <span
           className={`inline-flex h-7.5 w-7.5 items-center justify-center rounded-lg border ${
             isDark
               ? 'border-white/[0.08] bg-white/[0.04] text-slate-200'
               : 'border-black/5 bg-slate-100 text-slate-700'
           }`}
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0" />
-          </svg>
+          <Icon icon={faUser} className="h-4 w-4" />
         </span>
 
         <span
@@ -328,9 +326,7 @@ function AccountMenu({
                   }`}
                   style={{ textDecoration: 'none' }}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 5a2 2 0 012-2h5v8H4V5zm9-2h5a2 2 0 012 2v3h-7V3zM4 13h7v8H6a2 2 0 01-2-2v-6zm9-3h7v9a2 2 0 01-2 2h-5V10z" />
-                  </svg>
+                  <Icon icon={appIcons.dashboardUsers} className="w-4 h-4" />
                   Dashboard
                 </Link>
               )}
@@ -344,9 +340,7 @@ function AccountMenu({
                   isDark ? 'text-red-300 hover:bg-red-500/10' : 'text-red-600 hover:bg-red-50'
                 }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3-3h-9m9 0l-3-3m3 3l-3 3" />
-                </svg>
+                <Icon icon={appIcons.logout} className="w-4 h-4" />
                 Sign out
               </button>
             </div>

@@ -10,6 +10,7 @@ import {
   type DriveSyncConfig,
 } from '../api/client';
 import { ServerModeBanner } from '../components/ServerModeBanner';
+import { Icon, appIcons } from '../components/Icon';
 import type { ThemeMode } from '../types/theme';
 
 interface AutoAudioPageProps {
@@ -336,7 +337,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                       style={{ opacity: needsConfig ? 0.4 : 1 }}
                     >
                       {needsConfig ? (
-                        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
+                        <Icon icon={appIcons.settings} className="w-[14px] h-[14px]" />
                       ) : null}
                       {needsConfig ? 'Setup' : 'Start Session'}
                     </button>
@@ -345,7 +346,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                       <button onClick={() => setShowStartConfirm(false)} disabled={loading} className="lg-btn-ghost">Cancel</button>
                       <button onClick={handleStart} disabled={loading} className="lg-btn-primary">
                         {loading ? (
-                          <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                          <Icon icon={appIcons.spinner} className="animate-spin w-[14px] h-[14px]" />
                         ) : null}
                         {loading ? 'Starting…' : 'Launch'}
                       </button>
@@ -356,18 +357,18 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                     {isActive && (
                       <button onClick={handlePauseToggle} className={isPaused ? 'lg-btn-primary' : 'lg-btn-ghost'}>
                         {isPaused ? (
-                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                          <Icon icon={appIcons.play} className="w-[14px] h-[14px]" />
                         ) : (
-                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><rect x="7" y="5" width="3" height="14" rx="1"/><rect x="14" y="5" width="3" height="14" rx="1"/></svg>
+                          <Icon icon={appIcons.pause} className="w-[14px] h-[14px]" />
                         )}
                         {isPaused ? 'Resume' : 'Pause'}
                       </button>
                     )}
                   <button onClick={() => setShowStopConfirm(true)} disabled={isStopping} className="lg-btn-danger">
                     {isStopping ? (
-                      <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                      <Icon icon={appIcons.spinner} className="animate-spin w-[14px] h-[14px]" />
                     ) : (
-                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                      <Icon icon={appIcons.stop} className="w-[14px] h-[14px]" />
                     )}
                     {isStopping ? 'Stopping…' : 'Stop'}
                   </button>
@@ -471,7 +472,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                 {session?.current_story && (
                   <div className="lg-glass-card px-4 py-3 flex items-center gap-3">
                     <div className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${runningAccent}15` }}>
-                      <svg width="14" height="14" fill="none" stroke={runningAccent} strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                      <Icon icon={appIcons.book} className="w-[14px] h-[14px]" style={{ color: runningAccent }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }}>Processing</p>
@@ -532,7 +533,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                   disabled={isLive}
                   className="lg-icon-btn"
                 >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  <Icon icon={appIcons.refresh} className="w-[14px] h-[14px]" />
                 </button>
               </div>
 
@@ -585,7 +586,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                           <span className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: `${runningAccent}40`, borderTopColor: runningAccent }} />
                         ) : result.chapters_uploaded > 0 ? (
                           <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(52,211,153,0.12)' }}>
-                            <svg width="10" height="10" fill="none" stroke="#10b981" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            <Icon icon={appIcons.check} className="w-[10px] h-[10px] text-emerald-500" />
                           </span>
                         ) : null}
                       </div>

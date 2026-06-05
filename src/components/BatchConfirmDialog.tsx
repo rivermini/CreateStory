@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icon, appIcons } from './Icon';
 
 interface BatchConfirmDialogProps {
   isOpen: boolean;
@@ -74,9 +75,7 @@ export function BatchConfirmDialog({
         <div className={`flex items-center justify-between px-6 py-4 ${isDark ? 'border-b border-white/6' : 'border-b border-black/6'}`}>
           <div className="flex items-center gap-3">
             <div className="lg-icon-btn" style={{ background: isDark ? 'rgba(251,191,36,0.15)' : 'rgba(251,191,36,0.08)', color: '#fbbf24' }}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+              <Icon icon={appIcons.statusWarning} className="w-5 h-5" />
             </div>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-white/85' : 'text-black/85'}`}>{title}</h2>
@@ -84,9 +83,7 @@ export function BatchConfirmDialog({
             </div>
           </div>
           <button onClick={onCancel} className="lg-icon-btn">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <Icon icon={appIcons.close} className="w-5 h-5" />
           </button>
         </div>
 
@@ -96,9 +93,7 @@ export function BatchConfirmDialog({
 
           {validationMessage && (
             <div className="lg-glass mb-5 p-3 flex items-start gap-2" style={{ border: isDark ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(239,68,68,0.3)', background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)' }}>
-              <svg className={`w-4 h-4 mt-0.5 shrink-0 ${isDark ? 'text-red-400' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+              <Icon icon={appIcons.statusWarning} className={`w-4 h-4 mt-0.5 shrink-0 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
               <p className={`text-sm ${isDark ? 'text-red-300' : 'text-red-700'}`}>{validationMessage}</p>
             </div>
           )}

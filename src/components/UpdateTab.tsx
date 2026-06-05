@@ -8,6 +8,7 @@ import {
   getDriveFileContent,
   type DriveFileContentResponse,
 } from '../api/client';
+import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../types/theme';
 import { ValidationErrorBadge, EmptyState } from './SyncTabShared';
 
@@ -162,9 +163,7 @@ export function UpdateTab({
     <div className="flex flex-col min-h-[400px] h-full">
       <div className="lg-glass flex flex-col sm:flex-row gap-3 p-4 sticky top-0 z-10" style={{ borderRadius: 0 }}>
         <div className="relative flex-1 min-w-0">
-          <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-white/50' : 'text-black/30'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <Icon icon={appIcons.search} className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-white/50' : 'text-black/30'}`} />
           <input
             type="text"
             placeholder="Search stories..."
@@ -175,9 +174,7 @@ export function UpdateTab({
           {search && (
             <button onClick={() => setSearch('')}
               className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded ${isDark ? 'text-white/50 hover:text-white/80' : 'text-black/30 hover:text-black/60'}`}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <Icon icon={appIcons.close} className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -188,9 +185,7 @@ export function UpdateTab({
             disabled={loading}
             className={loading ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : 'lg-btn-danger'}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
+            <Icon icon={appIcons.users} className="w-4 h-4" />
             Check Reader Finished
           </button>
           <button
@@ -200,16 +195,12 @@ export function UpdateTab({
           >
             {loading ? (
               <>
-                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
                 Scanning...
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Icon icon={appIcons.search} className="w-4 h-4" />
                 Check Updates
               </>
             )}
@@ -233,16 +224,12 @@ export function UpdateTab({
             >
               {isUpdatingAny ? (
                 <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
+                  <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
                   Updating ({isUpdatingAny})
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
+                  <Icon icon={appIcons.trends} className="w-4 h-4" />
                   Update All ({updateCount})
                 </>
               )}
@@ -265,9 +252,7 @@ export function UpdateTab({
 
       {error && (
         <div className="mx-4 mt-3 flex items-center gap-3 p-3 lg-glass" style={{ border: isDark ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(239,68,68,0.3)', background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)' }}>
-          <svg className="w-5 h-5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+          <Icon icon={appIcons.error} className="w-5 h-5 flex-shrink-0 text-red-400" />
           {error}
         </div>
       )}
@@ -276,9 +261,7 @@ export function UpdateTab({
         <div className={`mx-4 mt-3 flex flex-wrap items-center gap-3 px-4 py-2 rounded-xl text-xs ${isDark ? 'bg-white/[0.04]' : 'bg-black/5'}`}>
           {data.all_extended_folders?.length ? (
             <div className={`flex items-center gap-1.5 ${isDark ? 'text-white/60' : 'text-black/45'}`}>
-              <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+            <Icon icon={appIcons.check} className="w-3.5 h-3.5 text-emerald-400" />
               {data.all_extended_folders.length} EXTENDED_
             </div>
           ) : null}
@@ -289,17 +272,13 @@ export function UpdateTab({
           {filteredEmptyExtended.length > 0 && <StatPill label="empty EXTENDED" value={filteredEmptyExtended.length} color="#94a3b8" isDark={isDark} />}
           {successCount > 0 && (
             <div className="ml-auto flex items-center gap-1.5 text-emerald-400">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <Icon icon={appIcons.check} className="w-3.5 h-3.5" />
               {successCount} updated
             </div>
           )}
           {failedCount > 0 && (
             <div className={`ml-auto flex items-center gap-1.5 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <Icon icon={appIcons.close} className="w-3.5 h-3.5" />
               {failedCount} failed
             </div>
           )}
@@ -312,9 +291,7 @@ export function UpdateTab({
             isDark={isDark}
             message="Click 'Check Updates' to scan for stories with new chapters to sync."
             icon={
-              <svg className={`w-8 h-8 ${isDark ? 'text-white/40' : 'text-black/20'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
+              <Icon icon={appIcons.trends} className={`w-8 h-8 ${isDark ? 'text-white/40' : 'text-black/20'}`} />
             }
           />
         )}
@@ -322,9 +299,7 @@ export function UpdateTab({
         {loading && (
           <div className="flex flex-col items-center justify-center py-16 w-full h-full">
             <div className="lg-glass w-16 h-16 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 animate-spin text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <Icon icon={appIcons.spinner} className="w-8 h-8 animate-spin text-amber-400" />
             </div>
             <p className={`text-sm ${isDark ? 'text-white/65' : 'text-black/45'}`}>Checking for updates...</p>
           </div>
@@ -334,7 +309,7 @@ export function UpdateTab({
           <>
             {updateCount > 0 && (
               <div className="mb-4">
-                <SectionHeader label={`Ready to Update (${updateCount})`} color="#f59e0b" icon={<svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>} />
+                <SectionHeader label={`Ready to Update (${updateCount})`} color="#f59e0b" icon={<Icon icon={appIcons.trends} className="w-4 h-4 text-amber-400" />} />
                 <div className="space-y-2">
                   {filteredUpdatable.map((entry: UpdatableStoryEntry) => (
                     <UpdateCard key={entry.server_story.id} entry={entry} storiesNeedingUpdateIds={storiesNeedingUpdateIds} chapterCountInputs={chapterCountInputs} chapterErrors={chapterErrors} updateResults={updateResults} updatingIds={updatingIds} onChapterCountChange={(id: string, val: number) => { setChapterCountInputs(prev => { const next = new Map(prev); next.set(id, val); return next; }); setTimeout(revalidateAllErrors, 0); }} onUpdateSingle={onUpdateSingle} openFilePanels={openFilePanels} toggleFilePanel={toggleFilePanel} isDark={isDark} />
@@ -345,7 +320,7 @@ export function UpdateTab({
 
             {filteredInvalid.length > 0 && (
               <div className="mb-4">
-                <SectionHeader label={invalidLabel} color="#f87171" icon={<svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>} />
+                <SectionHeader label={invalidLabel} color="#f87171" icon={<Icon icon={appIcons.error} className="w-4 h-4 text-red-400" />} />
                 <div className="space-y-2">
                   {filteredInvalid.map(entry => (
                     <InvalidCard key={entry.server_story.id} entry={entry} chapterCountInputs={chapterCountInputs} chapterErrors={chapterErrors} updateResults={updateResults} updatingIds={updatingIds} onChapterCountChange={(id: string, val: number) => { setChapterCountInputs(prev => { const next = new Map(prev); next.set(id, val); return next; }); }} onUpdateSingle={onUpdateSingle} isDark={isDark} />
@@ -356,7 +331,7 @@ export function UpdateTab({
 
             {filteredNoUpdate.length > 0 && (
               <div>
-                <SectionHeader label={noUpdateLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<svg className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
+                <SectionHeader label={noUpdateLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<Icon icon={appIcons.checkCircle} className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} />} />
                 <div className="space-y-2">
                   {filteredNoUpdate.map(entry => (
                     <UpToDateCard key={entry.server_story.id} entry={entry} isDark={isDark} />
@@ -367,7 +342,7 @@ export function UpdateTab({
 
             {filteredNoServerMatch.length > 0 && (
               <div className="mt-4">
-                <SectionHeader label={noServerLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<svg className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
+                <SectionHeader label={noServerLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<Icon icon={appIcons.question} className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} />} />
                 <div className="space-y-2">
                   {filteredNoServerMatch.map(entry => (
                     <NoMatchCard key={entry.id} entry={entry} isDark={isDark} />
@@ -378,7 +353,7 @@ export function UpdateTab({
 
             {filteredEmptyExtended.length > 0 && (
               <div className="mt-4">
-                <SectionHeader label={emptyLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<svg className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15v4c0 1.1.896 2 2 2h14a2 2 0 002-2v-4M17 9l-5 5-5-5M12 12.8V2.5" /></svg>} />
+                <SectionHeader label={emptyLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<Icon icon={appIcons.download} className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} />} />
                 <div className="space-y-2">
                   {filteredEmptyExtended.map(entry => (
                     <EmptyExtendedCard key={entry.id} entry={entry} isDark={isDark} />
@@ -389,7 +364,7 @@ export function UpdateTab({
 
             {filteredNoDriveFolder.length > 0 && (
               <div className="mt-4">
-                <SectionHeader label={noDriveLabel} color="#fb7185" icon={<svg className="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>} />
+                <SectionHeader label={noDriveLabel} color="#fb7185" icon={<Icon icon={appIcons.folder} className="w-4 h-4 text-rose-400" />} />
                 <div className="space-y-2">
                   {filteredNoDriveFolder.map(entry => (
                     <NoDriveFolderCard key={entry.server_story.id} entry={entry} isDark={isDark} />
@@ -456,9 +431,7 @@ export function UpdateTab({
             (filterSection === 'emptyExtended' && filteredEmptyExtended.length === 0) ||
             (filterSection === 'noDriveFolder' && filteredNoDriveFolder.length === 0)) && (
             <div className={`text-center py-8 ${isDark ? 'text-white/75' : 'text-black/35'}`}>
-              <svg className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-white/40' : 'text-black/15'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Icon icon={appIcons.checkCircle} className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-white/40' : 'text-black/15'}`} />
               <p className="text-sm">No items in this section</p>
             </div>
           )
@@ -493,9 +466,7 @@ function FilterChip({ label, count, active, onClick, variant, isDark = false }: 
 function StatPill({ label, value, color, isDark = false }: { label: string; value: number; color: string; isDark?: boolean }) {
   return (
     <div className="flex items-center gap-1.5" style={{ color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
-      <svg className="w-3.5 h-3.5" style={{ color }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-      </svg>
+      <Icon icon={appIcons.check} className="w-3.5 h-3.5" style={{ color }} />
       {value} {label}
     </div>
   );
@@ -581,13 +552,13 @@ function UpdateCard({ entry, storiesNeedingUpdateIds, chapterCountInputs, chapte
           <p className={`text-xs font-mono mb-2 ${dm60}`}>{entry.folder.name}</p>
           <div className="flex items-center gap-3 text-xs">
             <div className={`flex items-center gap-1.5 ${dm45}`}><span>Server:</span><span className={`font-semibold ${dm}`}>{entry.server_story.maxChapter}</span></div>
-            <svg className={`w-3 h-3 ${dm45}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            <Icon icon={appIcons.external} className={`w-3 h-3 ${dm45}`} />
             <div className={`flex items-center gap-1.5 ${dm45}`}><span>Drive:</span><span className={`font-semibold ${dm}`}>{entry.folder.extended_chapter_count ?? 0}</span></div>
           </div>
           <div className="text-xs mt-1">
             {entry.last_updated ? <span className={dm60}>{formatDate(entry.last_updated!)}</span> : <span className={dm60}>Never updated</span>}
           </div>
-          {result && <p className={`text-xs mt-1.5 flex items-center gap-1 ${isSuccess ? 'text-emerald-400' : isFailed ? 'text-red-400' : ''}`}>{isSuccess && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}{isFailed && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}{result.message}</p>}
+          {result && <p className={`text-xs mt-1.5 flex items-center gap-1 ${isSuccess ? 'text-emerald-400' : isFailed ? 'text-red-400' : ''}`}>{isSuccess && <Icon icon={appIcons.check} className="w-3.5 h-3.5" />}{isFailed && <Icon icon={appIcons.close} className="w-3.5 h-3.5" />}{result.message}</p>}
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-1.5">
@@ -610,7 +581,7 @@ function UpdateCard({ entry, storiesNeedingUpdateIds, chapterCountInputs, chapte
             className={isUpdating ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : isSuccess ? 'lg-chip lg-chip-green' : 'lg-btn-primary'}
             style={!isUpdating && !isSuccess ? { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', boxShadow: '0 4px 16px rgba(245,158,11,0.35)', color: 'white' } : undefined}
           >
-            {isUpdating ? <><svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Updating...</> : isSuccess ? <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Updated</> : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>Update</>}
+            {isUpdating ? <><Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />Updating...</> : isSuccess ? <><Icon icon={appIcons.check} className="w-4 h-4" />Updated</> : <><Icon icon={appIcons.trends} className="w-4 h-4" />Update</>}
           </button>
         </div>
       </div>
@@ -634,7 +605,7 @@ function InvalidCard({ entry, isDark }: any) {
           </div>
           <div className="flex items-center gap-3 text-xs">
             <div className={`flex items-center gap-1.5 ${dm45}`}><span>Server:</span><span className={`font-semibold ${isDark ? 'text-white' : 'text-black/65'}`}>{entry.server_story.maxChapter}</span></div>
-            <svg className={`w-3 h-3 ${dm45}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            <Icon icon={appIcons.external} className={`w-3 h-3 ${dm45}`} />
             <div className={`flex items-center gap-1.5 ${dm45}`}><span>Drive:</span><span className={`font-semibold ${isDark ? 'text-white' : 'text-black/65'}`}>{entry.folder.extended_chapter_count ?? 0}</span></div>
           </div>
         </div>
@@ -656,7 +627,7 @@ function UpToDateCard({ entry, isDark }: any) {
           <p className={`text-xs font-mono ${dm60}`}>{entry.folder.name}</p>
           <div className="flex items-center gap-3 text-xs mt-1.5">
             <div className={`flex items-center gap-1.5 ${dm45}`}><span>Server:</span><span className={`font-semibold ${dm}`}>{entry.server_story.maxChapter}</span></div>
-            <svg className={`w-3 h-3 ${dm45}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            <Icon icon={appIcons.external} className={`w-3 h-3 ${dm45}`} />
             <div className={`flex items-center gap-1.5 ${dm45}`}><span>Drive:</span><span className={`font-semibold ${dm}`}>{entry.folder.extended_chapter_count ?? 0}</span></div>
           </div>
         </div>

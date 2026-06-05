@@ -22,6 +22,7 @@ import {
 import type { ThemeMode } from '../types/theme';
 import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
 import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
+import { Icon, appIcons } from '../components/Icon';
 import { ServerModeBanner } from '../components/ServerModeBanner';
 import { showToast } from '../components/Toast';
 
@@ -429,9 +430,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
                 {/* Folder info */}
                 <div className="flex items-center gap-2 min-w-0">
-                  <svg className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                  </svg>
+                  <Icon icon={appIcons.folder} className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`} />
                   <span className={`text-xs sm:text-sm truncate ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
                     {config.folder_id}
                   </span>
@@ -440,22 +439,16 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
                 {/* Stats badges */}
                 <div className="flex items-center gap-2 sm:ml-auto">
                   <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-white/[0.04] text-white/40' : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.4)]'}`}>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
+                    <Icon icon={appIcons.uploadFile} className="w-3.5 h-3.5" />
                     {totalUploadable} ready to upload
                   </div>
                   <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-white/[0.04] text-white/40' : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.4)]'}`}>
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                    </svg>
+                    <Icon icon={appIcons.trends} className="w-3.5 h-3.5" />
                     {totalUpdatable} can update
                   </div>
                   {successfulUploads > 0 && (
                     <div className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <Icon icon={appIcons.check} className="w-3.5 h-3.5" />
                       {successfulUploads} uploaded
                     </div>
                   )}
@@ -470,9 +463,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         {/* Loading state */}
         {configLoading && (
           <div className="lg-glass p-8 flex items-center justify-center gap-4">
-            <svg className="w-6 h-6 animate-spin text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            <Icon icon={appIcons.spinner} className="w-6 h-6 animate-spin text-indigo-400" />
             <span className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Loading Drive Sync...</span>
           </div>
         )}

@@ -3,6 +3,7 @@ import {
   type CheckUploadableResponse,
   type DriveFolderEntry,
 } from '../api/client';
+import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../types/theme';
 import { ValidationErrorBadge, StatusBadge, EmptyState } from './SyncTabShared';
 
@@ -62,9 +63,7 @@ export function UploadTab({
     <div className="flex flex-col min-h-[400px] h-full">
       <div className="lg-glass flex flex-col sm:flex-row gap-3 p-4 sticky top-0 z-10" style={{ borderRadius: 0 }}>
         <div className="relative flex-1 min-w-0">
-          <svg className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-white/50' : 'text-black/30'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <Icon icon={appIcons.search} className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-white/50' : 'text-black/30'}`} />
           <input
             type="text"
             placeholder="Search stories..."
@@ -75,9 +74,7 @@ export function UploadTab({
           {search && (
             <button onClick={() => setSearch('')}
               className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded ${isDark ? 'text-white/50 hover:text-white/80' : 'text-black/30 hover:text-black/60'}`}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <Icon icon={appIcons.close} className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -90,16 +87,12 @@ export function UploadTab({
           >
             {loading ? (
               <>
-                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
                 Scanning...
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Icon icon={appIcons.search} className="w-4 h-4" />
                 Scan Drive
               </>
             )}
@@ -113,23 +106,17 @@ export function UploadTab({
             >
               {isUploadingAny ? (
                 <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
+                  <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
                   Uploading ({isUploadingAny})
                 </>
               ) : allDone ? (
                 <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  <Icon icon={appIcons.check} className="w-4 h-4" />
                   All Uploaded
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
+                  <Icon icon={appIcons.uploadFile} className="w-4 h-4" />
                   Upload All ({validCount})
                 </>
               )}
@@ -140,9 +127,7 @@ export function UploadTab({
 
       {error && (
         <div className="mx-4 mt-4 flex items-center gap-3 p-3 lg-glass" style={{ border: isDark ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(239,68,68,0.3)', background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)' }}>
-          <svg className="w-5 h-5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+          <Icon icon={appIcons.error} className="w-5 h-5 flex-shrink-0 text-red-400" />
           {error}
         </div>
       )}
@@ -160,45 +145,33 @@ export function UploadTab({
         <div className={`mx-4 mt-3 flex flex-wrap items-center gap-3 px-4 py-2 rounded-xl text-xs ${isDark ? 'bg-black/10' : 'bg-black/5'}`}>
           {data.drive_folders.length > 0 && (
           <div className={`flex items-center gap-1.5 ${isDark ? 'text-white/75' : 'text-black/45'}`}>
-            <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+            <Icon icon={appIcons.check} className="w-3.5 h-3.5 text-emerald-400" />
             {data.drive_folders.length} DONE_
           </div>
           )}
           <div className={`flex items-center gap-1.5 ${isDark ? 'text-white/75' : 'text-black/45'}`}>
-            <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
+            <Icon icon={appIcons.add} className="w-3.5 h-3.5 text-indigo-400" />
             {validCount} ready to upload
           </div>
           <div className={`flex items-center gap-1.5 ${isDark ? 'text-white/75' : 'text-black/45'}`}>
-            <svg className="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
+            <Icon icon={appIcons.trends} className="w-3.5 h-3.5 text-amber-400" />
             {filteredAlready.length} uploaded
           </div>
           {filteredInvalid.length > 0 && (
             <div className={`flex items-center gap-1.5 ${isDark ? 'text-white/75' : 'text-black/45'}`}>
-              <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <Icon icon={appIcons.close} className="w-3.5 h-3.5 text-red-400" />
               {filteredInvalid.length} invalid
             </div>
           )}
           {successCount > 0 && (
             <div className="ml-auto flex items-center gap-1.5 text-emerald-400">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <Icon icon={appIcons.check} className="w-3.5 h-3.5" />
               {successCount} successful
             </div>
           )}
           {failedCount > 0 && (
             <div className={`ml-auto flex items-center gap-1.5 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <Icon icon={appIcons.close} className="w-3.5 h-3.5" />
               {failedCount} failed
             </div>
           )}
@@ -211,9 +184,7 @@ export function UploadTab({
             isDark={isDark}
             message="Click 'Scan Drive' to check for stories ready to upload to your Google Drive."
             icon={
-              <svg className={`w-8 h-8 ${isDark ? 'text-white/40' : 'text-black/20'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+              <Icon icon={appIcons.shield} className={`w-8 h-8 ${isDark ? 'text-white/40' : 'text-black/20'}`} />
             }
           />
         )}
@@ -221,9 +192,7 @@ export function UploadTab({
         {loading && (
           <div className="flex flex-col items-center justify-center py-16 w-full h-full"> 
             <div className="lg-glass w-16 h-16 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 animate-spin text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <Icon icon={appIcons.spinner} className="w-8 h-8 animate-spin text-indigo-400" />
             </div>
             <p className={`text-sm ${isDark ? 'text-white/65' : 'text-black/45'}`}>Scanning your Drive folders...</p>
           </div>
@@ -233,7 +202,7 @@ export function UploadTab({
           <>
             {filteredInvalid.length > 0 && (
               <div className="mb-4">
-                <SectionHeader label={invalidLabel} color="#f87171" icon={<svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>} />
+                <SectionHeader label={invalidLabel} color="#f87171" icon={<Icon icon={appIcons.error} className="w-4 h-4 text-red-400" />} />
                 <div className="space-y-2">
                   {filteredInvalid.map(folder => (
                     <InvalidUploadCard key={folder.id} folder={folder} isDark={isDark} />
@@ -244,7 +213,7 @@ export function UploadTab({
 
             {validCount > 0 && (
               <div className="mb-4">
-                <SectionHeader label={readyLabel} color="#34d399" icon={<svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>} />
+                <SectionHeader label={readyLabel} color="#34d399" icon={<Icon icon={appIcons.cloud} className="w-4 h-4 text-emerald-400" />} />
                 <div className="space-y-2">
                   {filteredUploadable.map(folder => {
                     const result = uploadResults.get(folder.id);
@@ -261,7 +230,7 @@ export function UploadTab({
 
             {filteredAlready.length > 0 && (
               <div>
-                <SectionHeader label={alreadyLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<svg className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>} />
+                <SectionHeader label={alreadyLabel} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)'} icon={<Icon icon={appIcons.check} className={isDark ? "w-4 h-4 text-white/55" : "w-4 h-4 text-black/25"} />} />
                 <div className="space-y-2">
                   {filteredAlready.map(folder => (
                     <AlreadyCard key={folder.id} folder={folder} isDark={isDark} />
@@ -306,9 +275,7 @@ export function UploadTab({
             (filterSection === 'invalid' && filteredInvalid.length === 0) ||
             (filterSection === 'uploaded' && filteredAlready.length === 0)) && (
             <div className={`text-center py-8 ${isDark ? 'text-white/75' : 'text-black/35'}`}>
-              <svg className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-white/40' : 'text-black/15'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
-              </svg>
+              <Icon icon={appIcons.checkCircle} className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-white/40' : 'text-black/15'}`} />
               <p className="text-sm">No items in this section</p>
             </div>
           )
@@ -349,8 +316,8 @@ function UploadCard({ folder, result, isUploading, isSuccess, isFailed, onUpload
           <p className={`text-xs font-mono ${isDark ? 'text-white/50' : 'text-black/30'}`}>{folder.name}</p>
           {result && (
             <p className={`text-xs mt-1.5 flex items-center gap-1 ${isSuccess ? 'text-emerald-400' : isFailed ? 'text-red-400' : ''}`}>
-              {isSuccess && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-              {isFailed && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
+              {isSuccess && <Icon icon={appIcons.check} className="w-3.5 h-3.5" />}
+              {isFailed && <Icon icon={appIcons.close} className="w-3.5 h-3.5" />}
               {result.message}
             </p>
           )}
@@ -360,7 +327,7 @@ function UploadCard({ folder, result, isUploading, isSuccess, isFailed, onUpload
           disabled={isUploading || isSuccess}
           className={isUploading ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : isSuccess ? 'lg-chip lg-chip-green' : 'lg-btn-primary'}
         >
-          {isUploading ? <><svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ animationDirection: 'reverse' }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Uploading...</> : isSuccess ? <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Uploaded</> : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>Upload</>}
+          {isUploading ? <><Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />Uploading...</> : isSuccess ? <><Icon icon={appIcons.check} className="w-4 h-4" />Uploaded</> : <><Icon icon={appIcons.uploadFile} className="w-4 h-4" />Upload</>}
         </button>
       </div>
     </div>

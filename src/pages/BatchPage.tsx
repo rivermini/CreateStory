@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { startBatchCrawl, type CrawlRequest, detectSite, getNovelChapters, listSites, type NovelMetadata, type SiteInfoResponse } from '../api/client';
+import { Icon, appIcons } from '../components/Icon';
 import type { ThemeMode } from '../types/theme';
 
 interface BatchPageProps {
@@ -260,10 +261,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
                       />
                       {entry.isLoading && (
                         <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                          <svg className="animate-spin h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
+                          <Icon icon={appIcons.refresh} className="animate-spin h-4 w-4 text-indigo-400" />
                         </div>
                       )}
                     </div>
@@ -274,9 +272,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
                         ? 'bg-emerald-500/10 border border-emerald-500/20'
                         : 'bg-emerald-50 border border-emerald-200'
                       }`} title="Valid">
-                        <svg className={`w-4 h-4 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
+                        <Icon icon={appIcons.success} className={`w-4 h-4 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
                       </div>
                     )}
                     {!entry.isLoading && entry.isValid && entry.novelMetadata?.is_paywalled && (
@@ -284,9 +280,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
                         ? 'bg-amber-500/10 border border-amber-500/20'
                         : 'bg-amber-50 border border-amber-200'
                       }`} title="Paywalled">
-                        <svg className={`w-4 h-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
+                        <Icon icon={appIcons.paywall} className={`w-4 h-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
                       </div>
                     )}
                     {!entry.isLoading && entry.error && (
@@ -294,9 +288,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
                         ? 'bg-red-500/10 border border-red-500/20'
                         : 'bg-red-50 border border-red-200'
                       }`} title={entry.error}>
-                        <svg className={`w-4 h-4 ${isDark ? 'text-red-400' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <Icon icon={appIcons.close} className={`w-4 h-4 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
                       </div>
                     )}
 
@@ -310,9 +302,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
                         }`}
                         title="Remove"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <Icon icon={appIcons.close} className="w-4 h-4" />
                       </button>
                     )}
                   </div>
@@ -344,9 +334,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
                 : 'text-indigo-600 hover:text-indigo-700'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Icon icon={appIcons.add} className="w-4 h-4" />
               Add another URL
             </button>
           </section>
@@ -404,9 +392,7 @@ export function BatchPage({ themeMode }: BatchPageProps) {
               ? 'bg-red-500/10 border border-red-500/20 text-red-400'
               : 'bg-red-50 border border-red-200 text-red-600'
             }`}>
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Icon icon={appIcons.error} className="w-5 h-5 flex-shrink-0" />
               {startError}
             </div>
           )}
@@ -424,17 +410,12 @@ export function BatchPage({ themeMode }: BatchPageProps) {
           >
             {isStarting ? (
               <>
-                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+                <Icon icon={appIcons.refresh} className="animate-spin h-5 w-5" />
                 Starting {validCount} crawl{validCount !== 1 ? 's' : ''}...
               </>
             ) : (
               <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+                <Icon icon={appIcons.autoAudio} className="w-5 h-5" />
                 Crawl All ({validCount} novel{validCount !== 1 ? 's' : ''})
               </>
             )}

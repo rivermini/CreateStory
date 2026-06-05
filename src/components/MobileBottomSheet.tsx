@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ChapterEntry, NovelMetadata } from '../api/client';
 import { formatNumber } from '../api/client';
+import { Icon, appIcons } from './Icon';
 
 interface MobileBottomSheetProps {
     isOpen: boolean;
@@ -176,9 +177,7 @@ export function MobileBottomSheet({
                     {isPaywalled && (
                         <div className="lg-glass p-4 mb-4" style={{ border: '1px solid rgba(251,191,36,0.25)', background: isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)' }}>
                             <div className={`flex items-center gap-2 font-semibold text-sm ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
+                                <Icon icon={appIcons.paywall} className="w-4 h-4" />
                                 Wattpad Original
                             </div>
                             <p className={`text-xs leading-relaxed mt-2 ${isDark ? 'text-amber-200/70' : 'text-amber-800/70'}`}>
@@ -218,9 +217,7 @@ export function MobileBottomSheet({
                             className={estimatedMax === 0 && totalChapterCount == null ? 'lg-btn-ghost w-full opacity-50 cursor-not-allowed' : 'lg-btn-primary w-full'}
                             style={{ padding: '14px', fontSize: '1rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, borderRadius: '16px', border: 'none' }}
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
+                            <Icon icon={appIcons.trends} className="w-5 h-5" />
                             Crawl All Chapters
                         </button>
                     )}
@@ -231,16 +228,14 @@ export function MobileBottomSheet({
 }
 
 function StatItem({ icon, value, isDark }: { icon: 'eye' | 'star' | 'comment'; value: string; isDark: boolean }) {
-    const svgs = {
-        eye: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />,
-        star: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />,
-        comment: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />,
+    const icons: Record<'eye' | 'star' | 'comment', typeof appIcons.eye> = {
+        eye: appIcons.eye,
+        star: appIcons.checkCircle,
+        comment: appIcons.comment,
     };
     return (
         <span className="flex items-center gap-1">
-            <svg className={`w-4 h-4 ${isDark ? 'text-white/30' : 'text-black/30'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {svgs[icon]}
-            </svg>
+            <Icon icon={icons[icon]} className={`w-4 h-4 ${isDark ? 'text-white/30' : 'text-black/30'}`} />
             {value}
         </span>
     );
