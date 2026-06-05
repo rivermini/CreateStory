@@ -22,6 +22,50 @@ from api.routes.drive_sync.utils import (
 logger = logging.getLogger(__name__)
 
 
+async def _load_drive_folders_and_server_stories(service) -> tuple[list[dict], list[dict]]:
+    """Fetch Drive folders and server stories concurrently for check endpoints."""
+    drive_result, server_stories = await asyncio.gather(
+        asyncio.to_thread(service.list_drive_folders, limit=10000, offset=0),
+        asyncio.to_thread(service.get_all_server_stories),
+    )
+    drive_folders_raw, _ = drive_result
+    return drive_folders_raw, server_stories
+
+
+async def _get_last_update_times(service, names: list[str]) -> dict[str, Optional[str]]:
+    """Read persisted last-update timestamps once per distinct display name."""
+    unique_names = sorted({name for name in names if name})
+    if not unique_names:
+        return {}
+
+    def _load() -> dict[str, Optional[str]]:
+        return {name: service.get_last_update_time(name) for name in unique_names}
+
+    return await asyncio.to_thread(_load)
+
+
+def _run_chapter_batch_check(service, folder_ids: list[str], check_extended_only: bool):
+    if not folder_ids:
+        return service._batch_check_duplicates_and_count_extended(
+            None,
+            [],
+            check_extended_only=check_extended_only,
+        )
+    drive_service = service._build_drive_service()
+    return service._batch_check_duplicates_and_count_extended(
+        drive_service,
+        folder_ids,
+        check_extended_only=check_extended_only,
+    )
+
+
+def _run_free_tag_batch_check(service, folder_ids: list[str]):
+    if not folder_ids:
+        return ({}, {})
+    drive_service = service._build_drive_service()
+    return service._batch_get_free_and_tag_counts(drive_service, folder_ids)
+
+
 def _normalize(s: str) -> str:
     """Normalize a story title for comparison."""
     for ch in ("\u2019", "\u2018", "\u201A", "\u201B", "\u02BC", "\u02BB", "\uFF07"):
@@ -44,8 +88,7 @@ async def check_uploadable() -> CheckUploadableResponse:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
-        drive_folders_raw, _ = await asyncio.to_thread(service.list_drive_folders, limit=10000, offset=0)
-        server_stories = await asyncio.to_thread(service.get_all_server_stories)
+        drive_folders_raw, server_stories = await _load_drive_folders_and_server_stories(service)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -54,9 +97,11 @@ async def check_uploadable() -> CheckUploadableResponse:
     server_titles = {_normalize(s["title"]) for s in server_stories}
 
     candidate_ids = [f["id"] for f in candidate_folders]
-    drive_service = service._build_drive_service()
-    dup_check_results, ext_count_by_folder_id, chapter_count_by_folder_id, first_chapter_by_id, format_errors, sequential_errors, _ = service._batch_check_duplicates_and_count_extended(
-        drive_service, candidate_ids, check_extended_only=False
+    dup_check_results, ext_count_by_folder_id, chapter_count_by_folder_id, first_chapter_by_id, format_errors, sequential_errors, _ = await asyncio.to_thread(
+        _run_chapter_batch_check,
+        service,
+        candidate_ids,
+        False,
     )
 
     uploadable = []
@@ -130,8 +175,7 @@ async def check_updatable() -> CheckUpdatableResponse:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
-        drive_folders_raw, _ = await asyncio.to_thread(service.list_drive_folders, limit=10000, offset=0)
-        server_stories = await asyncio.to_thread(service.get_all_server_stories)
+        drive_folders_raw, server_stories = await _load_drive_folders_and_server_stories(service)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -149,20 +193,33 @@ async def check_updatable() -> CheckUpdatableResponse:
             logger.warning("Skipping malformed server story: %s", exc)
 
     extended_ids = [f["id"] for f in extended_folders]
-    drive_service = service._build_drive_service()
 
     try:
-        dup_check_results, ext_count_by_folder_id, _, _, format_errors, _, ext_indices = service._batch_check_duplicates_and_count_extended(
-            drive_service, extended_ids, check_extended_only=True
+        chapter_check_task = asyncio.to_thread(
+            _run_chapter_batch_check,
+            service,
+            extended_ids,
+            True,
         )
+        free_tag_task = asyncio.to_thread(_run_free_tag_batch_check, service, extended_ids)
+        chapter_check_result, free_tag_result = await asyncio.gather(chapter_check_task, free_tag_task, return_exceptions=True)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {exc}")
 
-    try:
-        has_free_by_folder, has_tags_by_folder = service._batch_get_free_and_tag_counts(drive_service, extended_ids)
-    except Exception:
+    if isinstance(chapter_check_result, Exception):
+        raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {chapter_check_result}")
+    dup_check_results, ext_count_by_folder_id, _, _, format_errors, _, ext_indices = chapter_check_result
+
+    if isinstance(free_tag_result, Exception):
         has_free_by_folder = {fid: False for fid in extended_ids}
         has_tags_by_folder = {fid: False for fid in extended_ids}
+    else:
+        has_free_by_folder, has_tags_by_folder = free_tag_result
+
+    last_updated_by_name = await _get_last_update_times(
+        service,
+        [f.get("display_name", "") for f in extended_folders],
+    )
 
     updatable = []
     no_update_needed = []
@@ -184,7 +241,7 @@ async def check_updatable() -> CheckUpdatableResponse:
             continue
 
         display_name = folder.get("display_name", "")
-        last_updated = await asyncio.to_thread(service.get_last_update_time, display_name)
+        last_updated = last_updated_by_name.get(display_name)
 
         has_duplicates, dupes = dup_check_results.get(folder_id, (False, []))
         if has_duplicates:
@@ -297,8 +354,12 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
-        raw_result = await asyncio.to_thread(service.get_stories_needing_update)
-        server_stories = await asyncio.to_thread(service.get_all_server_stories)
+        raw_result, server_stories, drive_result = await asyncio.gather(
+            asyncio.to_thread(service.get_stories_needing_update),
+            asyncio.to_thread(service.get_all_server_stories),
+            asyncio.to_thread(service.list_drive_folders, limit=10000, offset=0),
+        )
+        drive_folders_raw, _ = drive_result
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -318,11 +379,6 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
                 maxChapter=s.get("maxChapter") or 0,
             )
 
-    try:
-        drive_folders_raw, _ = await asyncio.to_thread(service.list_drive_folders, limit=10000, offset=0)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
     matched_extended_folders = [
         f for f in drive_folders_raw
         if f.get("prefix") == "EXTENDED" and _normalize(f.get("display_name", "")) in reader_titles_lower
@@ -332,12 +388,16 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         # Still detect no_drive_folder by comparing all reader titles against all EXTENDED_ folders
         extended_display_names_lower = {_normalize(f.get("display_name", "")) for f in drive_folders_raw if f.get("prefix") == "EXTENDED"}
         no_drive_folder: list[ServerOnlyStoryEntry] = []
+        last_updated_by_title = await _get_last_update_times(
+            service,
+            [s.get("title", "") for s in reader_stories],
+        )
         for s in reader_stories:
             title = _normalize(s.get("title", ""))
             if title and title not in extended_display_names_lower:
                 server_ref = server_by_title.get(title)
                 if server_ref:
-                    last_updated = await asyncio.to_thread(service.get_last_update_time, server_ref.title)
+                    last_updated = last_updated_by_title.get(server_ref.title)
                     no_drive_folder.append(ServerOnlyStoryEntry(server_story=server_ref, last_updated=last_updated))
         return CheckUpdatableResponse(
             all_extended_folders=[],
@@ -351,22 +411,34 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         )
 
     matched_ids = [f["id"] for f in matched_extended_folders]
-    drive_service = service._build_drive_service()
 
     try:
-        dup_check_results, ext_count_by_folder_id, _, _, format_errors, _, ext_indices = (
-            service._batch_check_duplicates_and_count_extended(
-                drive_service, matched_ids, check_extended_only=True
-            )
+        chapter_check_task = asyncio.to_thread(
+            _run_chapter_batch_check,
+            service,
+            matched_ids,
+            True,
         )
+        free_tag_task = asyncio.to_thread(_run_free_tag_batch_check, service, matched_ids)
+        chapter_check_result, free_tag_result = await asyncio.gather(chapter_check_task, free_tag_task, return_exceptions=True)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {exc}")
 
-    try:
-        has_free_by_folder, has_tags_by_folder = service._batch_get_free_and_tag_counts(drive_service, matched_ids)
-    except Exception:
+    if isinstance(chapter_check_result, Exception):
+        raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {chapter_check_result}")
+    dup_check_results, ext_count_by_folder_id, _, _, format_errors, _, ext_indices = chapter_check_result
+
+    if isinstance(free_tag_result, Exception):
         has_free_by_folder = {fid: False for fid in matched_ids}
         has_tags_by_folder = {fid: False for fid in matched_ids}
+    else:
+        has_free_by_folder, has_tags_by_folder = free_tag_result
+
+    last_updated_by_name = await _get_last_update_times(
+        service,
+        [f.get("display_name", "") for f in matched_extended_folders]
+        + [s.get("title", "") for s in reader_stories],
+    )
 
     updatable: list[UpdatableStoryEntry] = []
     no_update_needed: list[UpdatableStoryEntry] = []
@@ -391,7 +463,7 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         )
 
         display_name = folder.get("display_name", "")
-        last_updated = await asyncio.to_thread(service.get_last_update_time, display_name)
+        last_updated = last_updated_by_name.get(display_name)
 
         has_duplicates, dupes = dup_check_results.get(folder_id, (False, []))
         if has_duplicates:
@@ -485,7 +557,7 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         if title in reader_titles_lower and title not in matched_folder_titles_lower:
             server_ref = server_by_title.get(title)
             if server_ref:
-                last_updated = await asyncio.to_thread(service.get_last_update_time, server_ref.title)
+                last_updated = last_updated_by_name.get(server_ref.title)
                 no_drive_folder.append(ServerOnlyStoryEntry(server_story=server_ref, last_updated=last_updated))
 
     return CheckUpdatableResponse(

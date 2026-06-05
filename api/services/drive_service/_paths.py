@@ -6,6 +6,7 @@ _history_jobs, and drive_service live here.
 """
 
 from pathlib import Path
+import os
 import re
 import threading
 
@@ -123,9 +124,21 @@ _RANDOM_AUTHOR_IDS = [
 # -------------------------------------------------------------------------
 # Drive API call settings (used by _drive_api, drive_service)
 # -------------------------------------------------------------------------
+def _positive_int_from_env(name: str, default: int) -> int:
+    try:
+        raw = os.getenv(name)
+        return max(1, int(raw)) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
 _DRIVE_CALL_RETRIES = 5
 _DRIVE_CALL_BACKOFF_BASE = 0.5
-_DRIVE_CALL_SEMAPHORE = threading.Semaphore(1)
+_DRIVE_CALL_CONCURRENCY = _positive_int_from_env("DRIVE_SYNC_DRIVE_CONCURRENCY", 6)
+_CHAPTER_PREFETCH_WORKERS = _positive_int_from_env("DRIVE_SYNC_CHAPTER_PREFETCH_WORKERS", 6)
+_MAIN_BE_MAX_KEEPALIVE_CONNECTIONS = _positive_int_from_env("DRIVE_SYNC_MAIN_BE_KEEPALIVE_CONNECTIONS", 20)
+_MAIN_BE_MAX_CONNECTIONS = _positive_int_from_env("DRIVE_SYNC_MAIN_BE_MAX_CONNECTIONS", 40)
+_DRIVE_CALL_SEMAPHORE = threading.BoundedSemaphore(_DRIVE_CALL_CONCURRENCY)
 
 # -------------------------------------------------------------------------
 # Misc

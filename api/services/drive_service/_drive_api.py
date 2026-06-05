@@ -17,6 +17,7 @@ from googleapiclient.discovery import build
 
 from api.services.drive_service._paths import (
     _DRIVE_CALL_BACKOFF_BASE,
+    _DRIVE_CALL_CONCURRENCY,
     _DRIVE_CALL_RETRIES,
     _DRIVE_CALL_SEMAPHORE,
     _RE_STATUS_PREFIX,
@@ -96,8 +97,8 @@ class DriveAPIMixin:
                 if attempt < _DRIVE_CALL_RETRIES - 1:
                     backoff = _DRIVE_CALL_BACKOFF_BASE * (attempt + 1)
                     logger.warning(
-                        "Drive API call failed (attempt %d/%d), retrying in %.1fs: %s",
-                        attempt + 1, _DRIVE_CALL_RETRIES, backoff, exc,
+                        "Drive API call failed (attempt %d/%d, concurrency=%d), retrying in %.1fs: %s",
+                        attempt + 1, _DRIVE_CALL_RETRIES, _DRIVE_CALL_CONCURRENCY, backoff, exc,
                     )
                     time.sleep(backoff)
                 continue
@@ -326,14 +327,17 @@ class DriveAPIMixin:
         from googleapiclient.http import MediaIoBaseDownload
         import io
 
-        request = drive_service.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            _, done = downloader.next_chunk()
-        fh.seek(0)
-        return fh.read()
+        def _download() -> bytes:
+            request = drive_service.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            fh.seek(0)
+            return fh.read()
+
+        return self._retry_drive_call(_download)
 
     def _get_file_content(self, drive_service: Any, file_id: str) -> str:
         """
@@ -371,18 +375,18 @@ class DriveAPIMixin:
             return fh.read().decode("utf-8", errors="replace")
 
         try:
-            mime = _get_meta().get("mimeType", "")
+            mime = self._retry_drive_call(_get_meta).get("mimeType", "")
         except Exception:
-            return _get_media()
+            return self._retry_drive_call(_get_media)
 
         if mime.startswith("application/vnd.google-apps"):
             if "folder" in mime:
                 return ""
             try:
-                return _export()
+                return self._retry_drive_call(_export)
             except Exception:
-                return _get_media()
-        return _get_media()
+                return self._retry_drive_call(_get_media)
+        return self._retry_drive_call(_get_media)
 
     def _batch_get_chapter_counts(self, drive_service: Any, folder_ids: list[str]) -> list[Optional[int]]:
         """
@@ -691,13 +695,17 @@ class DriveAPIMixin:
             return (dupe_result, ext_result, chapter_count_result, first_chapter_result, format_errors, sequential_errors, ext_indices_result)
 
         files_by_sub: dict[str, list[dict]] = {sid: [] for sid in chapters_sub}
-        for sub_id in chapters_sub:
+        sub_ids = list(chapters_sub)
+        for chunk_start in range(0, len(sub_ids), _CHUNK_SIZE):
+            chunk = sub_ids[chunk_start: chunk_start + _CHUNK_SIZE]
+            parents_clause = " or ".join(f'"{sid}" in parents' for sid in chunk)
+            q = f"({parents_clause}) and name contains '.md' and trashed=false"
             page_token = None
             while True:
                 _pt = page_token
                 def _call() -> dict:
                     return drive_service.files().list(
-                        q=f"'{sub_id}' in parents and name contains '.md' and trashed=false",
+                        q=q,
                         fields="files(id, name, parents)",
                         pageSize=500,
                         pageToken=_pt,
@@ -707,21 +715,28 @@ class DriveAPIMixin:
                 except (ssl.SSLError, TimeoutError):
                     break
                 for f in response.get("files", []):
-                    if f.get("name", "").lower().endswith(".md"):
-                        files_by_sub[sub_id].append(f)
+                    if not f.get("name", "").lower().endswith(".md"):
+                        continue
+                    for parent in f.get("parents", []):
+                        if parent in files_by_sub:
+                            files_by_sub[parent].append(f)
+                            break
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     break
 
         empty_sub_ids = [sid for sid, files in files_by_sub.items() if not files]
         if empty_sub_ids:
-            for sid in empty_sub_ids:
+            for chunk_start in range(0, len(empty_sub_ids), _CHUNK_SIZE):
+                chunk = empty_sub_ids[chunk_start: chunk_start + _CHUNK_SIZE]
+                parents_clause = " or ".join(f'"{sid}" in parents' for sid in chunk)
+                q = f"({parents_clause}) and name contains '.md' and trashed=false"
                 page_token = None
                 while True:
                     _pt = page_token
                     def _fallback_call() -> dict:
                         return drive_service.files().list(
-                            q=f'"{sid}" in parents and name contains ".md" and trashed=false',
+                            q=q,
                             fields="files(id, name, parents)",
                             pageSize=500,
                             pageToken=_pt,
@@ -733,8 +748,10 @@ class DriveAPIMixin:
                     for f in response.get("files", []):
                         if not f.get("name", "").lower().endswith(".md"):
                             continue
-                        if f.get("parents") and f["parents"][0] == sid:
-                            files_by_sub[sid].append(f)
+                        for parent in f.get("parents", []):
+                            if parent in files_by_sub:
+                                files_by_sub[parent].append(f)
+                                break
                     page_token = response.get("nextPageToken")
                     if not page_token:
                         break

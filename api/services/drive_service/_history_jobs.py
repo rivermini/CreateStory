@@ -227,22 +227,20 @@ class HistoryJobsMixin:
 
         sorted_files = sorted(md_files, key=lambda f: f.get("name", ""))
         chapters_added = 0
+        parsed_chapters = self._download_and_parse_chapter_files(sorted_files)
 
-        for file_info in sorted_files:
-            file_id = file_info["id"]
-            file_name = file_info["name"]
-            try:
-                content = self._get_file_content(drive_service, file_id)
-            except Exception as exc:
-                self._append_log("warning", f"Failed to download {file_name}: {exc}", display_name)
+        for parsed in parsed_chapters:
+            file_name = parsed["file_name"]
+            title = parsed["title"]
+            chapter_content = parsed["content"]
+            if parsed["error"] is not None:
+                self._append_log("warning", f"Failed to download {file_name}: {parsed['error']}", display_name)
                 continue
-
-            _, title, chapter_content = self._parse_chapter_file(content, file_name)
             if not chapter_content:
                 self._append_log("debug", f"Skipped {file_name} — empty content", display_name)
                 continue
 
-            posting_index = self._extract_chapter_index(file_name) or next_index
+            posting_index = parsed["chapter_index"] or next_index
             while posting_index in existing_indices:
                 posting_index += 1
 
@@ -981,24 +979,23 @@ class HistoryJobsMixin:
 
         chapters_added = 0
         chapters_skipped = 0
+        parsed_chapters = self._download_and_parse_chapter_files(sorted_files)
 
-        for file_info in sorted_files:
-            file_id = file_info["id"]
-            file_name = file_info["name"]
-            try:
-                content = self._get_file_content(drive_service, file_id)
-            except Exception as exc:
-                self.append_job_log(job_id, "warning", f"Failed to download {file_name}: {exc}")
+        for parsed in parsed_chapters:
+            file_name = parsed["file_name"]
+            title = parsed["title"]
+            chapter_content = parsed["content"]
+            if parsed["error"] is not None:
+                self.append_job_log(job_id, "warning", f"Failed to download {file_name}: {parsed['error']}")
                 chapters_skipped += 1
                 continue
 
-            _, title, chapter_content = self._parse_chapter_file(content, file_name)
             if not chapter_content:
-                self.append_job_log(job_id, "debug", f"Skipped {file_name} — empty content")
+                self.append_job_log(job_id, "debug", f"Skipped {file_name} - empty content")
                 chapters_skipped += 1
                 continue
 
-            posting_index = self._extract_chapter_index(file_name) or next_index
+            posting_index = parsed["chapter_index"] or next_index
             while posting_index in existing_indices:
                 posting_index += 1
 

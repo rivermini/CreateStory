@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
-import bisect
 import json
 import logging
 import html
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import httpx
+
+from api.services.drive_service._paths import (
+    _CHAPTER_PREFETCH_WORKERS,
+    _MAIN_BE_MAX_CONNECTIONS,
+    _MAIN_BE_MAX_KEEPALIVE_CONNECTIONS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +37,35 @@ class MainBEClientMixin:
       - _upload_cover_image
       - get_stories_needing_update
     """
+
+    _main_be_tls = threading.local()
+
+    def _get_main_be_client(self, timeout: float = 600.0) -> httpx.Client:
+        """Return a reusable per-thread main-BE HTTP client."""
+        client = getattr(self._main_be_tls, "client", None)
+        client_key = (
+            getattr(self._config, "main_be_api_base_url", None),
+            getattr(self._config, "main_be_bearer_token", None),
+            getattr(self._config, "main_be_user_id", None),
+            timeout,
+        )
+        existing_key = getattr(self._main_be_tls, "client_key", None)
+        if client is not None and existing_key == client_key and not client.is_closed:
+            return client
+        if client is not None and not client.is_closed:
+            client.close()
+        limits = httpx.Limits(
+            max_keepalive_connections=_MAIN_BE_MAX_KEEPALIVE_CONNECTIONS,
+            max_connections=_MAIN_BE_MAX_CONNECTIONS,
+        )
+        client = httpx.Client(timeout=timeout, limits=limits)
+        self._main_be_tls.client = client
+        self._main_be_tls.client_key = client_key
+        return client
+
+    @contextmanager
+    def _main_be_client(self, timeout: float = 600.0) -> Iterator[httpx.Client]:
+        yield self._get_main_be_client(timeout)
 
     def _append_log(self, level: str, message: str, story_name: Optional[str] = None, job_id: Optional[str] = None) -> None:
         from api.models.drive_sync import DriveSyncLogEntry
@@ -91,7 +128,7 @@ class MainBEClientMixin:
         if job_id:
             self.append_job_log(job_id, "info", f"Story POST payload: {payload}")
         try:
-            with httpx.Client(timeout=600.0) as client:
+            with self._main_be_client(timeout=600.0) as client:
                 resp = client.post(url, content=self._json_body(payload), headers=headers)
                 if resp.status_code in (200, 201):
                     data = resp.json()
@@ -139,7 +176,7 @@ class MainBEClientMixin:
         page = 1
         try:
             while True:
-                with httpx.Client(timeout=600.0) as client:
+                with self._main_be_client(timeout=600.0) as client:
                     resp = client.get(
                         f"{self._config.main_be_api_base_url}/api/v1/story",
                         headers=headers,
@@ -263,6 +300,53 @@ class MainBEClientMixin:
                 blocks.append("\n".join(lines))
         return "\n".join(blocks)
 
+    def _download_and_parse_chapter_files(self, files: list[dict]) -> list[dict[str, Any]]:
+        """Download and parse chapter files with bounded parallel Drive reads."""
+        if not files:
+            return []
+
+        def _worker(position: int, file_info: dict) -> dict[str, Any]:
+            file_id = file_info["id"]
+            file_name = file_info["name"]
+            try:
+                worker_drive_service = self._build_drive_service()
+                content = self._get_file_content(worker_drive_service, file_id)
+                _, title, chapter_content = self._parse_chapter_file(content, file_name)
+                return {
+                    "position": position,
+                    "file": file_info,
+                    "file_name": file_name,
+                    "title": title,
+                    "content": chapter_content,
+                    "chapter_index": self._extract_chapter_index(file_name),
+                    "error": None,
+                }
+            except Exception as exc:
+                return {
+                    "position": position,
+                    "file": file_info,
+                    "file_name": file_name,
+                    "title": "",
+                    "content": "",
+                    "chapter_index": None,
+                    "error": exc,
+                }
+
+        worker_count = min(_CHAPTER_PREFETCH_WORKERS, len(files))
+        if worker_count <= 1:
+            return [_worker(position, file_info) for position, file_info in enumerate(files)]
+
+        parsed: list[dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="drive-chapter-prefetch") as executor:
+            futures = [
+                executor.submit(_worker, position, file_info)
+                for position, file_info in enumerate(files)
+            ]
+            for future in as_completed(futures):
+                parsed.append(future.result())
+        parsed.sort(key=lambda item: item["position"])
+        return parsed
+
     def search_server_stories(self, keyword: str) -> list[dict]:
         """Search stories on the configured main BE using api/v1/story/?keyword=."""
         if self._config is None:
@@ -273,7 +357,7 @@ class MainBEClientMixin:
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/"
         headers = self._main_be_headers()
         params = {"keyword": keyword, "page": 1, "limit": 20}
-        with httpx.Client(timeout=600.0) as client:
+        with self._main_be_client(timeout=600.0) as client:
             resp = client.get(url, headers=headers, params=params)
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -287,7 +371,7 @@ class MainBEClientMixin:
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}"
-        with httpx.Client(timeout=600.0) as client:
+        with self._main_be_client(timeout=600.0) as client:
             resp = client.get(url, headers=self._main_be_headers())
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -304,7 +388,7 @@ class MainBEClientMixin:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter"
         numbers: list[int] = []
-        with httpx.Client(timeout=600.0) as client:
+        with self._main_be_client(timeout=600.0) as client:
             resp = client.get(url, headers=self._main_be_headers())
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -335,7 +419,7 @@ class MainBEClientMixin:
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter/{chapter_number}"
-        with httpx.Client(timeout=600.0) as client:
+        with self._main_be_client(timeout=600.0) as client:
             resp = client.get(url, headers=self._main_be_headers())
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -357,7 +441,7 @@ class MainBEClientMixin:
             "content": content,
             "plainContent": plain_content,
         }
-        with httpx.Client(timeout=600.0) as client:
+        with self._main_be_client(timeout=600.0) as client:
             resp = client.put(url, content=self._json_body(payload), headers=self._main_be_headers(include_content_type=True))
             if resp.status_code == 401:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
@@ -625,7 +709,7 @@ class MainBEClientMixin:
 
         def _attempt(attempt_num: int) -> tuple[bool, str]:
             try:
-                with httpx.Client(timeout=600.0) as client:
+                with self._main_be_client(timeout=600.0) as client:
                     resp = client.post(url, content=self._json_body(payload), headers=headers)
                     if resp.status_code in (200, 201):
                         return True, ""
@@ -679,7 +763,7 @@ class MainBEClientMixin:
             "x-user-id": self._config.main_be_user_id,
         }
         try:
-            with httpx.Client(timeout=600.0) as client:
+            with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers)
                 if resp.status_code in (200, 201):
                     data = resp.json()
@@ -703,7 +787,7 @@ class MainBEClientMixin:
             "x-user-id": self._config.main_be_user_id,
         }
         try:
-            with httpx.Client(timeout=600.0) as client:
+            with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers)
                 if resp.status_code in (200, 201):
                     data = resp.json()
@@ -732,7 +816,7 @@ class MainBEClientMixin:
         page = 1
         try:
             while True:
-                with httpx.Client(timeout=600.0) as client:
+                with self._main_be_client(timeout=600.0) as client:
                     resp = client.get(
                         f"{self._config.main_be_api_base_url}/api/v1/story",
                         headers=headers,
@@ -774,7 +858,7 @@ class MainBEClientMixin:
         }
         payload = {"maxChapter": max_chapter}
         try:
-            with httpx.Client(timeout=600.0) as client:
+            with self._main_be_client(timeout=600.0) as client:
                 resp = client.put(url, content=self._json_body(payload), headers=headers)
                 return resp.status_code in (200, 201)
         except Exception:
@@ -812,7 +896,7 @@ class MainBEClientMixin:
         for attempt in range(max_retries):
             timeout = base_timeout * (2 ** attempt)
             try:
-                with httpx.Client(timeout=timeout) as client:
+                with self._main_be_client(timeout=timeout) as client:
                     resp = client.put(url, content=self._json_body(payload), headers=headers)
                     if resp.status_code in (200, 201):
                         self._append_log("info", f"Story metadata updated: freeChaptersCount={free_chapters_count}, maxChapter={max_chapter}")
@@ -900,54 +984,62 @@ class MainBEClientMixin:
         chapters_added = 0
         chapters_skipped = 0
 
-        # Binary search: find the first file whose chapter index >= next_index,
-        # so we skip all known-existing chapters without iterating them.
+        # Keep unnumbered files eligible, and skip numbered files already present.
         if existing_indices:
-            chapter_indices = [_extract_chapter_index_from_filename(f["name"]) for f in chapter_files_sorted]
-            lo = bisect.bisect_left(chapter_indices, next_index)
+            candidate_files = [
+                f for f in chapter_files_sorted
+                if (idx := _extract_chapter_index_from_filename(f["name"])) is None or idx >= next_index
+            ]
         else:
-            lo = 0
+            candidate_files = chapter_files_sorted
 
-        for file_info in chapter_files_sorted[lo:]:
+        batch_size = len(candidate_files)
+        if chapters_count is not None:
+            batch_size = max(_CHAPTER_PREFETCH_WORKERS, chapters_count)
+        batch_size = max(1, batch_size)
+
+        for batch_start in range(0, len(candidate_files), batch_size):
             if chapters_count is not None and chapters_added >= chapters_count:
                 self._append_log("info", f"[update] Stopped after {chapters_added} chapter(s) per user request.", display_name, job_id=job_id)
                 break
-            file_id = file_info["id"]
-            file_name = file_info["name"]
+            parsed_chapters = self._download_and_parse_chapter_files(candidate_files[batch_start:batch_start + batch_size])
 
-            ch_idx = self._extract_chapter_index(file_name)
-            # Files with no chapter index (ch_idx is None) are always processed —
-            # they can't be detected as duplicates since they have no index.
+            for parsed in parsed_chapters:
+                if chapters_count is not None and chapters_added >= chapters_count:
+                    self._append_log("info", f"[update] Stopped after {chapters_added} chapter(s) per user request.", display_name, job_id=job_id)
+                    break
+                file_name = parsed["file_name"]
+                ch_idx = parsed["chapter_index"]
+                title = parsed["title"]
+                chapter_content = parsed["content"]
+                # Files with no chapter index (ch_idx is None) are always processed;
+                # they can't be detected as duplicates since they have no index.
 
-            try:
-                content = self._get_file_content(drive_service, file_id)
-            except Exception as exc:
-                self._append_log("warning", f"[update] Failed to download {file_name}: {exc}", display_name, job_id=job_id)
-                chapters_skipped += 1
-                continue
+                if parsed["error"] is not None:
+                    self._append_log("warning", f"[update] Failed to download {file_name}: {parsed['error']}", display_name, job_id=job_id)
+                    chapters_skipped += 1
+                    continue
 
-            _, title, chapter_content = self._parse_chapter_file(content, file_name)
+                if not chapter_content:
+                    self._append_log("debug", f"[update] Skipped {file_name} - empty content", display_name, job_id=job_id)
+                    chapters_skipped += 1
+                    continue
 
-            if not chapter_content:
-                self._append_log("debug", f"[update] Skipped {file_name} — empty content", display_name, job_id=job_id)
-                chapters_skipped += 1
-                continue
+                posting_index = ch_idx if ch_idx is not None else next_index
 
-            posting_index = ch_idx if ch_idx is not None else next_index
+                while posting_index in existing_indices:
+                    posting_index += 1
 
-            while posting_index in existing_indices:
-                posting_index += 1
+                success = self._post_chapter(story_id, posting_index, title, chapter_content)
+                if success:
+                    chapters_added += 1
+                    existing_indices.add(posting_index)
+                    self._append_log("info", f"[update] Chapter {posting_index}: {title[:50]} -> OK", display_name, job_id=job_id)
+                else:
+                    self._append_log("warning", f"[update] Chapter {posting_index} ({file_name}) failed to post", display_name, job_id=job_id)
 
-            success = self._post_chapter(story_id, posting_index, title, chapter_content)
-            if success:
-                chapters_added += 1
-                existing_indices.add(posting_index)
-                self._append_log("info", f"[update] Chapter {posting_index}: {title[:50]} -> OK", display_name, job_id=job_id)
-            else:
-                self._append_log("warning", f"[update] Chapter {posting_index} ({file_name}) failed to post", display_name, job_id=job_id)
-
-            if ch_idx is not None:
-                next_index = max(next_index, posting_index + 1)
+                if ch_idx is not None:
+                    next_index = max(next_index, posting_index + 1)
 
         self._append_log("info", f"[update] Done. Added={chapters_added} Skipped={chapters_skipped}", display_name, job_id=job_id)
 
@@ -971,7 +1063,7 @@ class MainBEClientMixin:
             "x-user-id": self._config.main_be_user_id,
         }
         try:
-            with httpx.Client(timeout=60.0) as client:
+            with self._main_be_client(timeout=60.0) as client:
                 resp = client.post(
                     url,
                     files={"image": (filename, image_bytes, "image/jpeg")},
@@ -1010,7 +1102,7 @@ class MainBEClientMixin:
             params["endDate"] = end_date
 
         try:
-            with httpx.Client(timeout=600.0) as client:
+            with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(
                     f"{self._config.main_be_api_base_url}/api/v1/dashboard/stories-needing-update",
                     headers=headers,
@@ -1049,7 +1141,7 @@ class MainBEClientMixin:
             "x-user-id": self._config.main_be_user_id,
         }
         try:
-            with httpx.Client(timeout=600.0) as client:
+            with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers, params={"page": 1, "limit": 1})
                 if resp.status_code == 401:
                     return (False, resp.status_code, "Unauthorized: Invalid or expired bearer token.")
@@ -1058,5 +1150,3 @@ class MainBEClientMixin:
                 return (False, resp.status_code, resp.text[:200] or resp.reason_phrase)
         except httpx.RequestError as exc:
             return (False, 0, f"Request failed: {exc}")
-
-
