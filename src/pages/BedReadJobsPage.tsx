@@ -51,6 +51,10 @@ function getGenerationStart(job: BatchJob): string | null {
     return job.started_at;
 }
 
+function canDeleteBatchJob(job: BatchJob): boolean {
+    return job.status === 'completed' || job.status === 'cancelled' || job.status === 'failed';
+}
+
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
     pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
     queued: (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-400 animate-pulse',
@@ -96,6 +100,7 @@ interface JobCardProps {
     isSelected: boolean;
     deleteMode: boolean;
     isDark: boolean;
+    canSelectForDelete: boolean;
     onToggleSelect: (batchId: string) => void;
     onCancel: (batchId: string, storyTitle: string) => void;
     onDownloadChapter: (batchId: string, chapterNum: number) => void;
@@ -104,7 +109,7 @@ interface JobCardProps {
     c: (key: string) => string;
 }
 
-function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, onCancel, onDownloadChapter, onDownloadZip, nowMs, c }: JobCardProps) {
+function JobCard({ job, order, isSelected, deleteMode, isDark, canSelectForDelete, onToggleSelect, onCancel, onDownloadChapter, onDownloadZip, nowMs, c }: JobCardProps) {
     const [expanded, setExpanded] = useState(false);
 
     const dotFn = STATUS_DOT_MAP[job.status] ?? STATUS_DOT_MAP.pending;
@@ -130,12 +135,18 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
         ? isDark ? 'bg-red-500/10 border-r border-r-red-500/30 text-red-300' : 'bg-red-100 border-r border-r-red-200 text-red-700'
         : isDark ? 'bg-indigo-500/10 border-r border-r-white/5 text-indigo-300' : 'bg-indigo-50 border-r border-r-indigo-100 text-indigo-700';
 
+    const deleteModeCardClass = deleteMode
+        ? canSelectForDelete
+            ? 'cursor-pointer select-none'
+            : isDark ? 'opacity-70' : 'opacity-80'
+        : '';
+
     const chDotFn = (status: string) => CHAPTER_STATUS_DOT_MAP[status] ?? CHAPTER_STATUS_DOT_MAP.pending;
     const chTextFn = (status: string) => CHAPTER_STATUS_TEXT_MAP[status] ?? CHAPTER_STATUS_TEXT_MAP.pending;
 
     return (
-        <div className={`rounded-2xl overflow-hidden flex transition-all duration-200 ${cardBg} ${deleteMode ? 'cursor-pointer select-none' : ''}`}
-            onClick={deleteMode ? () => onToggleSelect(job.batch_id) : undefined}>
+        <div className={`rounded-2xl overflow-hidden flex transition-all duration-200 ${cardBg} ${deleteModeCardClass}`}
+            onClick={deleteMode && canSelectForDelete ? () => onToggleSelect(job.batch_id) : undefined}>
             {order != null && (
                 <div className={`w-12 flex-shrink-0 border-r flex flex-col items-center justify-center rounded-l-2xl transition-colors duration-200 ${orderBg}`}>
                     <span className="text-base font-bold select-none">#{order}</span>
@@ -179,7 +190,15 @@ function JobCard({ job, order, isSelected, deleteMode, isDark, onToggleSelect, o
                                     ? 'text-amber-300 bg-amber-500/10 border border-amber-500/20'
                                     : 'text-amber-700 bg-amber-50 border border-amber-200'
                                     }`}>
-                                    Auto Mode — Files Deleted
+                                    {deleteMode && canSelectForDelete ? 'Auto Mode — Deletable' : deleteMode ? 'Auto Mode — Cannot Delete' : 'Auto Mode — Files Deleted'}
+                                </span>
+                            )}
+                            {deleteMode && !canSelectForDelete && (
+                                <span className={`px-3 py-1.5 text-xs font-medium rounded-xl ${isDark
+                                    ? 'text-slate-300 bg-white/[0.04] border border-white/10'
+                                    : 'text-slate-600 bg-slate-100 border border-slate-200'
+                                    }`}>
+                                    Active Job — Cannot Delete
                                 </span>
                             )}
                             {(job.status === 'running' || job.status === 'queued') && !deleteMode && !isAutoMode && (
@@ -362,7 +381,8 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
 
     const visibleJobs = filtered.slice(0, visibleCount);
     const hasMore = visibleCount < filtered.length;
-    const allVisibleSelected = visibleJobs.length > 0 && visibleJobs.every(j => selectedIds.has(j.batch_id));
+    const deletableVisibleJobs = visibleJobs.filter(canDeleteBatchJob);
+    const allVisibleSelected = deletableVisibleJobs.length > 0 && deletableVisibleJobs.every(j => selectedIds.has(j.batch_id));
 
     useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filter, sortOrder, timeRange, specificDate]);
 
@@ -375,7 +395,13 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
         return () => observer.disconnect();
     }, [hasMore, filtered.length]);
 
-    const handleToggleSelect = (batchId: string) => { const s = new Set(selectedIds); s.has(batchId) ? s.delete(batchId) : s.add(batchId); setSelectedIds(s); };
+    const handleToggleSelect = (batchId: string) => {
+        const job = jobs.find(j => j.batch_id === batchId);
+        if (!job || !canDeleteBatchJob(job)) return;
+        const s = new Set(selectedIds);
+        s.has(batchId) ? s.delete(batchId) : s.add(batchId);
+        setSelectedIds(s);
+    };
     const toggleDeleteMode = () => { if (deleteMode) { setDeleteMode(false); setSelectedIds(new Set()); } else { setDeleteMode(true); } };
     const handleDeleteClick = () => { if (selectedIds.size === 0) return; const ids = Array.from(selectedIds); const hasRunning = ids.some(id => { const job = jobs.find(j => j.batch_id === id); return job?.status === 'running' || job?.status === 'queued' || job?.status === 'pending'; }); setDeleteConfirmation({ open: true, ids, hasRunning }); };
     const handleConfirmDelete = async () => { try { setIsDeleting(true); for (const id of deleteConfirmation.ids) { await removeBatchJob(id); } setSelectedIds(new Set()); setDeleteConfirmation({ open: false, ids: [], hasRunning: false }); setDeleteMode(false); await fetchJobs(); } catch (e) { setError(e instanceof Error ? e.message : 'Failed to delete jobs'); setDeleteConfirmation({ open: false, ids: [], hasRunning: false }); } finally { setIsDeleting(false); } };
@@ -507,7 +533,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                             {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
                         </button>
                         {deleteMode && (
-                            <button onClick={() => allVisibleSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(visibleJobs.map(j => j.batch_id)))}
+                            <button onClick={() => allVisibleSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(deletableVisibleJobs.map(j => j.batch_id)))}
                                 className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark ? 'text-white/50 border border-white/5 hover:text-white/70 hover:bg-white/[0.04]' : 'text-[rgba(0,0,0,0.4)] border border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'}`}>
                                 {allVisibleSelected ? 'Unselect All' : 'Select All'}
                             </button>
@@ -621,6 +647,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                                 isSelected={selectedIds.has(job.batch_id)}
                                 deleteMode={deleteMode}
                                 isDark={isDark}
+                                canSelectForDelete={canDeleteBatchJob(job)}
                                 onToggleSelect={handleToggleSelect}
                                 onCancel={handleCancel}
                                 onDownloadChapter={handleDownloadChapter}

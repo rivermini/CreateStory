@@ -211,9 +211,9 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
       <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
         <header className="relative overflow-hidden">
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="lg-glass-deep px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h1 className={`text-xl sm:text-2xl font-bold ${textMain}`}>Chapter Content Update</h1>
+                <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${textMain}`}>Chapter Content Update</h1>
                 <p className={`mt-1 text-sm sm:text-base ${textSub}`}>Paste a Drive folder name, verify its server story, then push chapter files one at a time.</p>
               </div>
               {selectedStory && (

@@ -188,6 +188,12 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
   const chapterPct = session?.chapter_progress?.total ? Math.round((session.chapter_progress.done / session.chapter_progress.total) * 100) : 0;
   const needsConfig = !configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id);
 
+  const progressTrackStyle = {
+    background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.12)',
+    border: isDark ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(15,23,42,0.12)',
+    boxShadow: isDark ? 'inset 0 1px 0 rgba(255,255,255,0.03)' : 'inset 0 1px 1px rgba(255,255,255,0.7)',
+  };
+
   const statusLabel = session?.status ? session.status.charAt(0).toUpperCase() + session.status.slice(1) : 'Idle';
 
   const val = (dark: string, light: string) => isDark ? dark : light;
@@ -416,8 +422,8 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                       <span className="text-xs font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>Stories</span>
                       <span className="text-xs font-bold tabular-nums" style={{ color: runningAccent }}>{session!.progress.done} / {session!.progress.total}</span>
                     </div>
-                    <div className="lg-progress-track" style={{ height: 6 }}>
-                      <div className="lg-progress-fill" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${runningAccent}cc, ${runningAccent}88)`, boxShadow: `0 0 10px ${runningAccent}50` }} />
+                    <div className="lg-progress-track" style={{ ...progressTrackStyle, height: 8 }}>
+                      <div className="lg-progress-fill" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${runningAccent}, ${runningAccent}cc)`, boxShadow: `0 0 12px ${runningAccent}55` }} />
                     </div>
                   </div>
                 )}
@@ -428,8 +434,8 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                       <span className="text-xs font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>Chapters</span>
                       <span className="text-xs font-bold tabular-nums" style={{ color: '#f59e0b' }}>{session!.chapter_progress.done} / {session!.chapter_progress.total}</span>
                     </div>
-                    <div className="lg-progress-track" style={{ height: 6 }}>
-                      <div className="lg-progress-fill" style={{ width: `${chapterPct}%`, background: 'linear-gradient(90deg, #f59e0bcc, #f59e0b88)', boxShadow: '0 0 10px #f59e0b50' }} />
+                    <div className="lg-progress-track" style={{ ...progressTrackStyle, height: 8 }}>
+                      <div className="lg-progress-fill" style={{ width: `${chapterPct}%`, background: 'linear-gradient(90deg, #f59e0b, #fbbf24)', boxShadow: '0 0 12px rgba(245,158,11,0.35)' }} />
                     </div>
                   </div>
                 )}

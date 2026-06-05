@@ -400,10 +400,10 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         {/* Hero Header */}
         <header className="relative overflow-hidden">
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="lg-glass-deep px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div>
-                  <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
+                  <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
                     Drive Sync
                   </h1>
                   <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
@@ -466,7 +466,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-2">
+      <main className="max-w-7xl my-3 mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-3">
         {/* Loading state */}
         {configLoading && (
           <div className="lg-glass p-8 flex items-center justify-center gap-4">
@@ -496,8 +496,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
         {/* Main content */}
         {config && !configLoading && (
-          <div className="mt-3">
-
+          <div>
             <StorySyncTabs
               config={config}
               activeTab={activeSubTab}

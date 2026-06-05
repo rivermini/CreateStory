@@ -20,10 +20,24 @@ const VARIANT_ACCENT: Record<BannerVariant, string> = {
 };
 
 const VARIANT_LIGHT_BG: Record<BannerVariant, string> = {
-  error: 'rgba(239,68,68,0.06)',
-  production: 'rgba(16,185,129,0.06)',
-  nonproduction: 'rgba(99,102,241,0.06)',
-  token_invalid: 'rgba(249,115,22,0.06)',
+  error: 'rgba(239,68,68,0.09)',
+  production: 'rgba(16,185,129,0.09)',
+  nonproduction: 'rgba(99,102,241,0.09)',
+  token_invalid: 'rgba(249,115,22,0.09)',
+};
+
+const VARIANT_LIGHT_BORDER: Record<BannerVariant, string> = {
+  error: 'rgba(239,68,68,0.2)',
+  production: 'rgba(16,185,129,0.2)',
+  nonproduction: 'rgba(99,102,241,0.2)',
+  token_invalid: 'rgba(249,115,22,0.2)',
+};
+
+const VARIANT_LIGHT_SOFT: Record<BannerVariant, string> = {
+  error: 'rgba(255,255,255,0.56)',
+  production: 'rgba(240,253,250,0.6)',
+  nonproduction: 'rgba(238,242,255,0.6)',
+  token_invalid: 'rgba(255,247,237,0.62)',
 };
 
 export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigValid, tokenInvalid, onConfigure }: ServerModeBannerProps) {
@@ -43,26 +57,31 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
 
   const accent = VARIANT_ACCENT[variant];
   const lightBg = VARIANT_LIGHT_BG[variant];
+  const lightBorder = VARIANT_LIGHT_BORDER[variant];
+  const lightSoft = VARIANT_LIGHT_SOFT[variant];
 
   const iconColor = accent;
-  const textPrimary = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)';
-  const textSecondary = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+  const textPrimary = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)';
+  const textSecondary = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.68)';
   return (
     <div
       className="lg-glass px-4 py-3"
       style={{
-        border: `1px solid ${accent}25`,
+        border: isDark ? `1px solid ${accent}25` : `1px solid ${lightBorder}`,
         background: isDark
           ? `linear-gradient(135deg, ${accent}12, ${accent}06)`
-          : `linear-gradient(135deg, ${lightBg}, ${VARIANT_LIGHT_BG[variant]})`,
-        boxShadow: `0 4px 20px ${accent}10, inset 0 1px 0 rgba(255,255,255,0.05)`,
+          : `linear-gradient(135deg, ${lightSoft}, ${lightBg})`,
+        boxShadow: isDark
+          ? `0 4px 20px ${accent}10, inset 0 1px 0 rgba(255,255,255,0.05)`
+          : `0 8px 24px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.55)`,
+        backdropFilter: isDark ? undefined : 'blur(10px)',
       }}
     >
       <div className="flex items-start gap-3">
         {/* Icon */}
         <div
           className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center mt-0.5"
-          style={{ background: `${accent}15` }}
+          style={{ background: isDark ? `${accent}15` : `${accent}16`, boxShadow: isDark ? 'none' : `inset 0 0 0 1px ${lightBorder}` }}
         >
           {variant === 'error' || variant === 'token_invalid' ? (
             <svg className="w-4 h-4" style={{ color: iconColor }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,7 +113,7 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
           </p>
 
           {variant === 'production' && (
-            <p className="text-xs mt-1" style={{ color: '#fbbf24' }}>
+            <p className="text-xs mt-1" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
               <strong>Warning:</strong> Actions will affect real data. Please double-check before proceeding.
             </p>
           )}
