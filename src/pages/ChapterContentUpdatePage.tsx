@@ -416,8 +416,8 @@ function ChapterRow({
           </div>
           <div className={`mt-1 flex flex-wrap items-center gap-2 text-xs ${textSub}`}>
             {chapter.fileName && <span className="font-mono truncate max-w-md">{chapter.fileName}</span>}
-            {chapter.serverLength > 0 && <span>Server {chapter.serverLength.toLocaleString()}</span>}
-            <span>Drive {chapter.driveLength.toLocaleString()}</span>
+            {chapter.serverLength > 0 && <span>Server text: {chapter.serverLength.toLocaleString()} chars</span>}
+            <span>Drive text: {chapter.driveLength.toLocaleString()} chars</span>
           </div>
           {(chapter.message || result) && (
             <div className={`mt-1.5 text-xs ${result ? (result.success ? 'text-emerald-400' : 'text-red-400') : textSub}`}>
