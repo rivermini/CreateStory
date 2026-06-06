@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   getDriveSyncConfig,
   initDriveSyncConfig,
@@ -61,12 +61,15 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [uploadableLoading, setUploadableLoading] = useState(false);
   const [uploadableError, setUploadableError] = useState('');
   const [uploadResults, setUploadResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
+  const [uploadingJobs, setUploadingJobs] = useState<Map<string, string>>(new Map());
+  const uploadLocksRef = useRef<Set<string>>(new Set());
 
   const [updatableData, setUpdatableData] = useState<CheckUpdatableResponse | null>(null);
   const [updatableLoading, setUpdatableLoading] = useState(false);
   const [updatableError, setUpdatableError] = useState('');
   const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [updatingJobs, setUpdatingJobs] = useState<Map<string, string>>(new Map());
+  const updateLocksRef = useRef<Set<string>>(new Set());
   const [storiesNeedingUpdate, setStoriesNeedingUpdate] = useState<StoriesNeedingUpdateEntry[]>([]);
 
   useEffect(() => {
@@ -203,6 +206,16 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
       if (completedIds.length > 0) {
         setTrackedJobs(prev => prev.filter(j => !completedIds.includes(j.jobId)));
+        setUploadingJobs(prev => {
+          const next = new Map(prev);
+          for (const tracked of trackedJobs) {
+            if (completedIds.includes(tracked.jobId)) {
+              next.delete(tracked.folderId);
+              uploadLocksRef.current.delete(tracked.folderId);
+            }
+          }
+          return next;
+        });
       }
     };
 
@@ -239,16 +252,41 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   };
 
   const handleUploadSingle = useCallback(async (folder: DriveFolderEntry): Promise<string> => {
-    const res = await createJob({
-      kind: 'upload_single',
-      folder_id: folder.id,
-      folder_name: folder.name,
-      display_name: folder.display_name,
-      main_be_api_base_url: config?.main_be_api_base_url,
-    });
+    if (uploadLocksRef.current.has(folder.id)) {
+      return folder.id;
+    }
 
-    setTrackedJobs(prev => [...prev, { jobId: res.id, folderId: folder.id, displayName: folder.display_name }]);
-    return res.id;
+    uploadLocksRef.current.add(folder.id);
+    setUploadingJobs(prev => new Map(prev).set(folder.id, 'pending'));
+
+    try {
+      const res = await createJob({
+        kind: 'upload_single',
+        folder_id: folder.id,
+        folder_name: folder.name,
+        display_name: folder.display_name,
+        main_be_api_base_url: config?.main_be_api_base_url,
+      });
+
+      setTrackedJobs(prev => prev.some(j => j.jobId === res.id) ? prev : [...prev, { jobId: res.id, folderId: folder.id, displayName: folder.display_name }]);
+      setUploadingJobs(prev => new Map(prev).set(folder.id, res.id));
+      return res.id;
+    } catch (e) {
+      uploadLocksRef.current.delete(folder.id);
+      setUploadingJobs(prev => {
+        const next = new Map(prev);
+        next.delete(folder.id);
+        return next;
+      });
+      setUploadResults(prev => {
+        const next = new Map(prev).set(folder.id, {
+          success: false,
+          message: e instanceof Error ? e.message : 'Failed to enqueue job',
+        });
+        return next;
+      });
+      return folder.id;
+    }
   }, [config]);
 
   const handleUploadAll = useCallback(async () => {
@@ -259,6 +297,11 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
     const newJobs: TrackedJob[] = [];
     for (const folder of folders) {
+      if (uploadLocksRef.current.has(folder.id)) {
+        continue;
+      }
+      uploadLocksRef.current.add(folder.id);
+      setUploadingJobs(prev => new Map(prev).set(folder.id, 'pending'));
       try {
         const res = await createJob({
           kind: 'upload_single',
@@ -267,8 +310,17 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           display_name: folder.display_name,
           main_be_api_base_url: config?.main_be_api_base_url,
         });
-        newJobs.push({ jobId: res.id, folderId: folder.id, displayName: folder.display_name });
+        if (!newJobs.some(j => j.jobId === res.id)) {
+          newJobs.push({ jobId: res.id, folderId: folder.id, displayName: folder.display_name });
+        }
+        setUploadingJobs(prev => new Map(prev).set(folder.id, res.id));
       } catch (e) {
+        uploadLocksRef.current.delete(folder.id);
+        setUploadingJobs(prev => {
+          const next = new Map(prev);
+          next.delete(folder.id);
+          return next;
+        });
         setUploadResults(prev => {
           const next = new Map(prev).set(folder.id, {
             success: false,
@@ -325,6 +377,14 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
   const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry, chaptersCount?: number): Promise<string> => {
     const { server_story, folder } = entry;
+    const lockKey = server_story.id || folder.id;
+
+    if (updateLocksRef.current.has(lockKey)) {
+      return server_story.id;
+    }
+
+    updateLocksRef.current.add(lockKey);
+    setUpdatingJobs(prev => new Map(prev).set(server_story.id, 'pending'));
 
     let jobId: string;
     try {
@@ -339,6 +399,12 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       jobId = job.id;
       setUpdatingJobs(prev => new Map(prev).set(server_story.id, jobId));
     } catch (e) {
+      updateLocksRef.current.delete(lockKey);
+      setUpdatingJobs(prev => {
+        const next = new Map(prev);
+        next.delete(server_story.id);
+        return next;
+      });
       setUpdateResults(prev => {
         const next = new Map(prev).set(server_story.id, {
           success: false,
@@ -367,6 +433,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               next.delete(server_story.id);
               return next;
             });
+            updateLocksRef.current.delete(lockKey);
             return;
           }
         } catch {
@@ -376,7 +443,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     poll();
 
     return server_story.id;
-  }, []);
+  }, [config]);
 
   const handleUpdateAll = useCallback(async (entries: import('../api/client').UpdatableStoryEntry[], chapterInputs: Map<string, number>) => {
     if (entries.length === 0) return;
@@ -497,11 +564,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               uploadableLoading={uploadableLoading}
               uploadableError={uploadableError}
               uploadResults={uploadResults}
-              uploadingIds={(() => {
-                const s = new Set<string>();
-                for (const j of trackedJobs) s.add(j.folderId);
-                return s;
-              })()}
+              uploadingIds={new Set(uploadingJobs.keys())}
               onCheckUploadable={handleCheckUploadable}
               onUploadSingle={handleUploadSingle}
               onUploadAll={handleUploadAll}
