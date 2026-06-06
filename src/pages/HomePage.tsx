@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { listSites, startCrawl, getSettings } from '../api/client';
-import type { SiteInfoResponse } from '../api/client';
+import { listSites, startCrawl, getSettings, checkInkittCookies } from '../api/client';
+import type { InkittCookieStatusResponse, SiteInfoResponse } from '../api/client';
 import { NovelInfoPanel } from '../components/NovelInfoPanel';
 import { MobileBottomSheet } from '../components/MobileBottomSheet';
 import { Icon, appIcons } from '../components/Icon';
@@ -31,6 +31,8 @@ export function HomePage({ themeMode }: HomePageProps) {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [supportedSites, setSupportedSites] = useState<SiteInfoResponse[]>([]);
   const [autoMaxChapters, setAutoMaxChapters] = useState(false);
+  const [inkittCookieStatus, setInkittCookieStatus] = useState<InkittCookieStatusResponse | null>(null);
+  const [isCheckingInkittCookies, setIsCheckingInkittCookies] = useState(false);
   const outputFormat = 'md' as const;
 
   useEffect(() => {
@@ -84,6 +86,39 @@ export function HomePage({ themeMode }: HomePageProps) {
     setRangeTo(totalChapterCount);
   }, [autoMaxChapters, totalChapterCount]);
 
+  useEffect(() => {
+    if (siteInfo?.config_name !== 'inkitt' || !isValid || !inputUrl.trim()) {
+      setInkittCookieStatus(null);
+      setIsCheckingInkittCookies(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingInkittCookies(true);
+    setInkittCookieStatus(null);
+    checkInkittCookies(inputUrl)
+      .then(status => {
+        if (!cancelled) setInkittCookieStatus(status);
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setInkittCookieStatus({
+            valid: false,
+            reason: 'request_failed',
+            message: err instanceof Error ? err.message : 'Could not test saved Inkitt cookies.',
+            cookie_count: 0,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsCheckingInkittCookies(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [siteInfo?.config_name, isValid, inputUrl]);
+
   const inputsLocked = !isValid;
   const effectiveMax = totalChapterCount ?? 999999;
   const rangeTotal = Math.max(0, rangeTo - rangeFrom + 1);
@@ -114,6 +149,7 @@ export function HomePage({ themeMode }: HomePageProps) {
     setRangeFrom(1);
   };
 
+  const isInkitt = siteInfo?.config_name === 'inkitt';
   const isPaywalled = novelMetadata?.is_paywalled === true;
 
   const handleStart = async () => {
@@ -320,6 +356,47 @@ export function HomePage({ themeMode }: HomePageProps) {
                   }`}>
                     <Icon icon={appIcons.info} className="w-5 h-5 flex-shrink-0" />
                     <span>{error}</span>
+                  </div>
+                )}
+
+                {isInkitt && (
+                  <div className={`rounded-xl p-4 border ${isCheckingInkittCookies
+                    ? isDark
+                      ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300'
+                      : 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                    : inkittCookieStatus?.valid === true
+                      ? isDark
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : inkittCookieStatus?.valid === null
+                        ? isDark
+                          ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                          : 'bg-amber-50 border-amber-200 text-amber-700'
+                        : isDark
+                          ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                          : 'bg-red-50 border-red-200 text-red-600'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      {isCheckingInkittCookies ? (
+                        <Icon icon={appIcons.spinner} className="animate-spin w-5 h-5 mt-0.5 flex-shrink-0" />
+                      ) : inkittCookieStatus?.valid === true ? (
+                        <Icon icon={appIcons.checkCircle} className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                      ) : inkittCookieStatus?.valid === null ? (
+                        <Icon icon={appIcons.info} className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <Icon icon={appIcons.statusWarning} className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          {isCheckingInkittCookies ? 'Checking saved Inkitt cookies...' : inkittCookieStatus?.message || 'Could not test saved Inkitt cookies.'}
+                        </p>
+                        {!isCheckingInkittCookies && inkittCookieStatus?.valid !== true && (
+                          <p className={`text-xs mt-1 ${isDark ? 'text-white/45' : 'text-[rgba(0,0,0,0.45)]'}`}>
+                            Update Inkitt cookies in Settings before crawling login-gated chapters.
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </section>

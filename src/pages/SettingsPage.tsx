@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   clearBackendData,
+  updateInkittCookies,
   getSettings,
   updateSettings,
   getDriveSyncConfig,
@@ -63,6 +64,11 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [credentialFileExists, setCredentialFileExists] = useState(true);
   const [uploadError, setUploadError] = useState('');
   const [jsonText, setJsonText] = useState('');
+  const [inkittUserCredentials, setInkittUserCredentials] = useState('');
+  const [inkittCfClearance, setInkittCfClearance] = useState('');
+  const [savingInkittCookies, setSavingInkittCookies] = useState(false);
+  const [inkittCookieError, setInkittCookieError] = useState('');
+  const [inkittCookieMessage, setInkittCookieMessage] = useState('');
 
   useEffect(() => {
     setLocalTheme(themeMode === 'dark' ? 'dark' : 'light');
@@ -325,6 +331,34 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
     }
   };
 
+  const handleSaveInkittCookies = async () => {
+    const userCredentials = inkittUserCredentials.replace(/\s+/g, '').trim();
+    const cfClearance = inkittCfClearance.replace(/\s+/g, '').trim();
+    if (!userCredentials || !cfClearance) {
+      setInkittCookieError('Paste both user_credentials and cf_clearance before saving.');
+      setInkittCookieMessage('');
+      return;
+    }
+
+    setSavingInkittCookies(true);
+    setInkittCookieError('');
+    setInkittCookieMessage('');
+    try {
+      const result = await updateInkittCookies(`user_credentials=${userCredentials}; cf_clearance=${cfClearance}`);
+      const message = `Saved ${result.cookie_count} Inkitt cookie${result.cookie_count === 1 ? '' : 's'}.`;
+      setInkittCookieMessage(message);
+      setInkittUserCredentials('');
+      setInkittCfClearance('');
+      showToast(message, 'success', 2200, 'top-center');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update Inkitt cookies.';
+      setInkittCookieError(message);
+      showToast('Failed to update Inkitt cookies.', 'error', 2500, 'top-center');
+    } finally {
+      setSavingInkittCookies(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: isDark ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)' : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)' }}>
@@ -536,6 +570,106 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                   </span>
                 </div>
               </div>
+            </div>
+          )}
+        </section>
+
+        {/* Inkitt Cookies Section */}
+        <section className="lg-glass p-5 sm:p-6 space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
+                <Icon icon={appIcons.shield} className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Inkitt Cookies</h2>
+                <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                  Update login cookies for Inkitt chapter crawling
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveInkittCookies}
+              disabled={savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim()}
+              className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim()
+                  ? isDark
+                    ? 'bg-white/[0.05] text-white/25 cursor-not-allowed'
+                    : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25'
+              }`}
+            >
+              {savingInkittCookies ? (
+                <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
+              ) : (
+                <Icon icon={appIcons.save} className="w-4 h-4" />
+              )}
+              Save Cookies
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="settings-inkitt-user-credentials" className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                user_credentials value
+              </label>
+              <textarea
+                id="settings-inkitt-user-credentials"
+                value={inkittUserCredentials}
+                onChange={e => {
+                  setInkittUserCredentials(e.target.value);
+                  setInkittCookieError('');
+                  setInkittCookieMessage('');
+                }}
+                rows={4}
+                placeholder="Paste only the Cookie Value for user_credentials"
+                className={`w-full px-4 py-3 border rounded-xl text-xs font-mono resize-y min-h-[110px]
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                  ${isDark
+                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/25'
+                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
+                  }`}
+              />
+            </div>
+            <div>
+              <label htmlFor="settings-inkitt-cf-clearance" className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
+                cf_clearance value
+              </label>
+              <textarea
+                id="settings-inkitt-cf-clearance"
+                value={inkittCfClearance}
+                onChange={e => {
+                  setInkittCfClearance(e.target.value);
+                  setInkittCookieError('');
+                  setInkittCookieMessage('');
+                }}
+                rows={4}
+                placeholder="Paste only the Cookie Value for cf_clearance"
+                className={`w-full px-4 py-3 border rounded-xl text-xs font-mono resize-y min-h-[110px]
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                  ${isDark
+                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/25'
+                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
+                  }`}
+              />
+            </div>
+          </div>
+
+          <p className={`text-xs ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
+            Copy these from Chrome DevTools: Application, Cookies, https://www.inkitt.com. Only the Cookie Value column is needed.
+          </p>
+
+          {inkittCookieMessage && (
+            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+              <Icon icon={appIcons.checkCircle} className="w-4 h-4 flex-shrink-0" />
+              {inkittCookieMessage}
+            </div>
+          )}
+          {inkittCookieError && (
+            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+              <Icon icon={appIcons.statusWarning} className="w-4 h-4 flex-shrink-0" />
+              {inkittCookieError}
             </div>
           )}
         </section>

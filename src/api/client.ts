@@ -315,6 +315,20 @@ export interface CrawlCancelResponse {
   cancelled: boolean;
 }
 
+export interface InkittCookieUpdateResponse {
+  updated: boolean;
+  cookie_count: number;
+  path: string;
+}
+
+export interface InkittCookieStatusResponse {
+  valid: boolean | null;
+  reason: string;
+  message: string;
+  cookie_count: number;
+  tested_url?: string | null;
+}
+
 export interface ProgressUpdate {
   chapters_crawled: number;
   chapters_total: number;
@@ -337,6 +351,23 @@ export async function startBatchCrawl(requests: CrawlRequest[]): Promise<CrawlSt
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requests),
+  });
+}
+
+export async function updateInkittCookies(cookies: string): Promise<InkittCookieUpdateResponse> {
+  return apiFetch<InkittCookieUpdateResponse>('/api/crawl/inkitt-cookies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies }),
+  });
+}
+
+export async function checkInkittCookies(storyUrl?: string): Promise<InkittCookieStatusResponse> {
+  return apiFetch<InkittCookieStatusResponse>('/api/crawl/inkitt-cookies/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ story_url: storyUrl }),
+    timeout: 45000,
   });
 }
 
