@@ -35,6 +35,18 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Crawler service preload failed: %s", exc)
     try:
+        from api.repositories.inkitt_cookie_repository import migrate_json_to_db
+        from api.db import SessionLocal
+        db = SessionLocal()
+        try:
+            migrated = migrate_json_to_db(db)
+            if migrated > 0:
+                logger.info("Migrated %d Inkitt cookie(s) from JSON file to database.", migrated)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("Inkitt cookie migration failed: %s", exc)
+    try:
         from handlers.selenium_handler import _get_browser
         browser = _get_browser()
         browser._resolve_chromedriver()

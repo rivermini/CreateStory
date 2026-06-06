@@ -49,3 +49,22 @@ class CrawlOutputFileRecord(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     raw: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class InkittCookie(Base):
+    """Stores Inkitt login cookies (user_credentials, cf_clearance) in the database.
+
+    Only the most recently saved set of cookies is considered valid at any time.
+    Expired cookies are skipped at read time.
+    """
+
+    __tablename__ = "inkitt_cookies"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    domain: Mapped[str] = mapped_column(String(256), nullable=False, default=".inkitt.com")
+    path: Mapped[str] = mapped_column(String(64), nullable=False, default="/")
+    secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    expires_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)

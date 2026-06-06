@@ -1,4 +1,4 @@
-"""Helpers for updating Inkitt login cookies used by the crawler."""
+"""DB-backed helpers for Inkitt login cookies used by the crawler."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 import re
 import time
 import urllib.parse
-from pathlib import Path
 from typing import Any
 
 import requests
@@ -14,8 +13,6 @@ from bs4 import BeautifulSoup
 
 from utils.proxy import requests_proxies
 
-
-COOKIE_PATH = Path(__file__).resolve().parents[2] / "handlers" / "selenium_cookies_www_inkitt_com.json"
 
 _HEADERS = {
     "User-Agent": (
@@ -33,27 +30,42 @@ _CHAPTER_RE = re.compile(r"/stories/(\d+)/chapters/(\d+)")
 
 
 def update_inkitt_cookies(raw_input: str) -> dict[str, Any]:
-    """Parse pasted cookies and save them in Selenium cookie JSON format."""
+    """Parse pasted cookies and persist them to the database."""
     cookies = _parse_cookie_input(raw_input)
     if not cookies:
         raise ValueError("No valid Inkitt cookies were found.")
 
-    COOKIE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    COOKIE_PATH.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+    from api.db import SessionLocal
+    from api.repositories.inkitt_cookie_repository import InkittCookieRepository
+
+    db = SessionLocal()
+    try:
+        repo = InkittCookieRepository(db)
+        count = repo.save_cookies(cookies)
+    finally:
+        db.close()
 
     return {
         "updated": True,
-        "cookie_count": len(cookies),
-        "path": str(COOKIE_PATH),
+        "cookie_count": count,
     }
 
 
 def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
     """Check whether saved Inkitt cookies can read a likely login-gated page."""
-    saved = _load_saved_cookies()
-    cookie_count = len(saved)
+    from api.db import SessionLocal
+    from api.repositories.inkitt_cookie_repository import InkittCookieRepository
+
+    db = SessionLocal()
+    try:
+        repo = InkittCookieRepository(db)
+        saved = repo.get_valid()
+        cookie_count = len(saved)
+    finally:
+        db.close()
+
     if cookie_count == 0:
-        return _status(False, "missing", "No saved Inkitt cookies found.", cookie_count)
+        return _status(False, "missing", "No saved Inkitt cookies found.", 0)
 
     session = requests.Session()
     session.headers.update(_HEADERS)
@@ -62,15 +74,11 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
         session.proxies.update(proxies)
 
     for cookie in saved:
-        name = cookie.get("name")
-        value = cookie.get("value")
-        if not name or value is None:
-            continue
         session.cookies.set(
-            name,
-            str(value),
-            domain=cookie.get("domain") or ".inkitt.com",
-            path=cookie.get("path") or "/",
+            cookie.name,
+            cookie.value,
+            domain=cookie.domain,
+            path=cookie.path,
         )
 
     test_url = _test_url_for_story(story_url) if story_url else "https://www.inkitt.com/"
@@ -134,18 +142,6 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
     return _status(True, "ok", "Saved Inkitt cookies are present and Inkitt responded.", cookie_count, test_url)
 
 
-def _load_saved_cookies() -> list[dict[str, Any]]:
-    if not COOKIE_PATH.exists():
-        return []
-    try:
-        raw = json.loads(COOKIE_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    if not isinstance(raw, list):
-        return []
-    return [cookie for cookie in raw if isinstance(cookie, dict) and cookie.get("name") and cookie.get("value") is not None]
-
-
 def _status(
     valid: bool | None,
     reason: str,
@@ -175,7 +171,6 @@ def _test_url_for_story(story_url: str | None) -> str:
     if not story_match:
         return story_url
 
-    # Chapter 4 is often where Inkitt asks anonymous users to log in.
     return f"https://www.inkitt.com/stories/{story_match.group(1)}/chapters/4"
 
 
@@ -269,7 +264,7 @@ def _parse_cookie_input(raw_input: str) -> list[dict[str, Any]]:
 
 def _parse_cookie_header(header: str) -> list[dict[str, Any]]:
     text = re.sub(r"^\s*cookie\s*:\s*", "", header.strip(), flags=re.IGNORECASE)
-    cookies: list[dict[str, Any]] = []
+    parsed: list[dict[str, Any]] = []
     for part in text.split(";"):
         if "=" not in part:
             continue
@@ -278,8 +273,20 @@ def _parse_cookie_header(header: str) -> list[dict[str, Any]]:
         value = _clean_cookie_value(value)
         if not name:
             continue
-        cookies.append(_normalize_cookie(name, value, {}))
-    return _dedupe_cookies(cookies)
+        parsed.append(_normalize_cookie(name, value, {}))
+    return _dedupe_cookies(parsed)
+
+
+def _dedupe_cookies(cookies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for cookie in cookies:
+        key = (
+            cookie["name"],
+            cookie.get("domain", ".inkitt.com"),
+            cookie.get("path", "/"),
+        )
+        by_key[key] = cookie
+    return list(by_key.values())
 
 
 def _normalize_cookie(name: str, value: str, source: dict[str, Any]) -> dict[str, Any]:
@@ -324,15 +331,3 @@ def _parse_expiry(value: Any) -> int | None:
     if expiry <= int(time.time()):
         return None
     return expiry
-
-
-def _dedupe_cookies(cookies: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for cookie in cookies:
-        key = (
-            cookie["name"],
-            cookie.get("domain", ".inkitt.com"),
-            cookie.get("path", "/"),
-        )
-        by_key[key] = cookie
-    return list(by_key.values())

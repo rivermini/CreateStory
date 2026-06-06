@@ -28,7 +28,6 @@ class InkittCookieUpdateRequest(BaseModel):
 class InkittCookieUpdateResponse(BaseModel):
     updated: bool
     cookie_count: int
-    path: str
 
 
 class InkittCookieStatusRequest(BaseModel):

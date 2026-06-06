@@ -202,12 +202,50 @@ class InkittSpider(BaseSpider):
 
     def _load_saved_cookies(self) -> int:
         self._cookies_loaded = True
+
+        db_cookies = self._load_cookies_from_db()
+        if db_cookies:
+            for c in db_cookies:
+                self._session.cookies.set(c["name"], c["value"], domain=c.get("domain", ".inkitt.com"), path=c.get("path", "/"))
+            self.logger.info("[inkitt] Loaded %d cookie(s) from database.", len(db_cookies))
+            return len(db_cookies)
+
+        json_cookies = self._load_cookies_from_json()
+        if json_cookies:
+            for c in json_cookies:
+                self._session.cookies.set(c["name"], c["value"], domain=c.get("domain", ".inkitt.com"), path=c.get("path", "/"))
+            self.logger.info("[inkitt] Loaded %d cookie(s) from legacy JSON file.", len(json_cookies))
+            return len(json_cookies)
+
+        return 0
+
+    def _load_cookies_from_db(self) -> list[dict[str, Any]]:
+        try:
+            from api.db import SessionLocal
+            from api.repositories.inkitt_cookie_repository import InkittCookieRepository
+
+            db = SessionLocal()
+            try:
+                repo = InkittCookieRepository(db)
+                rows = repo.get_valid()
+                return [
+                    {"name": r.name, "value": r.value, "domain": r.domain, "path": r.path}
+                    for r in rows
+                ]
+            finally:
+                db.close()
+        except Exception as exc:
+            self.logger.debug("[inkitt] Could not load cookies from database: %s", exc)
+            return []
+
+    def _load_cookies_from_json(self) -> list[dict[str, Any]]:
         cookie_files = [
             Path(__file__).parent.parent / "handlers" / "selenium_cookies_www_inkitt_com.json",
             Path(__file__).parent.parent / "handlers" / "selenium_cookies.json",
         ]
 
         loaded = 0
+        results = []
         for cookie_file in cookie_files:
             if not cookie_file.exists():
                 continue
@@ -224,17 +262,12 @@ class InkittSpider(BaseSpider):
                 value = cookie.get("value")
                 if not name or value is None:
                     continue
-                self._session.cookies.set(
-                    name,
-                    value,
-                    domain=cookie.get("domain") or ".inkitt.com",
-                    path=cookie.get("path") or "/",
-                )
+                results.append({"name": name, "value": value, "domain": cookie.get("domain", ".inkitt.com"), "path": cookie.get("path", "/")})
                 loaded += 1
             if loaded:
                 self.logger.info("[inkitt] Loaded %d saved cookie(s) from %s", loaded, cookie_file.name)
-                return loaded
-        return 0
+                return results
+        return results
 
     def _is_login_gated_response(self, html: str) -> bool:
         soup = BeautifulSoup(html, "html.parser")
