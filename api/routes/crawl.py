@@ -2,10 +2,10 @@
 
 import logging
 import re
-from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from api.models.crawl_request import (
@@ -19,6 +19,28 @@ from api.routes.crawl_stream import crawl_event_generator
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/crawl", tags=["Crawl"])
+
+
+class InkittCookieUpdateRequest(BaseModel):
+    cookies: str = Field(..., min_length=1, description="Inkitt cookies as Selenium JSON or a raw Cookie header.")
+
+
+class InkittCookieUpdateResponse(BaseModel):
+    updated: bool
+    cookie_count: int
+    path: str
+
+
+class InkittCookieStatusRequest(BaseModel):
+    story_url: str | None = Field(default=None, description="Optional Inkitt story/chapter URL to test against.")
+
+
+class InkittCookieStatusResponse(BaseModel):
+    valid: bool | None
+    reason: str
+    message: str
+    cookie_count: int
+    tested_url: str | None = None
 
 
 @router.post("/start", response_model=CrawlStartResponse)
@@ -50,6 +72,35 @@ async def start_crawl(request: CrawlRequest) -> CrawlStartResponse:
     )
     logger.info("Crawl started: %s", crawl_id)
     return CrawlStartResponse(crawl_id=crawl_id, status="running")
+
+
+@router.post("/inkitt-cookies", response_model=InkittCookieUpdateResponse)
+async def update_inkitt_cookies(request: InkittCookieUpdateRequest) -> InkittCookieUpdateResponse:
+    """Update the saved Inkitt login cookies used by the Inkitt spider."""
+    from api.services.inkitt_cookie_service import update_inkitt_cookies as save_inkitt_cookies
+
+    try:
+        result = save_inkitt_cookies(request.cookies)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    logger.info("Updated Inkitt cookies: %d cookie(s)", result["cookie_count"])
+    return InkittCookieUpdateResponse(**result)
+
+
+@router.post("/inkitt-cookies/status", response_model=InkittCookieStatusResponse)
+async def check_inkitt_cookies(request: InkittCookieStatusRequest) -> InkittCookieStatusResponse:
+    """Check whether saved Inkitt cookies can access a likely login-gated page."""
+    from api.services.inkitt_cookie_service import check_inkitt_cookies as run_check
+
+    result = run_check(request.story_url)
+    logger.info(
+        "Checked Inkitt cookies: valid=%s reason=%s tested_url=%s",
+        result["valid"],
+        result["reason"],
+        result.get("tested_url"),
+    )
+    return InkittCookieStatusResponse(**result)
 
 
 @router.post("/start-batch", response_model=list[CrawlStartResponse])
