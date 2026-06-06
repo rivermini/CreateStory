@@ -69,6 +69,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [savingInkittCookies, setSavingInkittCookies] = useState(false);
   const [inkittCookieError, setInkittCookieError] = useState('');
   const [inkittCookieMessage, setInkittCookieMessage] = useState('');
+  const [inkittJsonText, setInkittJsonText] = useState('');
 
   useEffect(() => {
     setLocalTheme(themeMode === 'dark' ? 'dark' : 'light');
@@ -356,6 +357,74 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
       showToast('Failed to update Inkitt cookies.', 'error', 2500, 'top-center');
     } finally {
       setSavingInkittCookies(false);
+    }
+  };
+
+  const handleInkittJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        let json = JSON.parse(event.target?.result as string);
+
+        if (Array.isArray(json)) json = json[0] || {};
+
+        if (json.data) json = json.data;
+        else if (json.config) json = json.config;
+        else if (json.attributes) json = json.attributes;
+
+        const userCred = json.user_credentials || json.userCredentials || json.user_credentials_cookie || '';
+        const cfClear = json.cf_clearance || json.cfClearance || json.cfClearance || '';
+
+        if (!userCred || !cfClear) {
+          setInkittCookieError('Missing user_credentials or cf_clearance in JSON. Received keys: ' + Object.keys(json).join(', '));
+          return;
+        }
+
+        setInkittUserCredentials(userCred);
+        setInkittCfClearance(cfClear);
+        setInkittCookieError('');
+        showToast('Inkitt cookie values loaded from file.', 'success', 2000, 'top-center');
+      } catch (err) {
+        setInkittCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleInkittJsonPaste = () => {
+    if (!inkittJsonText.trim()) {
+      setInkittCookieError('Please paste JSON first.');
+      return;
+    }
+
+    try {
+      let json = JSON.parse(inkittJsonText);
+
+      if (Array.isArray(json)) json = json[0] || {};
+
+      if (json.data) json = json.data;
+      else if (json.config) json = json.config;
+      else if (json.attributes) json = json.attributes;
+
+      const userCred = json.user_credentials || json.userCredentials || json.user_credentials_cookie || '';
+      const cfClear = json.cf_clearance || json.cfClearance || '';
+
+      if (!userCred || !cfClear) {
+        setInkittCookieError('Missing user_credentials or cf_clearance in JSON. Received keys: ' + Object.keys(json).join(', '));
+        return;
+      }
+
+      setInkittUserCredentials(userCred);
+      setInkittCfClearance(cfClear);
+      setInkittJsonText('');
+      setInkittCookieError('');
+      showToast('Inkitt cookie values loaded.', 'success', 2000, 'top-center');
+    } catch (err) {
+      setInkittCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
     }
   };
 
@@ -653,6 +722,51 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
                     : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
                   }`}
               />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+              isDark
+                ? 'bg-white/[0.06] hover:bg-white/[0.08] text-white/70 border border-white/[0.08]'
+                : 'bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)] text-[rgba(0,0,0,0.6)] border border-black/8'
+            }`}>
+              <Icon icon={appIcons.uploadFile} className="w-4 h-4" />
+              Upload Inkitt Cookies JSON
+              <input
+                type="file"
+                accept="application/json"
+                onChange={handleInkittJsonFileUpload}
+                className="hidden"
+              />
+            </label>
+
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <textarea
+                value={inkittJsonText}
+                onChange={e => setInkittJsonText(e.target.value)}
+                placeholder={'{\n  "user_credentials": "...",\n  "cf_clearance": "..."\n}'}
+                rows={2}
+                className={`flex-1 px-3 py-2 rounded-xl border text-xs font-mono resize-none min-w-0
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                  ${isDark
+                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
+                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
+                  }`}
+              />
+              <button
+                onClick={handleInkittJsonPaste}
+                disabled={!inkittJsonText.trim()}
+                className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-shrink-0 ${
+                  inkittJsonText.trim()
+                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                    : isDark
+                      ? 'bg-white/[0.06] text-white/30 cursor-not-allowed'
+                      : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
+                }`}
+              >
+                Apply
+              </button>
             </div>
           </div>
 
