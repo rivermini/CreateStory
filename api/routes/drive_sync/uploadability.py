@@ -716,7 +716,7 @@ async def update_chapters(folder_id: str) -> JobCreateResponse:
 
     display_name = folder_name
 
-    job = service.create_job(
+    job, created = service.create_job_once(
         kind="update_single",
         folder_id=folder_id,
         folder_name=folder_name,
@@ -728,13 +728,18 @@ async def update_chapters(folder_id: str) -> JobCreateResponse:
     def run_update():
         service.sync_update_as_job(job.id)
 
-    thread = threading.Thread(target=run_update, daemon=True)
-    thread.start()
+    if created:
+        thread = threading.Thread(target=run_update, daemon=True)
+        thread.start()
 
     return JobCreateResponse(
         id=job.id,
         status=job.status,
-        message=f"Update job enqueued. Will update chapters for '{display_name}' shortly.",
+        message=(
+            f"Update job enqueued. Will update chapters for '{display_name}' shortly."
+            if created
+            else f"Update job already running for '{display_name}'."
+        ),
     )
 
 

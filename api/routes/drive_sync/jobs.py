@@ -51,7 +51,9 @@ async def create_job(body: JobCreateRequest) -> JobCreateResponse:
             detail="Drive sync not configured. POST /api/drive-sync/config first.",
         )
 
-    job = service.create_job(
+    from api.models.drive_sync import JobKind
+
+    job, created = service.create_job_once(
         kind=body.kind,
         folder_id=body.folder_id,
         folder_name=body.folder_name,
@@ -61,7 +63,6 @@ async def create_job(body: JobCreateRequest) -> JobCreateResponse:
     )
 
     import threading
-    from api.models.drive_sync import JobKind
 
     def run_job():
         if body.kind == JobKind.UPDATE_SINGLE:
@@ -69,13 +70,18 @@ async def create_job(body: JobCreateRequest) -> JobCreateResponse:
         else:
             service.sync_folder_as_job(job.id)
 
-    thread = threading.Thread(target=run_job, daemon=True)
-    thread.start()
+    if created:
+        thread = threading.Thread(target=run_job, daemon=True)
+        thread.start()
 
     return JobCreateResponse(
         id=job.id,
         status=job.status,
-        message=f"Job enqueued. Will sync '{body.display_name}' shortly.",
+        message=(
+            f"Job enqueued. Will sync '{body.display_name}' shortly."
+            if created
+            else f"{'Update' if body.kind == JobKind.UPDATE_SINGLE else 'Upload'} job already running for '{body.display_name}'."
+        ),
     )
 
 

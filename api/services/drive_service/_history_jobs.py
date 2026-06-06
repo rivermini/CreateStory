@@ -687,6 +687,55 @@ class HistoryJobsMixin:
         self._with_jobs_lock(_mutate)
         return job
 
+    def create_job_once(
+        self,
+        kind: str,
+        folder_id: str,
+        folder_name: str,
+        display_name: str,
+        main_be_api_base_url: Optional[str] = None,
+        chapters_count: Optional[int] = None,
+    ) -> tuple["SyncJob", bool]:
+        """Create a job unless an equivalent active job already exists."""
+        from api.models.drive_sync import JobKind, JobStatus, SyncJob
+
+        _JOB_KINDS_VALID = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE}
+        if kind not in _JOB_KINDS_VALID:
+            raise ValueError(f"Invalid job kind: {kind}")
+
+        job = SyncJob(
+            id=str(uuid.uuid4()),
+            kind=kind,
+            status=JobStatus.QUEUED,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            main_be_api_base_url=main_be_api_base_url,
+            chapters_count=chapters_count,
+        )
+        selected_job = job
+        created = True
+
+        def _mutate(jobs: list["SyncJob"]) -> list["SyncJob"]:
+            nonlocal selected_job, created
+            for existing in jobs:
+                if (
+                    existing.kind == kind
+                    and existing.folder_id == folder_id
+                    and existing.status in (JobStatus.QUEUED, JobStatus.RUNNING)
+                ):
+                    selected_job = existing
+                    created = False
+                    return jobs
+            jobs.insert(0, job)
+            if len(jobs) > _MAX_JOBS_ENTRIES:
+                jobs = jobs[:_MAX_JOBS_ENTRIES]
+            return jobs
+
+        self._with_jobs_lock(_mutate)
+        return selected_job, created
+
     def get_job(self, job_id: str) -> Optional["SyncJob"]:
         """Return a single job by ID, or None if not found."""
         jobs = self._load_jobs_raw()
@@ -1061,6 +1110,10 @@ class HistoryJobsMixin:
             if not found:
                 self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(),
                                 error="Story not found on server", chapters_added=added, chapters_skipped=skipped)
+            elif added == 0 and skipped > 0:
+                error = f"Update failed: 0 chapter(s) added, {skipped} failed/skipped."
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(),
+                                error=error, chapters_added=added, chapters_skipped=skipped)
             else:
                 msg = f"Added {added} chapter(s), skipped {skipped}." if added > 0 else f"No new chapters (skipped {skipped})."
                 self.update_job(job_id, status=JobStatus.SUCCESS, finished_at=datetime.now(timezone.utc).isoformat(),

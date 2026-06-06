@@ -724,10 +724,35 @@ class MainBEClientMixin:
         )
         return drive_chapter
 
-    def _post_chapter(self, story_id: str, index: int, title: str, content: str, max_retries: int = 3) -> bool:
-        """POST a chapter to main BE /api/v1/story/{id}/chapter. Returns True on success."""
+    @staticmethod
+    def _format_response_error(resp: httpx.Response) -> str:
+        """Build a short, readable API error without hiding validation details."""
+        detail = resp.text.strip()
+        try:
+            body = resp.json()
+            if isinstance(body, dict):
+                message = body.get("message") or body.get("error") or body.get("detail")
+                if isinstance(message, list):
+                    message = "; ".join(str(item) for item in message)
+                if message:
+                    detail = str(message)
+        except Exception:
+            pass
+        detail = re.sub(r"\s+", " ", detail)[:500]
+        return f"HTTP {resp.status_code}: {detail}" if detail else f"HTTP {resp.status_code}"
+
+    def _post_chapter(
+        self,
+        story_id: str,
+        index: int,
+        title: str,
+        content: str,
+        max_retries: int = 3,
+        return_error: bool = False,
+    ) -> bool | tuple[bool, Optional[str]]:
+        """POST a chapter to main BE /api/v1/story/{id}/chapter."""
         if self._config is None:
-            return False
+            return (False, "Backend client not configured") if return_error else False
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}/chapter"
         headers = {
             "Content-Type": "application/json",
@@ -736,19 +761,13 @@ class MainBEClientMixin:
         }
         payload = {"index": index, "title": title, "content": content}
 
-        def _attempt(attempt_num: int) -> tuple[bool, str]:
+        def _attempt(attempt_num: int) -> tuple[bool, str, bool]:
             try:
                 with self._main_be_client(timeout=600.0) as client:
                     resp = client.post(url, content=self._json_body(payload), headers=headers)
                     if resp.status_code in (200, 201):
-                        return True, ""
-                    body = {}
-                    try:
-                        body = resp.json()
-                    except Exception:
-                        pass
-                    err_code = body.get("code", 0)
-                    err_msg = body.get("message", "")
+                        return True, "", False
+                    err_msg = self._format_response_error(resp)
                     resp_text = resp.text[:500]
                     self._append_log(
                         "debug",
@@ -763,24 +782,82 @@ class MainBEClientMixin:
                         or "too many requests" in err_msg.lower()
                     )
                     if is_transient:
-                        return False, ""
-                    return False, f"{resp.status_code}:{err_code}:{err_msg}"
+                        return False, err_msg, True
+                    return False, err_msg, False
             except Exception as exc:
-                return False, str(exc)
+                return False, str(exc), True
 
+        last_error: Optional[str] = None
+        attempts_made = 0
         for attempt in range(max_retries):
-            ok, err = _attempt(attempt)
+            attempts_made = attempt + 1
+            ok, err, should_retry = _attempt(attempt)
             if ok:
-                return True
+                return (True, None) if return_error else True
             if err:
+                last_error = err
                 self._append_log("warning", f"Chapter {index} POST failed (attempt {attempt + 1}/{max_retries}): {err}", title)
-                if attempt < max_retries - 1:
+                if should_retry and attempt < max_retries - 1:
                     wait = 2 ** attempt
                     self._append_log("info", f"Retrying in {wait}s...", title)
                     time.sleep(wait)
+                elif not should_retry:
+                    break
 
-        self._append_log("warning", f"Chapter {index} POST failed after {max_retries} retries.", title)
-        return False
+        if attempts_made <= 1:
+            self._append_log("warning", f"Chapter {index} POST failed.", title)
+        else:
+            self._append_log("warning", f"Chapter {index} POST failed after {attempts_made} attempt(s).", title)
+        return (False, last_error or "POST failed after retries") if return_error else False
+
+    def _get_story_max_chapter(self, story_id: str) -> int:
+        """GET /api/v1/story/{id} and return maxChapter when available."""
+        if self._config is None:
+            return 0
+        url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}"
+        headers = {
+            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
+            "x-user-id": self._config.main_be_user_id,
+        }
+        try:
+            with self._main_be_client(timeout=600.0) as client:
+                resp = client.get(url, headers=headers)
+                if resp.status_code in (200, 201):
+                    body = resp.json()
+                    data = self._unwrap_api_data(body)
+                    if isinstance(data, dict):
+                        for key in ("maxChapter", "chapterCount", "totalChapters", "chaptersCount"):
+                            raw = data.get(key)
+                            if raw is not None:
+                                return int(raw)
+                else:
+                    self._append_log("debug", f"GET story maxChapter for {story_id[:8]}... failed {resp.status_code}")
+        except Exception as exc:
+            self._append_log("debug", f"GET story maxChapter for {story_id[:8]}... exception: {exc}")
+        return 0
+
+    def _posted_chapter_exists(self, story_id: str, index: int, expected_content: str) -> tuple[bool, str]:
+        """Check whether a failed POST still created the chapter on the server."""
+        try:
+            chapter = self.get_server_chapter_detail(story_id, index)
+        except Exception as exc:
+            return (False, f"verification GET failed: {exc}")
+
+        server_content = (
+            chapter.get("content")
+            or chapter.get("plainContent")
+            or chapter.get("plain_content")
+            or ""
+        )
+        if not server_content:
+            return (False, "verification GET returned chapter with empty content")
+
+        expected_normalized = self._normalize_chapter_text(expected_content)
+        server_normalized = self._normalize_chapter_text(str(server_content))
+        if expected_normalized and expected_normalized == server_normalized:
+            return (True, "chapter exists on server after failed POST")
+
+        return (False, "verification GET returned different chapter content")
 
     def _get_existing_chapter_indices(self, story_id: str) -> set[int]:
         """GET /api/v1/story/{id}/chapter and return the set of existing chapter indices."""
@@ -928,7 +1005,7 @@ class MainBEClientMixin:
                 with self._main_be_client(timeout=timeout) as client:
                     resp = client.put(url, content=self._json_body(payload), headers=headers)
                     if resp.status_code in (200, 201):
-                        self._append_log("info", f"Story metadata updated: freeChaptersCount={free_chapters_count}, maxChapter={max_chapter}")
+                        self._append_log("info", f"Story metadata updated: {payload}")
                         return (True, None)
                     detail = f"HTTP {resp.status_code}: {resp.text[:200]}"
                     self._append_log("warning", f"Story metadata PUT failed {detail}")
@@ -1022,6 +1099,39 @@ class MainBEClientMixin:
         else:
             candidate_files = chapter_files_sorted
 
+        planned_post_indices: list[int] = []
+        planned_existing = set(existing_indices)
+        planned_next_index = next_index
+        for file_info in candidate_files:
+            if chapters_count is not None and len(planned_post_indices) >= chapters_count:
+                break
+            planned_idx = _extract_chapter_index_from_filename(file_info["name"])
+            planned_posting_index = planned_idx if planned_idx is not None else planned_next_index
+            while planned_posting_index in planned_existing:
+                planned_posting_index += 1
+            planned_post_indices.append(planned_posting_index)
+            planned_existing.add(planned_posting_index)
+            planned_next_index = max(planned_next_index, planned_posting_index + 1)
+
+        if planned_post_indices:
+            planned_max_chapter = max(max(existing_indices) if existing_indices else 0, max(planned_post_indices))
+            current_max_chapter = max(max(existing_indices) if existing_indices else 0, self._get_story_max_chapter(story_id))
+            if planned_max_chapter > current_max_chapter:
+                self._append_log(
+                    "info",
+                    f"[update] Updating maxChapter {current_max_chapter} -> {planned_max_chapter} before posting chapters",
+                    display_name,
+                    job_id=job_id,
+                )
+                ok, err_detail = self.put_story_metadata(story_id, max_chapter=planned_max_chapter)
+                if not ok:
+                    self._append_log(
+                        "warning",
+                        f"[update] Failed to pre-update maxChapter before posting chapters - {err_detail}",
+                        display_name,
+                        job_id=job_id,
+                    )
+
         batch_size = len(candidate_files)
         if chapters_count is not None:
             batch_size = max(_CHAPTER_PREFETCH_WORKERS, chapters_count)
@@ -1059,13 +1169,38 @@ class MainBEClientMixin:
                 while posting_index in existing_indices:
                     posting_index += 1
 
-                success = self._post_chapter(story_id, posting_index, title, chapter_content)
+                success, error_detail = self._post_chapter(
+                    story_id,
+                    posting_index,
+                    title,
+                    chapter_content,
+                    return_error=True,
+                )
                 if success:
                     chapters_added += 1
                     existing_indices.add(posting_index)
                     self._append_log("info", f"[update] Chapter {posting_index}: {title[:50]} -> OK", display_name, job_id=job_id)
                 else:
-                    self._append_log("warning", f"[update] Chapter {posting_index} ({file_name}) failed to post", display_name, job_id=job_id)
+                    exists_after_error, verify_detail = self._posted_chapter_exists(story_id, posting_index, chapter_content)
+                    detail = f": {error_detail}" if error_detail else ""
+                    if exists_after_error:
+                        chapters_added += 1
+                        existing_indices.add(posting_index)
+                        self._append_log(
+                            "warning",
+                            f"[update] Chapter {posting_index}: {title[:50]} -> OK after verification "
+                            f"(POST returned{detail}; {verify_detail})",
+                            display_name,
+                            job_id=job_id,
+                        )
+                    else:
+                        chapters_skipped += 1
+                        self._append_log(
+                            "warning",
+                            f"[update] Chapter {posting_index} ({file_name}) failed to post{detail}; {verify_detail}",
+                            display_name,
+                            job_id=job_id,
+                        )
 
                 if ch_idx is not None:
                     next_index = max(next_index, posting_index + 1)
