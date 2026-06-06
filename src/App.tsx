@@ -1,12 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { MobileSidebar } from './components/MobileSidebar';
+import { AccountMenu } from './components/AccountMenu';
 import { ToastContainer } from './components/Toast';
 import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api/client';
 import { Icon, appIcons } from './components/Icon';
 import { type ThemeMode } from './types/theme';
-import { faUser } from '@fortawesome/free-solid-svg-icons';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
@@ -224,129 +224,6 @@ function AuthLoading({ themeMode }: { themeMode: ThemeMode }) {
   return (
     <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-gray-50 text-gray-600'}`}>
       Loading...
-    </div>
-  );
-}
-
-function AccountMenu({
-  authUser,
-  isDark,
-  isOpen,
-  onToggle,
-  onClose,
-  onLogout,
-}: {
-  authUser: AuthUser;
-  isDark: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
-  onClose: () => void;
-  onLogout: () => void;
-}) {
-  const isAdmin = authUser.role === 'admin';
-
-  return (
-    <div className="fixed right-4 top-3 z-[70]">
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`group relative inline-flex h-10 items-center gap-2 rounded-xl border px-2.5 transition-all ${
-          isDark
-            ? 'border-white/[0.08] bg-slate-950/80 text-slate-200 hover:bg-slate-900'
-            : 'border-black/10 bg-white/90 text-slate-700 hover:bg-slate-50 shadow-sm'
-        }`}
-        title="Account"
-        aria-label="Account menu"
-      >
-          <span
-          className={`inline-flex h-7.5 w-7.5 items-center justify-center rounded-lg border ${
-            isDark
-              ? 'border-white/[0.08] bg-white/[0.04] text-slate-200'
-              : 'border-black/5 bg-slate-100 text-slate-700'
-          }`}
-        >
-          <Icon icon={faUser} className="h-4 w-4" />
-        </span>
-
-        <span
-          className={`hidden sm:inline-flex items-center rounded-full px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] ${
-            isAdmin
-              ? isDark
-                ? 'bg-indigo-500/18 text-indigo-200 ring-1 ring-inset ring-indigo-400/30'
-                : 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200'
-              : isDark
-                ? 'bg-slate-800 text-slate-300 ring-1 ring-inset ring-white/10'
-                : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
-          }`}
-        >
-          {authUser.role}
-        </span>
-      </button>
-
-      {isOpen && (
-        <>
-          <button
-            type="button"
-            aria-label="Close account menu"
-            className="fixed inset-0 -z-10 cursor-default"
-            onClick={onClose}
-          />
-          <div className={`absolute right-0 mt-2 w-72 rounded-xl border p-3 shadow-2xl ${
-            isDark
-              ? 'border-white/[0.08] bg-slate-950/95 text-slate-200'
-              : 'border-black/10 bg-white/95 text-slate-800'
-          }`}>
-            <div className={`px-3 py-3 rounded-xl ${isDark ? 'bg-white/[0.04]' : 'bg-black/[0.03]'}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">{authUser.email}</div>
-                </div>
-                <span
-                  className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.18em] ${
-                    isAdmin
-                      ? isDark
-                        ? 'bg-indigo-500/18 text-indigo-200 ring-1 ring-inset ring-indigo-400/30'
-                        : 'bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200'
-                      : isDark
-                        ? 'bg-slate-800 text-slate-300 ring-1 ring-inset ring-white/10'
-                        : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
-                  }`}
-                >
-                  {authUser.role}
-                </span>
-              </div>
-            </div>
-            <div className="mt-2 space-y-1">
-              {authUser.role === 'admin' && (
-                <Link
-                  to="/dashboard"
-                  onClick={onClose}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    isDark ? 'text-slate-300 hover:bg-white/[0.06]' : 'text-slate-700 hover:bg-black/[0.05]'
-                  }`}
-                  style={{ textDecoration: 'none' }}
-                >
-                  <Icon icon={appIcons.dashboardUsers} className="w-4 h-4" />
-                  Dashboard
-                </Link>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  void onLogout();
-                }}
-                className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isDark ? 'text-red-300 hover:bg-red-500/10' : 'text-red-600 hover:bg-red-50'
-                }`}
-              >
-                <Icon icon={appIcons.logout} className="w-4 h-4" />
-                Sign out
-              </button>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }

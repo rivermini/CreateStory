@@ -318,7 +318,6 @@ export interface CrawlCancelResponse {
 export interface InkittCookieUpdateResponse {
   updated: boolean;
   cookie_count: number;
-  path: string;
 }
 
 export interface InkittCookieStatusResponse {
