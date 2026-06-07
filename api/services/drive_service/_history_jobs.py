@@ -844,6 +844,66 @@ class HistoryJobsMixin:
         self._with_jobs_lock(_mutate)
         return len(self._load_jobs_raw()) < before
 
+    def record_completed_job(
+        self,
+        kind: str,
+        folder_id: str,
+        folder_name: str,
+        display_name: str,
+        result_message: str,
+        logs: Optional[list[dict]] = None,
+        chapters_added: int = 0,
+        chapters_skipped: int = 0,
+        error: Optional[str] = None,
+        main_be_api_base_url: Optional[str] = None,
+        chapters_count: Optional[int] = None,
+    ) -> "SyncJob":
+        """Persist a completed job for immediate operations that do not need a worker."""
+        from api.models.drive_sync import JobKind, JobLogEntry, JobStatus, SyncJob
+
+        _JOB_KINDS_VALID = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE}
+        if kind not in _JOB_KINDS_VALID:
+            raise ValueError(f"Invalid job kind: {kind}")
+
+        timestamp = datetime.now(timezone.utc).isoformat()
+        status = JobStatus.ERROR if error else JobStatus.SUCCESS
+        job_logs = [
+            JobLogEntry(
+                timestamp=str(item.get("timestamp") or timestamp),
+                level=str(item.get("level") or "info"),
+                message=str(item.get("message") or ""),
+            )
+            for item in (logs or [])
+        ]
+
+        job = SyncJob(
+            id=str(uuid.uuid4()),
+            kind=kind,
+            status=status,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            created_at=timestamp,
+            started_at=timestamp,
+            finished_at=timestamp,
+            result_message=result_message if not error else None,
+            chapters_added=chapters_added,
+            chapters_skipped=chapters_skipped,
+            error=error,
+            logs=job_logs,
+            main_be_api_base_url=main_be_api_base_url,
+            chapters_count=chapters_count,
+        )
+
+        def _mutate(jobs: list["SyncJob"]) -> list["SyncJob"]:
+            jobs.insert(0, job)
+            if len(jobs) > _MAX_JOBS_ENTRIES:
+                jobs = jobs[:_MAX_JOBS_ENTRIES]
+            return jobs
+
+        self._with_jobs_lock(_mutate)
+        return job
+
     # -------------------------------------------------------------------------
     # Job-based sync execution
     # -------------------------------------------------------------------------

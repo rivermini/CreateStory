@@ -163,6 +163,7 @@ class JobKind(str):
     """Allowed sync job kind values."""
     UPLOAD_SINGLE = "upload_single"
     UPDATE_SINGLE = "update_single"
+    CHAPTER_CONTENT_UPDATE = "chapter_content_update"
 
 
 class JobLogEntry(BaseModel):

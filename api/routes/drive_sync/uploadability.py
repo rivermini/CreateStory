@@ -2,11 +2,12 @@
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from api.models.drive_sync import JobCreateRequest, JobCreateResponse
+from api.models.drive_sync import JobCreateRequest, JobCreateResponse, JobKind
 from api.services.drive_service import get_drive_sync_service
 from api.routes.drive_sync.utils import (
     DriveFolderEntry,
@@ -876,7 +877,8 @@ async def scan_content_update_story(story_id: str) -> ContentUpdateScanResponse:
 async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUpdateChapterResponse:
     """Replace one server chapter's index/title/content/plainContent from Drive."""
     service = get_drive_sync_service()
-    if service.get_config() is None:
+    config = service.get_config()
+    if config is None:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
@@ -894,6 +896,37 @@ async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUp
             serverLength=updated.get("plainLength") or 0,
             driveLength=updated.get("plainLength") or 0,
             message="Updated from Drive.",
+        )
+        story_title = str(updated.get("storyTitle") or body.story_id)
+        folder_name = str(updated.get("folderName") or body.folder_id)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        await asyncio.to_thread(
+            service.record_completed_job,
+            kind=JobKind.CHAPTER_CONTENT_UPDATE,
+            folder_id=body.folder_id,
+            folder_name=folder_name,
+            display_name=f"{story_title} - Chapter {body.chapter_number}",
+            result_message=f"Chapter {body.chapter_number} content updated from Drive.",
+            logs=[
+                {
+                    "timestamp": timestamp,
+                    "level": "info",
+                    "message": f"Story: {story_title}",
+                },
+                {
+                    "timestamp": timestamp,
+                    "level": "info",
+                    "message": f"Drive folder: {folder_name}",
+                },
+                {
+                    "timestamp": timestamp,
+                    "level": "info",
+                    "message": f"Chapter {body.chapter_number}: {chapter.title or updated.get('fileName') or 'Untitled'} updated from Drive.",
+                },
+            ],
+            chapters_added=1,
+            chapters_skipped=0,
+            main_be_api_base_url=config.main_be_api_base_url,
         )
         return ContentUpdateChapterResponse(success=True, message=f"Chapter {body.chapter_number} updated.", chapter=chapter)
     except RuntimeError as exc:

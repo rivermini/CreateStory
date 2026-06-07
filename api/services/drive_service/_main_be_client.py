@@ -722,6 +722,19 @@ class MainBEClientMixin:
             drive_chapter["content"],
             drive_chapter["plainContent"],
         )
+        try:
+            story = self.get_server_story_detail(story_id)
+            drive_chapter["storyTitle"] = story.get("title")
+        except Exception:
+            pass
+        try:
+            drive_service = self._build_drive_service()
+            folder_info = self._retry_drive_call(
+                lambda: drive_service.files().get(fileId=folder_id, fields="id, name").execute()
+            )
+            drive_chapter["folderName"] = folder_info.get("name")
+        except Exception:
+            pass
         return drive_chapter
 
     @staticmethod
