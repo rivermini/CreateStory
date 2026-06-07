@@ -590,7 +590,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                             ))}
                         </div>
 
-                        <DatePicker value={specificDate} onDateChange={setSpecificDate} isDark={isDark} />
+                        <DatePicker value={specificDate} onDateChange={(date) => { setSpecificDate(date); setTimeRange(date ? 'specific' : 'all'); }} isDark={isDark} />
 
                         <button onClick={() => { setIsLoading(true); fetchJobs().finally(() => setIsLoading(false)); }}
                             className="lg-icon-btn" title="Refresh now">

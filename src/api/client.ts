@@ -1310,6 +1310,7 @@ export interface BatchJobChapter {
   progress_pct: number;
   output_filename: string;
   error: string;
+  retry_count?: number;
 }
 
 export interface BatchJob {

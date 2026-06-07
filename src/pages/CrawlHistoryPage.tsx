@@ -508,7 +508,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                             ))}
                         </div>
 
-                        <DatePicker value={specificDate} onDateChange={setSpecificDate} isDark={isDark} />
+                        <DatePicker value={specificDate} onDateChange={(date) => { setSpecificDate(date); setTimeRange(date ? 'specific' : 'all'); }} isDark={isDark} />
 
                         <button onClick={() => { setIsLoading(true); fetchSessions().finally(() => setIsLoading(false)); }}
                             className="lg-icon-btn" title="Refresh now">
