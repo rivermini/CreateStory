@@ -41,6 +41,26 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
+const JOB_KIND_LABEL_MAP: Record<SyncJob['kind'], string> = {
+  upload_single: 'Upload',
+  update_single: 'Update',
+  chapter_content_update: 'ChapterContent Update',
+};
+
+function getJobKindClasses(kind: SyncJob['kind'], isDark: boolean): string {
+  if (kind === 'upload_single') {
+    return isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-100 text-blue-700 border border-blue-200';
+  }
+  if (kind === 'chapter_content_update') {
+    return isDark ? 'bg-violet-500/10 text-violet-300' : 'bg-violet-100 text-violet-800 border border-violet-200';
+  }
+  return isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-100 text-amber-800 border border-amber-200';
+}
+
+function getJobKindLabel(kind: SyncJob['kind']): string {
+  return JOB_KIND_LABEL_MAP[kind] ?? kind;
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return '-';
   try {
@@ -139,10 +159,8 @@ function JobCard({ job, order, isSelected, isExpanded, deleteMode, isDark, c, on
                 : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
                 {label}
               </span>
-              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${job.kind === 'upload_single'
-                ? isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-100 text-blue-700 border border-blue-200'
-                : isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
-                {job.kind === 'upload_single' ? 'Upload' : 'Update'}
+              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${getJobKindClasses(job.kind, isDark)}`}>
+                {getJobKindLabel(job.kind)}
               </span>
               {job.main_be_api_base_url && (
                 <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${production
@@ -163,7 +181,11 @@ function JobCard({ job, order, isSelected, isExpanded, deleteMode, isDark, c, on
               <span>{job.folder_name}</span>
               {hasChapterStats && (
                 <>
-                  {job.chapters_added > 0 && <span className={isDark ? 'text-emerald-400' : 'text-emerald-700'}>+{job.chapters_added} added</span>}
+                  {job.chapters_added > 0 && (
+                    <span className={isDark ? 'text-emerald-400' : 'text-emerald-700'}>
+                      {job.kind === 'chapter_content_update' ? `${job.chapters_added} content updated` : `+${job.chapters_added} added`}
+                    </span>
+                  )}
                   {job.chapters_skipped > 0 && <span className={isDark ? 'text-amber-400' : 'text-amber-700'}>{job.chapters_skipped} skipped</span>}
                   {job.chapters_count ? <span>{job.chapters_count} chapter limit</span> : null}
                 </>
@@ -233,6 +255,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [filterKind, setFilterKind] = useState<FilterKind>('all');
+  const [showChapterContentUpdates, setShowChapterContentUpdates] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [specificDate, setSpecificDate] = useState('');
@@ -321,7 +344,8 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   })();
 
   const searchText = search.trim().toLowerCase();
-  const baseFiltered = jobs
+  const visibleSourceJobs = jobs.filter(job => showChapterContentUpdates || job.kind !== 'chapter_content_update');
+  const baseFiltered = visibleSourceJobs
     .filter(job => {
       if (filterKind !== 'all' && job.kind !== filterKind) return false;
       if (searchText) {
@@ -365,12 +389,12 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   useEffect(() => {
     const timer = window.setTimeout(() => setVisibleCount(PAGE_SIZE), 0);
     return () => window.clearTimeout(timer);
-  }, [PAGE_SIZE, filter, filterKind, sortOrder, timeRange, specificDate, search]);
+  }, [PAGE_SIZE, filter, filterKind, showChapterContentUpdates, sortOrder, timeRange, specificDate, search]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSelectedIds(new Set()), 0);
     return () => window.clearTimeout(timer);
-  }, [filter, filterKind, timeRange, specificDate, search]);
+  }, [filter, filterKind, showChapterContentUpdates, timeRange, specificDate, search]);
 
   useEffect(() => {
     if (!hasMore) return;
@@ -525,7 +549,8 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
               <p className={`text-sm mt-1 ${c('textMuted')}`}>
                 {filtered.length} of {jobs.length} jobs
                 {filter !== 'all' && ` | ${filter}`}
-                {filterKind !== 'all' && ` | ${filterKind === 'upload_single' ? 'upload' : 'update'}`}
+                {filterKind !== 'all' && ` | ${getJobKindLabel(filterKind).toLowerCase()}`}
+                {showChapterContentUpdates && ' | with chaptercontent'}
                 {timeRange !== 'all' && ` | ${timeRange === 'today' ? 'today' : timeRange === 'week' ? '7 days' : timeRange === 'month' ? '30 days' : specificDate || 'date'}`}
                 {` | refreshed ${lastRefresh.toLocaleTimeString()}`}
               </p>
@@ -638,6 +663,16 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
               ))}
             </div>
 
+            <label className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs sm:text-sm ${filterBarBase} ${isDark ? 'text-white/50' : 'text-slate-600'}`}>
+              <input
+                type="checkbox"
+                checked={showChapterContentUpdates}
+                onChange={event => setShowChapterContentUpdates(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-400 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Show ChapterContent Update</span>
+            </label>
+
             <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
               <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Sort:</span>
               <button onClick={() => setSortOrder('newest')} className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${sortOrder === 'newest' ? filterBtnActive : filterBtnInactive}`}>Newest</button>
@@ -728,7 +763,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
               </div>
               <p className={c('textMuted')}>No jobs match your filters.</p>
               <button
-                onClick={() => { setFilter('all'); setFilterKind('all'); setSortOrder('newest'); setTimeRange('all'); setSpecificDate(''); setSearch(''); }}
+                onClick={() => { setFilter('all'); setFilterKind('all'); setShowChapterContentUpdates(false); setSortOrder('newest'); setTimeRange('all'); setSpecificDate(''); setSearch(''); }}
                 className={`text-sm underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-700 hover:text-indigo-900'}`}
               >
                 Clear all filters
