@@ -21,6 +21,7 @@ from api.db import init_db
 from api.repositories.audio_repository import BedReadJobRepository
 
 logger = logging.getLogger(__name__)
+MAX_CHAPTER_TTS_RETRIES = 2
 
 
 class BedReadConfigError(Exception):
@@ -91,6 +92,7 @@ class ChapterTask:
     output_filename: str = ""
     error: str = ""
     progress_pct: int = 0
+    retry_count: int = 0
 
 
 @dataclass
@@ -145,6 +147,7 @@ class BatchJob:
                     "progress_pct": c.progress_pct,
                     "output_filename": c.output_filename,
                     "error": c.error,
+                    "retry_count": c.retry_count,
                 }
                 for c in self.chapters
             ],
@@ -203,6 +206,7 @@ class BedReadService:
                         output_filename=c.get("output_filename", ""),
                         error=c.get("error", ""),
                         progress_pct=c.get("progress_pct", 0),
+                        retry_count=c.get("retry_count", 0),
                     )
                     for c in entry.get("chapters", [])
                 ]
@@ -502,50 +506,17 @@ class BedReadService:
                         )
                         break
 
-                chapter_data = chapter_map.get(ch.chapter_number, {})
-                plain_content = chapter_data.get("content") or chapter_data.get("plainContent", "")
-                if plain_content:
-                    from api.services.tts_service import TTSService
-                    clean_text = TTSService.clean_text(plain_content)
-                    if clean_text:
-                        tts_job_id = self.tts_service.start_job(
-                            text=clean_text,
-                            voice=voice,
-                            lang=lang,
-                            speed=speed,
-                            format=format,
-                        )
-                        should_cancel_tts = False
-                        with self._lock:
-                            batch = self._batch_jobs.get(batch_id_for_tts)
-                            if batch and batch.status == "cancelled":
-                                should_cancel_tts = True
-                            elif batch:
-                                for c in batch.chapters:
-                                    if c.chapter_number == ch.chapter_number:
-                                        c.job_id = tts_job_id
-                                        c.status = "queued"
-                        if should_cancel_tts:
-                            self.tts_service.cancel_job(tts_job_id)
-                            break
-                        logger.info("BedRead batch %s: chapter %d queued as TTS job %s",
-                                    batch_id_for_tts, ch.chapter_number, tts_job_id)
-                    else:
-                        with self._lock:
-                            batch = self._batch_jobs.get(batch_id_for_tts)
-                            if batch:
-                                for c in batch.chapters:
-                                    if c.chapter_number == ch.chapter_number:
-                                        c.status = "failed"
-                                        c.error = "Empty chapter content"
-                else:
-                    with self._lock:
-                        batch = self._batch_jobs.get(batch_id_for_tts)
-                        if batch:
-                            for c in batch.chapters:
-                                if c.chapter_number == ch.chapter_number:
-                                    c.status = "failed"
-                                    c.error = "No content returned"
+                if not self._queue_chapter_tts_job(
+                    batch_id=batch_id_for_tts,
+                    chapter_number=ch.chapter_number,
+                    story_id=story_id,
+                    voice=voice,
+                    lang=lang,
+                    speed=speed,
+                    format=format,
+                    chapter_map=chapter_map,
+                ):
+                    break
             except Exception as exc:
                 with self._lock:
                     batch = self._batch_jobs.get(batch_id_for_tts)
@@ -556,6 +527,151 @@ class BedReadService:
                                 c.error = repr(exc)
                 logger.exception("BedRead batch %s: failed to fetch chapter %d",
                                  batch_id_for_tts, ch.chapter_number)
+
+    def _queue_chapter_tts_job(
+        self,
+        batch_id: str,
+        chapter_number: int,
+        story_id: str,
+        voice: str,
+        lang: str,
+        speed: float,
+        format: str,
+        chapter_map: Optional[dict[int, dict]] = None,
+    ) -> bool:
+        chapter_data = (chapter_map or {}).get(chapter_number, {})
+        if not chapter_data:
+            try:
+                chapter_data = self.fetch_chapter(story_id, chapter_number)
+            except Exception:
+                logger.exception(
+                    "BedRead batch %s: failed to fetch chapter %d for TTS",
+                    batch_id,
+                    chapter_number,
+                )
+                self._mark_chapter_failed(batch_id, chapter_number, "Failed to fetch chapter content")
+                return True
+
+        plain_content = (
+            chapter_data.get("content")
+            or chapter_data.get("plainContent")
+            or chapter_data.get("plain_content")
+            or ""
+        )
+        if not plain_content:
+            self._mark_chapter_failed(batch_id, chapter_number, "No content returned")
+            return True
+
+        from api.services.tts_service import TTSService
+
+        clean_text = TTSService.clean_text(plain_content)
+        if not clean_text:
+            self._mark_chapter_failed(batch_id, chapter_number, "Empty chapter content")
+            return True
+
+        tts_job_id = self.tts_service.start_job(
+            text=clean_text,
+            voice=voice,
+            lang=lang,
+            speed=speed,
+            format=format,
+        )
+        should_cancel_tts = False
+        retry_count = 0
+        with self._lock:
+            batch = self._batch_jobs.get(batch_id)
+            if batch and batch.status == "cancelled":
+                should_cancel_tts = True
+            elif batch is None:
+                should_cancel_tts = True
+            elif batch:
+                for c in batch.chapters:
+                    if c.chapter_number == chapter_number:
+                        retry_count = c.retry_count
+                        c.job_id = tts_job_id
+                        c.status = "queued"
+                        c.progress_pct = 0
+                        c.output_filename = ""
+                        c.error = ""
+                        break
+
+        if should_cancel_tts:
+            self.tts_service.cancel_job(tts_job_id)
+            return False
+
+        suffix = f" retry {retry_count}/{MAX_CHAPTER_TTS_RETRIES}" if retry_count else ""
+        logger.info(
+            "BedRead batch %s: chapter %d queued as TTS job %s%s",
+            batch_id,
+            chapter_number,
+            tts_job_id,
+            suffix,
+        )
+        return True
+
+    def _mark_chapter_failed(self, batch_id: str, chapter_number: int, error: str) -> None:
+        with self._lock:
+            batch = self._batch_jobs.get(batch_id)
+            if not batch:
+                return
+            for c in batch.chapters:
+                if c.chapter_number == chapter_number:
+                    c.status = "failed"
+                    c.error = error
+                    c.progress_pct = 0
+                    break
+
+    def _retry_or_fail_chapter(
+        self,
+        batch_id: str,
+        chapter_number: int,
+        error: str,
+    ) -> bool:
+        with self._lock:
+            batch = self._batch_jobs.get(batch_id)
+            if batch is None or batch.status == "cancelled":
+                return False
+
+            chapter = next((c for c in batch.chapters if c.chapter_number == chapter_number), None)
+            if chapter is None:
+                return False
+
+            if chapter.retry_count >= MAX_CHAPTER_TTS_RETRIES:
+                chapter.status = "failed"
+                chapter.error = error
+                chapter.progress_pct = 0
+                return False
+
+            chapter.retry_count += 1
+            retry_count = chapter.retry_count
+            chapter.status = "queued"
+            chapter.error = f"Retrying after TTS failure ({retry_count}/{MAX_CHAPTER_TTS_RETRIES})"
+            chapter.progress_pct = 0
+            chapter.job_id = ""
+
+            story_id = batch.story_id
+            voice = batch.voice
+            lang = batch.lang
+            speed = batch.speed
+            fmt = batch.format
+
+        logger.warning(
+            "BedRead batch %s: chapter %d failed TTS; retrying %d/%d: %s",
+            batch_id,
+            chapter_number,
+            retry_count,
+            MAX_CHAPTER_TTS_RETRIES,
+            error,
+        )
+        return self._queue_chapter_tts_job(
+            batch_id=batch_id,
+            chapter_number=chapter_number,
+            story_id=story_id,
+            voice=voice,
+            lang=lang,
+            speed=speed,
+            format=fmt,
+        )
 
     def _start_poll_thread(self) -> None:
         with self._lock:
@@ -628,24 +744,14 @@ class BedReadService:
                             continue
 
                         if not job_id:
-                            with self._lock:
-                                batch = self._batch_jobs.get(batch_id)
-                                if batch:
-                                    for c in batch.chapters:
-                                        if c.chapter_number == cn:
-                                            c.status = "failed"
-                                            c.error = "No TTS job was started"
+                            if self._retry_or_fail_chapter(batch_id, cn, "No TTS job was started"):
+                                all_done = False
                             continue
 
                         tts_job = self.tts_service.get_job(job_id)
                         if tts_job is None:
-                            with self._lock:
-                                batch = self._batch_jobs.get(batch_id)
-                                if batch:
-                                    for c in batch.chapters:
-                                        if c.chapter_number == cn:
-                                            c.status = "failed"
-                                            c.error = "TTS job not found"
+                            if self._retry_or_fail_chapter(batch_id, cn, "TTS job not found"):
+                                all_done = False
                             continue
 
                         tts_status = tts_job.get("status", "unknown")
@@ -672,21 +778,12 @@ class BedReadService:
                                                 c.output_filename = new_name
                                 self._cleanup_tts_job(job_id)
                         elif tts_status == "failed":
-                            with self._lock:
-                                batch = self._batch_jobs.get(batch_id)
-                                if batch:
-                                    for c in batch.chapters:
-                                        if c.chapter_number == cn:
-                                            c.status = "failed"
-                                            c.error = tts_job.get("error", "TTS job failed")
+                            error = tts_job.get("error", "TTS job failed")
+                            if self._retry_or_fail_chapter(batch_id, cn, error):
+                                all_done = False
                         elif tts_status == "cancelled":
-                            with self._lock:
-                                batch = self._batch_jobs.get(batch_id)
-                                if batch:
-                                    for c in batch.chapters:
-                                        if c.chapter_number == cn:
-                                            c.status = "failed"
-                                            c.error = "TTS job was cancelled"
+                            if self._retry_or_fail_chapter(batch_id, cn, "TTS job was cancelled"):
+                                all_done = False
                         elif tts_status == "processing":
                             with self._lock:
                                 batch = self._batch_jobs.get(batch_id)
