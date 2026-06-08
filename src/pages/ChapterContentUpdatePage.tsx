@@ -179,12 +179,25 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
         setScanData(prev => markChapterUpdated(prev, chapterNumber, result.chapter));
         showToast(`Chapter ${chapterNumber} updated.`, 'success', 1800, 'top-center');
       } else {
-        showToast(result.message || `Chapter ${chapterNumber} update failed.`, 'error', 3000, 'top-center');
+        const notFound = result.message.toLowerCase().includes('not found') || result.message.includes('404');
+        const display = notFound
+          ? `Chapter ${chapterNumber} is not on the server yet. Upload the story first before updating chapters.`
+          : result.message || `Chapter ${chapterNumber} update failed.`;
+        setUpdateResults(prev => new Map(prev).set(chapterNumber, { success: false, message: display }));
+        if (!notFound) {
+          showToast(result.message, 'error', 3000, 'top-center');
+        }
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Chapter update failed.';
+      const raw = e instanceof Error ? e.message : String(e);
+      const notFound = raw.toLowerCase().includes('not found') || raw.includes('404');
+      const message = notFound
+        ? `Chapter ${chapterNumber} is not on the server yet. Upload the story first before updating chapters.`
+        : (e instanceof Error ? e.message : 'Chapter update failed.');
       setUpdateResults(prev => new Map(prev).set(chapterNumber, { success: false, message }));
-      showToast(message, 'error', 3000, 'top-center');
+      if (!notFound) {
+        showToast(message, 'error', 3000, 'top-center');
+      }
     } finally {
       setUpdatingChapters(prev => {
         const next = new Set(prev);
