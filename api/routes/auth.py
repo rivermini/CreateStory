@@ -31,11 +31,6 @@ class AuthTokensResponse(BaseModel):
     user: AuthUserResponse
 
 
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-
-
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -60,19 +55,6 @@ def _tokens(repo: AuthRepository, user: User) -> AuthTokensResponse:
         refresh_token=refresh_token,
         user=_user_response(user),
     )
-
-
-@router.post("/register", response_model=AuthTokensResponse, status_code=status.HTTP_201_CREATED)
-def register(req: RegisterRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTokensResponse:
-    repo = AuthRepository(db)
-    role = "admin" if repo.count_users() == 0 else "user"
-    try:
-        user = repo.create_user(req.email, hash_password(req.password), role=role)
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Email is already registered.") from exc
-    return _tokens(repo, user)
-
 
 @router.post("/login", response_model=AuthTokensResponse)
 def login(req: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTokensResponse:
