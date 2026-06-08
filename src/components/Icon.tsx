@@ -51,7 +51,7 @@ import {
   faUserPlus,
   faUsers,
   faVolumeHigh,
-  faWandMagicSparkles,
+  faArrowTrendUp,
   faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 import { faCirclePause, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
@@ -111,7 +111,7 @@ export const appIcons = {
   syncHistory: faClock,
   themeDark: faBook,
   themeLight: faBookOpen,
-  trends: faWandMagicSparkles,
+  trends: faArrowTrendUp,
   upload: faUpload,
   uploadFile: faFileArrowUp,
   userAdd: faUserPlus,
