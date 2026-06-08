@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select
@@ -87,20 +86,6 @@ class DriveSyncRepository:
                 for job in jobs:
                     db.add(self._job_to_row(job))
             return jobs
-
-    def import_existing_files(self, history_path: Path, jobs_path: Path, status_path: Path) -> None:
-        import json
-        from api.models.drive_sync import DriveSyncStatus, HistoryEntry, SyncJob
-
-        if history_path.exists() and not self.load_history():
-            raw = json.loads(history_path.read_text(encoding="utf-8"))
-            self.save_history([HistoryEntry(**entry) for entry in raw])
-        if jobs_path.exists() and not self.load_jobs():
-            raw = json.loads(jobs_path.read_text(encoding="utf-8"))
-            self.with_jobs_lock(lambda _jobs: [SyncJob(**job) for job in raw])
-        if status_path.exists() and self.load_status() is None:
-            raw = json.loads(status_path.read_text(encoding="utf-8"))
-            self.save_status(DriveSyncStatus(**raw))
 
     @staticmethod
     def _history_entry_to_row(entry: "HistoryEntry") -> DriveSyncHistoryRecord:

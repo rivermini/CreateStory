@@ -23,15 +23,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import init_db
 from api.routes.drive_sync import router as drive_sync_router
-from api.repositories.drive_sync_repository import DriveSyncRepository
-from api.services.drive_service._paths import _HISTORY_FILE, _JOBS_FILE, _STATUS_FILE
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("BedReadDriveSync startup: initializing database...")
     init_db()
-    DriveSyncRepository().import_existing_files(_HISTORY_FILE, _JOBS_FILE, _STATUS_FILE)
     logger.info("BedReadDriveSync startup: database ready.")
     yield
 

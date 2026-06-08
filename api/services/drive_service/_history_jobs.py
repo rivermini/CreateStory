@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import random
 import ssl
@@ -10,34 +9,18 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from api.models.drive_sync import HistoryEntry, SyncJob
+    from collections.abc import Callable
+    from api.models.drive_sync import DriveSyncStatus, HistoryEntry, SyncJob
 
 from api.services.drive_service._paths import (
-    _DATA_DIR,
-    _HISTORY_FILE,
-    _JOBS_FILE,
-    _JOBS_LOCK_FILE,
     _MAX_HISTORY_ENTRIES,
     _MAX_JOBS_ENTRIES,
     _RANDOM_AUTHOR_IDS,
     _RE_STATUS_PREFIX,
 )
-
-logger = logging.getLogger(__name__)
-
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
-
-try:
-    import msvcrt
-except ImportError:
-    msvcrt = None
 
 
 class HistoryJobsMixin:
@@ -474,27 +457,11 @@ class HistoryJobsMixin:
     def _load_history(self) -> list["HistoryEntry"]:
         from api.models.drive_sync import HistoryEntry
 
-        if hasattr(self, "_repo"):
-            raw = self._repo.load_history()
-            return [HistoryEntry(**e) for e in raw]
-        if not _HISTORY_FILE.exists():
-            return []
-        try:
-            raw = json.loads(_HISTORY_FILE.read_text(encoding="utf-8"))
-            return [HistoryEntry(**e) for e in raw]
-        except Exception as exc:
-            logger.warning("Failed to load drive sync history: %s", exc)
-            return []
+        raw = self._repo.load_history()
+        return [HistoryEntry(**e) for e in raw]
 
     def _save_history(self, entries: list["HistoryEntry"]) -> None:
-        if hasattr(self, "_repo"):
-            self._repo.save_history(entries)
-            return
-        _DATA_DIR.mkdir(parents=True, exist_ok=True)
-        _HISTORY_FILE.write_text(
-            json.dumps([e.model_dump() for e in entries], indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        self._repo.save_history(entries)
 
     def get_history(self, limit: int = 200, offset: int = 0) -> tuple[list["HistoryEntry"], int]:
         """Return a paginated slice of history entries, newest first."""
@@ -606,49 +573,11 @@ class HistoryJobsMixin:
     def _load_jobs_raw(self) -> list["SyncJob"]:
         from api.models.drive_sync import SyncJob
 
-        if hasattr(self, "_repo"):
-            raw = self._repo.load_jobs()
-            return [SyncJob(**j) for j in raw]
-        if not _JOBS_FILE.exists():
-            return []
-        try:
-            raw = json.loads(_JOBS_FILE.read_text(encoding="utf-8"))
-            return [SyncJob(**j) for j in raw]
-        except Exception as exc:
-            logger.warning("Failed to load sync jobs: %s", exc)
-            return []
+        raw = self._repo.load_jobs()
+        return [SyncJob(**j) for j in raw]
 
-    def _with_jobs_lock(self, fn: "callable") -> list["SyncJob"]:
-        """
-        Execute fn inside an exclusive file lock on _JOBS_LOCK_FILE.
-        Uses fcntl on Unix/Linux/macOS and msvcrt on Windows.
-        """
-        if hasattr(self, "_repo"):
-            return self._repo.with_jobs_lock(fn)
-
-        lock_path = str(_JOBS_LOCK_FILE)
-        _DATA_DIR.mkdir(parents=True, exist_ok=True)
-        lock_fd = open(lock_path, "w")
-        try:
-            if fcntl is not None:
-                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
-            elif msvcrt is not None:
-                msvcrt.locking(lock_fd.fileno(), msvcrt.LK_LOCK, 1)
-            try:
-                jobs = self._load_jobs_raw()
-                jobs = fn(jobs)
-                _JOBS_FILE.write_text(
-                    json.dumps([j.model_dump() for j in jobs], indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
-                return jobs
-            finally:
-                if fcntl is not None:
-                    fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
-                elif msvcrt is not None:
-                    msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
-        finally:
-            lock_fd.close()
+    def _with_jobs_lock(self, fn: "Callable[[list[SyncJob]], list[SyncJob]]") -> list["SyncJob"]:
+        return self._repo.with_jobs_lock(fn)
 
     def create_job(
         self,

@@ -68,10 +68,6 @@ from api.repositories.drive_sync_repository import DriveSyncRepository
 logger = logging.getLogger(__name__)
 
 from api.services.drive_service._paths import (
-    _STATUS_FILE,
-    _HISTORY_FILE,
-    _JOBS_FILE,
-    _JOBS_LOCK_FILE,
     _MAX_HISTORY_ENTRIES,
     _MAX_JOBS_ENTRIES,
     _RANDOM_AUTHOR_IDS,
@@ -125,7 +121,6 @@ def get_drive_sync_service() -> DriveSyncService:
     global _service_instance
     if _service_instance is None:
         init_db()
-        DriveSyncRepository().import_existing_files(_HISTORY_FILE, _JOBS_FILE, _STATUS_FILE)
         _service_instance = DriveSyncService()
     return _service_instance
 

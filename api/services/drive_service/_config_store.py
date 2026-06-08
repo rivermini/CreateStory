@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from api.repositories.drive_sync_repository import DriveSyncRepository
-from api.services.drive_service._paths import _STATUS_FILE
 
 if TYPE_CHECKING:
     from api.models.drive_sync import DriveSyncConfig, DriveSyncLogEntry, DriveSyncStatus
@@ -64,17 +62,8 @@ class ConfigStoreMixin:
         if raw:
             self._status = DriveSyncStatus(**raw)
             return
-        if not _STATUS_FILE.exists():
-            self._status = DriveSyncStatus(enabled=self._config.enabled if self._config else True)
-            self._save_status()
-            return
-        try:
-            raw = json.loads(_STATUS_FILE.read_text(encoding="utf-8"))
-            self._status = DriveSyncStatus(**raw)
-        except Exception as exc:
-            logger.warning("Failed to load drive sync status: %s", exc)
-            self._status = DriveSyncStatus(enabled=self._config.enabled if self._config else True)
-            self._save_status()
+        self._status = DriveSyncStatus(enabled=self._config.enabled if self._config else True)
+        self._save_status()
 
     def _save_status(self) -> None:
         self._repo.save_status(self._status)
