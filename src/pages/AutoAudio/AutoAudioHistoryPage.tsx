@@ -638,7 +638,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
             className="rounded-2xl border px-5 py-4 sm:px-6"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+            <div className="mb-4 flex justify-between lg:grid-cols-[minmax(0,1fr)_220px_220px]">
               <div className="relative">
                 <Icon icon={appIcons.search} className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: tertiaryText }} />
                 <input
@@ -646,13 +646,19 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search by session ID or error"
-                  className="w-full rounded-md border py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full rounded-md border py-2.5 pl-10 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                   style={{ background: inputBackground, borderColor: inputBorder, color: pageText }}
                 />
-              </div>
-
-              <div>
-                <DatePicker value={specificDate} onDateChange={setSpecificDate} isDark={isDark} />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                    style={{ color: tertiaryText }}
+                    title="Clear search"
+                  >
+                    <Icon icon={appIcons.close} />
+                  </button>
+                )}
               </div>
 
               <div className="flex gap-2">
@@ -663,18 +669,11 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                 >
                   {loading ? 'Refreshing…' : 'Refresh'}
                 </button>
-                <button
-                  onClick={toggleDeleteMode}
-                  className="rounded-md border px-3 py-2 text-sm transition-colors"
-                  style={{
-                    borderColor: deleteMode ? '#dc2626' : panelBorder,
-                    background: deleteMode ? selectedSurface : mutedSurface,
-                    color: deleteMode ? '#dc2626' : secondaryText,
-                  }}
-                >
-                  {deleteMode ? 'Exit delete' : 'Delete mode'}
-                </button>
               </div>
+            </div>
+
+            <div>
+              <DatePicker value={specificDate} onDateChange={setSpecificDate} isDark={isDark} />
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -754,7 +753,26 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                   >
                     {isDeleting ? 'Removing…' : `Delete (${selectedIds.size})`}
                   </button>
+                  <button
+                    onClick={toggleDeleteMode}
+                    className="rounded-md border px-3 py-2 text-sm"
+                    style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                  >
+                    Exit delete
+                  </button>
                 </div>
+              </div>
+            )}
+
+            {!deleteMode && (
+              <div className="mt-4 flex justify-end border-t pt-4" style={{ borderColor: panelBorder }}>
+                <button
+                  onClick={toggleDeleteMode}
+                  className="rounded-md border px-3 py-2 text-sm transition-colors"
+                  style={{ borderColor: deleteMode ? '#dc2626' : panelBorder, color: deleteMode ? '#dc2626' : secondaryText, background: deleteMode ? selectedSurface : mutedSurface }}
+                >
+                  Delete mode
+                </button>
               </div>
             )}
           </section>

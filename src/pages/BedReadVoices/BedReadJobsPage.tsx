@@ -715,7 +715,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
             className="rounded-2xl border px-5 py-4 sm:px-6"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+            <div className="flex justify-between lg:grid-cols-[minmax(0,1fr)_220px_220px]">
               <div>
                 <DatePicker
                   value={specificDate}

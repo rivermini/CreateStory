@@ -636,7 +636,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
             className="rounded-2xl border px-5 py-4 sm:px-6"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+            <div className="flex justify-between lg:grid-cols-[minmax(0,1fr)_220px_220px] mb-4">
               <div className="relative">
                 <Icon icon={appIcons.search} className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: tertiaryText }} />
                 <input
@@ -659,17 +659,6 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                 )}
               </div>
 
-              <div>
-                <DatePicker
-                  value={specificDate}
-                  onDateChange={(date) => {
-                    setSpecificDate(date);
-                    setTimeRange(date ? 'specific' : 'all');
-                  }}
-                  isDark={isDark}
-                />
-              </div>
-
               <div className="flex gap-2">
                 <button
                   onClick={handleRefresh}
@@ -687,6 +676,18 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
                 </button>
               </div>
             </div>
+            
+
+            <div>
+                <DatePicker
+                  value={specificDate}
+                  onDateChange={(date) => {
+                    setSpecificDate(date);
+                    setTimeRange(date ? 'specific' : 'all');
+                  }}
+                  isDark={isDark}
+                />
+              </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
               {statusOptions.map((option) => (
