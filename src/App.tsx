@@ -10,7 +10,7 @@ import { Icon, appIcons } from './components/Shared/Icon';
 import { type ThemeMode } from './types/theme';
 
 const LoginPage = lazy(() => import('./pages/Shared/LoginPage').then(m => ({ default: m.LoginPage })));
-const HomePage = lazy(() => import('./pages/Shared/HomePage').then(m => ({ default: m.HomePage })));
+const HomePage = lazy(() => import('./pages/NovelCrawler/HomePage').then(m => ({ default: m.HomePage })));
 const CrawlPage = lazy(() => import('./pages/NovelCrawler/CrawlPage').then(m => ({ default: m.CrawlPage })));
 const ResultPage = lazy(() => import('./pages/NovelCrawler/ResultPage').then(m => ({ default: m.ResultPage })));
 const CrawlHistory = lazy(() => import('./pages/NovelCrawler/CrawlHistoryPage').then(m => ({ default: m.default })));
@@ -227,12 +227,10 @@ function Shell({
         </div>
       </div>
 
-      {/* Settings Modal */}
       {settingsOpen && (
         <SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} onClose={handleCloseSettings} onLogout={onLogout} />
       )}
 
-      {/* Global Toast Notifications */}
       <ToastContainer />
     </>
   );
