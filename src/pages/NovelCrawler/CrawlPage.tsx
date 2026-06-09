@@ -71,50 +71,36 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   const statusStyle = () => {
-    if (status === 'completed') {
+    if (status === 'running' || status === 'completed') {
       return {
-        background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)',
-        borderColor: isDark ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.16)',
-        color: isDark ? '#6ee7b7' : '#047857',
-      };
-    }
-    if (status === 'failed') {
-      return {
-        background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
-        borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
-        color: isDark ? '#f87171' : '#dc2626',
-      };
-    }
-    if (status === 'cancelled') {
-      return {
-        background: isDark ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.06)',
-        borderColor: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.16)',
-        color: isDark ? '#fcd34d' : '#b45309',
+        background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
+        borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
+        color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
       };
     }
     return {
-      background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.06)',
-      borderColor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.16)',
-      color: isDark ? '#a5b4fc' : '#4338ca',
+      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.1)',
+      color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
     };
   };
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <main className="space-y-5">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
+        <main className="space-y-4">
           <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
+            className="rounded-xl border px-4 py-4 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
                 Session
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" style={{ color: pageText }}>
                 Crawl progress
               </h1>
-              <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+              <p className="text-sm leading-5" style={{ color: secondaryText }}>
                 Your novel is being crawled. Follow the live log, progress updates, and session status below.
               </p>
             </div>
@@ -122,9 +108,9 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
 
           {error && (
             <section className="rounded-xl border px-4 py-3 text-sm" style={{
-              background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
-              borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
-              color: isDark ? '#f87171' : '#dc2626',
+              background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
+              borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
+              color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
             }}>
               {error}
             </section>
@@ -149,7 +135,7 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
 
           {sourceUrl && (
             <section
-              className="rounded-2xl border px-5 py-4 sm:px-6"
+              className="rounded-xl border px-4 py-3 sm:px-5"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
               <div className="text-xs uppercase tracking-[0.14em]" style={{ color: tertiaryText }}>
@@ -160,7 +146,7 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-2 block break-all text-sm underline hover:no-underline"
-                style={{ color: isDark ? '#818cf8' : '#4f46e5' }}
+                style={{ color: pageText }}
               >
                 {sourceUrl}
               </a>
@@ -168,10 +154,10 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
           )}
 
           <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
+            className="rounded-xl border px-4 py-4 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold" style={{ color: pageText }}>
                   Progress
@@ -180,7 +166,7 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
                   {currentTitle || 'Waiting for crawl output...'}
                 </p>
               </div>
-              <div className="rounded-xl border px-3 py-2 text-right" style={{ borderColor: panelBorder, background: mutedSurface }}>
+              <div className="rounded-lg border px-3 py-2 text-right" style={{ borderColor: panelBorder, background: mutedSurface }}>
                 <p className="text-sm font-semibold" style={{ color: pageText }}>
                   {chaptersCrawled}
                   {chaptersTotal > 0 ? ` / ${chaptersTotal}` : ''}
@@ -210,10 +196,10 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
           />
 
           <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
+            className="rounded-xl border px-4 py-4 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="mb-4">
+            <div className="mb-3">
               <h2 className="text-lg font-semibold" style={{ color: pageText }}>
                 Crawl log
               </h2>
@@ -229,8 +215,8 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
               <button
                 onClick={handleCancel}
                 disabled={cancelling}
-                className="rounded-md px-4 py-2.5 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed"
-                style={{ background: '#dc2626', opacity: cancelling ? 0.65 : 1 }}
+                className="rounded-md px-4 py-2 text-sm font-medium transition-opacity disabled:cursor-not-allowed"
+                style={{ background: mutedSurface, color: secondaryText, border: `1px solid ${panelBorder}`, opacity: cancelling ? 0.65 : 1 }}
               >
                 {cancelling ? 'Cancelling...' : 'Cancel crawl'}
               </button>

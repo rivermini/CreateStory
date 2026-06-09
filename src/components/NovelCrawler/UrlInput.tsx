@@ -30,12 +30,12 @@ export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }
   };
 
   const inputBase = isDark
-    ? 'bg-white/8 border-white/12 text-white/85 placeholder:text-white/30 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50'
-    : 'bg-black/4 border-black/10 text-black/80 placeholder:text-black/30 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50';
+    ? 'bg-white/8 border-white/12 text-white/85 placeholder:text-white/30 focus:border-white/18 focus:ring-1 focus:ring-white/12'
+    : 'bg-black/4 border-black/10 text-black/80 placeholder:text-black/30 focus:border-black/18 focus:ring-1 focus:ring-black/8';
 
   return (
-    <div className="space-y-2">
-      <label htmlFor="url-input" className={`block text-sm font-medium ${isDark ? 'text-white/45' : 'text-black/45'}`}>
+    <div className="space-y-1.5">
+      <label htmlFor="url-input" className={`block text-xs font-medium uppercase tracking-[0.14em] ${isDark ? 'text-white/40' : 'text-black/40'}`}>
         Novel URL
       </label>
       <div className="relative">
@@ -46,29 +46,49 @@ export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }
           onChange={handleChange}
           onBlur={handleBlur}
           placeholder="https://www.wattpad.com/1284690197-...-chapter-one"
-          className={`w-full px-4 py-3 rounded-xl border transition-all duration-200 text-sm focus:outline-none ${inputBase}`}
+          className={`w-full rounded-lg border px-3.5 py-2.5 text-sm transition-all duration-200 focus:outline-none ${inputBase}`}
         />
         {isLoading && (
           <div className="absolute inset-y-0 right-3 flex items-center">
-            <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5 text-indigo-400" />
+            <Icon icon={appIcons.spinner} className="h-4.5 w-4.5 animate-spin" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(17,17,17,0.45)' }} />
           </div>
         )}
       </div>
 
       {isValid && siteInfo && slug && (
-        <div className="lg-glass flex items-center gap-2 text-sm p-3" style={{ border: isDark ? '1px solid rgba(52,211,153,0.2)' : '1px solid rgba(52,211,153,0.3)', background: isDark ? 'rgba(52,211,153,0.06)' : 'rgba(52,211,153,0.04)' }}>
-          <Icon icon={appIcons.check} className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+        <div
+          className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm"
+          style={{
+            border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(17,17,17,0.1)',
+            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,17,17,0.04)',
+          }}
+        >
+          <Icon
+            icon={appIcons.check}
+            className="h-4 w-4 flex-shrink-0"
+            style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}
+          />
           <span className={isDark ? 'text-white/65' : 'text-black/65'}>
-            <span className="font-medium">{siteInfo.site_name}</span>
-            {' · '}Slug: <code className={isDark ? 'text-indigo-300' : 'text-indigo-600'}>{slug}</code>
+            <span className="font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>{siteInfo.site_name}</span>
+            {' · '}Slug: <code className={isDark ? 'text-white/72' : 'text-black/72'}>{slug}</code>
           </span>
         </div>
       )}
 
       {error && (
-        <div className="lg-glass flex items-center gap-2 text-sm p-3" style={{ border: isDark ? '1px solid rgba(239,68,68,0.2)' : '1px solid rgba(239,68,68,0.3)', background: isDark ? 'rgba(239,68,68,0.06)' : 'rgba(239,68,68,0.04)' }}>
-          <Icon icon={appIcons.error} className="w-4 h-4 flex-shrink-0 text-red-400" />
-          <span className={isDark ? 'text-red-400' : 'text-red-600'}>{error}</span>
+        <div
+          className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm"
+          style={{
+            border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(17,17,17,0.1)',
+            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,17,17,0.04)',
+          }}
+        >
+          <Icon
+            icon={appIcons.error}
+            className="h-4 w-4 flex-shrink-0"
+            style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}
+          />
+          <span className={isDark ? 'text-white/65' : 'text-black/65'}>{error}</span>
         </div>
       )}
     </div>

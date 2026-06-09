@@ -9,7 +9,7 @@ import {
   listAllResults,
   type CrawlSessionSummary,
 } from '../../api/client';
-import { FilePreview } from '../../components/BedReadVoices/FilePreview';
+import { FilePreview } from '../../components/NovelCrawler/FilePreview';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 
@@ -149,14 +149,38 @@ export function ResultPage({ themeMode }: ResultPageProps) {
   const panelBackground = isDark ? '#202020' : '#ffffff';
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
+  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.08)';
+  const strongSurface = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
+  const strongSurfaceText = isDark ? '#111111' : '#ffffff';
+  const statusToneMap: Record<string, { text: string; dot: string }> = {
+    completed: {
+      text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    },
+    failed: {
+      text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      dot: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)',
+    },
+    cancelled: {
+      text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      dot: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+    },
+    running: {
+      text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    },
+    idle: {
+      text: secondaryText,
+      dot: tertiaryText,
+    },
+  };
 
   if (isLoading) {
     return (
       <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBg }}>
-        <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-3 py-4 sm:px-5 lg:px-6">
           <section
-            className="rounded-2xl border px-6 py-5 text-sm"
+            className="rounded-xl border px-5 py-4 text-sm"
             style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
           >
             <div className="flex items-center gap-3">
@@ -172,19 +196,19 @@ export function ResultPage({ themeMode }: ResultPageProps) {
   if (error || !result) {
     return (
       <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBg }}>
-        <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-3 py-4 sm:px-5 lg:px-6">
           <section
-            className="max-w-md rounded-2xl border px-6 py-6 text-center"
+            className="max-w-md rounded-xl border px-5 py-5 text-center"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="flex items-center justify-center gap-2" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
+            <div className="flex items-center justify-center gap-2" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
               <Icon icon={appIcons.info} className="h-5 w-5" />
               <span>{error || 'Results not found'}</span>
             </div>
             <button
               onClick={() => navigate('/')}
-              className="mt-4 rounded-md px-4 py-2 text-sm font-medium text-white"
-              style={{ background: '#4f46e5' }}
+              className="mt-4 rounded-md px-4 py-2 text-sm font-medium"
+              style={{ background: strongSurface, color: strongSurfaceText }}
             >
               Start new crawl
             </button>
@@ -194,13 +218,6 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     );
   }
 
-  const statusColors: Record<string, string> = {
-    completed: isDark ? 'text-emerald-400' : 'text-emerald-600',
-    failed: isDark ? 'text-red-400' : 'text-red-600',
-    cancelled: isDark ? 'text-amber-400' : 'text-amber-600',
-    running: isDark ? 'text-blue-400' : 'text-blue-600',
-  };
-
   const statusLabels: Record<string, string> = {
     completed: 'Completed',
     failed: 'Failed',
@@ -208,42 +225,20 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     running: 'Running',
   };
 
-  const statusDotMap: Record<string, string> = {
-    completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
-    failed: isDark ? 'bg-red-400' : 'bg-red-500',
-    cancelled: isDark ? 'bg-amber-400' : 'bg-amber-500',
-    running: isDark ? 'bg-blue-400' : 'bg-blue-500',
-    idle: isDark ? 'bg-slate-500' : 'bg-gray-400',
-  };
-
   const statusChipStyle = () => {
     const status = result.status;
-    if (status === 'completed') {
+    if (status === 'running' || status === 'completed') {
       return {
-        background: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.1)',
-        color: isDark ? '#6ee7b7' : '#047857',
-        border: isDark ? '1px solid rgba(16,185,129,0.22)' : '1px solid rgba(16,185,129,0.18)',
+        background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
+        color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+        border: `1px solid ${isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)'}`,
       };
     }
-    if (status === 'failed') {
+    if (status === 'failed' || status === 'cancelled') {
       return {
-        background: isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)',
-        color: isDark ? '#fca5a5' : '#dc2626',
-        border: isDark ? '1px solid rgba(239,68,68,0.22)' : '1px solid rgba(239,68,68,0.16)',
-      };
-    }
-    if (status === 'cancelled') {
-      return {
-        background: isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)',
-        color: isDark ? '#fcd34d' : '#b45309',
-        border: isDark ? '1px solid rgba(245,158,11,0.22)' : '1px solid rgba(245,158,11,0.16)',
-      };
-    }
-    if (status === 'running') {
-      return {
-        background: isDark ? 'rgba(59,130,246,0.12)' : 'rgba(59,130,246,0.08)',
-        color: isDark ? '#93c5fd' : '#2563eb',
-        border: isDark ? '1px solid rgba(59,130,246,0.22)' : '1px solid rgba(59,130,246,0.16)',
+        background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
+        color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+        border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.1)'}`,
       };
     }
     return {
@@ -279,10 +274,10 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBg }}>
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <main className="space-y-5">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
+        <main className="space-y-4">
           <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
+            className="rounded-xl border px-4 py-4 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -290,10 +285,10 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
                   Results
                 </div>
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+                <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" style={{ color: pageText }}>
                   {result.novel_name || 'Crawl session'}
                 </h1>
-                <p className="max-w-3xl text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+                <p className="max-w-3xl text-sm leading-5" style={{ color: secondaryText }}>
                   Review session details, preview output files, and jump across recent crawl runs.
                 </p>
               </div>
@@ -318,7 +313,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                   }}
                   className="rounded-md border px-3 py-2 text-sm transition-colors"
                   style={{
-                    borderColor: showHistory ? '#6366f1' : panelBorder,
+                    borderColor: showHistory ? (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)') : panelBorder,
                     background: showHistory ? activeSurface : mutedSurface,
                     color: showHistory ? pageText : secondaryText,
                   }}
@@ -334,7 +329,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
           {combinedFilename && (
             <section
-              className="rounded-2xl border px-5 py-5 sm:px-6"
+              className="rounded-xl border px-4 py-4 sm:px-5"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -351,8 +346,8 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 </div>
                 <button
                   onClick={handleDownloadCombined}
-                  className="rounded-md px-4 py-2 text-sm font-medium text-white"
-                  style={{ background: '#059669' }}
+                  className="rounded-md px-4 py-2 text-sm font-medium"
+                  style={{ background: strongSurface, color: strongSurfaceText }}
                 >
                   <span className="inline-flex items-center gap-2">
                     <Icon icon={appIcons.download} className="h-4 w-4" />
@@ -367,7 +362,6 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                   filename={combinedFilename}
                   sizeBytes={files.find((file) => file.filename === combinedFilename)?.size_bytes || 0}
                   onDownload={handleDownloadCombined}
-                  accent="emerald"
                   isDark={isDark}
                 />
               </div>
@@ -376,10 +370,10 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
           {showHistory && (
             <section
-              className="overflow-hidden rounded-2xl border"
+              className="overflow-hidden rounded-xl border"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
-              <div className="flex items-center justify-between border-b px-5 py-4 sm:px-6" style={{ borderColor: panelBorder }}>
+              <div className="flex items-center justify-between border-b px-4 py-3.5 sm:px-5" style={{ borderColor: panelBorder }}>
                 <div>
                   <h2 className="text-lg font-semibold" style={{ color: pageText }}>
                     Recent sessions
@@ -412,9 +406,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
               ) : (
                 <div>
                   {otherSessions.slice(0, 8).map((session, index) => {
-                    const dot = statusDotMap[session.status] ?? (isDark ? 'bg-white/30' : 'bg-black/30');
-                    const label = statusLabels[session.status] ?? session.status;
-                    const textColor = statusColors[session.status] ?? (isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]');
+                    const tone = statusToneMap[session.status] ?? { text: secondaryText, dot: tertiaryText };
                     const displayTitle = session.novel_name || session.crawl_id;
 
                     return (
@@ -422,16 +414,18 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                         key={session.crawl_id}
                         type="button"
                         onClick={() => navigate(`/results?session=${session.crawl_id}`)}
-                        className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-black/[0.02] sm:px-6"
-                        style={{ borderTop: index === 0 ? 'none' : `1px solid ${panelBorder}` }}
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors sm:px-5"
+                        style={{
+                          borderTop: index === 0 ? 'none' : `1px solid ${panelBorder}`,
+                          background: 'transparent',
+                        }}
                       >
-                        <div className={`h-2 w-2 rounded-full shrink-0 ${dot}`} />
+                        <div className="h-2 w-2 shrink-0 rounded-full" style={{ background: tone.dot }} />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium" style={{ color: pageText }}>
                             {displayTitle}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" style={{ color: secondaryText }}>
-                            <span className={textColor}>{label}</span>
                             <span>{session.chapters_crawled} ch</span>
                             <span>{formatDate(session.started_at)}</span>
                             {session.finished_at && <span>{formatDuration(session.started_at, session.finished_at)}</span>}
@@ -449,7 +443,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                   <button
                     onClick={() => navigate('/results/all')}
                     className="text-sm font-medium"
-                    style={{ color: isDark ? '#818cf8' : '#4f46e5' }}
+                    style={{ color: pageText }}
                   >
                     View all {otherSessions.length} sessions →
                   </button>
@@ -459,7 +453,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
           )}
 
           <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
+            className="rounded-xl border px-4 py-4 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -474,7 +468,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 )}
                 <p className="text-sm" style={{ color: secondaryText }}>
                   {result.spider_name || 'Unknown site'} ·{' '}
-                  <span className={statusColors[result.status] ?? (isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]')}>
+                  <span style={{ color: statusToneMap[result.status]?.text ?? secondaryText }}>
                     {statusLabels[result.status] ?? result.status}
                   </span>
                   {result.chapters_crawled > 0 && (
@@ -489,7 +483,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline hover:no-underline"
-                      style={{ color: isDark ? '#818cf8' : '#4f46e5' }}
+                      style={{ color: pageText }}
                     >
                       {result.source_url}
                     </a>
@@ -506,8 +500,8 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                     a.click();
                     document.body.removeChild(a);
                   }}
-                  className="rounded-md px-4 py-2 text-sm font-medium text-white"
-                  style={{ background: '#4f46e5' }}
+                  className="rounded-md px-4 py-2 text-sm font-medium"
+                  style={{ background: strongSurface, color: strongSurfaceText }}
                 >
                   <span className="inline-flex items-center gap-2">
                     <Icon icon={appIcons.download} className="h-4 w-4" />
@@ -534,9 +528,9 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 {meta.views != null && <span>{meta.views.toLocaleString()} views</span>}
                 {meta.stars != null && <span>{meta.stars.toLocaleString()} stars</span>}
                 {meta.chapter_count != null && <span>{meta.chapter_count} parts</span>}
-                {meta.completed === true && <InlineChip label="Completed" tone="green" isDark={isDark} />}
-                {meta.mature === true && <InlineChip label="18+" tone="amber" isDark={isDark} />}
-                {meta.is_paywalled === true && <InlineChip label="Locked chapters present" tone="red" isDark={isDark} />}
+                {meta.completed === true && <InlineChip label="Completed" tone="strong" isDark={isDark} />}
+                {meta.mature === true && <InlineChip label="18+" tone="soft" isDark={isDark} />}
+                {meta.is_paywalled === true && <InlineChip label="Locked chapters present" tone="soft" isDark={isDark} />}
               </div>
             )}
 
@@ -558,9 +552,9 @@ export function ResultPage({ themeMode }: ResultPageProps) {
               <div
                 className="mt-4 rounded-xl border px-4 py-3 text-sm"
                 style={{
-                  background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
-                  borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
-                  color: isDark ? '#f87171' : '#dc2626',
+                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
+                  color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
                 }}
               >
                 <strong>Error:</strong> {result.error_message}
@@ -570,7 +564,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
 
           {nonCombinedFiles.length > 0 ? (
             <section
-              className="rounded-2xl border px-5 py-5 sm:px-6"
+              className="rounded-xl border px-4 py-4 sm:px-5"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
               <div className="flex items-center justify-between gap-3">
@@ -619,7 +613,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
             </section>
           ) : !combinedFilename ? (
             <section
-              className="rounded-2xl border px-5 py-10 text-center sm:px-6"
+              className="rounded-xl border px-4 py-8 text-center sm:px-5"
               style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
             >
               No output files found for this crawl session.
@@ -627,7 +621,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
           ) : null}
 
           <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
+            className="rounded-xl border px-4 py-4 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
             <div className="space-y-2">
@@ -643,8 +637,8 @@ export function ResultPage({ themeMode }: ResultPageProps) {
             </div>
             <button
               disabled
-              className="mt-4 rounded-md px-4 py-2 text-sm font-medium text-white"
-              style={{ background: '#4f46e5', opacity: 0.4, cursor: 'not-allowed' }}
+              className="mt-4 rounded-md px-4 py-2 text-sm font-medium"
+              style={{ background: mutedSurface, color: secondaryText, opacity: 0.7, cursor: 'not-allowed', border: `1px solid ${panelBorder}` }}
             >
               Send to Company BE (Phase 2)
             </button>
@@ -691,24 +685,19 @@ function InlineChip({
   isDark,
 }: {
   label: string;
-  tone: 'green' | 'amber' | 'red' | 'neutral';
+  tone: 'strong' | 'soft' | 'neutral';
   isDark: boolean;
 }) {
-  const styles: Record<'green' | 'amber' | 'red' | 'neutral', { background: string; color: string; border: string }> = {
-    green: {
-      background: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.1)',
-      color: isDark ? '#6ee7b7' : '#047857',
-      border: isDark ? '1px solid rgba(16,185,129,0.22)' : '1px solid rgba(16,185,129,0.18)',
+  const styles: Record<'strong' | 'soft' | 'neutral', { background: string; color: string; border: string }> = {
+    strong: {
+      background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
+      color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      border: isDark ? '1px solid rgba(255,255,255,0.14)' : '1px solid rgba(17,17,17,0.12)',
     },
-    amber: {
-      background: isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)',
-      color: isDark ? '#fcd34d' : '#b45309',
-      border: isDark ? '1px solid rgba(245,158,11,0.22)' : '1px solid rgba(245,158,11,0.16)',
-    },
-    red: {
-      background: isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)',
-      color: isDark ? '#fca5a5' : '#dc2626',
-      border: isDark ? '1px solid rgba(239,68,68,0.22)' : '1px solid rgba(239,68,68,0.16)',
+    soft: {
+      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
+      color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(17,17,17,0.1)',
     },
     neutral: {
       background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)',

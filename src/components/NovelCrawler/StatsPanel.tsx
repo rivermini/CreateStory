@@ -37,19 +37,19 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
   const duration = formatDuration(startedAt, finishedAt);
 
   const statusDotMap: Record<string, string> = {
-    running:   '#60a5fa',
-    completed: '#34d399',
-    failed:   '#f87171',
-    cancelled: '#fbbf24',
-    idle:     isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
+    running: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    completed: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    failed: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)',
+    cancelled: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+    idle: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
   };
 
   const statusTextMap: Record<string, string> = {
-    running:   '#60a5fa',
-    completed: '#34d399',
-    failed:   '#f87171',
-    cancelled: '#fbbf24',
-    idle:     isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
+    running: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    completed: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    failed: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+    cancelled: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+    idle: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
   };
 
   const dot = statusDotMap[status] ?? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)');
@@ -57,7 +57,7 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
   const label = status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
       <StatCard
         label="Chapters Scraped"
         value={chaptersCrawled}
@@ -96,10 +96,16 @@ function StatCard({ label, value, sub, isDark }: {
   isDark: boolean;
 }) {
   return (
-    <div className="lg-glass-card p-4">
-      <p className={`text-xs font-medium uppercase tracking-wider mb-2 ${isDark ? 'text-white/30' : 'text-black/30'}`}>{label}</p>
-      <p className="text-xl sm:text-2xl font-bold" style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)' }}>{value}</p>
-      {sub && <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-black/30'}`}>{sub}</p>}
+    <div
+      className="rounded-xl border px-3.5 py-3"
+      style={{
+        background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,17,17,0.04)',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)',
+      }}
+    >
+      <p className={`mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] ${isDark ? 'text-white/30' : 'text-black/30'}`}>{label}</p>
+      <p className="text-lg font-semibold sm:text-xl" style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)' }}>{value}</p>
+      {sub && <p className={`mt-1 text-[11px] ${isDark ? 'text-white/30' : 'text-black/30'}`}>{sub}</p>}
     </div>
   );
 }

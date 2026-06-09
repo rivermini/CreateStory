@@ -39,7 +39,6 @@ interface NavSection {
 
 const NAV_ICONS = {
     '/': 'add',
-    '/batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread': 'bookOpen',
     '/bedread/jobs': 'audioJobs',
@@ -55,7 +54,6 @@ const NAV_ICONS = {
 
 const NAV_ITEMS_CRAWL: NavItem[] = [
     { to: '/', label: 'New Crawl', iconKey: NAV_ICONS['/'] },
-    { to: '/batch', label: 'Batch', iconKey: NAV_ICONS['/batch'] },
     { to: '/results/all', label: 'Crawl History', iconKey: NAV_ICONS['/results/all'] },
 ];
 

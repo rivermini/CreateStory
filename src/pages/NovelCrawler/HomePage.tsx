@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { checkInkittCookies, getSettings, listSites, startCrawl } from '../../api/client';
 import type { InkittCookieStatusResponse, SiteInfoResponse } from '../../api/client';
-import { MobileBottomSheet } from '../../components/Shared/Mobile/MobileBottomSheet';
 import { NovelInfoPanel } from '../../components/NovelCrawler/NovelInfoPanel';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
@@ -29,7 +28,6 @@ export function HomePage({ themeMode }: HomePageProps) {
     chaptersError,
     warning,
     isChapterUrl,
-    isResolvingTotal,
     refresh,
   } = useNovelInfo();
 
@@ -40,7 +38,6 @@ export function HomePage({ themeMode }: HomePageProps) {
   const [rangeMode, setRangeMode] = useState<'count' | 'range'>('count');
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState('');
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [supportedSites, setSupportedSites] = useState<SiteInfoResponse[]>([]);
   const [autoMaxChapters, setAutoMaxChapters] = useState(false);
   const [inkittCookieStatus, setInkittCookieStatus] = useState<InkittCookieStatusResponse | null>(null);
@@ -151,6 +148,8 @@ export function HomePage({ themeMode }: HomePageProps) {
   const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
   const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
+  const accentSolid = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
+  const accentText = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
   const sectionDisabledClass = inputsLocked ? 'opacity-60' : '';
 
   const handleRangeToChange = (value: number) => {
@@ -217,96 +216,48 @@ export function HomePage({ themeMode }: HomePageProps) {
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <main className="space-y-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
+        <main className="space-y-4">
           <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
+            className="rounded-xl border px-4 py-4 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
             <div className="space-y-2">
               <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
                 Crawl
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" style={{ color: pageText }}>
                 New crawl
               </h1>
-              <p className="max-w-3xl text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+              <p className="max-w-3xl text-sm leading-5" style={{ color: secondaryText }}>
                 Paste a supported novel URL, review the detected metadata, and choose how many chapters to crawl.
               </p>
             </div>
           </section>
 
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-            <div className="space-y-5">
-              {isValid && (
-                <button
-                  onClick={() => setMobileSheetOpen(true)}
-                  className="flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-colors lg:hidden"
-                  style={{ background: panelBackground, borderColor: panelBorder }}
-                >
-                  <div
-                    className="flex h-16 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg"
-                    style={{ background: mutedSurface }}
-                  >
-                    {novelMetadata?.cover_url ? (
-                      <img
-                        src={novelMetadata.cover_url}
-                        alt="Cover"
-                        className="h-full w-full rounded-lg object-cover"
-                        onError={(event) => {
-                          event.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <Icon icon={appIcons.bookOpen} className="text-xl" style={{ color: secondaryText }} />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium" style={{ color: pageText }}>
-                      {panelTitle || storyTitle}
-                    </p>
-                    {totalChapterCount != null && (
-                      <p className="text-sm" style={{ color: secondaryText }}>
-                        {totalChapterCount.toLocaleString()} chapters
-                      </p>
-                    )}
-                  </div>
-                  <Icon icon={appIcons.chevronRight} className="h-5 w-5 shrink-0" style={{ color: secondaryText }} />
-                </button>
-              )}
-
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="flex flex-col gap-4">
               <section
-                className="space-y-5 rounded-2xl border px-5 py-5 sm:px-6"
+                className="space-y-4 rounded-xl border px-4 py-4 sm:px-5"
                 style={{ background: panelBackground, borderColor: panelBorder }}
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <StepBadge number={1} isDark={isDark} />
-                      <h2 className="text-lg font-semibold" style={{ color: pageText }}>
+                      <h2 className="text-base font-semibold" style={{ color: pageText }}>
                         Paste a novel URL
                       </h2>
                     </div>
-                    <p className="text-sm" style={{ color: secondaryText }}>
+                    <p className="text-xs" style={{ color: secondaryText }}>
                       {supportedSites.length > 0
                         ? `Supported: ${supportedSites.map((site) => site.base_url.replace('https://', '').replace('http://', '')).join(', ')}`
                         : 'Supported: wattpad.com'}
                     </p>
                   </div>
-                  <button
-                    onClick={() => navigate('/batch')}
-                    className="rounded-md border px-3 py-2 text-sm transition-colors"
-                    style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
-                    title="Crawl multiple novels at once"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Icon icon={appIcons.list} className="h-4 w-4" />
-                      Batch
-                    </span>
-                  </button>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <label htmlFor="url-input" className="block text-sm" style={{ color: secondaryText }}>
                     Novel URL
                   </label>
@@ -317,7 +268,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                       value={inputUrl}
                       onChange={(event) => handleUrlChange(event.target.value)}
                       placeholder="https://www.wattpad.com/... or https://www.inkitt.com/... or https://www.novelworm.com/..."
-                      className="w-full rounded-md border px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full rounded-md border px-4 py-3 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20"
                       style={{
                         background: mutedSurface,
                         borderColor: panelBorder,
@@ -326,7 +277,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     />
                     {isLoading && (
                       <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                        <Icon icon={appIcons.spinner} className="h-5 w-5 animate-spin text-indigo-400" />
+                        <Icon icon={appIcons.spinner} className="h-5 w-5 animate-spin" style={{ color: accentText }} />
                       </div>
                     )}
                   </div>
@@ -334,15 +285,15 @@ export function HomePage({ themeMode }: HomePageProps) {
 
                 {isValid && siteInfo && (
                   <div
-                    className="rounded-xl border px-4 py-4"
+                    className="rounded-lg border px-3 py-3"
                     style={{
-                      background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)',
-                      borderColor: isDark ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.16)',
+                      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
                     }}
                   >
                     <div className="flex items-center gap-2">
-                      <Icon icon={appIcons.checkCircle} className="h-5 w-5" style={{ color: isDark ? '#6ee7b7' : '#059669' }} />
-                      <span className="font-medium" style={{ color: isDark ? '#6ee7b7' : '#047857' }}>
+                      <Icon icon={appIcons.checkCircle} className="h-4 w-4" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }} />
+                      <span className="font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
                         {siteInfo.site_name}
                       </span>
                       {storyTitle && <span style={{ color: secondaryText }}>— {storyTitle}</span>}
@@ -359,7 +310,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         → Chapter 1
                         {slug && (
                           <span>
-                            {' '}(ID: <code style={{ color: isDark ? '#a5b4fc' : '#4f46e5' }}>{slug}</code>)
+                            {' '}(ID: <code style={{ color: accentText }}>{slug}</code>)
                           </span>
                         )}
                       </p>
@@ -375,7 +326,7 @@ export function HomePage({ themeMode }: HomePageProps) {
 
                 {isInkitt && (
                   <div
-                    className="rounded-xl border px-4 py-4"
+                    className="rounded-lg border px-3 py-3"
                     style={inkittStateStyle(isDark, isCheckingInkittCookies, inkittCookieStatus)}
                   >
                     <div className="flex items-start gap-3">
@@ -389,7 +340,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         <Icon icon={appIcons.statusWarning} className="mt-0.5 h-5 w-5 shrink-0" />
                       )}
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">
+                        <p className="text-xs font-medium">
                           {isCheckingInkittCookies
                             ? 'Checking saved Inkitt cookies...'
                             : inkittCookieStatus?.message || 'Could not test saved Inkitt cookies.'}
@@ -406,14 +357,14 @@ export function HomePage({ themeMode }: HomePageProps) {
               </section>
 
               <section
-                className={`space-y-5 rounded-2xl border px-5 py-5 sm:px-6 ${sectionDisabledClass}`}
+                className={`space-y-4 rounded-xl border px-4 py-4 sm:px-5 ${sectionDisabledClass}`}
                 style={{ background: panelBackground, borderColor: panelBorder }}
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <StepBadge number={2} isDark={isDark} />
-                      <h2 className="text-lg font-semibold" style={{ color: pageText }}>
+                      <h2 className="text-base font-semibold" style={{ color: pageText }}>
                         Chapter range
                       </h2>
                     </div>
@@ -422,7 +373,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                     </p>
                   </div>
                   {totalChapterCount != null && (
-                    <div className="rounded-xl border px-3 py-2 text-right" style={{ borderColor: panelBorder, background: mutedSurface }}>
+                    <div className="rounded-lg border px-2.5 py-1.5 text-right" style={{ borderColor: panelBorder, background: mutedSurface }}>
                       <p className="text-sm font-semibold" style={{ color: pageText }}>
                         {totalChapterCount.toLocaleString()}
                       </p>
@@ -433,11 +384,11 @@ export function HomePage({ themeMode }: HomePageProps) {
                   )}
                 </div>
 
-                <div className="inline-flex rounded-xl border p-1" style={{ borderColor: panelBorder, background: mutedSurface }}>
+                <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: panelBorder, background: mutedSurface }}>
                   <button
                     onClick={() => setRangeMode('count')}
                     disabled={inputsLocked}
-                    className="rounded-lg px-4 py-2 text-sm transition-colors"
+                    className="rounded-md px-3 py-1.5 text-xs transition-colors"
                     style={{
                       background: rangeMode === 'count' ? activeSurface : 'transparent',
                       color: rangeMode === 'count' ? pageText : secondaryText,
@@ -448,7 +399,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                   <button
                     onClick={() => setRangeMode('range')}
                     disabled={inputsLocked}
-                    className="rounded-lg px-4 py-2 text-sm transition-colors"
+                    className="rounded-md px-3 py-1.5 text-xs transition-colors"
                     style={{
                       background: rangeMode === 'range' ? activeSurface : 'transparent',
                       color: rangeMode === 'range' ? pageText : secondaryText,
@@ -459,7 +410,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                 </div>
 
                 {rangeMode === 'count' ? (
-                  <div className="max-w-xs">
+                  <div className="max-w-[220px]">
                     <label className="mb-2 block text-sm" style={{ color: secondaryText }}>
                       Max chapters to crawl
                       {totalChapterCount != null && (
@@ -474,7 +425,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         value={toChapter}
                         disabled={inputsLocked}
                         onChange={(event) => handleToChapterChange(parseInt(event.target.value) || 1)}
-                        className="w-full rounded-md border px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
                         style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       />
                       {totalChapterCount != null && (
@@ -500,7 +451,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         value={rangeFrom}
                         disabled={inputsLocked}
                         onChange={(event) => handleRangeFromChange(parseInt(event.target.value) || 1)}
-                        className="w-full rounded-md border px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
                         style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       />
                     </div>
@@ -521,7 +472,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         value={rangeTo}
                         disabled={inputsLocked}
                         onChange={(event) => handleRangeToChange(parseInt(event.target.value) || rangeFrom)}
-                        className="w-full rounded-md border px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
                         style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       />
                     </div>
@@ -557,10 +508,10 @@ export function HomePage({ themeMode }: HomePageProps) {
                 onClick={handleStart}
                 disabled={isStarting || !isValid || isPaywalled}
                 title={isPaywalled ? 'Crawling disabled — Wattpad Original' : undefined}
-                className="flex w-full items-center justify-center gap-2 rounded-md py-3.5 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed"
+                className="flex w-full items-center justify-center gap-2 rounded-md py-3.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed"
                 style={{
-                  background: isPaywalled || isStarting || !isValid ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.14)') : '#4f46e5',
-                  color: isPaywalled || isStarting || !isValid ? secondaryText : '#ffffff',
+                  background: isPaywalled || isStarting || !isValid ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.14)') : accentSolid,
+                  color: isPaywalled || isStarting || !isValid ? secondaryText : (isDark ? '#111111' : '#ffffff'),
                   opacity: isStarting ? 0.7 : 1,
                 }}
               >
@@ -580,7 +531,7 @@ export function HomePage({ themeMode }: HomePageProps) {
 
             <div className="space-y-4 lg:sticky lg:top-6">
               {isValid && (
-                <div className="rounded-2xl border p-4" style={{ background: panelBackground, borderColor: panelBorder }}>
+                <div className="rounded-2xl border" style={{ background: panelBackground, borderColor: panelBorder }}>
                   <NovelInfoPanel
                     storyTitle={panelTitle || storyTitle}
                     siteName={siteInfo?.site_name || null}
@@ -595,25 +546,12 @@ export function HomePage({ themeMode }: HomePageProps) {
                     novelMetadata={novelMetadata}
                     onCrawlNovel={handleCrawlNovel}
                     isDark={isDark}
-                    isResolvingTotal={isResolvingTotal}
                   />
                 </div>
               )}
             </div>
           </div>
         </main>
-
-        <MobileBottomSheet
-          isOpen={mobileSheetOpen}
-          onClose={() => setMobileSheetOpen(false)}
-          storyTitle={panelTitle || storyTitle}
-          chapters={chapters}
-          chapterCount={chapterCount}
-          totalChapterCount={totalChapterCount}
-          novelMetadata={novelMetadata}
-          onCrawlNovel={handleCrawlNovel}
-          isDark={isDark}
-        />
       </div>
     </div>
   );
@@ -624,8 +562,8 @@ function StepBadge({ number, isDark }: { number: number; isDark: boolean }) {
     <span
       className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-semibold"
       style={{
-        background: isDark ? 'rgba(99,102,241,0.16)' : 'rgba(99,102,241,0.12)',
-        color: isDark ? '#a5b4fc' : '#4f46e5',
+        background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(17,17,17,0.08)',
+        color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
       }}
     >
       {number}
@@ -671,23 +609,23 @@ function inkittStateStyle(
 ) {
   if (isCheckingInkittCookies) {
     return {
-      background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.06)',
-      borderColor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.16)',
-      color: isDark ? '#a5b4fc' : '#4338ca',
+      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
+      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
+      color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
     };
   }
   if (inkittCookieStatus?.valid === true) {
     return {
-      background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)',
-      borderColor: isDark ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.16)',
-      color: isDark ? '#6ee7b7' : '#047857',
+      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
+      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
+      color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
     };
   }
   if (inkittCookieStatus?.valid === null) {
     return {
       background: isDark ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.06)',
       borderColor: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.16)',
-      color: isDark ? '#fcd34d' : '#b45309',
+      color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
     };
   }
   return {

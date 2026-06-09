@@ -25,21 +25,17 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBackground = isDark ? 'rgba(255,255,255,0.03)' : '#ffffff';
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const codeSurface = isDark ? 'rgba(0,0,0,0.18)' : 'rgba(55,53,47,0.03)';
+  const codeSurface = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(55,53,47,0.03)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const strongText = isDark ? 'rgba(255,255,255,0.82)' : '#111111';
 
-  const accentConfig = accent === 'emerald'
-    ? { border: '#10b981', tint: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.06)' }
-    : accent === 'cyan'
-      ? { border: '#06b6d4', tint: isDark ? 'rgba(6,182,212,0.12)' : 'rgba(6,182,212,0.06)' }
-      : accent === 'none'
-        ? { border: panelBorder, tint: mutedSurface }
-        : { border: '#6366f1', tint: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.06)' };
+  const neutralBorder = accent === 'none' ? panelBorder : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.12)';
+  const neutralTint = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)';
 
   const handleExpand = async () => {
     if (expanded) {
@@ -81,35 +77,35 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
   const isTxt = filename.endsWith('.txt');
 
   const typeConfig = isJson
-    ? { label: '{}', bg: isDark ? 'rgba(99,102,241,0.14)' : 'rgba(99,102,241,0.08)', text: isDark ? '#a5b4fc' : '#4338ca' }
+    ? { label: '{}', bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', text: strongText }
     : isMd
-      ? { label: 'MD', bg: isDark ? 'rgba(6,182,212,0.14)' : 'rgba(6,182,212,0.08)', text: isDark ? '#67e8f9' : '#0e7490' }
+      ? { label: 'MD', bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', text: strongText }
       : isTxt
-        ? { label: 'TXT', bg: isDark ? 'rgba(6,182,212,0.14)' : 'rgba(6,182,212,0.08)', text: isDark ? '#67e8f9' : '#0e7490' }
-        : { label: 'CSV', bg: isDark ? 'rgba(16,185,129,0.14)' : 'rgba(16,185,129,0.08)', text: isDark ? '#6ee7b7' : '#047857' };
+        ? { label: 'TXT', bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', text: strongText }
+        : { label: 'CSV', bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', text: strongText };
 
   return (
-    <div className="overflow-hidden rounded-2xl border" style={{ background: panelBackground, borderColor: accent === 'none' ? panelBorder : accentConfig.border }}>
-      <div className="flex items-center justify-between gap-4 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border" style={{ background: panelBackground, borderColor: neutralBorder }}>
+      <div className="flex items-center justify-between gap-3 px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="shrink-0">
             <span
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold"
-              style={{ background: typeConfig.bg, color: typeConfig.text, border: `1px solid ${accent === 'none' ? panelBorder : accentConfig.border}` }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[11px] font-semibold"
+              style={{ background: typeConfig.bg, color: typeConfig.text, border: `1px solid ${panelBorder}` }}
             >
               {typeConfig.label}
             </span>
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium" style={{ color: pageText }}>{filename}</p>
-            <p className="text-xs" style={{ color: tertiaryText }}>{formatBytes(sizeBytes)}</p>
+            <p className="text-[11px]" style={{ color: tertiaryText }}>{formatBytes(sizeBytes)}</p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={handleExpand}
             disabled={loading}
-            className="rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+            className="rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-50"
             style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}
           >
             {loading ? 'Loading...' : expanded ? 'Collapse' : 'Preview'}
@@ -117,8 +113,8 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
           <button
             onClick={handleCopy}
             disabled={copied}
-            className="relative flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-default"
-            style={{ background: copied ? 'rgba(16,185,129,0.14)' : mutedSurface, borderColor: copied ? 'rgba(16,185,129,0.24)' : panelBorder, color: copied ? (isDark ? '#6ee7b7' : '#047857') : secondaryText }}
+            className="relative flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors disabled:cursor-default"
+            style={{ background: copied ? neutralTint : mutedSurface, borderColor: copied ? neutralBorder : panelBorder, color: copied ? strongText : secondaryText }}
             title="Copy full file content to clipboard"
             onMouseLeave={() => copied && setCopied(false)}
           >
@@ -133,8 +129,8 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
           </button>
           <button
             onClick={onDownload}
-            className="rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors"
-            style={{ background: accentConfig.tint, borderColor: accent === 'none' ? panelBorder : accentConfig.border, color: accent === 'emerald' ? (isDark ? '#6ee7b7' : '#047857') : accent === 'cyan' ? (isDark ? '#67e8f9' : '#0e7490') : isDark ? '#a5b4fc' : '#4338ca' }}
+            className="rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors"
+            style={{ background: neutralTint, borderColor: neutralBorder, color: strongText }}
           >
             Download
           </button>
@@ -142,11 +138,11 @@ export function FilePreview({ crawlId, filename, sizeBytes, onDownload, accent =
       </div>
 
       {expanded && (
-        <div className="border-t px-4 py-4" style={{ borderColor: panelBorder }}>
-          {err && <p className="mb-3 text-sm" style={{ color: isDark ? '#f87171' : '#dc2626' }}>{err}</p>}
+        <div className="border-t px-3 py-3" style={{ borderColor: panelBorder }}>
+          {err && <p className="mb-2 text-sm" style={{ color: strongText }}>{err}</p>}
           {preview ? (
-            <div className="space-y-2">
-              <pre className="max-h-60 overflow-x-auto overflow-y-auto rounded-xl border p-4 text-xs font-mono" style={{ background: codeSurface, borderColor: panelBorder, color: secondaryText }}>
+            <div className="space-y-1.5">
+              <pre className="max-h-60 overflow-x-auto overflow-y-auto rounded-lg border p-3 text-[11px] font-mono" style={{ background: codeSurface, borderColor: panelBorder, color: secondaryText }}>
                 <code>{preview.preview || '(empty file)'}</code>
               </pre>
               {preview.total_lines > 30 && (

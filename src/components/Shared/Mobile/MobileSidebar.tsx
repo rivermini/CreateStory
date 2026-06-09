@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from '../AppIcon';
 import { Icon, appIcons } from '../Icon';
@@ -12,8 +11,6 @@ interface MobileSidebarProps {
     isOpen: boolean;
     onClose: () => void;
 }
-
-const PHASE_ACCENT = '#6366f1';
 
 function navActive(locationPath: string, expect: string) {
     if (expect === '/results/all') {
@@ -39,7 +36,6 @@ interface NavSection {
 
 const NAV_ICONS_MOBILE = {
     '/': 'add',
-    '/batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread': 'bookOpen',
     '/bedread/jobs': 'audioJobs',
@@ -57,7 +53,6 @@ const NAV_SECTIONS: NavSection[] = [
         label: 'Crawl',
         items: [
             { to: '/', label: 'New Crawl', iconKey: NAV_ICONS_MOBILE['/'] },
-            { to: '/batch', label: 'Batch', iconKey: NAV_ICONS_MOBILE['/batch'] },
             { to: '/results/all', label: 'Crawl History', iconKey: NAV_ICONS_MOBILE['/results/all'] },
         ],
     },
@@ -92,198 +87,144 @@ const NAV_SECTIONS: NavSection[] = [
     },
 ];
 
+function MobileNavItem({
+    item,
+    active,
+    isDark,
+    onClick,
+    asButton = false,
+}: {
+    item: NavItem;
+    active: boolean;
+    isDark: boolean;
+    onClick: () => void;
+    asButton?: boolean;
+}) {
+    const panelBackground = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,17,17,0.04)';
+    const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.08)';
+    const activeBackground = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(17,17,17,0.08)';
+    const activeBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.14)';
+    const baseIcon = isDark ? 'rgba(255,255,255,0.42)' : 'rgba(17,17,17,0.48)';
+    const activeIcon = isDark ? 'rgba(255,255,255,0.9)' : '#111111';
+    const baseText = isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.68)';
+    const activeText = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
+
+    const content = (
+        <span
+            className="flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-200"
+            style={{
+                background: active ? activeBackground : panelBackground,
+                borderColor: active ? activeBorder : panelBorder,
+            }}
+        >
+            <span
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg"
+                style={{
+                    background: active ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.06)') : 'transparent',
+                    color: active ? activeIcon : baseIcon,
+                }}
+            >
+                <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="h-4 w-4 flex-shrink-0" />
+            </span>
+            <span
+                className="min-w-0 truncate text-sm font-medium"
+                style={{ color: active ? activeText : baseText }}
+            >
+                {item.label}
+            </span>
+            {active && <span className="h-1.5 w-1.5 rounded-full" style={{ background: activeIcon }} />}
+        </span>
+    );
+
+    if (asButton) {
+        return (
+            <button
+                key={item.to}
+                type="button"
+                onClick={onClick}
+                className="block w-full"
+                style={{ textDecoration: 'none' }}
+            >
+                {content}
+            </button>
+        );
+    }
+
+    return (
+        <Link
+            key={item.to}
+            to={item.to}
+            onClick={onClick}
+            className="block"
+            style={{ textDecoration: 'none' }}
+        >
+            {content}
+        </Link>
+    );
+}
+
 export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isSettingsOpen, onOpenSettings, isOpen, onClose }: MobileSidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
-    const activeAccent = PHASE_ACCENT;
-
-    const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-
     const makeNavItem = (item: NavItem) => {
         const active = item.to === '/settings' ? isSettingsOpen : navActive(location.pathname, item.to);
-        const hovered = hoveredItem === item.to;
-
-        const showHover = hovered && !active;
-        const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.07)';
-        const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.72)';
-        const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(15,23,42,0.86)';
 
         if (item.to === '/settings') {
             return (
-                <button
+                <MobileNavItem
                     key={item.to}
-                    type="button"
+                    item={item}
+                    active={active}
+                    isDark={isDark}
+                    asButton
                     onClick={() => {
                         onClose();
                         onOpenSettings();
                     }}
-                    className="group relative flex items-center gap-3 transition-all duration-200 w-full"
-                    style={{ textDecoration: 'none' }}
-                    onMouseEnter={() => setHoveredItem(item.to)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                >
-                    <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full transition-all duration-300"
-                        style={{
-                            width: active ? 4 : 0,
-                            height: active ? 24 : 0,
-                            background: activeAccent,
-                            boxShadow: active ? `0 0 10px ${activeAccent}80` : 'none',
-                        }}
-                    />
-                    <span
-                        className="relative flex items-center gap-3 rounded-[14px] transition-all duration-200 w-full"
-                        style={{
-                            padding: '10px 14px',
-                            background: active
-                                ? `linear-gradient(135deg, ${activeAccent}18, ${activeAccent}10)`
-                                : showHover
-                                ? hoverBg
-                                : 'transparent',
-                            border: active
-                                ? `1px solid ${activeAccent}30`
-                                : showHover
-                                ? isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.14)'
-                                : '1px solid transparent',
-                            boxShadow: active
-                                ? `0 2px 12px ${activeAccent}15, inset 0 1px 0 rgba(255,255,255,0.05)`
-                                : showHover
-                                ? 'inset 0 1px 0 rgba(255,255,255,0.04)'
-                                : 'none',
-                        }}
-                    >
-                        <span
-                            className="flex-shrink-0 transition-colors duration-200"
-                            style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
-                        >
-                            <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-5 h-5 flex-shrink-0" />
-                        </span>
-                        <span
-                            className="text-sm font-medium truncate transition-colors duration-200 text-left"
-                            style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
-                        >
-                            {item.label}
-                        </span>
-
-                        {active && (
-                            <span className="ml-auto">
-                                <span className="block rounded-full" style={{ width: 6, height: 6, background: activeAccent, boxShadow: `0 0 6px ${activeAccent}80` }} />
-                            </span>
-                        )}
-                    </span>
-                </button>
+                />
             );
         }
 
-        return (
-            <Link
-                key={item.to}
-                to={item.to}
-                onClick={onClose}
-                className="group relative flex items-center gap-3 transition-all duration-200"
-                style={{ textDecoration: 'none' }}
-                onMouseEnter={() => setHoveredItem(item.to)}
-                onMouseLeave={() => setHoveredItem(null)}
-            >
-                <span
-                    className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full transition-all duration-300"
-                    style={{
-                        width: active ? 4 : 0,
-                        height: active ? 24 : 0,
-                        background: activeAccent,
-                        boxShadow: active ? `0 0 10px ${activeAccent}80` : 'none',
-                    }}
-                />
-                <span
-                    className="relative flex items-center gap-3 rounded-[14px] transition-all duration-200 w-full"
-                    style={{
-                        padding: '10px 14px',
-                        background: active
-                            ? `linear-gradient(135deg, ${activeAccent}18, ${activeAccent}10)`
-                            : showHover
-                            ? hoverBg
-                            : 'transparent',
-                        border: active
-                            ? `1px solid ${activeAccent}30`
-                            : showHover
-                            ? isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.14)'
-                            : '1px solid transparent',
-                        boxShadow: active
-                            ? `0 2px 12px ${activeAccent}15, inset 0 1px 0 rgba(255,255,255,0.05)`
-                            : showHover
-                            ? 'inset 0 1px 0 rgba(255,255,255,0.04)'
-                            : 'none',
-                    }}
-                >
-                    <span
-                        className="flex-shrink-0 transition-colors duration-200"
-                        style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
-                    >
-                        <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-5 h-5 flex-shrink-0" />
-                    </span>
-                    <span
-                        className="text-sm font-medium truncate transition-colors duration-200"
-                        style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
-                    >
-                        {item.label}
-                    </span>
-
-                    {/* Active dot */}
-                    {active && (
-                        <span className="ml-auto">
-                            <span className="block rounded-full" style={{ width: 6, height: 6, background: activeAccent, boxShadow: `0 0 6px ${activeAccent}80` }} />
-                        </span>
-                    )}
-                </span>
-            </Link>
-        );
+        return <MobileNavItem key={item.to} item={item} active={active} isDark={isDark} onClick={onClose} />;
     };
 
     return (
         <>
             {/* Backdrop */}
             <div
-                className={`lg:hidden fixed inset-0 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                className={`fixed inset-0 z-40 transition-opacity duration-200 lg:hidden ${isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
                 style={{
-                    background: 'rgba(0,0,0,0.5)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
+                    background: isDark ? 'rgba(0,0,0,0.42)' : 'rgba(17,17,17,0.18)',
                 }}
                 onClick={onClose}
             />
 
             {/* Sidebar panel */}
             <aside
-                className={`lg:hidden fixed inset-0 z-50 flex flex-col transition-transform duration-300 ease-out`}
+                className="fixed inset-0 z-50 flex flex-col transition-transform duration-200 ease-out lg:hidden"
                 style={{
-                    width: 280,
-                    background: isDark
-                        ? 'rgba(15, 15, 35, 0.82)'
-                        : 'rgba(248, 250, 252, 0.92)',
-                    backdropFilter: 'blur(40px) saturate(200%)',
-                    WebkitBackdropFilter: 'blur(40px) saturate(200%)',
-                    borderRight: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(15,23,42,0.12)',
-                    boxShadow: isDark
-                        ? '0 32px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)'
-                        : '0 32px 64px rgba(15,23,42,0.16), inset 0 1px 0 rgba(255,255,255,0.95)',
+                    width: 272,
+                    background: isDark ? '#111111' : '#fafafa',
+                    borderRight: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(17,17,17,0.08)',
+                    boxShadow: isDark ? '0 18px 40px rgba(0,0,0,0.38)' : '0 18px 40px rgba(17,17,17,0.08)',
                     transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
                 }}
             >
                 {/* Brand */}
                 <div
-                    className="flex items-center gap-3 shrink-0"
+                    className="flex shrink-0 items-center gap-3"
                     style={{
-                        padding: '20px 16px',
-                        borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
+                        padding: '16px 14px',
+                        borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(17,17,17,0.08)',
                     }}
                 >
                     <AppIcon size="xl" className="flex-shrink-0" />
                     <div className="min-w-0 flex-1">
-                        <h1 className="text-base font-bold truncate" style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)' }}>
+                        <h1 className="truncate text-sm font-semibold" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
                             Novel Crawler
                         </h1>
-                        <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.58)' }}>
+                        <p className="truncate text-[11px] uppercase tracking-[0.14em]" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(17,17,17,0.42)' }}>
                             Content Fetcher
                         </p>
                     </div>
@@ -292,21 +233,21 @@ export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isSett
                         className="lg-icon-btn flex-shrink-0"
                         title="Close sidebar"
                     >
-                        <Icon icon={appIcons.close} className="" style={{ width: 14, height: 14, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)' }} />
+                        <Icon icon={appIcons.close} className="" style={{ width: 14, height: 14, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(17,17,17,0.56)' }} />
                     </button>
                 </div>
 
                 {/* Nav */}
-                <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+                <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-3">
                     {NAV_SECTIONS.map((section) => (
                         <div key={section.label}>
                             <p
-                                className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-widest"
-                                style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.46)' }}
+                                className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em]"
+                                style={{ color: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(17,17,17,0.4)' }}
                             >
                                 {section.label}
                             </p>
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                                 {section.items.map((item) => makeNavItem(item))}
                             </div>
                         </div>
@@ -316,8 +257,8 @@ export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isSett
                 {/* Bottom: Theme */}
                 <div
                     style={{
-                        padding: '12px 12px',
-                        borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
+                        padding: '10px 12px',
+                        borderTop: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(17,17,17,0.08)',
                     }}
                 />
             </aside>

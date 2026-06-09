@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ChapterEntry, NovelMetadata } from '../../api/client';
 import { formatNumber } from '../../api/client';
 import { Icon, appIcons } from '../Shared/Icon';
@@ -17,7 +17,6 @@ export interface NovelInfoPanelProps {
   novelMetadata: NovelMetadata | null | undefined;
   onCrawlNovel: (toChapter: number) => void;
   isDark?: boolean;
-  isResolvingTotal?: boolean;
 }
 
 export function NovelInfoPanel({
@@ -34,7 +33,6 @@ export function NovelInfoPanel({
   novelMetadata,
   onCrawlNovel,
   isDark = true,
-  isResolvingTotal = false,
 }: NovelInfoPanelProps) {
   const tocRef = useRef<HTMLDivElement>(null);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -55,7 +53,7 @@ export function NovelInfoPanel({
 
   if (error) {
     return (
-      <div className="space-y-3 rounded-2xl border p-5" style={{ background: panelBackground, borderColor: panelBorder }}>
+      <div className="space-y-2 rounded-xl border p-4" style={{ background: panelBackground, borderColor: panelBorder }}>
         <div className="flex items-center gap-2" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
           <Icon icon={appIcons.info} className="h-4 w-4 shrink-0" />
           <span className="text-sm font-medium">Could not load chapters</span>
@@ -74,46 +72,11 @@ export function NovelInfoPanel({
   const estimatedMax = totalChapterCount ?? displayedTotal;
   const showPartial = totalChapterCount != null && chapterCount < totalChapterCount;
   const panelTitle = novelMetadata?.title || storyTitle || 'Novel Info';
-  const showSpinner = showPartial || isResolvingTotal;
-  const debugEntries = useMemo(() => {
-    if (!novelMetadata) return [];
-
-    return Object.entries(novelMetadata).filter(([, value]) => {
-      if (value == null) return false;
-      if (typeof value === 'string') return value.trim().length > 0;
-      if (Array.isArray(value)) return value.length > 0;
-      return true;
-    });
-  }, [novelMetadata]);
 
   return (
-    <div className="flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-2xl border" style={{ background: panelBackground, borderColor: panelBorder }}>
-      {import.meta.env.DEV && novelMetadata && (
-        <details className="shrink-0 border-b" style={{ borderColor: panelBorder, background: subtleSurface }}>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 select-none" style={{ color: secondaryText }}>
-            <span className="text-[11px] font-medium uppercase tracking-wide">Debug metadata</span>
-            <span className="text-[10px]" style={{ color: tertiaryText }}>{debugEntries.length} fields</span>
-          </summary>
-          <div className="space-y-3 px-4 pb-3">
-            {debugEntries.length > 0 && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {debugEntries.map(([key, value]) => (
-                  <div key={key} className="rounded-xl border px-3 py-2" style={{ borderColor: panelBorder, background: subtleSurface }}>
-                    <p className="mb-1 text-[10px] uppercase tracking-wide" style={{ color: tertiaryText }}>{key}</p>
-                    <p className="break-words text-[11px]" style={{ color: secondaryText }}>{formatDebugValue(value)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            <pre className="max-h-40 overflow-auto rounded-xl border px-3 py-3 text-[10px]" style={{ borderColor: panelBorder, background: isDark ? 'rgba(0,0,0,0.18)' : 'rgba(55,53,47,0.03)', color: tertiaryText }}>
-              {JSON.stringify(novelMetadata, null, 2)}
-            </pre>
-          </div>
-        </details>
-      )}
-
-      <div className="shrink-0 space-y-3 border-b px-4 py-4 sm:px-5" style={{ borderColor: panelBorder }}>
-        <div className="flex items-start gap-3">
+    <div className="flex max-h-[calc(100vh-4.5rem)] flex-col overflow-hidden rounded-xl" style={{ background: panelBackground, borderColor: panelBorder }}>
+      <div className="shrink-0 space-y-2.5 border-b px-3 py-3 sm:px-4" style={{ borderColor: panelBorder }}>
+        <div className="flex items-start gap-2.5">
           <CoverImage url={novelMetadata?.cover_url} title={panelTitle} isDark={isDark} />
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold leading-snug" style={{ color: pageText }} title={panelTitle}>
@@ -129,7 +92,7 @@ export function NovelInfoPanel({
               <p className="mt-0.5 text-xs" style={{ color: tertiaryText }}>{siteName}</p>
             )}
             {novelMetadata?.season_current != null && (
-              <p className="mt-0.5 text-xs" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>
+              <p className="mt-0.5 text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
                 Season {novelMetadata.season_current}
                 {novelMetadata.season_total != null && ` of ${novelMetadata.season_total}`}
               </p>
@@ -137,19 +100,18 @@ export function NovelInfoPanel({
           </div>
           {displayedTotal > 0 && (
             <div className="shrink-0 text-right">
-              <div className="rounded-xl border px-3 py-1.5" style={{ borderColor: isDark ? 'rgba(99,102,241,0.22)' : 'rgba(99,102,241,0.18)', background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.06)' }}>
-                <p className="flex items-center justify-end gap-1.5 text-sm font-bold leading-none" style={{ color: isDark ? '#a5b4fc' : '#4338ca' }}>
+              <div className="rounded-lg border px-2.5 py-1" style={{ borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)' }}>
+                <p className="flex items-center justify-end gap-1 text-sm font-semibold leading-none" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
                   {showPartial ? `${chapterCount} / ${totalChapterCount?.toLocaleString()}` : displayedTotal.toLocaleString()}
-                  {showSpinner && <Icon icon={appIcons.spinner} className="inline-block h-3 w-3 animate-spin" />}
                 </p>
-                <p className="mt-0.5 text-[10px] leading-none" style={{ color: isDark ? 'rgba(165,180,252,0.72)' : 'rgba(67,56,202,0.72)' }}>chapters</p>
+                <p className="mt-0.5 text-[10px] leading-none" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(17,17,17,0.55)' }}>chapters</p>
               </div>
             </div>
           )}
         </div>
 
         {(novelMetadata?.views != null || novelMetadata?.stars != null || novelMetadata?.comment_count != null || displayedTotal > 0) && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: secondaryText }}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: secondaryText }}>
             {novelMetadata?.views != null && <StatPill icon={appIcons.eye} value={formatNumber(novelMetadata.views)} isDark={isDark} />}
             {novelMetadata?.stars != null && <StatPill icon={appIcons.checkCircle} value={formatNumber(novelMetadata.stars)} isDark={isDark} />}
             {novelMetadata?.comment_count != null && <StatPill icon={appIcons.comment} value={formatNumber(novelMetadata.comment_count)} isDark={isDark} />}
@@ -158,7 +120,7 @@ export function NovelInfoPanel({
         )}
 
         {(novelMetadata?.completed != null || novelMetadata?.mature === true) && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {novelMetadata.completed === true && <BadgeCompleted isDark={isDark} />}
             {novelMetadata.completed === false && <BadgeOngoing isDark={isDark} />}
             {novelMetadata.mature === true && <BadgeMature isDark={isDark} />}
@@ -185,29 +147,29 @@ export function NovelInfoPanel({
         )}
 
         {totalChapterCount != null && (
-          <div className="flex items-center gap-2 rounded-xl border px-3 py-2" style={{ borderColor: isDark ? 'rgba(99,102,241,0.22)' : 'rgba(99,102,241,0.18)', background: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)' }}>
-            <Icon icon={appIcons.book} className="h-4 w-4 shrink-0" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
-            <span className="text-xs" style={{ color: isDark ? '#c7d2fe' : '#4338ca' }}>
+          <div className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5" style={{ borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)' }}>
+            <Icon icon={appIcons.book} className="h-4 w-4 shrink-0" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }} />
+            <span className="text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
               This novel has <span className="font-semibold">{totalChapterCount.toLocaleString()} chapters</span>
               {showPartial && <> — showing first {chapterCount}</>}
             </span>
           </div>
         )}
 
-        {warning && <p className="text-xs" style={{ color: '#f59e0b' }}>{warning}</p>}
+        {warning && <p className="text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>{warning}</p>}
       </div>
 
       {isPaywalled && (
-        <div className="shrink-0 border-b px-4 py-3" style={{ borderColor: panelBorder }}>
-          <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(251,191,36,0.24)', background: isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)' }}>
-            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
+        <div className="shrink-0 border-b px-3 py-2.5" style={{ borderColor: panelBorder }}>
+          <div className="rounded-lg border p-3" style={{ borderColor: 'rgba(251,191,36,0.24)', background: isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)' }}>
+            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
               <LockIcon />
               Wattpad Original
             </div>
-            <p className="mt-2 text-xs leading-relaxed" style={{ color: isDark ? 'rgba(253,230,138,0.78)' : 'rgba(146,64,14,0.78)' }}>
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
               This story contains chapters locked behind Wattpad coins. Crawling is disabled to respect author monetization and Wattpad&apos;s terms of service.
             </p>
-            <p className="mt-2 flex items-center gap-1 text-xs" style={{ color: isDark ? 'rgba(253,230,138,0.62)' : 'rgba(146,64,14,0.62)' }}>
+            <p className="mt-2 flex items-center gap-1 text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)' }}>
               <InfoIcon />
               Free chapters may be available on other sources.
             </p>
@@ -217,7 +179,7 @@ export function NovelInfoPanel({
 
       <div className="min-h-0 min-h-[200px] flex-1 overflow-y-auto" ref={tocRef}>
         {chapters.length === 0 ? (
-          <div className="flex items-center gap-2 p-5 text-sm" style={{ color: tertiaryText }}>
+          <div className="flex items-center gap-2 p-4 text-sm" style={{ color: tertiaryText }}>
             <Icon icon={appIcons.file} className="h-4 w-4" />
             No chapters found
           </div>
@@ -225,8 +187,8 @@ export function NovelInfoPanel({
           <table className="w-full text-sm">
             <thead className="sticky top-0 border-b" style={{ background: panelBackground, borderColor: panelBorder }}>
               <tr>
-                <th className="w-12 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: tertiaryText }}>#</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: tertiaryText }}>Chapter Title</th>
+                <th className="w-12 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: tertiaryText }}>#</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide" style={{ color: tertiaryText }}>Chapter Title</th>
               </tr>
             </thead>
             <tbody>
@@ -238,21 +200,21 @@ export function NovelInfoPanel({
         )}
       </div>
 
-      <div className="shrink-0 space-y-3 border-t px-4 py-4 sm:px-5" style={{ borderColor: panelBorder }}>
+      <div className="shrink-0 space-y-2 border-t px-3 py-3 sm:px-4" style={{ borderColor: panelBorder }}>
         {estimatedMax > 0 && (
           <p className="text-center text-xs" style={{ color: tertiaryText }}>
             Range: 1 &ndash; {estimatedMax.toLocaleString()}
           </p>
         )}
         {isPaywalled ? (
-          <p className="text-center text-xs" style={{ color: '#f59e0b' }}>
+          <p className="text-center text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
             Crawling unavailable for Wattpad Originals
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 px-1">
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-2 px-0.5">
               <span className="text-xs" style={{ color: secondaryText }}>Format:</span>
-              <span className="rounded-md border px-2.5 py-1 text-xs font-semibold" style={{ background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.06)', borderColor: isDark ? 'rgba(99,102,241,0.22)' : 'rgba(99,102,241,0.18)', color: isDark ? '#a5b4fc' : '#4338ca' }}>
+              <span className="rounded-md border px-2 py-0.5 text-xs font-semibold" style={{ background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)', color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
                 MD
               </span>
             </div>
@@ -261,11 +223,11 @@ export function NovelInfoPanel({
                 onCrawlNovel(estimatedMax > 0 ? estimatedMax : totalChapterCount ?? chapterCount);
               }}
               disabled={estimatedMax === 0 && totalChapterCount == null}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed"
               style={{
-                background: estimatedMax === 0 && totalChapterCount == null ? mutedSurface : '#4f46e5',
-                borderColor: estimatedMax === 0 && totalChapterCount == null ? panelBorder : '#4f46e5',
-                color: estimatedMax === 0 && totalChapterCount == null ? secondaryText : '#ffffff',
+                background: estimatedMax === 0 && totalChapterCount == null ? mutedSurface : (isDark ? 'rgba(255,255,255,0.92)' : '#111111'),
+                borderColor: estimatedMax === 0 && totalChapterCount == null ? panelBorder : (isDark ? 'rgba(255,255,255,0.92)' : '#111111'),
+                color: estimatedMax === 0 && totalChapterCount == null ? secondaryText : (isDark ? '#111111' : '#ffffff'),
                 opacity: estimatedMax === 0 && totalChapterCount == null ? 0.5 : 1,
               }}
             >
@@ -309,7 +271,7 @@ function DescriptionBlock({ text, expanded, onToggle, isDark }: { text: string; 
         {text}
       </p>
       {tooLong && (
-        <button onClick={onToggle} className="mt-1 text-xs hover:underline" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>
+        <button onClick={onToggle} className="mt-1 text-xs hover:underline" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
           {expanded ? 'Show less' : 'Show more'}
         </button>
       )}
@@ -341,15 +303,9 @@ function StatPill({ icon, value, isDark }: { icon: typeof appIcons.eye; value: s
   );
 }
 
-function formatDebugValue(value: unknown): string {
-  if (Array.isArray(value)) return value.join(', ');
-  if (typeof value === 'object' && value !== null) return JSON.stringify(value);
-  return String(value);
-}
-
 function BadgeCompleted({ isDark }: { isDark: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(52,211,153,0.14)' : 'rgba(5,150,105,0.08)', borderColor: isDark ? 'rgba(52,211,153,0.24)' : 'rgba(5,150,105,0.18)', color: isDark ? '#34d399' : '#059669' }}>
+    <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)', color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
       <Icon icon={appIcons.check} className="h-3 w-3" />
       Completed
     </span>
@@ -357,7 +313,7 @@ function BadgeCompleted({ isDark }: { isDark: boolean }) {
 }
 
 function BadgeOngoing({ isDark }: { isDark: boolean }) {
-  return <span className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.2)', color: isDark ? '#fbbf24' : '#b45309' }}>Ongoing</span>;
+  return <span className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)', color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>Ongoing</span>;
 }
 
 function BadgeMature({ isDark }: { isDark: boolean }) {
@@ -396,18 +352,18 @@ function NovelInfoPanelSkeleton({ isDetecting, isDark }: { isDetecting: boolean;
             </div>
           </div>
           <div className="flex-1 pt-0.5">
-            <p className="text-xs font-medium" style={{ color: isDark ? '#34d399' : '#059669' }}>Site detected</p>
+            <p className="text-xs font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>Site detected</p>
             <p className="mt-0.5 text-[11px]" style={{ color: secondaryText }}>URL is valid</p>
           </div>
         </div>
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-center">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style={{ background: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
               <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin text-white" />
             </div>
           </div>
           <div className="flex-1 pt-0.5">
-            <p className="text-xs font-medium" style={{ color: isDark ? '#a5b4fc' : '#4338ca' }}>
+            <p className="text-xs font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
               {isDetecting ? 'Detecting site...' : 'Fetching chapters...'}
             </p>
             <p className="mt-0.5 text-[11px]" style={{ color: secondaryText }}>

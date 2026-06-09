@@ -60,23 +60,30 @@ function SessionCard({
   selectedSurface,
   navigate,
 }: SessionCardProps) {
-  const statusDotMap: Record<string, string> = {
-    completed: isDark ? 'bg-emerald-400' : 'bg-emerald-500',
-    failed: isDark ? 'bg-red-400' : 'bg-red-500',
-    cancelled: isDark ? 'bg-amber-400' : 'bg-amber-500',
-    running: isDark ? 'bg-blue-400' : 'bg-blue-500',
-    idle: isDark ? 'bg-white/30' : 'bg-gray-400',
-  };
-  const statusTextMap: Record<string, string> = {
-    completed: isDark ? 'text-emerald-400' : 'text-emerald-600',
-    failed: isDark ? 'text-red-400' : 'text-red-600',
-    cancelled: isDark ? 'text-amber-400' : 'text-amber-600',
-    running: isDark ? 'text-blue-400' : 'text-blue-600',
-    idle: isDark ? 'text-white/40' : 'text-gray-500',
+  const statusToneMap: Record<string, { dot: string; text: string }> = {
+    completed: {
+      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    },
+    failed: {
+      dot: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)',
+      text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+    },
+    cancelled: {
+      dot: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+    },
+    running: {
+      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+    },
+    idle: {
+      dot: tertiaryText,
+      text: secondaryText,
+    },
   };
 
-  const dot = statusDotMap[session.status] ?? (isDark ? 'bg-white/30' : 'bg-gray-400');
-  const text = statusTextMap[session.status] ?? (isDark ? 'text-white/40' : 'text-gray-500');
+  const tone = statusToneMap[session.status] ?? { dot: tertiaryText, text: secondaryText };
   const label = session.status.charAt(0).toUpperCase() + session.status.slice(1);
   const hasCombined = !!(session.combined_file || session.combined_txt_file);
   const hasFiles = session.chapters_crawled > 0;
@@ -113,14 +120,14 @@ function SessionCard({
       onClick={deleteMode && onToggleSelect ? () => onToggleSelect(session.crawl_id) : undefined}
     >
       <div
-        className="px-5 py-4 sm:px-6"
+        className="px-4 py-3.5 sm:px-5"
         style={{ borderTop: order === 1 ? 'none' : `1px solid ${panelBorder}` }}
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium" style={{ color: tertiaryText }}>#{order}</span>
-              <div className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+              <div className="h-2.5 w-2.5 rounded-full" style={{ background: tone.dot }} />
               <span
                 className="rounded-md px-2 py-0.5 text-[11px] font-medium"
                 style={{ background: mutedSurface, color: secondaryText }}
@@ -151,7 +158,7 @@ function SessionCard({
             )}
 
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: secondaryText }}>
-              <span className={text}>{label}</span>
+              <span style={{ color: tone.text }}>{label}</span>
               {session.chapters_crawled > 0 && (
                 <span>{session.chapters_crawled} chapter{session.chapters_crawled !== 1 ? 's' : ''}</span>
               )}
@@ -171,6 +178,7 @@ function SessionCard({
                   rel="noopener noreferrer"
                   className="underline hover:no-underline"
                   title={session.source_url}
+                  style={{ color: pageText }}
                 >
                   {session.source_url}
                 </a>
@@ -186,14 +194,14 @@ function SessionCard({
                 <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: mutedSurface }}>
                   <div
                     className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${progress}%`, background: '#6366f1' }}
+                    style={{ width: `${progress}%`, background: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}
                   />
                 </div>
               </div>
             )}
 
             {session.error_message && (
-              <p className="mt-2 text-sm" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
+              <p className="mt-2 text-sm" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
                 {session.error_message}
               </p>
             )}
@@ -265,8 +273,8 @@ function SessionCard({
                 event.stopPropagation();
                 handleRetry();
               }}
-              className="rounded-md px-3 py-2 text-sm text-white transition-colors"
-              style={{ background: '#d97706' }}
+              className="rounded-md px-3 py-2 text-sm transition-colors"
+              style={{ background: isDark ? 'rgba(255,255,255,0.92)' : '#111111', color: isDark ? '#111111' : '#ffffff' }}
               title="Retry this crawl with the same URL"
             >
               Retry crawl
@@ -446,8 +454,8 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
   const panelBackground = isDark ? '#202020' : '#ffffff';
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const selectedSurface = isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.08)';
-  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
+  const selectedSurface = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)';
+  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.08)';
 
   const statusOptions: Array<{ value: typeof filter; label: string }> = [
     { value: 'all', label: `All (${filteredCounts.all})` },
@@ -476,14 +484,14 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
       {deleteConfirmation.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div
-            className="w-full max-w-md rounded-2xl border p-5"
+            className="w-full max-w-md rounded-xl border p-4"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
             <h3 className="text-lg font-semibold" style={{ color: pageText }}>
               {deleteConfirmation.hasRunning ? 'Warning — running sessions included' : 'Confirm delete'}
             </h3>
             {deleteConfirmation.hasRunning ? (
-              <div className="mt-3 space-y-2 text-sm" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
+              <div className="mt-3 space-y-2 text-sm" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
                 <p>
                   You are about to delete {deleteConfirmation.crawlIds.length} session
                   {deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}, including running crawl(s).
@@ -509,8 +517,8 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
               <button
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="rounded-md px-3 py-2 text-sm text-white transition-opacity"
-                style={{ background: '#dc2626', opacity: isDeleting ? 0.6 : 1 }}
+                className="rounded-md px-3 py-2 text-sm transition-opacity"
+                style={{ background: mutedSurface, color: secondaryText, border: `1px solid ${panelBorder}`, opacity: isDeleting ? 0.6 : 1 }}
               >
                 {isDeleting ? 'Deleting…' : 'Delete'}
               </button>
@@ -519,20 +527,20 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
         </div>
       )}
 
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
         <header
-          className="rounded-2xl border px-5 py-5 sm:px-6"
+          className="rounded-xl border px-4 py-4 sm:px-5"
           style={{ background: panelBackground, borderColor: panelBorder }}
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
                 History
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" style={{ color: pageText }}>
                 Crawl history
               </h1>
-              <p className="max-w-3xl text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+              <p className="max-w-3xl text-sm leading-5" style={{ color: secondaryText }}>
                 Review previous crawl sessions, revisit results, download collected files, and retry failed runs.
               </p>
             </div>
@@ -540,7 +548,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
             <div className="space-y-1 text-right text-xs lg:text-sm" style={{ color: tertiaryText }}>
               {runningSessions.length > 0 && (
                 <div>
-                  <span style={{ color: isDark ? '#60a5fa' : '#1d4ed8' }}>
+                  <span style={{ color: pageText }}>
                     {runningSessions.length} running session{runningSessions.length !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -554,12 +562,12 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
           </div>
         </header>
 
-        <main className="mt-5 flex-1 space-y-5">
+        <main className="mt-4 flex-1 space-y-4">
           <section
-            className="rounded-2xl border px-5 py-4 sm:px-6"
+            className="rounded-xl border px-4 py-3.5 sm:px-5"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+            <div className="flex justify-between gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
               <div>
                 <DatePicker
                   value={specificDate}
@@ -669,8 +677,13 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                   <button
                     onClick={handleDeleteClick}
                     disabled={selectedCrawlIds.size === 0 || isDeleting}
-                    className="rounded-md px-3 py-2 text-sm text-white transition-opacity"
-                    style={{ background: '#dc2626', opacity: selectedCrawlIds.size === 0 || isDeleting ? 0.5 : 1 }}
+                    className="rounded-md px-3 py-2 text-sm transition-opacity"
+                    style={{
+                      background: mutedSurface,
+                      color: secondaryText,
+                      border: `1px solid ${panelBorder}`,
+                      opacity: selectedCrawlIds.size === 0 || isDeleting ? 0.5 : 1,
+                    }}
                   >
                     {isDeleting ? 'Deleting…' : `Delete (${selectedCrawlIds.size})`}
                   </button>
@@ -700,7 +713,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
 
           {isLoading && sessions.length === 0 && (
             <section
-              className="rounded-2xl border px-5 py-12 text-sm sm:px-6"
+              className="rounded-xl border px-4 py-8 text-sm sm:px-5"
               style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
             >
               Loading crawl sessions…
@@ -709,25 +722,29 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
 
           {error && (
             <section
-              className="rounded-2xl border px-5 py-4 text-sm sm:px-6"
-              style={{ background: panelBackground, borderColor: '#dc2626', color: isDark ? '#f87171' : '#dc2626' }}
+              className="rounded-xl border px-4 py-3.5 text-sm sm:px-5"
+              style={{
+                background: panelBackground,
+                borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
+                color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+              }}
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>{error}</span>
-                <button onClick={fetchSessions} className="underline">Retry</button>
+                <button onClick={fetchSessions} className="underline" style={{ color: pageText }}>Retry</button>
               </div>
             </section>
           )}
 
           {!isLoading && filtered.length === 0 && (
             <section
-              className="rounded-2xl border px-5 py-12 text-sm sm:px-6"
+              className="rounded-xl border px-4 py-8 text-sm sm:px-5"
               style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
             >
               {filter === 'all' ? (
                 <>
                   No crawl sessions yet.{' '}
-                  <button onClick={() => navigate('/')} className="underline">
+                  <button onClick={() => navigate('/')} className="underline" style={{ color: pageText }}>
                     Start your first crawl
                   </button>
                 </>
@@ -739,11 +756,11 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
 
           {filtered.length > 0 && (
             <section
-              className="overflow-hidden rounded-2xl border"
+              className="overflow-hidden rounded-xl border"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
               <div
-                className="flex items-center justify-between border-b px-5 py-3 text-xs uppercase tracking-[0.14em] sm:px-6"
+                className="flex items-center justify-between border-b px-4 py-3 text-xs uppercase tracking-[0.14em] sm:px-5"
                 style={{ borderColor: panelBorder, color: tertiaryText }}
               >
                 <span>Sessions</span>

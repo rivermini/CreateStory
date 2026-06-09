@@ -14,7 +14,6 @@ const HomePage = lazy(() => import('./pages/NovelCrawler/HomePage').then(m => ({
 const CrawlPage = lazy(() => import('./pages/NovelCrawler/CrawlPage').then(m => ({ default: m.CrawlPage })));
 const ResultPage = lazy(() => import('./pages/NovelCrawler/ResultPage').then(m => ({ default: m.ResultPage })));
 const CrawlHistory = lazy(() => import('./pages/NovelCrawler/CrawlHistoryPage').then(m => ({ default: m.default })));
-const BatchPage = lazy(() => import('./pages/NovelCrawler/BatchPage').then(m => ({ default: m.BatchPage })));
 const BedReadPage = lazy(() => import('./pages/BedReadVoices/BedReadPage').then(m => ({ default: m.BedReadPage })));
 const BedReadJobsPage = lazy(() => import('./pages/BedReadVoices/BedReadJobsPage').then(m => ({ default: m.default })));
 const DriveSyncPage = lazy(() => import('./pages/BedReadDriveSync/DriveSyncPage').then(m => ({ default: m.DriveSyncPage })));
@@ -42,10 +41,10 @@ function writeThemeCookie(mode: ThemeMode) {
 }
 
 function App() {
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeCookie() ?? 'light');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeCookie() ?? 'dark');
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredAuthUser());
   const [authChecked, setAuthChecked] = useState(false);
-  const loginThemeMode: ThemeMode = 'light';
+  const loginThemeMode: ThemeMode = 'dark';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -127,7 +126,6 @@ function Shell({
   authUser: AuthUser;
   onLogout: () => void;
 }) {
-  const isDark = themeMode === 'dark';
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const location = useLocation();
@@ -167,45 +165,32 @@ function Shell({
       )}
 
       {!isDashboard && (
-      <header className={`lg:hidden fixed top-0 left-0 right-0 z-30 safe-area-top ${
-        isDark
-          ? 'bg-slate-950/95 border-b border-slate-800/80 backdrop-blur-xl'
-          : 'bg-gray-50/95 border-b border-gray-200/80 backdrop-blur-xl shadow-sm'
-      }`}>
-        <div className="flex items-center gap-3 px-4 py-3">
+      <header className="fixed top-0 left-0 right-0 z-30 border-b border-white/10 bg-[#0f0f0f] safe-area-top lg:hidden">
+        <div className="flex items-center gap-2 px-3 py-2.5">
           <button
             onClick={() => setMobileSidebarOpen(true)}
-            className={`p-2 rounded-lg transition-colors ${
-              isDark
-                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/80'
-            }`}
+            className="rounded-lg border border-white/10 p-2 text-white/60 transition-colors hover:bg-white/5 hover:text-white/88"
             title="Open menu"
           >
-            <Icon icon={appIcons.menu} className="w-5 h-5" />
+            <Icon icon={appIcons.menu} className="h-4.5 w-4.5" />
           </button>
-          <h1 className={`text-base font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+          <h1 className="text-sm font-semibold tracking-[0.01em] text-white/92">
             Novel Crawler
           </h1>
-          <div className="ml-auto w-10" />
+          <div className="ml-auto w-9" />
         </div>
       </header>
       )}
 
-      <div
-        className={`min-h-screen transition-colors duration-300 ${
-          isDark ? 'bg-slate-950' : 'bg-gray-50'
-        }`}
-      >
+      <div className="min-h-screen bg-[#050505] transition-colors duration-300">
         <div className={`${isDashboard ? 'pt-0 pl-0' : 'pt-14 lg:pt-0 pl-0 lg:pl-[248px]'} min-h-screen transition-all duration-300`}>
           <Suspense fallback={
-            <div className={`flex items-center justify-center h-screen ${isDark ? 'bg-slate-950 text-slate-400' : 'bg-gray-50 text-gray-500'}`}>
+            <div className="flex h-screen items-center justify-center bg-[#050505] text-white/45">
               Loading...
             </div>
           }>
             <Routes>
               <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/batch" element={<BatchPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/results" element={<ResultPage themeMode={themeMode} />} />
               <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} />} />
@@ -236,10 +221,9 @@ function Shell({
   );
 }
 
-function AuthLoading({ themeMode }: { themeMode: ThemeMode }) {
-  const isDark = themeMode === 'dark';
+function AuthLoading({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
   return (
-    <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-300' : 'bg-gray-50 text-gray-600'}`}>
+    <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white/45">
       Loading...
     </div>
   );
