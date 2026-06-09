@@ -1,17 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  getDriveSyncConfig,
-  initDriveSyncConfig,
   checkUploadable,
   checkUpdatable,
   checkUpdatableReaderFinished,
   createJob,
   getJob,
   getStoriesNeedingUpdate,
-  checkCredentialsExists,
-  validateMainBeToken,
-  FIXED_JSON_PREFIX,
-  type DriveSyncConfig,
   type DriveFolderEntry,
   type UpdatableStoryEntry,
   type CheckUploadableResponse,
@@ -19,12 +13,11 @@ import {
   type TrackedJob,
   type StoriesNeedingUpdateEntry,
 } from '../api/client';
-import type { ThemeMode } from '../types/theme';
-import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
-import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
 import { Icon, appIcons } from '../components/Icon';
 import { ServerModeBanner } from '../components/ServerModeBanner';
-import { showToast } from '../components/Toast';
+import { StorySyncTabs, type StorySyncTab } from '../components/StorySyncTabs';
+import { useDriveSyncConfig } from '../hooks/useDriveSyncConfig';
+import type { ThemeMode } from '../types/theme';
 
 interface DriveSyncPageProps {
   themeMode: ThemeMode;
@@ -34,29 +27,19 @@ interface DriveSyncPageProps {
 export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const isDark = themeMode === 'dark';
 
-  const [config, setConfig] = useState<DriveSyncConfig | null>(null);
-  const [configLoading, setConfigLoading] = useState(true);
-  const [configError, setConfigError] = useState('');
-  const [configInvalid, setConfigInvalid] = useState(false);
-  const [tokenInvalid, setTokenInvalid] = useState(false);
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [isInitialSetup, setIsInitialSetup] = useState(false);
-
-  const [configForm, setConfigForm] = useState<ConfigFormData>({
-    folder_id: '',
-    service_account_json_name: 'google-service-account.json',
-    main_be_api_base_url: '',
-    main_be_bearer_token: '',
-    main_be_user_id: '',
+  const {
+    config,
+    configLoading,
+    configError,
+    configInvalid,
+    tokenInvalid,
+  } = useDriveSyncConfig({
+    validateToken: true,
+    enableEditing: false,
   });
-  const [savingConfig, setSavingConfig] = useState(false);
-  const [savingConfigError, setSavingConfigError] = useState('');
-  const [credentialFileExists, setCredentialFileExists] = useState(true);
 
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
-
   const [activeSubTab, setActiveSubTab] = useState<StorySyncTab>('uploadable');
-
   const [uploadableData, setUploadableData] = useState<CheckUploadableResponse | null>(null);
   const [uploadableLoading, setUploadableLoading] = useState(false);
   const [uploadableError, setUploadableError] = useState('');
@@ -72,100 +55,15 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const updateLocksRef = useRef<Set<string>>(new Set());
   const [storiesNeedingUpdate, setStoriesNeedingUpdate] = useState<StoriesNeedingUpdateEntry[]>([]);
 
-  useEffect(() => {
-    async function loadConfig() {
-      setConfigLoading(true);
-      try {
-        const cfg = await getDriveSyncConfig();
-        setConfig(cfg);
-        if (cfg) {
-          const fullCfg = cfg as DriveSyncConfig & { service_account_json_path?: string };
-          const jsonName = fullCfg.service_account_json_path
-            ? fullCfg.service_account_json_path.replace(FIXED_JSON_PREFIX, '')
-            : 'google-service-account.json';
-          setConfigForm(f => ({
-            ...f,
-            folder_id: cfg.folder_id,
-            service_account_json_name: jsonName,
-            main_be_api_base_url: cfg.main_be_api_base_url,
-            main_be_user_id: (cfg as DriveSyncConfig & { main_be_user_id?: string }).main_be_user_id ?? '',
-          }));
-          const hasBaseUrl = Boolean(cfg.main_be_api_base_url);
-          const hasUserId = Boolean(cfg.main_be_user_id);
-          setConfigInvalid(!hasBaseUrl || !hasUserId);
-          if (jsonName) {
-            const exists = await checkCredentialsExists(jsonName);
-            setCredentialFileExists(exists);
-          }
-          if (hasBaseUrl && hasUserId) {
-            try {
-              const tokenResult = await validateMainBeToken();
-              if (!tokenResult.valid) {
-                setTokenInvalid(true);
-              }
-            } catch {
-              setTokenInvalid(false);
-            }
-          }
-          setShowConfigModal(false);
-        } else {
-          setIsInitialSetup(true);
-          setConfigInvalid(true);
-          setShowConfigModal(true);
-        }
-      } catch {
-        setConfigError('Failed to load config.');
-        setConfigInvalid(true);
-      } finally {
-        setConfigLoading(false);
-      }
-    }
-    loadConfig();
-  }, []);
-
-  const handleConfigFormChange = (data: Partial<ConfigFormData>) => {
-    setConfigForm(prev => ({ ...prev, ...data }));
-  };
-
-  const handleSaveConfig = async () => {
-    setSavingConfigError('');
-    if (!configForm.folder_id.trim()) {
-      setSavingConfigError('Folder ID is required.');
-      return;
-    }
-    setSavingConfig(true);
-
-    try {
-      const cfg = await initDriveSyncConfig({
-        folder_id: configForm.folder_id.trim(),
-        service_account_json_path: FIXED_JSON_PREFIX + configForm.service_account_json_name.trim(),
-        main_be_api_base_url: configForm.main_be_api_base_url.trim(),
-        main_be_user_id: configForm.main_be_user_id.trim(),
-        main_be_bearer_token: configForm.main_be_bearer_token.trim() || undefined,
-      });
-      setConfig(cfg);
-      setShowConfigModal(false);
-      setConfigInvalid(false);
-      setTokenInvalid(false);
-
-      if (configForm.main_be_api_base_url.trim() && configForm.main_be_user_id.trim()) {
-        try {
-          const tokenResult = await validateMainBeToken();
-          if (!tokenResult.valid) {
-            setTokenInvalid(true);
-          }
-        } catch {
-          setTokenInvalid(true);
-        }
-      }
-
-      showToast('Drive Sync configuration saved successfully.', 'success', 2000, 'top-center');
-    } catch (e) {
-      setSavingConfigError(e instanceof Error ? e.message : 'Failed to save config.');
-    } finally {
-      setSavingConfig(false);
-    }
-  };
+  const pageBackground = isDark
+    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
+    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   useEffect(() => {
     const doPoll = async () => {
@@ -184,7 +82,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           completedIds.push(tracked.jobId);
 
           if (job.status === 'success') {
-            setUploadResults(prev => {
+            setUploadResults((prev) => {
               const next = new Map(prev).set(tracked.folderId, {
                 success: true,
                 message: job.result_message ?? 'Done',
@@ -192,7 +90,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               return next;
             });
           } else {
-            setUploadResults(prev => {
+            setUploadResults((prev) => {
               const next = new Map(prev).set(tracked.folderId, {
                 success: false,
                 message: job.error ?? 'Upload failed',
@@ -201,12 +99,13 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
             });
           }
         } catch {
+          // ignore
         }
       }
 
       if (completedIds.length > 0) {
-        setTrackedJobs(prev => prev.filter(j => !completedIds.includes(j.jobId)));
-        setUploadingJobs(prev => {
+        setTrackedJobs((prev) => prev.filter((job) => !completedIds.includes(job.jobId)));
+        setUploadingJobs((prev) => {
           const next = new Map(prev);
           for (const tracked of trackedJobs) {
             if (completedIds.includes(tracked.jobId)) {
@@ -243,51 +142,58 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       const data = await checkUploadable();
       setUploadableData(data);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to check uploadable stories.';
-      setUploadableError(msg);
+      const message = e instanceof Error ? e.message : 'Failed to check uploadable stories.';
+      setUploadableError(message);
       setUploadableData(null);
     } finally {
       setUploadableLoading(false);
     }
   };
 
-  const handleUploadSingle = useCallback(async (folder: DriveFolderEntry): Promise<string> => {
-    if (uploadLocksRef.current.has(folder.id)) {
-      return folder.id;
-    }
+  const handleUploadSingle = useCallback(
+    async (folder: DriveFolderEntry): Promise<string> => {
+      if (uploadLocksRef.current.has(folder.id)) {
+        return folder.id;
+      }
 
-    uploadLocksRef.current.add(folder.id);
-    setUploadingJobs(prev => new Map(prev).set(folder.id, 'pending'));
+      uploadLocksRef.current.add(folder.id);
+      setUploadingJobs((prev) => new Map(prev).set(folder.id, 'pending'));
 
-    try {
-      const res = await createJob({
-        kind: 'upload_single',
-        folder_id: folder.id,
-        folder_name: folder.name,
-        display_name: folder.display_name,
-        main_be_api_base_url: config?.main_be_api_base_url,
-      });
-
-      setTrackedJobs(prev => prev.some(j => j.jobId === res.id) ? prev : [...prev, { jobId: res.id, folderId: folder.id, displayName: folder.display_name }]);
-      setUploadingJobs(prev => new Map(prev).set(folder.id, res.id));
-      return res.id;
-    } catch (e) {
-      uploadLocksRef.current.delete(folder.id);
-      setUploadingJobs(prev => {
-        const next = new Map(prev);
-        next.delete(folder.id);
-        return next;
-      });
-      setUploadResults(prev => {
-        const next = new Map(prev).set(folder.id, {
-          success: false,
-          message: e instanceof Error ? e.message : 'Failed to enqueue job',
+      try {
+        const response = await createJob({
+          kind: 'upload_single',
+          folder_id: folder.id,
+          folder_name: folder.name,
+          display_name: folder.display_name,
+          main_be_api_base_url: config?.main_be_api_base_url,
         });
-        return next;
-      });
-      return folder.id;
-    }
-  }, [config]);
+
+        setTrackedJobs((prev) =>
+          prev.some((job) => job.jobId === response.id)
+            ? prev
+            : [...prev, { jobId: response.id, folderId: folder.id, displayName: folder.display_name }],
+        );
+        setUploadingJobs((prev) => new Map(prev).set(folder.id, response.id));
+        return response.id;
+      } catch (e) {
+        uploadLocksRef.current.delete(folder.id);
+        setUploadingJobs((prev) => {
+          const next = new Map(prev);
+          next.delete(folder.id);
+          return next;
+        });
+        setUploadResults((prev) => {
+          const next = new Map(prev).set(folder.id, {
+            success: false,
+            message: e instanceof Error ? e.message : 'Failed to enqueue job',
+          });
+          return next;
+        });
+        return folder.id;
+      }
+    },
+    [config],
+  );
 
   const handleUploadAll = useCallback(async () => {
     if (!uploadableData) return;
@@ -301,27 +207,27 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         continue;
       }
       uploadLocksRef.current.add(folder.id);
-      setUploadingJobs(prev => new Map(prev).set(folder.id, 'pending'));
+      setUploadingJobs((prev) => new Map(prev).set(folder.id, 'pending'));
       try {
-        const res = await createJob({
+        const response = await createJob({
           kind: 'upload_single',
           folder_id: folder.id,
           folder_name: folder.name,
           display_name: folder.display_name,
           main_be_api_base_url: config?.main_be_api_base_url,
         });
-        if (!newJobs.some(j => j.jobId === res.id)) {
-          newJobs.push({ jobId: res.id, folderId: folder.id, displayName: folder.display_name });
+        if (!newJobs.some((job) => job.jobId === response.id)) {
+          newJobs.push({ jobId: response.id, folderId: folder.id, displayName: folder.display_name });
         }
-        setUploadingJobs(prev => new Map(prev).set(folder.id, res.id));
+        setUploadingJobs((prev) => new Map(prev).set(folder.id, response.id));
       } catch (e) {
         uploadLocksRef.current.delete(folder.id);
-        setUploadingJobs(prev => {
+        setUploadingJobs((prev) => {
           const next = new Map(prev);
           next.delete(folder.id);
           return next;
         });
-        setUploadResults(prev => {
+        setUploadResults((prev) => {
           const next = new Map(prev).set(folder.id, {
             success: false,
             message: e instanceof Error ? e.message : 'Failed to enqueue job',
@@ -332,7 +238,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     }
 
     if (newJobs.length > 0) {
-      setTrackedJobs(prev => [...prev, ...newJobs]);
+      setTrackedJobs((prev) => [...prev, ...newJobs]);
     }
   }, [uploadableData, config]);
 
@@ -345,8 +251,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       const data = await checkUpdatable();
       setUpdatableData(data);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to check updatable stories.';
-      setUpdatableError(msg);
+      const message = e instanceof Error ? e.message : 'Failed to check updatable stories.';
+      setUpdatableError(message);
       setUpdatableData(null);
     } finally {
       setUpdatableLoading(false);
@@ -359,15 +265,12 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     setUpdatableError('');
     setUpdateResults(new Map());
     try {
-      const [data, storiesResp] = await Promise.all([
-        checkUpdatableReaderFinished(),
-        getStoriesNeedingUpdate(),
-      ]);
+      const [data, storiesResp] = await Promise.all([checkUpdatableReaderFinished(), getStoriesNeedingUpdate()]);
       setUpdatableData(data);
       setStoriesNeedingUpdate(storiesResp.success && storiesResp.data ? storiesResp.data.data : []);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to check reader finished stories.';
-      setUpdatableError(msg);
+      const message = e instanceof Error ? e.message : 'Failed to check reader finished stories.';
+      setUpdatableError(message);
       setUpdatableData(null);
       setStoriesNeedingUpdate([]);
     } finally {
@@ -375,186 +278,217 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     }
   };
 
-  const handleUpdateSingle = useCallback(async (entry: UpdatableStoryEntry, chaptersCount?: number): Promise<string> => {
-    const { server_story, folder } = entry;
-    const lockKey = server_story.id || folder.id;
+  const handleUpdateSingle = useCallback(
+    async (entry: UpdatableStoryEntry, chaptersCount?: number): Promise<string> => {
+      const { server_story, folder } = entry;
+      const lockKey = server_story.id || folder.id;
 
-    if (updateLocksRef.current.has(lockKey)) {
-      return server_story.id;
-    }
-
-    updateLocksRef.current.add(lockKey);
-    setUpdatingJobs(prev => new Map(prev).set(server_story.id, 'pending'));
-
-    let jobId: string;
-    try {
-      const job = await createJob({
-        kind: 'update_single',
-        folder_id: folder.id,
-        folder_name: folder.display_name,
-        display_name: folder.display_name,
-        main_be_api_base_url: config?.main_be_api_base_url,
-        chapters_count: chaptersCount,
-      });
-      jobId = job.id;
-      setUpdatingJobs(prev => new Map(prev).set(server_story.id, jobId));
-    } catch (e) {
-      updateLocksRef.current.delete(lockKey);
-      setUpdatingJobs(prev => {
-        const next = new Map(prev);
-        next.delete(server_story.id);
-        return next;
-      });
-      setUpdateResults(prev => {
-        const next = new Map(prev).set(server_story.id, {
-          success: false,
-          message: e instanceof Error ? e.message : 'Failed to create update job',
-        });
-        return next;
-      });
-      return server_story.id;
-    }
-
-    const poll = async () => {
-      while (true) {
-        await new Promise(r => setTimeout(r, 3000));
-        try {
-          const { job } = await getJob(jobId);
-          if (job.status !== 'queued' && job.status !== 'running') {
-            setUpdateResults(prev => {
-              const next = new Map(prev).set(server_story.id, {
-                success: job.status === 'success',
-                message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
-              });
-              return next;
-            });
-            setUpdatingJobs(prev => {
-              const next = new Map(prev);
-              next.delete(server_story.id);
-              return next;
-            });
-            updateLocksRef.current.delete(lockKey);
-            return;
-          }
-        } catch {
-        }
+      if (updateLocksRef.current.has(lockKey)) {
+        return server_story.id;
       }
-    };
-    poll();
 
-    return server_story.id;
-  }, [config]);
+      updateLocksRef.current.add(lockKey);
+      setUpdatingJobs((prev) => new Map(prev).set(server_story.id, 'pending'));
 
-  const handleUpdateAll = useCallback(async (entries: import('../api/client').UpdatableStoryEntry[], chapterInputs: Map<string, number>) => {
-    if (entries.length === 0) return;
-    for (const entry of entries) {
-      const count = chapterInputs.get(entry.server_story.id) ?? 1;
-      handleUpdateSingle(entry, count);
-    }
-  }, [handleUpdateSingle, config]);
+      let jobId: string;
+      try {
+        const job = await createJob({
+          kind: 'update_single',
+          folder_id: folder.id,
+          folder_name: folder.display_name,
+          display_name: folder.display_name,
+          main_be_api_base_url: config?.main_be_api_base_url,
+          chapters_count: chaptersCount,
+        });
+        jobId = job.id;
+        setUpdatingJobs((prev) => new Map(prev).set(server_story.id, jobId));
+      } catch (e) {
+        updateLocksRef.current.delete(lockKey);
+        setUpdatingJobs((prev) => {
+          const next = new Map(prev);
+          next.delete(server_story.id);
+          return next;
+        });
+        setUpdateResults((prev) => {
+          const next = new Map(prev).set(server_story.id, {
+            success: false,
+            message: e instanceof Error ? e.message : 'Failed to create update job',
+          });
+          return next;
+        });
+        return server_story.id;
+      }
+
+      const poll = async () => {
+        while (true) {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          try {
+            const { job } = await getJob(jobId);
+            if (job.status !== 'queued' && job.status !== 'running') {
+              setUpdateResults((prev) => {
+                const next = new Map(prev).set(server_story.id, {
+                  success: job.status === 'success',
+                  message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
+                });
+                return next;
+              });
+              setUpdatingJobs((prev) => {
+                const next = new Map(prev);
+                next.delete(server_story.id);
+                return next;
+              });
+              updateLocksRef.current.delete(lockKey);
+              return;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      };
+      poll();
+
+      return server_story.id;
+    },
+    [config],
+  );
+
+  const handleUpdateAll = useCallback(
+    async (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>) => {
+      if (entries.length === 0) return;
+      for (const entry of entries) {
+        const count = chapterInputs.get(entry.server_story.id) ?? 1;
+        handleUpdateSingle(entry, count);
+      }
+    },
+    [handleUpdateSingle, config],
+  );
 
   const hasActiveJobs = trackedJobs.length > 0 || updatingJobs.size > 0;
   const totalUploadable = uploadableData?.uploadable.length ?? 0;
   const totalUpdatable = updatableData?.updatable.length ?? 0;
-  const successfulUploads = Array.from(uploadResults.values()).filter(r => r.success).length;
+  const successfulUploads = Array.from(uploadResults.values()).filter((result) => result.success).length;
 
   return (
-    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: isDark ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)' : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)' }}>
-      <div className="lg-orb lg-orb-1" />
-      <div className="lg-orb lg-orb-2" />
-      <div className="lg-orb lg-orb-3" />
-
-      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-        {/* Hero Header */}
-        <header className="relative overflow-hidden">
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-6">
-            <div className="lg-glass-deep px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div>
-                  <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
-                    Drive Sync
-                  </h1>
-                  <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                    Sync your crawled novels with Google Drive
-                  </p>
+    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="space-y-4">
+          <section
+            className="rounded-2xl border px-5 py-5 sm:px-6"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-2">
+                <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
+                  Sync
                 </div>
+                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+                  Drive Sync
+                </h1>
+                <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+                  Sync your crawled novels with Google Drive.
+                </p>
               </div>
             </div>
+          </section>
 
-            {/* Status Bar */}
-            {config && !configLoading && (
-              <div className="mt-6 mb-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 p-4 rounded-2xl lg-glass">
-                {/* Status indicator */}
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${hasActiveJobs ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
-                  <span className={`text-sm font-medium ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
-                    {hasActiveJobs ? 'Syncing...' : 'Ready'}
-                  </span>
-                </div>
-
-                {/* Divider */}
-                <div className={`hidden sm:block w-px h-5 ${isDark ? 'bg-white/6' : 'bg-black/6'}`} />
-
-                {/* Folder info */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <Icon icon={appIcons.folder} className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`} />
-                  <span className={`text-xs sm:text-sm truncate ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-                    {config.folder_id}
-                  </span>
-                </div>
-
-                {/* Stats badges */}
-                <div className="flex items-center gap-2 sm:ml-auto">
-                  <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-white/[0.04] text-white/40' : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.4)]'}`}>
-                    <Icon icon={appIcons.uploadFile} className="w-3.5 h-3.5" />
-                    {totalUploadable} ready to upload
-                  </div>
-                  <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-white/[0.04] text-white/40' : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.4)]'}`}>
-                    <Icon icon={appIcons.trends} className="w-3.5 h-3.5" />
-                    {totalUpdatable} can update
-                  </div>
-                  {successfulUploads > 0 && (
-                    <div className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-                      <Icon icon={appIcons.check} className="w-3.5 h-3.5" />
-                      {successfulUploads} uploaded
-                    </div>
-                  )}
-                </div>
+          {config && !configLoading && (
+            <div
+              className="flex flex-wrap items-center gap-4 rounded-2xl border px-4 py-3"
+              style={{ background: panelBackground, borderColor: panelBorder }}
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: hasActiveJobs ? '#f59e0b' : '#10b981' }}
+                />
+                <span className="text-sm font-medium" style={{ color: pageText }}>
+                  {hasActiveJobs ? 'Syncing...' : 'Ready'}
+                </span>
               </div>
-            )}
-          </div>
-        </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl my-3 mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-3">
-        {/* Loading state */}
-        {configLoading && (
-          <div className="lg-glass p-8 flex items-center justify-center gap-4">
-            <Icon icon={appIcons.spinner} className="w-6 h-6 animate-spin text-indigo-400" />
-            <span className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Loading Drive Sync...</span>
-          </div>
-        )}
+              <div className="hidden h-5 sm:block" style={{ width: '1px', background: panelBorder }} />
 
-        {/* Error state */}
-        {configError && (
-          <div className={`lg-glass-card p-4 text-sm ${isDark ? 'text-red-400' : 'text-red-500'}`}>
-            <span>{configError}</span>
-          </div>
-        )}
+              <div className="flex min-w-0 items-center gap-2">
+                <Icon icon={appIcons.folder} className="h-4 w-4 shrink-0" style={{ color: tertiaryText }} />
+                <span className="truncate text-xs" style={{ color: tertiaryText }}>
+                  {config.folder_id}
+                </span>
+              </div>
 
-        {/* Server Mode Banner */}
-        <ServerModeBanner
-          serverUrl={config?.main_be_api_base_url ?? null}
-          isDark={isDark}
-          isConfigLoading={configLoading}
-          isConfigValid={tokenInvalid ? undefined : (configInvalid ? false : (configLoading ? undefined : Boolean(config?.main_be_api_base_url && config?.main_be_user_id)))}
-          tokenInvalid={tokenInvalid}
-          onConfigure={() => setShowConfigModal(true)}
-        />
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <div
+                  className="hidden items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium sm:flex"
+                  style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}
+                >
+                  <Icon icon={appIcons.uploadFile} className="h-3.5 w-3.5" />
+                  {totalUploadable} ready to upload
+                </div>
+                <div
+                  className="hidden items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium md:flex"
+                  style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}
+                >
+                  <Icon icon={appIcons.trends} className="h-3.5 w-3.5" />
+                  {totalUpdatable} can update
+                </div>
+                {successfulUploads > 0 && (
+                  <div
+                    className="hidden items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium lg:flex"
+                    style={{
+                      background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)',
+                      borderColor: isDark ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.16)',
+                      color: isDark ? '#6ee7b7' : '#047857',
+                    }}
+                  >
+                    <Icon icon={appIcons.check} className="h-3.5 w-3.5" />
+                    {successfulUploads} uploaded
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
-        {/* Main content */}
-        {config && !configLoading && (
-          <div>
+          {configLoading && (
+            <div
+              className="flex items-center justify-center gap-3 rounded-2xl border p-8"
+              style={{ background: panelBackground, borderColor: panelBorder }}
+            >
+              <Icon icon={appIcons.spinner} className="h-6 w-6 animate-spin" style={{ color: secondaryText }} />
+              <span className="text-sm" style={{ color: secondaryText }}>
+                Loading Drive Sync...
+              </span>
+            </div>
+          )}
+
+          {configError && (
+            <div
+              className="rounded-xl border px-4 py-3 text-sm"
+              style={{
+                background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
+                borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
+                color: isDark ? '#f87171' : '#dc2626',
+              }}
+            >
+              {configError}
+            </div>
+          )}
+
+          <ServerModeBanner
+            serverUrl={config?.main_be_api_base_url ?? null}
+            isDark={isDark}
+            isConfigLoading={configLoading}
+            isConfigValid={
+              tokenInvalid
+                ? undefined
+                : configInvalid
+                  ? false
+                  : configLoading
+                    ? undefined
+                    : Boolean(config?.main_be_api_base_url && config?.main_be_user_id)
+            }
+            tokenInvalid={tokenInvalid}
+          />
+
+          {config && !configLoading && (
             <StorySyncTabs
               config={config}
               activeTab={activeSubTab}
@@ -583,28 +517,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               storiesNeedingUpdate={storiesNeedingUpdate}
               noDriveFolder={updatableData?.no_drive_folder ?? []}
             />
-          </div>
-        )}
-      </main>
-
-      {/* Config Modal */}
-      <ConfigModal
-        isOpen={showConfigModal}
-        onClose={() => {
-          if (!config && !configLoading) return;
-          setShowConfigModal(false);
-        }}
-        config={config}
-        configForm={configForm}
-        onFormChange={handleConfigFormChange}
-        onSave={handleSaveConfig}
-        savingConfig={savingConfig}
-        savingConfigError={savingConfigError}
-        isInitialSetup={isInitialSetup}
-        themeMode={themeMode}
-        credentialFileExists={credentialFileExists}
-        onCredentialUploadSuccess={() => setCredentialFileExists(true)}
-      />
+          )}
+        </main>
       </div>
     </div>
   );

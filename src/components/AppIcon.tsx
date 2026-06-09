@@ -1,4 +1,5 @@
-import faviconUrl from '../assets/favicon.svg';
+import faviconLightUrl from '../assets/favicon.svg';
+import faviconDarkUrl from '../assets/favicon-dark.svg';
 
 interface AppIconProps {
     size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -13,9 +14,11 @@ const sizeMap = {
 };
 
 export function AppIcon({ size = 'md', className = '' }: AppIconProps) {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+
     return (
         <img
-            src={faviconUrl}
+            src={isDark ? faviconDarkUrl : faviconLightUrl}
             alt="Novel Crawler"
             className={`${sizeMap[size]} ${className}`}
         />

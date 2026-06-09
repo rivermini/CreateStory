@@ -3,11 +3,11 @@ import {
   type DriveSyncConfig,
   type UpdatableStoryEntry,
 } from '../api/client';
-import type { ThemeMode } from '../types/theme';
 import { BatchConfirmDialog } from './BatchConfirmDialog';
 import { Icon, appIcons } from './Icon';
-import { UploadTab } from './UploadTab';
 import { UpdateTab } from './UpdateTab';
+import { UploadTab } from './UploadTab';
+import type { ThemeMode } from '../types/theme';
 
 export type StorySyncTab = 'uploadable' | 'updatable';
 
@@ -79,6 +79,10 @@ export function StorySyncTabs({
   const uploadableCount = uploadableData?.uploadable.length ?? 0;
   const updatableCount = updatableData?.updatable.length ?? 0;
 
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+
   const handleUploadAll = () => {
     setShowUploadConfirm(false);
     onUploadAll();
@@ -87,7 +91,7 @@ export function StorySyncTabs({
   const handleUpdateAll = () => {
     if (chapterErrors) return;
     setShowUpdateConfirm(false);
-    setPendingChapterErrors(new Map());
+    setChapterErrors(false);
     onUpdateAll(pendingUpdateEntries, pendingChapterInputs);
   };
 
@@ -107,17 +111,19 @@ export function StorySyncTabs({
       <BatchConfirmDialog
         isOpen={showUpdateConfirm}
         title="Update All Stories"
-        message={chapterErrors
-          ? `Cannot update: there are chapter count validation errors that must be resolved first. Please fix the errors in the Update tab before proceeding.`
-          : `You are about to update ${pendingUpdateEntries.length} stories with new chapters from Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of updates.`
+        message={
+          chapterErrors
+            ? `Cannot update: there are chapter count validation errors that must be resolved first. Please fix the errors in the Update tab before proceeding.`
+            : `You are about to update ${pendingUpdateEntries.length} stories with new chapters from Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of updates.`
         }
         itemCount={pendingUpdateEntries.length}
         confirmText="Start Update"
         isDark={isDark}
         disabled={chapterErrors}
-        validationMessage={pendingChapterErrors.size > 0
-          ? `${pendingChapterErrors.size} story(ies) exceed their available chapter count. Please fix these before updating.`
-          : undefined
+        validationMessage={
+          pendingChapterErrors.size > 0
+            ? `${pendingChapterErrors.size} story(ies) exceed their available chapter count. Please fix these before updating.`
+            : undefined
         }
         onConfirm={handleUpdateAll}
         onCancel={() => {
@@ -126,60 +132,147 @@ export function StorySyncTabs({
         }}
       />
 
-      <div className="lg-glass-card overflow-hidden" style={{ borderRadius: 24 }}>
-        <div className={`flex items-stretch ${isDark ? 'lg-border-divider' : 'lg-border-divider'}`}>
+      <div
+        className="overflow-hidden rounded-2xl border"
+        style={{ background: panelBackground, borderColor: panelBorder }}
+      >
+        <div className="flex">
           <button
             onClick={() => onTabChange('uploadable')}
-            className="flex-1 flex items-center justify-center gap-2.5 px-4 sm:px-6 py-4 text-sm font-semibold transition-all duration-200 relative"
+            className="relative flex flex-1 items-center justify-center gap-2.5 px-4 py-4 text-sm font-semibold transition-colors"
             style={{
-              color: activeTab === 'uploadable' ? (isDark ? '#818cf8' : '#6366f1') : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'),
-              background: activeTab === 'uploadable' ? (isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.05)') : 'transparent',
+              color:
+                activeTab === 'uploadable'
+                  ? isDark
+                    ? '#818cf8'
+                    : '#4f46e5'
+                  : isDark
+                    ? 'rgba(255,255,255,0.5)'
+                    : 'rgba(55,53,47,0.55)',
+              background:
+                activeTab === 'uploadable'
+                  ? isDark
+                    ? 'rgba(99,102,241,0.08)'
+                    : 'rgba(99,102,241,0.06)'
+                  : 'transparent',
             }}
           >
-            <Icon icon={appIcons.uploadFile} className="w-5 h-5" />
+            <Icon icon={appIcons.uploadFile} className="h-5 w-5" />
             <span>Upload to Drive</span>
             {uploadableCount > 0 ? (
-              <span className="lg-chip lg-chip-blue" style={activeTab !== 'uploadable' ? (isDark ? { background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.05)', borderColor: 'rgba(0,0,0,0.1)', color: 'rgba(0,0,0,0.35)' }) : undefined}>
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                style={{
+                  background:
+                    activeTab !== 'uploadable'
+                      ? mutedSurface
+                      : isDark
+                        ? 'rgba(99,102,241,0.14)'
+                        : 'rgba(99,102,241,0.12)',
+                  borderColor:
+                    activeTab !== 'uploadable'
+                      ? panelBorder
+                      : isDark
+                        ? 'rgba(99,102,241,0.3)'
+                        : 'rgba(99,102,241,0.24)',
+                  color:
+                    activeTab !== 'uploadable'
+                      ? isDark
+                        ? 'rgba(255,255,255,0.5)'
+                        : 'rgba(55,53,47,0.55)'
+                      : isDark
+                        ? '#818cf8'
+                        : '#4f46e5',
+                }}
+              >
                 {uploadableCount}
               </span>
             ) : uploadableData ? (
-              <span className="lg-chip" style={isDark ? { background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.04)', borderColor: 'rgba(0,0,0,0.08)', color: 'rgba(0,0,0,0.35)' }}>
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs"
+                style={{ background: mutedSurface, borderColor: panelBorder, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }}
+              >
                 0
               </span>
             ) : null}
             {activeTab === 'uploadable' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
+              <div
+                className="absolute bottom-0 left-0 right-0 h-0.5"
+                style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }}
+              />
             )}
           </button>
 
-          <div className="w-px" style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+          <div style={{ width: '1px', background: panelBorder }} />
 
           <button
             onClick={() => onTabChange('updatable')}
-            className="flex-1 flex items-center justify-center gap-2.5 px-4 sm:px-6 py-4 text-sm font-semibold transition-all duration-200 relative"
+            className="relative flex flex-1 items-center justify-center gap-2.5 px-4 py-4 text-sm font-semibold transition-colors"
             style={{
-              color: activeTab === 'updatable' ? (isDark ? '#fbbf24' : '#d97706') : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.35)'),
-              background: activeTab === 'updatable' ? (isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)') : 'transparent',
+              color:
+                activeTab === 'updatable'
+                  ? isDark
+                    ? '#fcd34d'
+                    : '#b45309'
+                  : isDark
+                    ? 'rgba(255,255,255,0.5)'
+                    : 'rgba(55,53,47,0.55)',
+              background:
+                activeTab === 'updatable'
+                  ? isDark
+                    ? 'rgba(245,158,11,0.08)'
+                    : 'rgba(245,158,11,0.06)'
+                  : 'transparent',
             }}
           >
-            <Icon icon={appIcons.trends} className="w-5 h-5" />
+            <Icon icon={appIcons.trends} className="h-5 w-5" />
             <span>Update Chapters</span>
             {updatableCount > 0 ? (
-              <span className="lg-chip lg-chip-amber" style={activeTab !== 'updatable' ? (isDark ? { background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.05)', borderColor: 'rgba(0,0,0,0.1)', color: 'rgba(0,0,0,0.35)' }) : undefined}>
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                style={{
+                  background:
+                    activeTab !== 'updatable'
+                      ? mutedSurface
+                      : isDark
+                        ? 'rgba(245,158,11,0.14)'
+                        : 'rgba(245,158,11,0.12)',
+                  borderColor:
+                    activeTab !== 'updatable'
+                      ? panelBorder
+                      : isDark
+                        ? 'rgba(245,158,11,0.3)'
+                        : 'rgba(245,158,11,0.24)',
+                  color:
+                    activeTab !== 'updatable'
+                      ? isDark
+                        ? 'rgba(255,255,255,0.5)'
+                        : 'rgba(55,53,47,0.55)'
+                      : isDark
+                        ? '#fcd34d'
+                        : '#b45309',
+                }}
+              >
                 {updatableCount}
               </span>
             ) : updatableData ? (
-              <span className="lg-chip" style={isDark ? { background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)' } : { background: 'rgba(0,0,0,0.04)', borderColor: 'rgba(0,0,0,0.08)', color: 'rgba(0,0,0,0.35)' }}>
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs"
+                style={{ background: mutedSurface, borderColor: panelBorder, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }}
+              >
                 0
               </span>
             ) : null}
             {activeTab === 'updatable' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, #f59e0b, #ea580c)' }} />
+              <div
+                className="absolute bottom-0 left-0 right-0 h-0.5"
+                style={{ background: 'linear-gradient(90deg, #f59e0b, #ea580c)' }}
+              />
             )}
           </button>
         </div>
 
-        <div className="h-[calc(100vh-280px)] sm:min-h-[500px] sm:max-h-[calc(100vh-280px)] overflow-y-auto">
+        <div className="h-[calc(100vh-280px)] overflow-y-auto sm:min-h-[500px] sm:max-h-[calc(100vh-280px)]">
           {activeTab === 'uploadable' && (
             <UploadTab
               data={uploadableData}

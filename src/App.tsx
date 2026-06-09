@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import faviconLightUrl from './assets/favicon.svg';
+import faviconDarkUrl from './assets/favicon-dark.svg';
 import { Sidebar } from './components/Sidebar';
 import { MobileSidebar } from './components/MobileSidebar';
-import { AccountMenu } from './components/AccountMenu';
 import { ToastContainer } from './components/Toast';
 import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api/client';
 import { Icon, appIcons } from './components/Icon';
@@ -51,6 +52,11 @@ function App() {
     root.dataset.theme = themeMode;
     root.dataset.themeMode = themeMode;
     root.style.colorScheme = themeMode;
+
+    const favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (favicon) {
+      favicon.href = themeMode === 'dark' ? faviconDarkUrl : faviconLightUrl;
+    }
   }, [themeMode]);
 
   useEffect(() => {
@@ -123,9 +129,18 @@ function Shell({
 }) {
   const isDark = themeMode === 'dark';
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const location = useLocation();
   const isDashboard = location.pathname.startsWith('/dashboard');
+
+  const handleOpenSettings = useCallback(() => {
+    setSettingsOpen(true);
+    setMobileSidebarOpen(false);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
 
   return (
     <>
@@ -133,6 +148,10 @@ function Shell({
         <Sidebar
           themeMode={themeMode}
           onThemeChange={onThemeChange}
+          isSettingsOpen={settingsOpen}
+          onOpenSettings={handleOpenSettings}
+          authUser={authUser}
+          onLogout={onLogout}
         />
       )}
 
@@ -140,19 +159,12 @@ function Shell({
         <MobileSidebar
           themeMode={themeMode}
           onThemeChange={onThemeChange}
+          isSettingsOpen={settingsOpen}
+          onOpenSettings={handleOpenSettings}
           isOpen={mobileSidebarOpen}
           onClose={() => setMobileSidebarOpen(false)}
         />
       )}
-
-      <AccountMenu
-        authUser={authUser}
-        isDark={isDark}
-        isOpen={accountOpen}
-        onToggle={() => setAccountOpen(open => !open)}
-        onClose={() => setAccountOpen(false)}
-        onLogout={onLogout}
-      />
 
       {!isDashboard && (
       <header className={`lg:hidden fixed top-0 left-0 right-0 z-30 safe-area-top ${
@@ -205,7 +217,7 @@ function Shell({
               <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/auto-audio/history" element={<AutoAudioHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/settings" element={<SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/settings" element={<Navigate to="/" replace />} />
               <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/dashboard/*" element={authUser.role === 'admin' ? <DashboardPage themeMode={themeMode} authUser={authUser} /> : <Navigate to="/" replace />} />
               <Route path="/admin/users" element={<Navigate to="/dashboard/users" replace />} />
@@ -214,6 +226,11 @@ function Shell({
           </Suspense>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {settingsOpen && (
+        <SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} onClose={handleCloseSettings} onLogout={onLogout} />
+      )}
 
       {/* Global Toast Notifications */}
       <ToastContainer />

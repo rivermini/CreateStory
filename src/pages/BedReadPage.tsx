@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   cancelBatchJob,
-  getBedReadChapters,
   getBatchJob,
-  getChapterAudioUrl,
   getBatchZipUrl,
+  getBedReadChapters,
+  getChapterAudioUrl,
   getDriveSyncConfig,
   getLanguages,
   getVoices,
@@ -34,40 +34,59 @@ function loadStoredStories(): BedReadStory[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_STORIES);
     return stored ? JSON.parse(stored) : [];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 function saveStories(stories: BedReadStory[]) {
   try {
     localStorage.setItem(STORAGE_KEY_STORIES, JSON.stringify(stories));
-  } catch { /* ignore */ }
+  } catch {
+    // ignore
+  }
 }
 
 function loadStoredSelectedId(): string | null {
   try {
     return localStorage.getItem(STORAGE_KEY_SELECTED);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function saveSelectedStoryId(id: string | null) {
   try {
-    if (id) localStorage.setItem(STORAGE_KEY_SELECTED, id);
-    else localStorage.removeItem(STORAGE_KEY_SELECTED);
-  } catch { /* ignore */ }
+    if (id) {
+      localStorage.setItem(STORAGE_KEY_SELECTED, id);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_SELECTED);
+    }
+  } catch {
+    // ignore
+  }
 }
 
 const VALID_SORT_VALUES = ['release_date', 'popular', 'recently_updated', 'recently_added'] as const;
 
-function loadStoredSort(): typeof VALID_SORT_VALUES[number] {
+function loadStoredSort(): (typeof VALID_SORT_VALUES)[number] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_SORT);
-    if (stored && VALID_SORT_VALUES.includes(stored as typeof VALID_SORT_VALUES[number])) return stored as typeof VALID_SORT_VALUES[number];
-  } catch { /* ignore */ }
+    if (stored && VALID_SORT_VALUES.includes(stored as (typeof VALID_SORT_VALUES)[number])) {
+      return stored as (typeof VALID_SORT_VALUES)[number];
+    }
+  } catch {
+    // ignore
+  }
   return 'release_date';
 }
 
 function saveSortBy(sort: string) {
-  try { localStorage.setItem(STORAGE_KEY_SORT, sort); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(STORAGE_KEY_SORT, sort);
+  } catch {
+    // ignore
+  }
 }
 
 export function BedReadPage({ themeMode }: BedReadPageProps) {
@@ -88,7 +107,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const [selectedStory, setSelectedStory] = useState<BedReadStory | null>(() => {
     const storedId = loadStoredSelectedId();
     const stories = loadStoredStories();
-    return stories.find(s => s.storyId === storedId) || null;
+    return stories.find((story) => story.storyId === storedId) || null;
   });
   const [chapters, setChapters] = useState<BedReadChapter[]>([]);
   const [chaptersLoading, setChaptersLoading] = useState(false);
@@ -113,18 +132,30 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
 
+  const pageBackground = isDark
+    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
+    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const selectedSurface = isDark ? 'rgba(79,70,229,0.16)' : 'rgba(79,70,229,0.08)';
+  const tagSurface = isDark ? 'rgba(99,102,241,0.14)' : 'rgba(99,102,241,0.08)';
+
   const fetchPage1 = () => {
     setStoriesLoading(true);
     setStoriesError('');
     setHasLoadedAll(false);
 
     searchBedReadStories({ sort: sortBy, page: 1, limit: 20 })
-      .then((res: BedReadStorySearchResponse) => {
-        setAllLoadedStories(res.stories);
-        setTotalStories(res.total);
-        saveStories(res.stories);
+      .then((response: BedReadStorySearchResponse) => {
+        setAllLoadedStories(response.stories);
+        setTotalStories(response.total);
+        saveStories(response.stories);
         setCurrentPage(1);
-        if (res.stories.length >= res.total) {
+        if (response.stories.length >= response.total) {
           setHasLoadedAll(true);
         }
       })
@@ -135,21 +166,24 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const loadAllStories = () => {
     if (hasLoadedAll || isLoadingAll) return;
     setIsLoadingAll(true);
-    const totalPg = Math.max(1, Math.ceil(totalStories / 20));
+    const totalPages = Math.max(1, Math.ceil(totalStories / 20));
     const pageRequests: Promise<BedReadStorySearchResponse>[] = [];
-    for (let p = 2; p <= totalPg; p++) {
-      pageRequests.push(searchBedReadStories({ sort: sortBy, page: p, limit: 20 }));
+    for (let page = 2; page <= totalPages; page += 1) {
+      pageRequests.push(searchBedReadStories({ sort: sortBy, page, limit: 20 }));
     }
+
     Promise.all(pageRequests)
-      .then(responses => {
+      .then((responses) => {
         const seen = new Set<string>();
-        const page1Stories = allLoadedStories;
-        const allStories: BedReadStory[] = [page1Stories, ...responses.map(r => r.stories)].flatMap(stories => stories)
-          .filter(s => {
-            if (seen.has(s.storyId)) return false;
-            seen.add(s.storyId);
+        const pageOneStories = allLoadedStories;
+        const allStories: BedReadStory[] = [pageOneStories, ...responses.map((response) => response.stories)]
+          .flatMap((stories) => stories)
+          .filter((story) => {
+            if (seen.has(story.storyId)) return false;
+            seen.add(story.storyId);
             return true;
           });
+
         setAllLoadedStories(allStories);
         saveStories(allStories);
         setHasLoadedAll(true);
@@ -158,16 +192,13 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
       .finally(() => setIsLoadingAll(false));
   };
 
-  const filteredStories = allLoadedStories.filter(s =>
-    s.title.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-    s.author.toLowerCase().includes(searchKeyword.toLowerCase())
+  const filteredStories = allLoadedStories.filter(
+    (story) =>
+      story.title.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      story.author.toLowerCase().includes(searchKeyword.toLowerCase()),
   );
 
-  const paginatedStories = filteredStories.slice(
-    (currentPage - 1) * pageLimit,
-    currentPage * pageLimit
-  );
-
+  const paginatedStories = filteredStories.slice((currentPage - 1) * pageLimit, currentPage * pageLimit);
   const filteredTotalPages = Math.max(1, Math.ceil(filteredStories.length / pageLimit));
 
   useEffect(() => {
@@ -181,30 +212,30 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     fetchPage1();
   }, [sortBy]);
 
-  const handleSortChange = (newSort: 'release_date' | 'popular' | 'recently_updated' | 'recently_added') => {
-    setSortBy(newSort);
-    saveSortBy(newSort);
-  };
-
-  useEffect(() => { setCurrentPage(1); }, [searchKeyword]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchKeyword]);
 
   useEffect(() => {
-    const langVoices = voices.filter(v => v.lang === selectedLang);
-    if (langVoices.length > 0 && !langVoices.find(v => v.id === selectedVoice)) {
-      setSelectedVoice(langVoices[0].id);
+    const languageVoices = voices.filter((voice) => voice.lang === selectedLang);
+    if (languageVoices.length > 0 && !languageVoices.find((voice) => voice.id === selectedVoice)) {
+      setSelectedVoice(languageVoices[0].id);
     }
   }, [selectedLang, voices, selectedVoice]);
 
   useEffect(() => {
-    getDriveSyncConfig().then(cfg => {
-      if (cfg?.main_be_user_id) {
-        setBedReadUserId(cfg.main_be_user_id);
-      }
-      if (cfg?.main_be_api_base_url) {
-        setMainBeApiUrl(cfg.main_be_api_base_url);
-      }
-      setConfigInvalid(!cfg?.main_be_api_base_url || !cfg?.main_be_user_id);
-    }).catch(() => setConfigInvalid(true)).finally(() => setConfigLoading(false));
+    getDriveSyncConfig()
+      .then((config) => {
+        if (config?.main_be_user_id) {
+          setBedReadUserId(config.main_be_user_id);
+        }
+        if (config?.main_be_api_base_url) {
+          setMainBeApiUrl(config.main_be_api_base_url);
+        }
+        setConfigInvalid(!config?.main_be_api_base_url || !config?.main_be_user_id);
+      })
+      .catch(() => setConfigInvalid(true))
+      .finally(() => setConfigLoading(false));
   }, []);
 
   useEffect(() => {
@@ -213,11 +244,12 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     setIsGenerating(false);
     setGenerationError('');
     if (!selectedStory) return;
+
     setChaptersLoading(true);
     getBedReadChapters(selectedStory.storyId, bedReadUserId ?? undefined)
-      .then(ch => {
-        setChapters(ch);
-        const maxChapter = Math.max(...ch.map(c => c.chapterNumber), 1);
+      .then((chapterList) => {
+        setChapters(chapterList);
+        const maxChapter = Math.max(...chapterList.map((chapter) => chapter.chapterNumber), 1);
         setRangeEnd(maxChapter);
       })
       .catch(() => setChapters([]))
@@ -226,6 +258,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
 
   useEffect(() => {
     if (!batchId) return;
+
     const poll = async () => {
       try {
         const job = await getBatchJob(batchId);
@@ -233,19 +266,29 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
         if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
           setIsGenerating(false);
         }
-      } catch { /* ignore */ }
+      } catch {
+        // ignore
+      }
     };
+
     poll();
     const interval = setInterval(poll, 2000);
     return () => clearInterval(interval);
   }, [batchId]);
 
-  const filteredVoices = voices.filter(v => v.lang === selectedLang);
+  const handleSortChange = (newSort: 'release_date' | 'popular' | 'recently_updated' | 'recently_added') => {
+    setSortBy(newSort);
+    saveSortBy(newSort);
+  };
+
+  const filteredVoices = voices.filter((voice) => voice.lang === selectedLang);
+  const maxChapterNumber = Math.max(...chapters.map((chapter) => chapter.chapterNumber), 0);
 
   const chaptersToGenerate = allChapters
-    ? chapters.map(c => c.chapterNumber)
-    : Array.from({ length: rangeEnd - rangeStart + 1 }, (_, i) => rangeStart + i)
-        .filter(n => n >= 1 && n <= Math.max(...chapters.map(c => c.chapterNumber), 0));
+    ? chapters.map((chapter) => chapter.chapterNumber)
+    : Array.from({ length: rangeEnd - rangeStart + 1 }, (_, index) => rangeStart + index).filter(
+        (chapterNumber) => chapterNumber >= 1 && chapterNumber <= maxChapterNumber,
+      );
 
   const handleGenerate = async () => {
     if (!selectedStory) return;
@@ -253,195 +296,182 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     setIsGenerating(true);
     setBatchJob(null);
     setBatchId(null);
+
     try {
-      const res = await startBatchGenerate({
-        story_id: selectedStory.storyId,
-        story_title: selectedStory.title,
-        chapter_start: allChapters ? 1 : rangeStart,
-        chapter_end: allChapters ? null : rangeEnd,
-        voice: selectedVoice,
-        lang: selectedLang,
-        speed,
-        format,
-      }, bedReadUserId ?? undefined);
-      setBatchId(res.batch_id);
-    } catch (e) {
-      setGenerationError(e instanceof Error ? e.message : 'Failed to start batch job.');
+      const response = await startBatchGenerate(
+        {
+          story_id: selectedStory.storyId,
+          story_title: selectedStory.title,
+          chapter_start: allChapters ? 1 : rangeStart,
+          chapter_end: allChapters ? null : rangeEnd,
+          voice: selectedVoice,
+          lang: selectedLang,
+          speed,
+          format,
+        },
+        bedReadUserId ?? undefined,
+      );
+      setBatchId(response.batch_id);
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : 'Failed to start batch job.');
       setIsGenerating(false);
     }
   };
 
   const handleCancel = async () => {
     if (!batchId) return;
-    try { await cancelBatchJob(batchId); } catch { /* ignore */ }
+    try {
+      await cancelBatchJob(batchId);
+    } catch {
+      // ignore
+    }
     setIsGenerating(false);
   };
 
-  const handleDownloadChapter = (chapterNum: number) => {
+  const handleDownloadChapter = (chapterNumber: number) => {
     if (!batchId) return;
-    const a = document.createElement('a');
-    a.href = getChapterAudioUrl(batchId, chapterNum);
-    a.download = `chapter_${chapterNum}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const anchor = document.createElement('a');
+    anchor.href = getChapterAudioUrl(batchId, chapterNumber);
+    anchor.download = `chapter_${chapterNumber}.${format}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   const handleDownloadZip = () => {
     if (!batchId) return;
-    const a = document.createElement('a');
-    a.href = getBatchZipUrl(batchId);
-    a.download = `bedread_${batchId}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const anchor = document.createElement('a');
+    anchor.href = getBatchZipUrl(batchId);
+    anchor.download = `bedread_${batchId}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
-  const handleListenChapter = (chapterNum: number) => {
+  const handleListenChapter = (chapterNumber: number) => {
     if (!batchId) return;
-    window.open(getChapterAudioUrl(batchId, chapterNum), '_blank');
+    window.open(getChapterAudioUrl(batchId, chapterNumber), '_blank');
   };
 
-  const hasAnyCompleted = batchJob?.chapters.some(c => c.status === 'completed') ?? false;
+  const hasAnyCompleted = batchJob?.chapters.some((chapter) => chapter.status === 'completed') ?? false;
   const progressPct = batchJob?.progress_pct ?? 0;
 
   const statusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return <Icon icon={appIcons.check} className={'w-4 h-4 ' + (isDark ? 'text-emerald-400' : 'text-emerald-600')} />;
+        return <Icon icon={appIcons.check} className={`h-4 w-4 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />;
       case 'failed':
-        return <Icon icon={appIcons.close} className="w-4 h-4 text-red-400" />;
+        return <Icon icon={appIcons.close} className="h-4 w-4 text-red-400" />;
       case 'processing':
       case 'queued':
-        return <Icon icon={appIcons.refresh} className={'w-4 h-4 animate-spin ' + (isDark ? 'text-indigo-400' : 'text-indigo-600')} />;
+        return <Icon icon={appIcons.refresh} className={`h-4 w-4 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />;
       default:
-        return <div className={'w-4 h-4 rounded-full border ' + (isDark ? 'border-white/20' : 'border-gray-300')} />;
+        return <div className={`h-4 w-4 rounded-full border ${isDark ? 'border-white/20' : 'border-gray-300'}`} />;
     }
   };
 
-  const c = (key: string) => {
-    const map: Record<string, [string, string]> = {
-      text: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
-      textMuted: ['text-white/40', 'text-[rgba(0,0,0,0.4)]'],
-      textSub: ['text-white/30', 'text-[rgba(0,0,0,0.3)]'],
-      textBody: ['text-white/70', 'text-[rgba(0,0,0,0.7)]'],
-      textBodyStrong: ['text-white/85', 'text-[rgba(0,0,0,0.8)]'],
-      divider: ['bg-white/6', 'bg-black/6'],
-      rowBg: ['bg-white/[0.04]', 'bg-[rgba(0,0,0,0.03)]'],
-      rowBorder: ['border-white/[0.05]', 'border-black/5'],
-      cardSubtleBg: ['bg-white/[0.03]', 'bg-[rgba(0,0,0,0.02)]'],
-      inputBg: ['bg-white/[0.05]', 'bg-[rgba(0,0,0,0.04)]'],
-    };
-    return isDark ? map[key][0] : map[key][1];
-  };
-
-  const pageBg = isDark
-    ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
-    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
-
-  const inputClass = isDark
-    ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder-white/30'
-    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder-[rgba(0,0,0,0.3)]';
-
-  const selectClass = isDark
-    ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
-    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]';
-
   return (
-    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
-      <div className="lg-orb lg-orb-1" />
-      <div className="lg-orb lg-orb-2" />
-      <div className="lg-orb lg-orb-3" />
-
-      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-        <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-
-          {/* Page Header */}
-          <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
-            <div>
-              <h1 className={`text-2xl sm:text-3xl font-bold ${c('text')}`}>BedReads</h1>
-              <p className={`mt-1 text-sm sm:text-base ${c('textMuted')}`}>Novel TTS Reader — batch audio from web novels</p>
+    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="space-y-6">
+          <section
+            className="rounded-2xl border px-5 py-5 sm:px-6"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <div className="space-y-2">
+              <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
+                Audio
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+                BedReads
+              </h1>
+              <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+                Browse BedRead stories, choose a chapter range, and generate TTS audio in batch.
+              </p>
             </div>
-          </div>
+          </section>
 
-          {/* Server Mode Banner */}
           <ServerModeBanner
             serverUrl={mainBeApiUrl}
             isDark={isDark}
             isConfigLoading={configLoading}
-            isConfigValid={configInvalid ? false : (configLoading ? undefined : Boolean(mainBeApiUrl && bedReadUserId))}
-            onConfigure={() => window.location.href = '/settings/drive-sync'}
+            isConfigValid={configInvalid ? false : configLoading ? undefined : Boolean(mainBeApiUrl && bedReadUserId)}
+            onConfigure={() => {
+              window.location.href = '/settings/drive-sync';
+            }}
           />
 
-          <div className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6 items-start">
-
-            {/* Left Column: Story List */}
-            <section className="lg-glass-card">
-              {/* Card Header */}
-              <div className={`px-5 pt-5 pb-4 border-b ${c('rowBorder')}`}>
-                <div className="flex items-center justify-between mb-3">
+          <div className="grid grid-cols-1 items-start gap-6 2xl:grid-cols-[420px_minmax(0,1fr)]">
+            <section
+              className="overflow-hidden rounded-2xl border"
+              style={{ background: panelBackground, borderColor: panelBorder }}
+            >
+              <div className="border-b px-5 pb-4 pt-5" style={{ borderColor: panelBorder }}>
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark
-                      ? 'bg-indigo-600/20 text-indigo-400'
-                      : 'bg-indigo-100 text-indigo-600'
-                    }`}>1</span>
-                    <h2 className={`text-base font-semibold ${c('textBodyStrong')}`}>Library</h2>
+                    <StepBadge number={1} isDark={isDark} />
+                    <h2 className="text-lg font-semibold" style={{ color: pageText }}>
+                      Library
+                    </h2>
                   </div>
                   <div className="flex items-center gap-2">
                     {!hasLoadedAll && (
                       <button
                         onClick={loadAllStories}
                         disabled={isLoadingAll}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark
-                          ? 'bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-500/20'
-                          : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200'}`}>
-                        {isLoadingAll ? (
-                          <span className="flex items-center gap-1.5">
-                            <Icon icon={appIcons.refresh} className="w-3.5 h-3.5 animate-spin" />
-                            Loading...
-                          </span>
-                        ) : (
-                          `Load All (${totalStories.toLocaleString()})`
-                        )}
+                        className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed"
+                        style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                      >
+                        {isLoadingAll ? 'Loading…' : `Load All (${totalStories.toLocaleString()})`}
                       </button>
                     )}
                     {hasLoadedAll && (
-                      <span className={`px-2.5 py-1 text-xs rounded-lg ${c('rowBg')}`}>
+                      <span
+                        className="rounded-md px-2.5 py-1 text-xs"
+                        style={{ background: mutedSurface, color: secondaryText }}
+                      >
                         All {totalStories.toLocaleString()} loaded
                       </span>
                     )}
                     <button
                       onClick={() => fetchPage1()}
                       disabled={storiesLoading || isLoadingAll}
-                      className={`p-1.5 rounded-lg transition-colors lg-icon-btn disabled:opacity-50`}
+                      className="rounded-md border p-2 transition-colors disabled:cursor-not-allowed"
+                      style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
                       title="Refresh story list"
                     >
-                      <Icon icon={appIcons.refresh} className={`w-4 h-4 ${c('textMuted')} ${storiesLoading ? 'animate-spin' : ''}`} />
+                      <Icon icon={appIcons.refresh} className={`h-4 w-4 ${storiesLoading ? 'animate-spin' : ''}`} />
                     </button>
                   </div>
                 </div>
 
-                {/* Search */}
                 <div className="relative">
-                  <Icon icon={appIcons.search} className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${c('textSub')}`} />
+                  <Icon
+                    icon={appIcons.search}
+                    className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2"
+                    style={{ color: tertiaryText }}
+                  />
                   <input
                     type="text"
                     value={searchKeyword}
-                    onChange={e => setSearchKeyword(e.target.value)}
+                    onChange={(event) => setSearchKeyword(event.target.value)}
                     placeholder="Search by title or author..."
-                    className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all ${inputClass}`}
+                    className="w-full rounded-md border py-3 pl-10 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                    style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                   />
                 </div>
               </div>
 
-              {/* Sort row */}
-              <div className={`px-5 py-3 border-b ${c('rowBorder')}`}>
+              <div className="border-b px-5 py-3" style={{ borderColor: panelBorder }}>
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs ${c('textSub')}`}>Sort:</span>
+                  <span className="text-xs" style={{ color: tertiaryText }}>
+                    Sort:
+                  </span>
                   <select
                     value={sortBy}
-                    onChange={e => handleSortChange(e.target.value as typeof sortBy)}
-                    className={`flex-1 px-3 py-2 border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer ${selectClass}`}
+                    onChange={(event) => handleSortChange(event.target.value as typeof sortBy)}
+                    className="flex-1 rounded-md border px-3 py-2 text-xs outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                    style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                   >
                     <option value="release_date">Latest</option>
                     <option value="recently_updated">Recently Updated</option>
@@ -451,291 +481,405 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                 </div>
               </div>
 
-              {/* Story list */}
-              <div className="max-h-[70vh] xl:max-h-[50vh] overflow-y-auto">
+              <div className="max-h-[70vh] overflow-y-auto xl:max-h-[50vh]">
                 {storiesLoading && (
-                  <div className={`flex flex-col items-center justify-center py-16 ${c('textMuted')} text-sm`}>
-                    <Icon icon={appIcons.refresh} className={`w-8 h-8 mb-3 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
+                  <div className="flex flex-col items-center justify-center py-16 text-sm" style={{ color: secondaryText }}>
+                    <Icon
+                      icon={appIcons.refresh}
+                      className={`mb-3 h-8 w-8 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}
+                    />
                     Loading stories...
                   </div>
                 )}
+
                 {storiesError && (
                   <div className="p-5">
-                    <div className={`p-3 rounded-xl text-sm ${isDark
-                      ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                      : 'bg-red-50 border border-red-200 text-red-600'}`}>
+                    <FeedbackBox tone="error" isDark={isDark}>
                       {storiesError}
-                    </div>
+                    </FeedbackBox>
                   </div>
                 )}
+
                 {!storiesLoading && !storiesError && filteredStories.length === 0 && (
-                  <div className={`flex flex-col items-center justify-center py-16 ${c('textSub')} text-sm`}>
-                    <Icon icon={appIcons.close} className={`w-12 h-12 mb-3 ${c('textSub')}`} />
+                  <div className="flex flex-col items-center justify-center py-16 text-sm" style={{ color: tertiaryText }}>
+                    <Icon icon={appIcons.close} className="mb-3 h-12 w-12" />
                     <p>No stories found</p>
                   </div>
                 )}
-                <div className="p-3 space-y-2">
-                  {paginatedStories.map(story => (
-                    <button
-                      key={story.storyId}
-                      onClick={() => { setSelectedStory(story); saveSelectedStoryId(story.storyId); }}
-                      className={
-                        `w-full flex gap-3 p-3 rounded-xl text-left transition-all duration-200 group ` +
-                        (selectedStory?.storyId === story.storyId
-                          ? (isDark
-                              ? 'bg-indigo-600/15 border border-indigo-500/25'
-                              : 'bg-indigo-50 border border-indigo-200')
-                          : (isDark
-                              ? 'bg-white/[0.02] border border-transparent hover:bg-white/[0.04] hover:border-white/[0.05]'
-                              : 'bg-[rgba(0,0,0,0.02)] border border-transparent hover:bg-[rgba(0,0,0,0.04)] hover:border-black/5'))
-                      }
-                    >
-                      {story.coverUrl ? (
-                        <div className="relative flex-shrink-0">
-                          <img
-                            src={story.coverUrl}
-                            alt={story.title}
-                            className={`w-14 h-[4.5rem] object-cover rounded-xl ${isDark ? 'bg-white/5' : 'bg-gray-200'}`}
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          />
-                        </div>
-                      ) : (
-                        <div className={`w-14 h-[4.5rem] rounded-xl flex-shrink-0 flex items-center justify-center ${isDark
-                          ? 'bg-indigo-600/10'
-                          : 'bg-indigo-100'}`}>
-                          <Icon icon={appIcons.book} className={`w-6 h-6 ${c('textMuted')}`} />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1 py-0.5">
-                        <p className={`text-sm font-medium line-clamp-2 leading-snug ${c('textBodyStrong')}`}>{story.title}</p>
-                        <p className={`text-xs mt-1 truncate ${c('textMuted')}`}>{story.author}</p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full ${c('rowBg')}`}>
-                            {story.chapterCount} ch
-                          </span>
-                          {story.tags.slice(0, 2).map(tag => (
-                            <span key={tag} className={`px-1.5 py-0.5 text-xs rounded ${isDark
-                              ? 'bg-indigo-600/15 text-indigo-300/80'
-                              : 'bg-indigo-50 text-indigo-700'}`}
-                              style={{ maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {tag}
+
+                <div className="space-y-2 p-3">
+                  {paginatedStories.map((story) => {
+                    const isSelected = selectedStory?.storyId === story.storyId;
+                    return (
+                      <button
+                        key={story.storyId}
+                        onClick={() => {
+                          setSelectedStory(story);
+                          saveSelectedStoryId(story.storyId);
+                        }}
+                        className="flex w-full gap-3 rounded-xl border p-3 text-left transition-colors"
+                        style={{
+                          background: isSelected ? selectedSurface : mutedSurface,
+                          borderColor: isSelected ? 'rgba(99,102,241,0.22)' : 'transparent',
+                        }}
+                      >
+                        {story.coverUrl ? (
+                          <div className="relative shrink-0">
+                            <img
+                              src={story.coverUrl}
+                              alt={story.title}
+                              className="h-[4.5rem] w-14 rounded-xl object-cover"
+                              style={{ background: mutedSurface }}
+                              onError={(event) => {
+                                (event.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className="flex h-[4.5rem] w-14 shrink-0 items-center justify-center rounded-xl"
+                            style={{ background: tagSurface }}
+                          >
+                            <Icon icon={appIcons.book} className="h-6 w-6" style={{ color: secondaryText }} />
+                          </div>
+                        )}
+
+                        <div className="min-w-0 flex-1 py-0.5">
+                          <p className="line-clamp-2 text-sm font-medium leading-snug" style={{ color: pageText }}>
+                            {story.title}
+                          </p>
+                          <p className="mt-1 truncate text-xs" style={{ color: secondaryText }}>
+                            {story.author}
+                          </p>
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+                              style={{ background: mutedSurface, color: secondaryText }}
+                            >
+                              {story.chapterCount} ch
                             </span>
-                          ))}
+                            {story.tags.slice(0, 2).map((tag) => (
+                              <span
+                                key={tag}
+                                className="rounded px-1.5 py-0.5 text-xs"
+                                style={{
+                                  background: tagSurface,
+                                  color: isDark ? '#a5b4fc' : '#4f46e5',
+                                  maxWidth: '60px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Pagination */}
-              <div className={`border-t px-4 py-3 ${c('rowBorder')}`}>
-                <div className="flex items-center justify-center gap-0.5 sm:gap-1 flex-wrap">
+              <div className="border-t px-4 py-3" style={{ borderColor: panelBorder }}>
+                <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5">
                   {storiesLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Icon icon={appIcons.refresh} className={`w-4 h-4 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                      <span className={`text-xs ${c('textSub')}`}>Loading stories...</span>
+                    <div className="flex items-center gap-2 text-xs" style={{ color: tertiaryText }}>
+                      <Icon
+                        icon={appIcons.refresh}
+                        className={`h-4 w-4 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}
+                      />
+                      Loading stories...
                     </div>
                   ) : (
                     <>
-                      <button
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      <PaginationButton
                         disabled={currentPage <= 1}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition-all duration-150 ${currentPage <= 1
-                          ? `${c('rowBg')} ${c('textSub')} opacity-40 cursor-not-allowed`
-                          : `${c('rowBg')} ${c('textBody')} hover:${isDark ? 'bg-white/[0.06]' : 'bg-[rgba(0,0,0,0.06)]'} active:scale-95`}`}
+                        isDark={isDark}
+                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                        panelBorder={panelBorder}
+                        mutedSurface={mutedSurface}
+                        secondaryText={secondaryText}
+                        tertiaryText={tertiaryText}
                       >
-                        <Icon icon={appIcons.chevronLeft} className="w-4 h-4" />
-                      </button>
+                        <Icon icon={appIcons.chevronLeft} className="h-4 w-4" />
+                      </PaginationButton>
 
-                      {(() => {
-                        const total = filteredTotalPages;
-                        const cur = currentPage;
-                        const pages: (number | '...')[] = [];
-                        if (total <= 7) {
-                          for (let i = 1; i <= total; i++) pages.push(i);
-                        } else {
-                          pages.push(1);
-                          if (cur > 3) pages.push('...');
-                          for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i);
-                          if (cur < total - 2) pages.push('...');
-                          pages.push(total);
-                        }
-                        return pages.map((p, i) =>
-                          p === '...' ? (
-                            <span key={'ellipsis-' + i} className={`w-8 h-8 flex items-center justify-center text-xs ${c('textSub')}`}>...</span>
-                          ) : (
-                            <button
-                              key={p}
-                              onClick={() => setCurrentPage(p)}
-                              className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-medium transition-all duration-150 ${p === cur
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                                : `${c('rowBg')} ${c('textBody')} hover:${isDark ? 'bg-white/[0.06]' : 'bg-[rgba(0,0,0,0.06)]'} active:scale-95`}`}
-                            >
-                              {p}
-                            </button>
-                          )
-                        );
-                      })()}
+                      {buildPagination(currentPage, filteredTotalPages).map((page, index) =>
+                        page === '...' ? (
+                          <span key={`ellipsis-${index}`} className="flex h-8 w-8 items-center justify-center text-xs" style={{ color: tertiaryText }}>
+                            ...
+                          </span>
+                        ) : (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-xs font-medium transition-colors"
+                            style={{
+                              background: page === currentPage ? '#4f46e5' : mutedSurface,
+                              color: page === currentPage ? '#ffffff' : pageText,
+                            }}
+                          >
+                            {page}
+                          </button>
+                        ),
+                      )}
 
-                      <button
-                        onClick={() => setCurrentPage(p => Math.min(filteredTotalPages, p + 1))}
+                      <PaginationButton
                         disabled={currentPage >= filteredTotalPages}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition-all duration-150 ${currentPage >= filteredTotalPages
-                          ? `${c('rowBg')} ${c('textSub')} opacity-40 cursor-not-allowed`
-                          : `${c('rowBg')} ${c('textBody')} hover:${isDark ? 'bg-white/[0.06]' : 'bg-[rgba(0,0,0,0.06)]'} active:scale-95`}`}
+                        isDark={isDark}
+                        onClick={() => setCurrentPage((page) => Math.min(filteredTotalPages, page + 1))}
+                        panelBorder={panelBorder}
+                        mutedSurface={mutedSurface}
+                        secondaryText={secondaryText}
+                        tertiaryText={tertiaryText}
                       >
-                        <Icon icon={appIcons.chevronRight} className="w-4 h-4" />
-                      </button>
+                        <Icon icon={appIcons.chevronRight} className="h-4 w-4" />
+                      </PaginationButton>
                     </>
                   )}
                 </div>
               </div>
             </section>
 
-            {/* Right Column: Story Detail + Generation */}
             <div className="space-y-4 lg:sticky lg:top-6">
-
-              {/* Story Details Card */}
               {selectedStory && (
-                <section className="lg-glass-card p-5 sm:p-6 space-y-4">
+                <section className="rounded-2xl border p-5 sm:p-6" style={{ background: panelBackground, borderColor: panelBorder }}>
                   <div className="flex items-start gap-4">
                     {selectedStory.coverUrl && (
                       <img
                         src={selectedStory.coverUrl}
                         alt={selectedStory.title}
-                        className={`w-20 h-28 object-cover rounded-xl flex-shrink-0 ${isDark ? 'bg-white/5' : 'bg-gray-200'}`}
-                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        className="h-28 w-20 shrink-0 rounded-xl object-cover"
+                        style={{ background: mutedSurface }}
+                        onError={(event) => {
+                          (event.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                     )}
                     <div className="min-w-0 flex-1">
-                      <h2 className={`text-lg font-semibold ${c('text')}`}>{selectedStory.title}</h2>
-                      <p className={`text-sm mt-0.5 ${c('textMuted')}`}>{selectedStory.author}</p>
-                      <p className={`text-xs mt-1 ${c('textSub')}`}>{selectedStory.chapterCount} chapters</p>
+                      <h2 className="text-lg font-semibold" style={{ color: pageText }}>
+                        {selectedStory.title}
+                      </h2>
+                      <p className="mt-0.5 text-sm" style={{ color: secondaryText }}>
+                        {selectedStory.author}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: tertiaryText }}>
+                        {selectedStory.chapterCount} chapters
+                      </p>
                       {selectedStory.description && (
-                        <p className={`text-sm mt-2 line-clamp-3 ${c('textMuted')}`}>{selectedStory.description}</p>
+                        <p className="mt-2 line-clamp-3 text-sm" style={{ color: secondaryText }}>
+                          {selectedStory.description}
+                        </p>
                       )}
                       {selectedStory.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {selectedStory.tags.slice(0, 5).map(tag => (
-                            <span key={tag} className={`px-2 py-0.5 text-xs rounded ${c('rowBg')} ${c('textMuted')}`}>{tag}</span>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {selectedStory.tags.slice(0, 5).map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded px-2 py-0.5 text-xs"
+                              style={{ background: mutedSurface, color: secondaryText }}
+                            >
+                              {tag}
+                            </span>
                           ))}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className={`border-t ${c('divider')} pt-4`}>
-                    <h3 className={`text-sm font-medium ${c('textBody')} mb-3`}>Chapters</h3>
+                  <div className="mt-4 border-t pt-4" style={{ borderColor: panelBorder }}>
+                    <h3 className="mb-3 text-sm font-medium" style={{ color: pageText }}>
+                      Chapters
+                    </h3>
                     <div className="space-y-3">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="chapter-mode" checked={allChapters} onChange={() => setAllChapters(true)} className="accent-indigo-500" />
-                        <span className={`text-sm ${c('textMuted')}`}>All chapters</span>
-                        <span className={`text-xs ${c('textSub')}`}>({chapters.length})</span>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="chapter-mode"
+                          checked={allChapters}
+                          onChange={() => setAllChapters(true)}
+                          className="accent-indigo-500"
+                        />
+                        <span className="text-sm" style={{ color: secondaryText }}>
+                          All chapters
+                        </span>
+                        <span className="text-xs" style={{ color: tertiaryText }}>
+                          ({chapters.length})
+                        </span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="chapter-mode" checked={!allChapters} onChange={() => setAllChapters(false)} className="accent-indigo-500" />
-                        <span className={`text-sm ${c('textMuted')}`}>Range</span>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="chapter-mode"
+                          checked={!allChapters}
+                          onChange={() => setAllChapters(false)}
+                          className="accent-indigo-500"
+                        />
+                        <span className="text-sm" style={{ color: secondaryText }}>
+                          Range
+                        </span>
                       </label>
                       {!allChapters && (
-                        <div className="flex items-center gap-3 ml-6">
+                        <div className="ml-6 flex items-center gap-3">
                           <div>
-                            <label className={`block text-xs ${c('textSub')} mb-1`}>From</label>
+                            <label className="mb-1 block text-xs" style={{ color: tertiaryText }}>
+                              From
+                            </label>
                             <input
-                              type="number" min={1} max={rangeEnd} value={rangeStart}
-                              onChange={e => setRangeStart(Math.max(1, parseInt(e.target.value) || 1))}
-                              className={`w-20 px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${inputClass}`}
+                              type="number"
+                              min={1}
+                              max={rangeEnd}
+                              value={rangeStart}
+                              onChange={(event) => setRangeStart(Math.max(1, parseInt(event.target.value) || 1))}
+                              className="w-20 rounded-md border px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                              style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                             />
                           </div>
-                          <span className={`text-xs ${c('textSub')} mt-4`}>to</span>
+                          <span className="mt-4 text-xs" style={{ color: tertiaryText }}>
+                            to
+                          </span>
                           <div>
-                            <label className={`block text-xs ${c('textSub')} mb-1`}>To</label>
+                            <label className="mb-1 block text-xs" style={{ color: tertiaryText }}>
+                              To
+                            </label>
                             <input
-                              type="number" min={rangeStart} max={chapters.length || 999} value={rangeEnd}
-                              onChange={e => setRangeEnd(Math.max(rangeStart, parseInt(e.target.value) || rangeStart))}
-                              className={`w-20 px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${inputClass}`}
+                              type="number"
+                              min={rangeStart}
+                              max={chapters.length || 999}
+                              value={rangeEnd}
+                              onChange={(event) => setRangeEnd(Math.max(rangeStart, parseInt(event.target.value) || rangeStart))}
+                              className="w-20 rounded-md border px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                              style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                             />
                           </div>
-                          <span className={`text-xs ${c('textSub')} mt-4`}>({Math.max(0, rangeEnd - rangeStart + 1)} chapters)</span>
+                          <span className="mt-4 text-xs" style={{ color: tertiaryText }}>
+                            ({Math.max(0, rangeEnd - rangeStart + 1)} chapters)
+                          </span>
                         </div>
                       )}
                     </div>
-                    {chaptersLoading && <p className={`text-xs mt-2 ${c('textSub')}`}>Loading chapters...</p>}
+                    {chaptersLoading && (
+                      <p className="mt-2 text-xs" style={{ color: tertiaryText }}>
+                        Loading chapters...
+                      </p>
+                    )}
                   </div>
                 </section>
               )}
 
-              {/* Voice Settings Card */}
               {selectedStory && (
-                <section className="lg-glass-card p-5 sm:p-6 space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark
-                          ? 'bg-indigo-600/20 text-indigo-400'
-                          : 'bg-indigo-100 text-indigo-600'
-                        }`}>2</span>
-                        <h3 className={`text-base font-semibold ${c('text')}`}>Voice Settings</h3>
-                      </div>
-                    </div>
+                <section className="rounded-2xl border p-5 sm:p-6" style={{ background: panelBackground, borderColor: panelBorder }}>
+                  <div className="mb-4 flex items-center gap-2">
+                    <StepBadge number={2} isDark={isDark} />
+                    <h3 className="text-lg font-semibold" style={{ color: pageText }}>
+                      Voice settings
+                    </h3>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <label className={`block text-sm ${c('textMuted')} mb-1.5`}>Language</label>
+                      <label className="mb-1.5 block text-sm" style={{ color: secondaryText }}>
+                        Language
+                      </label>
                       <select
                         value={selectedLang}
-                        onChange={e => setSelectedLang(e.target.value)}
+                        onChange={(event) => setSelectedLang(event.target.value)}
                         disabled={isGenerating}
-                        className={`w-full px-3 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 ${selectClass}`}
+                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                        style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       >
-                        {languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+                        {languages.map((language) => (
+                          <option key={language.code} value={language.code}>
+                            {language.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className={`block text-sm ${c('textMuted')} mb-1.5`}>Voice</label>
+                      <label className="mb-1.5 block text-sm" style={{ color: secondaryText }}>
+                        Voice
+                      </label>
                       <select
                         value={selectedVoice}
-                        onChange={e => setSelectedVoice(e.target.value)}
+                        onChange={(event) => setSelectedVoice(event.target.value)}
                         disabled={isGenerating}
-                        className={`w-full px-3 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 ${selectClass}`}
+                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                        style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       >
-                        {filteredVoices.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                        {filteredVoices.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
 
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className={`text-sm ${c('textMuted')}`}>Speed</label>
-                      <span className={`text-sm font-mono ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>{speed.toFixed(2)}x</span>
+                  <div className="mt-4">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="text-sm" style={{ color: secondaryText }}>
+                        Speed
+                      </label>
+                      <span className="text-sm font-mono" style={{ color: isDark ? '#a5b4fc' : '#4f46e5' }}>
+                        {speed.toFixed(2)}x
+                      </span>
                     </div>
                     <div className="flex items-center gap-3">
                       <input
-                        type="range" min={0.25} max={2.0} step={0.05} value={speed}
-                        onChange={e => setSpeed(parseFloat(e.target.value))}
+                        type="range"
+                        min={0.25}
+                        max={2.0}
+                        step={0.05}
+                        value={speed}
+                        onChange={(event) => setSpeed(parseFloat(event.target.value))}
                         disabled={isGenerating}
                         className="flex-1 accent-indigo-500"
                       />
                       <input
-                        type="number" min={0.25} max={2.0} step={0.01} value={speed}
-                        onChange={e => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0.25 && val <= 2.0) setSpeed(val); }}
+                        type="number"
+                        min={0.25}
+                        max={2.0}
+                        step={0.01}
+                        value={speed}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          if (!Number.isNaN(value) && value >= 0.25 && value <= 2.0) {
+                            setSpeed(value);
+                          }
+                        }}
                         disabled={isGenerating}
-                        className={`w-20 px-2 py-1.5 border rounded-xl text-sm text-center font-mono ${inputClass}`}
+                        className="w-20 rounded-md border px-2 py-1.5 text-center text-sm font-mono outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       />
                     </div>
-                    <div className={`flex justify-between text-xs mt-0.5 ${c('textSub')}`}>
-                      <span>0.25x</span><span>1.0x</span><span>2.0x</span>
+                    <div className="mt-0.5 flex justify-between text-xs" style={{ color: tertiaryText }}>
+                      <span>0.25x</span>
+                      <span>1.0x</span>
+                      <span>2.0x</span>
                     </div>
                   </div>
 
-                  <div>
-                    <label className={`block text-sm ${c('textMuted')} mb-1.5`}>Format</label>
+                  <div className="mt-4">
+                    <label className="mb-1.5 block text-sm" style={{ color: secondaryText }}>
+                      Format
+                    </label>
                     <div className="flex gap-3">
-                      {(['wav', 'mp3'] as const).map(f => (
-                        <label key={f} className="flex items-center gap-2 cursor-pointer">
-                          <input type="radio" name="format" value={f} checked={format === f} onChange={() => setFormat(f)} disabled={isGenerating} className="accent-indigo-500" />
-                          <span className={`text-sm uppercase ${c('textMuted')}`}>{f}</span>
+                      {(['wav', 'mp3'] as const).map((audioFormat) => (
+                        <label key={audioFormat} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="format"
+                            value={audioFormat}
+                            checked={format === audioFormat}
+                            onChange={() => setFormat(audioFormat)}
+                            disabled={isGenerating}
+                            className="accent-indigo-500"
+                          />
+                          <span className="text-sm uppercase" style={{ color: secondaryText }}>
+                            {audioFormat}
+                          </span>
                         </label>
                       ))}
                     </div>
@@ -743,93 +887,96 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                 </section>
               )}
 
-              {/* Generate Card */}
               {selectedStory && (
-                <section className="lg-glass-card p-5 sm:p-6 space-y-4">
-                  <div className="flex items-start justify-between gap-4">
+                <section className="rounded-2xl border p-5 sm:p-6" style={{ background: panelBackground, borderColor: panelBorder }}>
+                  <div className="mb-4 flex items-start justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className={`flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${isDark
-                          ? 'bg-indigo-600/20 text-indigo-400'
-                          : 'bg-indigo-100 text-indigo-600'
-                        }`}>3</span>
-                        <h3 className={`text-base font-semibold ${c('text')}`}>Generate Audio</h3>
+                        <StepBadge number={3} isDark={isDark} />
+                        <h3 className="text-lg font-semibold" style={{ color: pageText }}>
+                          Generate audio
+                        </h3>
                       </div>
-                      <p className={`text-xs ml-8 ${c('textMuted')}`}>
+                      <p className="text-sm" style={{ color: secondaryText }}>
                         {chaptersToGenerate.length} chapter{chaptersToGenerate.length !== 1 ? 's' : ''} selected
                       </p>
                     </div>
                   </div>
 
-                  {generationError && (
-                    <div className={`p-3 rounded-xl text-sm ${isDark
-                      ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                      : 'bg-red-50 border border-red-200 text-red-600'}`}
-                      title={generationError}>
-                      <span className="line-clamp-2">{generationError.length > 150 ? generationError.slice(0, 150) + '...' : generationError}</span>
-                    </div>
-                  )}
+                  {generationError && <FeedbackBox tone="error" isDark={isDark}>{generationError}</FeedbackBox>}
 
                   {chaptersToGenerate.length > 100 && !isGenerating && (
-                    <div className={`p-3 rounded-xl text-sm ${isDark
-                      ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
-                      : 'bg-amber-50 border border-amber-200 text-amber-700'}`}>
-                      <strong>Note:</strong> You are about to generate {chaptersToGenerate.length} chapters. This may take a very long time.
-                    </div>
+                    <FeedbackBox tone="warning" isDark={isDark}>
+                      <span>
+                        <strong>Note:</strong> You are about to generate {chaptersToGenerate.length} chapters. This may take a very long time.
+                      </span>
+                    </FeedbackBox>
                   )}
 
                   {isGenerating && batchJob && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className={`capitalize ${c('textMuted')}`}>{batchJob.status}</span>
-                        <span className={`text-xs ${c('textSub')}`}>{batchJob.chapters.filter(c => c.status === 'completed').length}/{batchJob.chapters.length} chapters</span>
-                        <span className={`font-mono ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>{progressPct}%</span>
+                        <span className="capitalize" style={{ color: secondaryText }}>
+                          {batchJob.status}
+                        </span>
+                        <span className="text-xs" style={{ color: tertiaryText }}>
+                          {batchJob.chapters.filter((chapter) => chapter.status === 'completed').length}/{batchJob.chapters.length} chapters
+                        </span>
+                        <span className="font-mono" style={{ color: isDark ? '#a5b4fc' : '#4f46e5' }}>
+                          {progressPct}%
+                        </span>
                       </div>
-                      <div className={`h-2.5 rounded-full overflow-hidden ${c('rowBg')}`}>
-                        <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
+                      <div className="h-2.5 overflow-hidden rounded-full" style={{ background: mutedSurface }}>
+                        <div className="h-full rounded-full bg-indigo-500 transition-all duration-500" style={{ width: `${progressPct}%` }} />
                       </div>
                     </div>
                   )}
 
                   {batchJob && !isGenerating && batchJob.status === 'completed' && (
-                    <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                      <Icon icon={appIcons.check} className="w-5 h-5" />
+                    <div className="flex items-center gap-2 text-sm" style={{ color: isDark ? '#6ee7b7' : '#047857' }}>
+                      <Icon icon={appIcons.check} className="h-5 w-5" />
                       All chapters generated successfully!
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
                     {!isGenerating && !batchJob && (
                       <button
                         onClick={handleGenerate}
                         disabled={!selectedStory || chaptersToGenerate.length === 0}
-                        className={`px-6 py-2.5 text-white font-semibold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg ${!selectedStory || chaptersToGenerate.length === 0
-                          ? isDark
-                            ? 'bg-white/[0.04] text-white/30 cursor-not-allowed shadow-none border border-white/[0.05]'
-                            : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed shadow-none border border-black/5'
-                          : 'bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-500/40'}`}
+                        className="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed"
+                        style={{
+                          background:
+                            !selectedStory || chaptersToGenerate.length === 0
+                              ? isDark
+                                ? 'rgba(255,255,255,0.08)'
+                                : 'rgba(55,53,47,0.14)'
+                              : '#4f46e5',
+                          color: !selectedStory || chaptersToGenerate.length === 0 ? secondaryText : '#ffffff',
+                        }}
                       >
-                        <Icon icon={appIcons.play} className="w-4 h-4" />
-                        Generate Audio
+                        <Icon icon={appIcons.play} className="h-4 w-4" />
+                        Generate audio
                       </button>
                     )}
+
                     {isGenerating && (
                       <button
                         onClick={handleCancel}
-                        className="px-6 py-2.5 text-white font-semibold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/30"
+                        className="inline-flex items-center gap-2 rounded-md bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-95"
                       >
-                        <Icon icon={appIcons.stop} className="w-4 h-4" />
+                        <Icon icon={appIcons.stop} className="h-4 w-4" />
                         Cancel
                       </button>
                     )}
+
                     {hasAnyCompleted && (
                       <button
                         onClick={handleDownloadZip}
-                        className={`px-5 py-2.5 font-medium border rounded-xl transition-all duration-200 flex items-center gap-2 ${isDark
-                          ? 'text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10'
-                          : 'text-indigo-600 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50'}`}
+                        className="inline-flex items-center gap-2 rounded-md border px-5 py-2.5 text-sm font-medium transition-colors"
+                        style={{ borderColor: panelBorder, background: mutedSurface, color: isDark ? '#a5b4fc' : '#4f46e5' }}
                       >
-                        <Icon icon={appIcons.download} className="w-4 h-4" />
+                        <Icon icon={appIcons.download} className="h-4 w-4" />
                         Download All (ZIP)
                       </button>
                     )}
@@ -837,25 +984,46 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                 </section>
               )}
 
-              {/* Chapter Progress Card */}
               {batchJob && batchJob.chapters.length > 0 && (
-                <section className="lg-glass-card p-5 sm:p-6 space-y-3">
-                  <h3 className={`text-sm font-medium ${c('textBody')}`}>Chapter Progress</h3>
-                  <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-                    {batchJob.chapters.map(ch => (
-                      <div key={ch.chapter_number} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${c('rowBg')}`}>
-                        {statusIcon(ch.status)}
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs font-medium truncate ${c('textBody')}`}>Ch. {ch.chapter_number}: {ch.title}</p>
-                          {ch.error && <p className={`text-xs text-red-400 truncate max-w-[200px]`} title={ch.error}>{ch.error.length > 80 ? ch.error.slice(0, 80) + '...' : ch.error}</p>}
+                <section className="rounded-2xl border p-5 sm:p-6" style={{ background: panelBackground, borderColor: panelBorder }}>
+                  <h3 className="mb-3 text-sm font-medium" style={{ color: pageText }}>
+                    Chapter progress
+                  </h3>
+                  <div className="max-h-[400px] space-y-1.5 overflow-y-auto">
+                    {batchJob.chapters.map((chapter) => (
+                      <div
+                        key={chapter.chapter_number}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2"
+                        style={{ background: mutedSurface }}
+                      >
+                        {statusIcon(chapter.status)}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium" style={{ color: pageText }}>
+                            Ch. {chapter.chapter_number}: {chapter.title}
+                          </p>
+                          {chapter.error && (
+                            <p className="max-w-[200px] truncate text-xs text-red-400" title={chapter.error}>
+                              {chapter.error.length > 80 ? `${chapter.error.slice(0, 80)}...` : chapter.error}
+                            </p>
+                          )}
                         </div>
-                        {ch.status === 'completed' && (
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button onClick={() => handleListenChapter(ch.chapter_number)} title="Listen" className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-600/10' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'}`}>
-                              <Icon icon={appIcons.play} className="w-3.5 h-3.5" />
+                        {chapter.status === 'completed' && (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              onClick={() => handleListenChapter(chapter.chapter_number)}
+                              title="Listen"
+                              className="rounded-md p-1.5 transition-colors"
+                              style={{ background: tagSurface, color: isDark ? '#a5b4fc' : '#4f46e5' }}
+                            >
+                              <Icon icon={appIcons.play} className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => handleDownloadChapter(ch.chapter_number)} title="Download" className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-600/10' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'}`}>
-                              <Icon icon={appIcons.download} className="w-3.5 h-3.5" />
+                            <button
+                              onClick={() => handleDownloadChapter(chapter.chapter_number)}
+                              title="Download"
+                              className="rounded-md p-1.5 transition-colors"
+                              style={{ background: tagSurface, color: isDark ? '#a5b4fc' : '#4f46e5' }}
+                            >
+                              <Icon icon={appIcons.download} className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         )}
@@ -865,17 +1033,22 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                 </section>
               )}
 
-              {/* Empty State */}
               {!selectedStory && (
-                <section className="lg-glass-card p-8 text-center">
-                  <Icon icon={appIcons.book} className={`w-12 h-12 mx-auto mb-4 ${c('textSub')}`} />
-                  <p className={`text-sm ${c('textMuted')}`}>Select a story from the list to get started.</p>
+                <section className="rounded-2xl border p-8 text-center" style={{ background: panelBackground, borderColor: panelBorder }}>
+                  <Icon icon={appIcons.book} className="mx-auto mb-4 h-12 w-12" style={{ color: tertiaryText }} />
+                  <p className="text-sm" style={{ color: secondaryText }}>
+                    Select a story from the list to get started.
+                  </p>
                 </section>
               )}
 
               {selectedStory && (
-                <div className={`text-center ${c('textSub')} text-xs`}>
-                  <button onClick={() => navigate('/bedread/jobs')} className={`hover:${isDark ? 'text-indigo-400' : 'text-indigo-600'} underline`}>
+                <div className="text-center text-xs" style={{ color: tertiaryText }}>
+                  <button
+                    onClick={() => navigate('/bedread/jobs')}
+                    className="underline"
+                    style={{ color: isDark ? '#a5b4fc' : '#4f46e5' }}
+                  >
                     View all TTS jobs
                   </button>
                 </div>
@@ -886,6 +1059,101 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
       </div>
     </div>
   );
+}
+
+function StepBadge({ number, isDark }: { number: number; isDark: boolean }) {
+  return (
+    <span
+      className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-semibold"
+      style={{
+        background: isDark ? 'rgba(99,102,241,0.16)' : 'rgba(99,102,241,0.12)',
+        color: isDark ? '#a5b4fc' : '#4f46e5',
+      }}
+    >
+      {number}
+    </span>
+  );
+}
+
+function FeedbackBox({
+  tone,
+  isDark,
+  children,
+}: {
+  tone: 'error' | 'warning';
+  isDark: boolean;
+  children: React.ReactNode;
+}) {
+  const style =
+    tone === 'warning'
+      ? {
+          background: isDark ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.06)',
+          borderColor: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.16)',
+          color: isDark ? '#fcd34d' : '#b45309',
+        }
+      : {
+          background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
+          borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
+          color: isDark ? '#f87171' : '#dc2626',
+        };
+
+  return (
+    <div className="rounded-xl border px-4 py-3 text-sm" style={style}>
+      {children}
+    </div>
+  );
+}
+
+function PaginationButton({
+  children,
+  disabled,
+  onClick,
+  panelBorder,
+  mutedSurface,
+  secondaryText,
+  tertiaryText,
+}: {
+  children: React.ReactNode;
+  disabled: boolean;
+  isDark: boolean;
+  onClick: () => void;
+  panelBorder: string;
+  mutedSurface: string;
+  secondaryText: string;
+  tertiaryText: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors disabled:cursor-not-allowed"
+      style={{
+        background: mutedSurface,
+        border: `1px solid ${panelBorder}`,
+        color: disabled ? tertiaryText : secondaryText,
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function buildPagination(currentPage: number, totalPages: number): Array<number | '...'> {
+  const pages: Array<number | '...'> = [];
+  if (totalPages <= 7) {
+    for (let page = 1; page <= totalPages; page += 1) pages.push(page);
+    return pages;
+  }
+
+  pages.push(1);
+  if (currentPage > 3) pages.push('...');
+  for (let page = Math.max(2, currentPage - 1); page <= Math.min(totalPages - 1, currentPage + 1); page += 1) {
+    pages.push(page);
+  }
+  if (currentPage < totalPages - 2) pages.push('...');
+  pages.push(totalPages);
+  return pages;
 }
 
 export default BedReadPage;

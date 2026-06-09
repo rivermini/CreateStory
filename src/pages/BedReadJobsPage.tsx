@@ -1,684 +1,950 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { cancelBatchJob, getChapterAudioUrl, getBatchZipUrl, listAllBatchJobs, removeBatchJob, type BatchJob } from '../api/client';
+import {
+  cancelBatchJob,
+  getChapterAudioUrl,
+  getBatchZipUrl,
+  listAllBatchJobs,
+  removeBatchJob,
+  type BatchJob,
+} from '../api/client';
 import { DatePicker } from '../components/DatePicker';
-import { Icon, appIcons } from '../components/Icon';
 
 interface BedReadJobsPageProps {
-    themeMode: 'light' | 'dark';
-    onThemeChange: (mode: 'light' | 'dark') => void;
+  themeMode: 'light' | 'dark';
+  onThemeChange: (mode: 'light' | 'dark') => void;
 }
 
 function formatDate(iso: string | null): string {
-    if (!iso) return '—';
-    try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString(); } catch { return iso; }
 }
 
 function formatDuration(start: string | null, finish: string | null): string {
-    if (!start || !finish) return '—';
-    try {
-        const secs = Math.floor((new Date(finish).getTime() - new Date(start).getTime()) / 1000);
-        if (secs < 60) return `${secs}s`;
-        return `${Math.floor(secs / 60)}m ${secs % 60}s`;
-    } catch { return '—'; }
-}
-
-function getTimestampMs(iso: string | null): number | null {
-    if (!iso) return null;
-    const direct = new Date(iso).getTime();
-    if (Number.isFinite(direct)) return direct;
-    const normalized = new Date(iso.replace(' ', 'T')).getTime();
-    return Number.isFinite(normalized) ? normalized : null;
-}
-
-function formatGenerationDuration(start: string | null, finish: string | null, nowMs: number, live: boolean): string {
-    if (start && finish) return formatDuration(start, finish);
-    if (!start || (!finish && !live)) return '-';
-    if (!start || (!finish && !live)) return 'â€”';
-    const startMs = getTimestampMs(start);
-    const finishMs = finish ? getTimestampMs(finish) : nowMs;
-    if (startMs === null || finishMs === null) return '-';
-    if (startMs === null || finishMs === null) return 'â€”';
-    const secs = Math.max(0, Math.floor((finishMs - startMs) / 1000));
-    const hours = Math.floor(secs / 3600);
-    if (hours > 0) return `${hours}h ${Math.floor((secs % 3600) / 60)}m ${secs % 60}s`;
+  if (!start || !finish) return '—';
+  try {
+    const secs = Math.floor((new Date(finish).getTime() - new Date(start).getTime()) / 1000);
     if (secs < 60) return `${secs}s`;
     return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+  } catch { return '—'; }
 }
 
 function getGenerationStart(job: BatchJob): string | null {
-    if (job.processing_started_at) return job.processing_started_at;
-    if (job.status === 'queued' || job.status === 'pending') return null;
-    return job.started_at;
+  if (job.processing_started_at) return job.processing_started_at;
+  if (job.status === 'queued' || job.status === 'pending') return null;
+  return job.started_at;
 }
 
 function canDeleteBatchJob(job: BatchJob): boolean {
-    return job.status === 'completed' || job.status === 'cancelled' || job.status === 'failed';
+  return job.status === 'completed' || job.status === 'cancelled' || job.status === 'failed';
 }
 
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
-    queued: (d) => d ? 'bg-amber-400 animate-pulse' : 'bg-amber-400 animate-pulse',
-    running: (d) => d ? 'bg-blue-400' : 'bg-blue-500',
-    completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
-    failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
-    cancelled: (d) => d ? 'bg-amber-400' : 'bg-amber-500',
-};
-
-const STATUS_TEXT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending: (d) => d ? 'text-white/40' : 'text-gray-500',
-    queued: (d) => d ? 'text-amber-400' : 'text-amber-600',
-    running: (d) => d ? 'text-blue-400' : 'text-blue-600',
-    completed: (d) => d ? 'text-emerald-400' : 'text-emerald-600',
-    failed: (d) => d ? 'text-red-400' : 'text-red-600',
-    cancelled: (d) => d ? 'text-amber-400' : 'text-amber-600',
+  pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
+  queued: (d) => d ? 'bg-amber-400' : 'bg-amber-400',
+  running: (d) => d ? 'bg-blue-400' : 'bg-blue-500',
+  completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
+  failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
+  cancelled: (d) => d ? 'bg-amber-400' : 'bg-amber-500',
 };
 
 const STATUS_LABEL_MAP: Record<string, string> = {
-    pending: 'Pending', queued: 'Queued', running: 'Running',
-    completed: 'Completed', failed: 'Failed', cancelled: 'Cancelled',
+  pending: 'Pending',
+  queued: 'Queued',
+  running: 'Running',
+  completed: 'Completed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
 };
 
 const CHAPTER_STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
-    queued: (d) => d ? 'bg-indigo-400 animate-pulse' : 'bg-indigo-400 animate-pulse',
-    processing: (d) => d ? 'bg-blue-400 animate-pulse' : 'bg-blue-500 animate-pulse',
-    completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
-    failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
+  pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
+  queued: (d) => d ? 'bg-indigo-400' : 'bg-indigo-400',
+  processing: (d) => d ? 'bg-blue-400' : 'bg-blue-500',
+  completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
+  failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
 };
 
 const CHAPTER_STATUS_TEXT_MAP: Record<string, (isDark: boolean) => string> = {
-    pending: (d) => d ? 'text-white/40' : 'text-gray-500',
-    queued: (d) => d ? 'text-indigo-400' : 'text-indigo-600',
-    processing: (d) => d ? 'text-blue-400' : 'text-blue-600',
-    completed: (d) => d ? 'text-emerald-400' : 'text-emerald-600',
-    failed: (d) => d ? 'text-red-400' : 'text-red-600',
+  pending: (d) => d ? 'text-white/40' : 'text-gray-500',
+  queued: (d) => d ? 'text-indigo-400' : 'text-indigo-600',
+  processing: (d) => d ? 'text-blue-400' : 'text-blue-600',
+  completed: (d) => d ? 'text-emerald-400' : 'text-emerald-600',
+  failed: (d) => d ? 'text-red-400' : 'text-red-600',
 };
 
 interface JobCardProps {
-    job: BatchJob;
-    order: number;
-    isSelected: boolean;
-    deleteMode: boolean;
-    isDark: boolean;
-    canSelectForDelete: boolean;
-    onToggleSelect: (batchId: string) => void;
-    onCancel: (batchId: string, storyTitle: string) => void;
-    onDownloadChapter: (batchId: string, chapterNum: number) => void;
-    onDownloadZip: (batchId: string) => void;
-    nowMs: number;
-    c: (key: string) => string;
+  job: BatchJob;
+  order: number;
+  isSelected: boolean;
+  deleteMode: boolean;
+  isDark: boolean;
+  canSelectForDelete: boolean;
+  panelBorder: string;
+  pageText: string;
+  secondaryText: string;
+  tertiaryText: string;
+  mutedSurface: string;
+  selectedSurface: string;
+  onToggleSelect: (batchId: string) => void;
+  onCancel: (batchId: string, storyTitle: string) => void;
+  onDownloadChapter: (batchId: string, chapterNum: number) => void;
+  onDownloadZip: (batchId: string) => void;
 }
 
-function JobCard({ job, order, isSelected, deleteMode, isDark, canSelectForDelete, onToggleSelect, onCancel, onDownloadChapter, onDownloadZip, nowMs, c }: JobCardProps) {
-    const [expanded, setExpanded] = useState(false);
+function JobCard({
+  job,
+  order,
+  isSelected,
+  deleteMode,
+  isDark,
+  canSelectForDelete,
+  panelBorder,
+  pageText,
+  secondaryText,
+  tertiaryText,
+  mutedSurface,
+  selectedSurface,
+  onToggleSelect,
+  onCancel,
+  onDownloadChapter,
+  onDownloadZip,
+}: JobCardProps) {
+  const [expanded, setExpanded] = useState(false);
 
-    const dotFn = STATUS_DOT_MAP[job.status] ?? STATUS_DOT_MAP.pending;
-    const textFn = STATUS_TEXT_MAP[job.status] ?? STATUS_TEXT_MAP.pending;
-    const dot = dotFn(isDark);
-    const text = textFn(isDark);
-    const label = STATUS_LABEL_MAP[job.status] ?? job.status;
+  const dotFn = STATUS_DOT_MAP[job.status] ?? STATUS_DOT_MAP.pending;
+  const dot = dotFn(isDark);
+  const label = STATUS_LABEL_MAP[job.status] ?? job.status;
 
-    const completedCount = job.chapters.filter(c => c.status === 'completed').length;
-    const failedCount = job.chapters.filter(c => c.status === 'failed').length;
-    const totalCount = job.chapters.length;
-    const progressPct = job.progress_pct;
-    const allDone = completedCount === totalCount && totalCount > 0;
-    const isAutoMode = job.from_auto_mode === true;
-    const generationStartedAt = getGenerationStart(job);
-    const generationDuration = formatGenerationDuration(generationStartedAt, job.finished_at, nowMs, job.status === 'running');
+  const completedCount = job.chapters.filter((c) => c.status === 'completed').length;
+  const failedCount = job.chapters.filter((c) => c.status === 'failed').length;
+  const totalCount = job.chapters.length;
+  const progressPct = job.progress_pct;
+  const allDone = completedCount === totalCount && totalCount > 0;
+  const isAutoMode = job.from_auto_mode === true;
+  const generationStartedAt = getGenerationStart(job);
 
-    const cardBg = deleteMode && isSelected
-        ? isDark ? 'bg-red-500/10 border border-red-500/30' : 'bg-red-50 border border-red-200'
-        : isDark ? 'lg-glass-card border border-white/[0.05]' : 'lg-glass-card border border-black/5';
+  const chDotFn = (status: string) =>
+    CHAPTER_STATUS_DOT_MAP[status] ?? CHAPTER_STATUS_DOT_MAP.pending;
+  const chTextFn = (status: string) =>
+    CHAPTER_STATUS_TEXT_MAP[status] ?? CHAPTER_STATUS_TEXT_MAP.pending;
 
-    const orderBg = deleteMode && isSelected
-        ? isDark ? 'bg-red-500/10 border-r border-r-red-500/30 text-red-300' : 'bg-red-100 border-r border-r-red-200 text-red-700'
-        : isDark ? 'bg-indigo-500/10 border-r border-r-white/5 text-indigo-300' : 'bg-indigo-50 border-r border-r-indigo-100 text-indigo-700';
+  return (
+    <article
+      className={`transition-colors ${deleteMode ? (canSelectForDelete ? 'cursor-pointer select-none' : 'opacity-75') : ''}`}
+      style={{ background: deleteMode && isSelected ? selectedSurface : 'transparent' }}
+      onClick={deleteMode && canSelectForDelete ? () => onToggleSelect(job.batch_id) : undefined}
+    >
+      <div
+        className="px-5 py-4 sm:px-6"
+        style={{ borderTop: order === 1 ? 'none' : `1px solid ${panelBorder}` }}
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium" style={{ color: tertiaryText }}>#{order}</span>
+              <div className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+              <span
+                className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                style={{ background: mutedSurface, color: secondaryText }}
+              >
+                {label}
+              </span>
+              {job.status === 'queued' && job.queue_position && job.queue_position > 0 && (
+                <span
+                  className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                  style={{ background: mutedSurface, color: secondaryText }}
+                >
+                  #{job.queue_position} in queue
+                </span>
+              )}
+              <span className="font-mono text-[11px]" style={{ color: tertiaryText }}>
+                {job.batch_id.slice(0, 8)}
+              </span>
+            </div>
 
-    const deleteModeCardClass = deleteMode
-        ? canSelectForDelete
-            ? 'cursor-pointer select-none'
-            : isDark ? 'opacity-70' : 'opacity-80'
-        : '';
+            <div className="mt-2 text-sm font-semibold sm:text-[15px] truncate" style={{ color: pageText }}>
+              {job.story_title}
+            </div>
 
-    const chDotFn = (status: string) => CHAPTER_STATUS_DOT_MAP[status] ?? CHAPTER_STATUS_DOT_MAP.pending;
-    const chTextFn = (status: string) => CHAPTER_STATUS_TEXT_MAP[status] ?? CHAPTER_STATUS_TEXT_MAP.pending;
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: secondaryText }}>
+              <span>{totalCount} chapter{totalCount !== 1 ? 's' : ''}</span>
+              {completedCount > 0 && <span>{completedCount} done</span>}
+              {failedCount > 0 && <span style={{ color: isDark ? '#f87171' : '#dc2626' }}>{failedCount} failed</span>}
+              {(job.status === 'running' || job.status === 'queued') && (
+                <span>{generationStartedAt
+                  ? `Generating since ${formatDate(generationStartedAt)}`
+                  : 'Waiting to generate'}
+                </span>
+              )}
+              {job.finished_at && <span>Finished {formatDate(job.finished_at)}</span>}
+              {(job.started_at || job.finished_at) && (
+                <span style={{ color: pageText }}>
+                  {formatDuration(job.started_at, job.finished_at)}
+                </span>
+              )}
+            </div>
 
-    return (
-        <div className={`rounded-2xl overflow-hidden flex transition-all duration-200 ${cardBg} ${deleteModeCardClass}`}
-            onClick={deleteMode && canSelectForDelete ? () => onToggleSelect(job.batch_id) : undefined}>
-            {order != null && (
-                <div className={`w-12 flex-shrink-0 border-r flex flex-col items-center justify-center rounded-l-2xl transition-colors duration-200 ${orderBg}`}>
-                    <span className="text-base font-bold select-none">#{order}</span>
+            {job.status === 'running' && totalCount > 0 && (
+              <div className="mt-3 space-y-1.5">
+                <div className="flex items-center justify-between text-xs" style={{ color: secondaryText }}>
+                  <span>{completedCount}/{totalCount} chapters</span>
+                  <span>{progressPct}%</span>
                 </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: mutedSurface }}>
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: '#6366f1' }} />
+                </div>
+              </div>
             )}
 
-            <div className="flex-1 min-w-0 flex flex-col">
-                <div className="px-5 py-4 flex flex-col sm:flex-row items-start gap-4">
-                    <div className="flex-shrink-0 mt-1 flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${dot}`} />
-                    </div>
+            {job.error && (
+              <p className="mt-2 text-sm" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
+                {job.error}
+              </p>
+            )}
+          </div>
 
-                    <div className="flex-1 min-w-0 w-full">
-                        <div className="min-w-0 w-full sm:w-auto">
-                            <h3 className={`text-sm sm:text-base font-semibold truncate ${c('textBodyStrong')}`}>{job.story_title}</h3>
-                            <div className={`flex items-center gap-3 mt-1.5 text-xs ${c('textMuted')}`}>
-                                <span className={text}>{label}</span>
-                                {job.status === 'queued' && job.queue_position && job.queue_position > 0 && (
-                                    <span className={isDark ? 'text-amber-400 font-medium' : 'text-amber-600 font-medium'}>#{job.queue_position} in queue</span>
-                                )}
-                                <span>{totalCount} chapter{totalCount !== 1 ? 's' : ''}</span>
-                                {completedCount > 0 && <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{completedCount} done</span>}
-                                {failedCount > 0 && <span className="text-red-400">{failedCount} failed</span>}
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap mt-3">
-                            {allDone && !deleteMode && !isAutoMode && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onDownloadZip(job.batch_id); }}
-                                    className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors shadow-lg shadow-indigo-600/30 flex items-center gap-1.5"
-                                >
-                                    <Icon icon={appIcons.download} className="w-3 h-3" />
-                                    Download ZIP
-                                </button>
-                            )}
-                            {isAutoMode && (
-                                <span className={`px-3 py-1.5 text-xs font-medium rounded-xl ${isDark
-                                    ? 'text-amber-300 bg-amber-500/10 border border-amber-500/20'
-                                    : 'text-amber-700 bg-amber-50 border border-amber-200'
-                                    }`}>
-                                    {deleteMode && canSelectForDelete ? 'Auto Mode — Deletable' : deleteMode ? 'Auto Mode — Cannot Delete' : 'Auto Mode — Files Deleted'}
-                                </span>
-                            )}
-                            {deleteMode && !canSelectForDelete && (
-                                <span className={`px-3 py-1.5 text-xs font-medium rounded-xl ${isDark
-                                    ? 'text-slate-300 bg-white/[0.04] border border-white/10'
-                                    : 'text-slate-600 bg-slate-100 border border-slate-200'
-                                    }`}>
-                                    Active Job — Cannot Delete
-                                </span>
-                            )}
-                            {(job.status === 'running' || job.status === 'queued') && !deleteMode && !isAutoMode && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onCancel(job.batch_id, job.story_title); }}
-                                    className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-500 rounded-xl transition-colors shadow-lg shadow-red-600/30"
-                                >
-                                    {job.status === 'running' ? 'Cancel' : 'Remove'}
-                                </button>
-                            )}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-colors ${isDark
-                                    ? 'text-white/40 border-white/5 hover:text-white/70 hover:bg-white/[0.04]'
-                                    : 'text-[rgba(0,0,0,0.4)] border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'
-                                    }`}
-                            >
-                                {expanded ? 'Hide' : `${totalCount}C`}
-                            </button>
-                        </div>
-
-                        {job.status === 'running' && totalCount > 0 && (
-                            <div className="mt-3 space-y-1.5">
-                                <div className={`flex items-center justify-between text-xs ${c('textMuted')}`}>
-                                    <span>{completedCount}/{totalCount} chapters</span>
-                                    <span>{progressPct}%</span>
-                                </div>
-                                <div className="lg-progress-track" style={{ height: 6 }}>
-                                    <div className="lg-progress-fill" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, #6366f1cc, #6366f188)`, boxShadow: '0 0 10px #6366f150' }} />
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className={`flex flex-col sm:items-end gap-2 text-xs ${c('textSub')}`}>
-                        <span>Queued {formatDate(job.started_at)}</span>
-                        {generationStartedAt ? (
-                            <>
-                                <span>{job.status === 'running' ? 'Generating since' : 'Generated from'} {formatDate(generationStartedAt)}</span>
-                                {job.finished_at && <span>Finished {formatDate(job.finished_at)}</span>}
-                                <span className={`font-medium ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
-                                    Generation {generationDuration}
-                                </span>
-                            </>
-                        ) : job.status === 'queued' ? (
-                            <span className={isDark ? 'text-amber-400' : 'text-amber-600'}>Waiting to generate</span>
-                        ) : null}
-                    </div>
-
-                    {job.error && <p className={`text-xs mt-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{job.error}</p>}
-                </div>
-
-                {expanded && job.chapters.length > 0 && (
-                    <div className={`border-t px-5 py-3 ${isDark ? 'border-white/[0.05] bg-white/[0.01]' : 'border-black/5 bg-[rgba(0,0,0,0.01)]'}`}>
-                        <p className={`text-[10px] uppercase tracking-wider font-semibold mb-2 ${isDark ? 'text-white/20' : 'text-[rgba(0,0,0,0.2)]'}`}>
-                            Chapters ({completedCount}/{totalCount} completed)
-                        </p>
-                        <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
-                            {job.chapters.map((ch) => {
-                                const isRunning = ch.status === 'queued' || ch.status === 'processing' || (ch.progress_pct > 0 && ch.progress_pct < 100);
-                                return (
-                                    <div key={ch.chapter_number} className={`flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg transition-colors ${isDark ? 'bg-white/[0.02] hover:bg-white/[0.03]' : 'bg-[rgba(0,0,0,0.02)] hover:bg-[rgba(0,0,0,0.03)]'}`}>
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            <div className={`w-2 h-2 rounded-full ${chDotFn(ch.status)(isDark)} flex-shrink-0`} />
-                                            <span className={`text-xs font-mono flex-shrink-0 ${c('textMuted')}`}> #{ch.chapter_number}</span>
-                                            <div className="min-w-0 flex-1">
-                                                <span className={`text-sm truncate block ${chTextFn(ch.status)(isDark)}`}>{ch.title}</span>
-                                                {isRunning && ch.progress_pct > 0 && (
-                                                    <div className="mt-1 space-y-0.5">
-                                                        <div className="lg-progress-track" style={{ height: 3 }}>
-                                                            <div className="lg-progress-fill" style={{ width: `${ch.progress_pct}%`, background: '#3b82f6' }} />
-                                                        </div>
-                                                        <span className={`text-[10px] ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{ch.progress_pct}%</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 flex-shrink-0">
-                                            {ch.status === 'failed' && ch.error && (
-                                                <span className={`text-xs max-w-[150px] truncate ${isDark ? 'text-red-400' : 'text-red-600'}`}>{ch.error}</span>
-                                            )}
-                                            {ch.status === 'completed' && !deleteMode && !isAutoMode && (
-                                                <button onClick={() => onDownloadChapter(job.batch_id, ch.chapter_number)}
-                                                    className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${isDark
-                                                        ? 'text-white/70 bg-white/[0.04] hover:bg-white/[0.06]'
-                                                        : 'text-[rgba(0,0,0,0.7)] bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)]'
-                                                        }`}>
-                                                    Download
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
+          <div className="flex items-start gap-3 lg:flex-col lg:items-end">
+            <div className="flex flex-wrap gap-2">
+              {allDone && !deleteMode && !isAutoMode && (
+                <button
+                  onClick={(event) => { event.stopPropagation(); onDownloadZip(job.batch_id); }}
+                  className="rounded-md border px-3 py-2 text-sm transition-colors"
+                  style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                >
+                  Download ZIP
+                </button>
+              )}
+              {isAutoMode && (
+                <span
+                  className="rounded-md px-3 py-2 text-sm"
+                  style={{ background: mutedSurface, color: secondaryText }}
+                >
+                  {deleteMode && canSelectForDelete
+                    ? 'Auto Mode — Deletable'
+                    : deleteMode
+                      ? 'Auto Mode — Cannot Delete'
+                      : 'Auto Mode'}
+                </span>
+              )}
+              {deleteMode && !canSelectForDelete && (
+                <span
+                  className="rounded-md px-3 py-2 text-sm"
+                  style={{ background: mutedSurface, color: secondaryText }}
+                >
+                  Active — Cannot Delete
+                </span>
+              )}
+              {(job.status === 'running' || job.status === 'queued') && !deleteMode && !isAutoMode && (
+                <button
+                  onClick={(event) => { event.stopPropagation(); onCancel(job.batch_id, job.story_title); }}
+                  className="rounded-md px-3 py-2 text-sm text-white transition-opacity"
+                  style={{ background: '#dc2626' }}
+                >
+                  {job.status === 'running' ? 'Cancel' : 'Remove'}
+                </button>
+              )}
+              <button
+                onClick={(event) => { event.stopPropagation(); setExpanded((v) => !v); }}
+                className="rounded-md border px-3 py-2 text-sm transition-colors"
+                style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+              >
+                {expanded ? 'Hide' : `${totalCount}C`}
+              </button>
             </div>
+          </div>
         </div>
-    );
+
+        {expanded && job.chapters.length > 0 && (
+          <div className="mt-4 border-t pt-4" style={{ borderColor: panelBorder }}>
+            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: tertiaryText }}>
+              Chapters ({completedCount}/{totalCount} completed)
+            </div>
+            <div className="overflow-hidden rounded-xl border" style={{ borderColor: panelBorder }}>
+              {job.chapters.map((ch) => {
+                const isRunning =
+                  ch.status === 'queued' ||
+                  ch.status === 'processing' ||
+                  (ch.progress_pct > 0 && ch.progress_pct < 100);
+
+                return (
+                  <div
+                    key={ch.chapter_number}
+                    className="flex items-center justify-between gap-3 px-3 py-2.5"
+                    style={{ borderTop: ch === job.chapters[0] ? 'none' : `1px solid ${panelBorder}` }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${chDotFn(ch.status)(isDark)}`} />
+                      <span className="font-mono text-[11px] flex-shrink-0" style={{ color: secondaryText }}>
+                        #{ch.chapter_number}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className={`text-sm truncate block ${chTextFn(ch.status)(isDark)}`}>
+                          {ch.title}
+                        </span>
+                        {isRunning && ch.progress_pct > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: mutedSurface }}>
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${ch.progress_pct}%`, background: '#3b82f6' }}
+                              />
+                            </div>
+                            <span className="text-[10px]" style={{ color: secondaryText }}>{ch.progress_pct}%</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {ch.status === 'failed' && ch.error && (
+                        <span
+                          className="max-w-[150px] truncate text-xs"
+                          style={{ color: isDark ? '#f87171' : '#dc2626' }}
+                        >
+                          {ch.error}
+                        </span>
+                      )}
+                      {ch.status === 'completed' && !deleteMode && !isAutoMode && (
+                        <button
+                          onClick={() => onDownloadChapter(job.batch_id, ch.chapter_number)}
+                          className="rounded-md border px-2.5 py-1 text-xs transition-colors"
+                          style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                        >
+                          Download
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </article>
+  );
 }
 
 export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
-    const isDark = themeMode === 'dark';
-    const PAGE_SIZE = 15;
-    const navigate = useNavigate();
-    const [jobs, setJobs] = useState<BatchJob[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [filter, setFilter] = useState<'all' | 'running' | 'queued' | 'completed' | 'failed'>('all');
-    const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
-    const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'specific'>('all');
-    const [specificDate, setSpecificDate] = useState<string>('');
-    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-    const [lastRefresh, setLastRefresh] = useState(new Date());
-    const [nowMs, setNowMs] = useState(() => Date.now());
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; ids: string[]; hasRunning: boolean }>({ open: false, ids: [], hasRunning: false });
-    const [deleteMode, setDeleteMode] = useState(false);
-    const [cancelConfirmation, setCancelConfirmation] = useState<{ open: boolean; batchId: string | null; storyTitle: string }>({ open: false, batchId: null, storyTitle: '' });
-    const [_cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
-    const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const isDark = themeMode === 'dark';
+  const PAGE_SIZE = 15;
+  const navigate = useNavigate();
+  const [jobs, setJobs] = useState<BatchJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState<'all' | 'running' | 'queued' | 'completed' | 'failed'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'specific'>('all');
+  const [specificDate, setSpecificDate] = useState<string>('');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    open: boolean;
+    ids: string[];
+    hasRunning: boolean;
+  }>({ open: false, ids: [], hasRunning: false });
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [cancelConfirmation, setCancelConfirmation] = useState<{
+    open: boolean;
+    batchId: string | null;
+    storyTitle: string;
+  }>({ open: false, batchId: null, storyTitle: '' });
+  const [_cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-    const fetchJobs = useCallback((): Promise<void> => {
-        return listAllBatchJobs()
-            .then(data => setJobs(data))
-            .catch(e => setError(e instanceof Error ? e.message : 'Failed to load'))
-            .finally(() => setLastRefresh(new Date()));
-    }, []);
+  const fetchJobs = useCallback((): Promise<void> => {
+    return listAllBatchJobs()
+      .then((data) => setJobs(data))
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
+      .finally(() => setLastRefresh(new Date()));
+  }, []);
 
-    useEffect(() => {
-        setIsLoading(true);
-        setError('');
-        fetchJobs().finally(() => setIsLoading(false));
-        const interval = setInterval(fetchJobs, 1000);
-        return () => clearInterval(interval);
-    }, [fetchJobs]);
+  useEffect(() => {
+    setIsLoading(true);
+    setError('');
+    fetchJobs().finally(() => setIsLoading(false));
+    const interval = setInterval(fetchJobs, 1000);
+    return () => clearInterval(interval);
+  }, [fetchJobs]);
 
-    useEffect(() => {
-        const interval = setInterval(() => setNowMs(Date.now()), 1000);
-        return () => clearInterval(interval);
-    }, []);
+  const timeCutoff = (() => {
+    if (timeRange === 'all') return null;
+    const now = new Date();
+    if (timeRange === 'today') {
+      const d = new Date(now);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+    if (timeRange === 'week') {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      return d;
+    }
+    if (timeRange === 'month') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    }
+    if (timeRange === 'specific' && specificDate) {
+      const d = new Date(`${specificDate}T00:00:00`);
+      const end = new Date(`${specificDate}T23:59:59`);
+      return { start: d, end };
+    }
+    return null;
+  })();
 
-    const timeCutoff = (() => {
-        if (timeRange === 'all') return null;
-        const now = new Date();
-        if (timeRange === 'today') { const d = new Date(now); d.setHours(0, 0, 0, 0); return d; }
-        if (timeRange === 'week') { const d = new Date(now); d.setDate(d.getDate() - 7); return d; }
-        if (timeRange === 'month') { const d = new Date(now); d.setMonth(d.getMonth() - 1); return d; }
-        if (timeRange === 'specific' && specificDate) {
-            const d = new Date(specificDate + 'T00:00:00');
-            const end = new Date(specificDate + 'T23:59:59');
-            return { start: d, end };
+  const filtered = jobs
+    .filter((j) => {
+      if (filter === 'all') return true;
+      if (filter === 'running') return j.status === 'running';
+      if (filter === 'queued') return j.status === 'queued';
+      if (filter === 'failed') return j.status === 'failed' || j.status === 'cancelled';
+      return j.status === filter;
+    })
+    .filter((j) => {
+      if (!timeCutoff || !j.started_at) return true;
+      const jobTime = new Date(j.started_at).getTime();
+      if ('start' in timeCutoff && 'end' in timeCutoff) {
+        return jobTime >= timeCutoff.start.getTime() && jobTime <= timeCutoff.end.getTime();
+      }
+      return jobTime >= (timeCutoff as Date).getTime();
+    })
+    .sort((a, b) => {
+      const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
+      const bTime = b.started_at ? new Date(b.started_at).getTime() : 0;
+      return sortOrder === 'newest' ? bTime - aTime : aTime - bTime;
+    });
+
+  const visibleJobs = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+  const deletableVisibleJobs = visibleJobs.filter(canDeleteBatchJob);
+  const allVisibleSelected =
+    deletableVisibleJobs.length > 0 &&
+    deletableVisibleJobs.every((j) => selectedIds.has(j.batch_id));
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filter, sortOrder, timeRange, specificDate]);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filtered.length));
         }
-        return null;
-    })();
+      },
+      { rootMargin: '300px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, filtered.length]);
 
-    const filtered = jobs
-        .filter(j => {
-            if (filter === 'all') return true;
-            if (filter === 'running') return j.status === 'running';
-            if (filter === 'queued') return j.status === 'queued';
-            if (filter === 'failed') return j.status === 'failed' || j.status === 'cancelled';
-            return j.status === filter;
-        })
-        .filter(j => {
-            if (!timeCutoff || !j.started_at) return true;
-            const jobTime = new Date(j.started_at).getTime();
-            if ('start' in timeCutoff && 'end' in timeCutoff) {
-                return jobTime >= timeCutoff.start.getTime() && jobTime <= timeCutoff.end.getTime();
-            }
-            return jobTime >= (timeCutoff as Date).getTime();
-        })
-        .sort((a, b) => {
-            const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
-            const bTime = b.started_at ? new Date(b.started_at).getTime() : 0;
-            return sortOrder === 'newest' ? bTime - aTime : aTime - bTime;
-        });
+  const handleToggleSelect = (batchId: string) => {
+    const job = jobs.find((j) => j.batch_id === batchId);
+    if (!job || !canDeleteBatchJob(job)) return;
+    const s = new Set(selectedIds);
+    s.has(batchId) ? s.delete(batchId) : s.add(batchId);
+    setSelectedIds(s);
+  };
 
-    const visibleJobs = filtered.slice(0, visibleCount);
-    const hasMore = visibleCount < filtered.length;
-    const deletableVisibleJobs = visibleJobs.filter(canDeleteBatchJob);
-    const allVisibleSelected = deletableVisibleJobs.length > 0 && deletableVisibleJobs.every(j => selectedIds.has(j.batch_id));
+  const toggleDeleteMode = () => {
+    if (deleteMode) {
+      setDeleteMode(false);
+      setSelectedIds(new Set());
+    } else {
+      setDeleteMode(true);
+    }
+  };
 
-    useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filter, sortOrder, timeRange, specificDate]);
+  const handleDeleteClick = () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    const hasRunning = ids.some((id) => {
+      const job = jobs.find((j) => j.batch_id === id);
+      return job?.status === 'running' || job?.status === 'queued' || job?.status === 'pending';
+    });
+    setDeleteConfirmation({ open: true, ids, hasRunning });
+  };
 
-    useEffect(() => {
-        if (!hasMore) return;
-        const node = loadMoreRef.current;
-        if (!node) return;
-        const observer = new IntersectionObserver(entries => { if (entries[0]?.isIntersecting) setVisibleCount(prev => Math.min(prev + PAGE_SIZE, filtered.length)); }, { rootMargin: '300px 0px' });
-        observer.observe(node);
-        return () => observer.disconnect();
-    }, [hasMore, filtered.length]);
+  const handleConfirmDelete = async () => {
+    try {
+      setIsDeleting(true);
+      for (const id of deleteConfirmation.ids) {
+        await removeBatchJob(id);
+      }
+      setSelectedIds(new Set());
+      setDeleteConfirmation({ open: false, ids: [], hasRunning: false });
+      setDeleteMode(false);
+      await fetchJobs();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete jobs');
+      setDeleteConfirmation({ open: false, ids: [], hasRunning: false });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
-    const handleToggleSelect = (batchId: string) => {
-        const job = jobs.find(j => j.batch_id === batchId);
-        if (!job || !canDeleteBatchJob(job)) return;
-        const s = new Set(selectedIds);
-        s.has(batchId) ? s.delete(batchId) : s.add(batchId);
-        setSelectedIds(s);
-    };
-    const toggleDeleteMode = () => { if (deleteMode) { setDeleteMode(false); setSelectedIds(new Set()); } else { setDeleteMode(true); } };
-    const handleDeleteClick = () => { if (selectedIds.size === 0) return; const ids = Array.from(selectedIds); const hasRunning = ids.some(id => { const job = jobs.find(j => j.batch_id === id); return job?.status === 'running' || job?.status === 'queued' || job?.status === 'pending'; }); setDeleteConfirmation({ open: true, ids, hasRunning }); };
-    const handleConfirmDelete = async () => { try { setIsDeleting(true); for (const id of deleteConfirmation.ids) { await removeBatchJob(id); } setSelectedIds(new Set()); setDeleteConfirmation({ open: false, ids: [], hasRunning: false }); setDeleteMode(false); await fetchJobs(); } catch (e) { setError(e instanceof Error ? e.message : 'Failed to delete jobs'); setDeleteConfirmation({ open: false, ids: [], hasRunning: false }); } finally { setIsDeleting(false); } };
-    const handleCancel = (batchId: string, storyTitle: string) => { setCancelConfirmation({ open: true, batchId, storyTitle }); };
-    const handleConfirmCancel = async () => { if (!cancelConfirmation.batchId) return; const batchId = cancelConfirmation.batchId; setCancelConfirmation({ open: false, batchId: null, storyTitle: '' }); try { setCancellingIds(prev => new Set(prev).add(batchId)); await cancelBatchJob(batchId); await fetchJobs(); } catch (e) { setError(e instanceof Error ? e.message : 'Failed to cancel job'); } finally { setCancellingIds(prev => { const n = new Set(prev); n.delete(batchId); return n; }); } };
-    const handleDownloadChapter = (batchId: string, chapterNum: number) => { const a = document.createElement('a'); a.href = getChapterAudioUrl(batchId, chapterNum); a.download = `chapter_${chapterNum}.wav`; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
-    const handleDownloadZip = (batchId: string) => { const a = document.createElement('a'); a.href = getBatchZipUrl(batchId); a.download = `bedread_${batchId}.zip`; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
+  const handleCancel = (batchId: string, storyTitle: string) => {
+    setCancelConfirmation({ open: true, batchId, storyTitle });
+  };
 
-    const runningJob = filtered.find(j => j.status === 'running');
-    const queuedJobs = filtered.filter(j => j.status === 'queued');
-    const totalQueueSize = queuedJobs.length;
+  const handleConfirmCancel = async () => {
+    if (!cancelConfirmation.batchId) return;
+    const batchId = cancelConfirmation.batchId;
+    setCancelConfirmation({ open: false, batchId: null, storyTitle: '' });
+    try {
+      setCancellingIds((prev) => new Set(prev).add(batchId));
+      await cancelBatchJob(batchId);
+      await fetchJobs();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to cancel job');
+    } finally {
+      setCancellingIds((prev) => {
+        const n = new Set(prev);
+        n.delete(batchId);
+        return n;
+      });
+    }
+  };
 
-    const filterBarBase = isDark ? 'lg-glass-nav p-1.5' : 'lg-glass-nav p-1.5';
-    const filterBtnActive = 'bg-indigo-600 text-white';
-    const filterBtnInactive = isDark ? 'text-white/40 hover:text-white/70' : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]';
+  const handleDownloadChapter = (batchId: string, chapterNum: number) => {
+    const a = document.createElement('a');
+    a.href = getChapterAudioUrl(batchId, chapterNum);
+    a.download = `chapter_${chapterNum}.wav`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
-    const filteredCounts = {
-        all: filtered.length,
-        running: filtered.filter(j => j.status === 'running').length,
-        queued: filtered.filter(j => j.status === 'queued').length,
-        completed: filtered.filter(j => j.status === 'completed').length,
-        failed: filtered.filter(j => j.status === 'failed' || j.status === 'cancelled').length,
-    };
+  const handleDownloadZip = (batchId: string) => {
+    const a = document.createElement('a');
+    a.href = getBatchZipUrl(batchId);
+    a.download = `bedread_${batchId}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
-    const c = (key: string) => {
-        const map: Record<string, [string, string]> = {
-            text: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
-            textMuted: ['text-white/40', 'text-[rgba(0,0,0,0.4)]'],
-            textSub: ['text-white/30', 'text-[rgba(0,0,0,0.3)]'],
-            textBody: ['text-white/70', 'text-[rgba(0,0,0,0.7)]'],
-            textBodyStrong: ['text-white/85', 'text-[rgba(0,0,0,0.8)]'],
-            divider: ['bg-white/6', 'bg-black/6'],
-        };
-        return isDark ? map[key][0] : map[key][1];
-    };
+  const runningJob = filtered.find((j) => j.status === 'running');
+  const queuedJobs = filtered.filter((j) => j.status === 'queued');
+  const totalQueueSize = queuedJobs.length;
 
-    const pageBg = isDark
-        ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
-        : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
+  const filteredCounts = {
+    all: filtered.length,
+    running: filtered.filter((j) => j.status === 'running').length,
+    queued: filtered.filter((j) => j.status === 'queued').length,
+    completed: filtered.filter((j) => j.status === 'completed').length,
+    failed: filtered.filter((j) => j.status === 'failed' || j.status === 'cancelled').length,
+  };
 
-    return (
-        <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
-            <div className="lg-orb lg-orb-1" />
-            <div className="lg-orb lg-orb-2" />
-            <div className="lg-orb lg-orb-3" />
-            {deleteConfirmation.open && (
-                <div className="lg-modal-overlay">
-                    <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">
-                        <h3 className={`text-lg font-semibold ${c('text')}`}>
-                            {deleteConfirmation.hasRunning ? 'Warning' : 'Confirm Delete'}
-                        </h3>
-                        {deleteConfirmation.hasRunning ? (
-                            <div className="space-y-3">
-                                <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                                    You are about to delete {deleteConfirmation.ids.length} job{deleteConfirmation.ids.length !== 1 ? 's' : ''}, including running job(s).
-                                </p>
-                                <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>This action cannot be undone.</p>
-                            </div>
-                        ) : (
-                            <p className={`text-sm ${c('textBody')}`}>
-                                Are you sure you want to delete {deleteConfirmation.ids.length} job{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
-                            </p>
-                        )}
-                        <div className="flex gap-2 justify-end pt-2">
-                            <button onClick={() => setDeleteConfirmation({ open: false, ids: [], hasRunning: false })} disabled={isDeleting} className="lg-btn-ghost">Cancel</button>
-                            <button onClick={handleConfirmDelete} disabled={isDeleting} className="lg-btn-danger" style={{ opacity: isDeleting ? 0.4 : 1 }}>
-                                {isDeleting ? 'Removing...' : 'Delete'}
-                            </button>
-                        </div>
-                    </div>
+  const pageBg = isDark
+    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
+    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const selectedSurface = isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.08)';
+  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
+
+  const statusOptions: Array<{ value: typeof filter; label: string }> = [
+    { value: 'all', label: `All (${filteredCounts.all})` },
+    { value: 'running', label: `Running (${filteredCounts.running})` },
+    { value: 'queued', label: `Queued (${filteredCounts.queued})` },
+    { value: 'completed', label: `Done (${filteredCounts.completed})` },
+    { value: 'failed', label: `Failed (${filteredCounts.failed})` },
+  ];
+
+  const timeRangeOptions: Array<{ value: typeof timeRange; label: string }> = [
+    { value: 'all', label: 'All' },
+    { value: 'today', label: 'Today' },
+    { value: 'week', label: '7d' },
+    { value: 'month', label: '30d' },
+  ];
+
+  const timeRangeLabels: Record<typeof timeRange, string> = {
+    all: 'All time',
+    today: 'Today',
+    week: 'Last 7 days',
+    month: 'Last 30 days',
+    specific: specificDate || 'Date',
+  };
+
+  return (
+    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBg }}>
+      {deleteConfirmation.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div
+            className="w-full max-w-md rounded-2xl border p-5"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <h3 className="text-lg font-semibold" style={{ color: pageText }}>
+              {deleteConfirmation.hasRunning
+                ? 'Warning — active jobs included'
+                : 'Confirm delete'}
+            </h3>
+            {deleteConfirmation.hasRunning ? (
+              <div className="mt-3 space-y-2 text-sm" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
+                <p>
+                  You are about to delete {deleteConfirmation.ids.length} job
+                  {deleteConfirmation.ids.length !== 1 ? 's' : ''}, including active
+                  job(s).
+                </p>
+                <p className="font-medium">This action cannot be undone.</p>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm leading-6" style={{ color: secondaryText }}>
+                Delete {deleteConfirmation.ids.length} job
+                {deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmation({ open: false, ids: [], hasRunning: false })}
+                disabled={isDeleting}
+                className="rounded-md border px-3 py-2 text-sm transition-colors"
+                style={{ borderColor: panelBorder, color: secondaryText, background: mutedSurface }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="rounded-md px-3 py-2 text-sm text-white transition-opacity"
+                style={{ background: '#dc2626', opacity: isDeleting ? 0.6 : 1 }}
+              >
+                {isDeleting ? 'Removing…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelConfirmation.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div
+            className="w-full max-w-md rounded-2xl border p-5"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <h3 className="text-lg font-semibold" style={{ color: pageText }}>
+              Cancel this TTS job?
+            </h3>
+            <p className="mt-3 text-sm leading-6" style={{ color: secondaryText }}>
+              Are you sure you want to cancel{' '}
+              <span className="font-semibold" style={{ color: pageText }}>
+                {cancelConfirmation.storyTitle}
+              </span>
+              ? This will stop the audio generation and cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setCancelConfirmation({ open: false, batchId: null, storyTitle: '' })}
+                disabled={_cancellingIds.size > 0}
+                className="rounded-md border px-3 py-2 text-sm transition-colors"
+                style={{ borderColor: panelBorder, color: secondaryText, background: mutedSurface }}
+              >
+                Keep Running
+              </button>
+              <button
+                onClick={handleConfirmCancel}
+                disabled={_cancellingIds.size > 0}
+                className="rounded-md px-3 py-2 text-sm text-white transition-opacity"
+                style={{ background: '#dc2626', opacity: _cancellingIds.size > 0 ? 0.6 : 1 }}
+              >
+                {_cancellingIds.size > 0 ? 'Cancelling…' : 'Cancel Job'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <header
+          className="rounded-2xl border px-5 py-5 sm:px-6"
+          style={{ background: panelBackground, borderColor: panelBorder }}
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
+                History
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+                BedRead audio jobs
+              </h1>
+              <p className="max-w-3xl text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+                Monitor ongoing and past TTS generation runs, download completed chapters, and clean up old jobs.
+              </p>
+            </div>
+
+            <div className="space-y-1 text-right text-xs lg:text-sm" style={{ color: tertiaryText }}>
+              {runningJob && (
+                <div>
+                  <span style={{ color: isDark ? '#60a5fa' : '#1d4ed8' }}>
+                    Processing: {runningJob.story_title} ({runningJob.progress_pct}%)
+                  </span>
                 </div>
+              )}
+              {totalQueueSize > 0 && (
+                <div>
+                  <span style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
+                    {totalQueueSize} in queue
+                    {queuedJobs[0] ? ` — Next: ${queuedJobs[0].story_title}` : ''}
+                    {totalQueueSize > 1 ? ` (+${totalQueueSize - 1} more)` : ''}
+                  </span>
+                </div>
+              )}
+              <div>
+                {filtered.length} of {jobs.length} jobs
+                {filter !== 'all' && ` · ${filter}`}
+                {timeRange !== 'all' && ` · ${timeRangeLabels[timeRange]}`}
+              </div>
+              <div>Refreshed {lastRefresh.toLocaleTimeString()}</div>
+            </div>
+          </div>
+        </header>
+
+        <main className="mt-5 flex-1 space-y-5">
+          <section
+            className="rounded-2xl border px-5 py-4 sm:px-6"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+              <div>
+                <DatePicker
+                  value={specificDate}
+                  onDateChange={(date) => {
+                    setSpecificDate(date);
+                    setTimeRange(date ? 'specific' : 'all');
+                  }}
+                  isDark={isDark}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setIsLoading(true);
+                    fetchJobs().finally(() => setIsLoading(false));
+                  }}
+                  className="rounded-md border px-3 py-2 text-sm transition-colors"
+                  style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                >
+                  {isLoading ? 'Refreshing…' : 'Refresh'}
+                </button>
+                <button
+                  onClick={() => navigate('/bedread')}
+                  className="rounded-md border px-3 py-2 text-sm transition-colors"
+                  style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                >
+                  New job
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {statusOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setFilter(option.value)}
+                  className="rounded-md px-3 py-1.5 text-sm transition-colors"
+                  style={{
+                    background: filter === option.value ? activeSurface : mutedSurface,
+                    color: filter === option.value ? pageText : secondaryText,
+                    border: `1px solid ${filter === option.value ? panelBorder : 'transparent'}`,
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {timeRangeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => { setTimeRange(option.value); setSpecificDate(''); }}
+                  className="rounded-md px-3 py-1.5 text-sm transition-colors"
+                  style={{
+                    background: timeRange === option.value ? activeSurface : mutedSurface,
+                    color: timeRange === option.value ? pageText : secondaryText,
+                    border: `1px solid ${timeRange === option.value ? panelBorder : 'transparent'}`,
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+
+              {([
+                ['newest', 'Newest first'],
+                ['oldest', 'Oldest first'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setSortOrder(value)}
+                  className="rounded-md px-3 py-1.5 text-sm transition-colors"
+                  style={{
+                    background: sortOrder === value ? activeSurface : mutedSurface,
+                    color: sortOrder === value ? pageText : secondaryText,
+                    border: `1px solid ${sortOrder === value ? panelBorder : 'transparent'}`,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {deleteMode && (
+              <div
+                className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+                style={{ borderColor: panelBorder }}
+              >
+                <div className="text-sm" style={{ color: secondaryText }}>
+                  {selectedIds.size} selected
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() =>
+                      allVisibleSelected
+                        ? setSelectedIds(new Set())
+                        : setSelectedIds(new Set(deletableVisibleJobs.map((j) => j.batch_id)))
+                    }
+                    className="rounded-md border px-3 py-2 text-sm"
+                    style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                  >
+                    {allVisibleSelected ? 'Unselect visible' : 'Select visible'}
+                  </button>
+                  <button
+                    onClick={handleDeleteClick}
+                    disabled={selectedIds.size === 0 || isDeleting}
+                    className="rounded-md px-3 py-2 text-sm text-white transition-opacity"
+                    style={{ background: '#dc2626', opacity: selectedIds.size === 0 || isDeleting ? 0.5 : 1 }}
+                  >
+                    {isDeleting ? 'Removing…' : `Delete (${selectedIds.size})`}
+                  </button>
+                  <button
+                    onClick={toggleDeleteMode}
+                    className="rounded-md border px-3 py-2 text-sm"
+                    style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                  >
+                    Exit delete
+                  </button>
+                </div>
+              </div>
             )}
 
-            <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-                <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-5">
+            {!deleteMode && (
+              <div className="mt-4 flex justify-end border-t pt-4" style={{ borderColor: panelBorder }}>
+                <button
+                  onClick={toggleDeleteMode}
+                  className="rounded-md border px-3 py-2 text-sm transition-colors"
+                  style={{
+                    borderColor: deleteMode ? '#dc2626' : panelBorder,
+                    color: deleteMode ? '#dc2626' : secondaryText,
+                    background: deleteMode ? selectedSurface : mutedSurface,
+                  }}
+                >
+                  Delete mode
+                </button>
+              </div>
+            )}
+          </section>
 
-                    <div className="lg-glass-deep px-6 py-5">
-                        <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${c('text')}`}>Audio Jobs</h1>
-                        <p className={`text-sm mt-1 ${c('textMuted')}`}>
-                            {filtered.length} of {jobs.length} jobs
-                            {filter !== 'all' && ` · ${filter}`}
-                            {timeRange !== 'all' && ` · ${timeRange === 'today' ? 'today' : timeRange === 'week' ? '7 days' : timeRange === 'month' ? '30 days' : specificDate ? specificDate : ''}`}
-                            {` · refreshed ${lastRefresh.toLocaleTimeString()}`}
-                        </p>
-                    </div>
+          {isLoading && jobs.length === 0 && (
+            <section
+              className="rounded-2xl border px-5 py-12 text-sm sm:px-6"
+              style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
+            >
+              Loading audio jobs…
+            </section>
+          )}
 
-                    {(runningJob || totalQueueSize > 0) && (
-                        <div className={`lg-glass p-4`}>
-                            <div className="flex items-center justify-between flex-wrap gap-3">
-                                <div className="flex items-center gap-3">
-                                    {runningJob && (
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
-                                            <span className={`text-sm ${c('textBody')}`}>
-                                                <span className={`font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Processing:</span>{' '}
-                                                <span className={c('textBodyStrong')}>{runningJob.story_title}</span>
-                                                <span className={c('textMuted') + ' ml-2'}>({runningJob.progress_pct}%)</span>
-                                            </span>
-                                        </div>
-                                    )}
-                                    {runningJob && totalQueueSize > 0 && <div className={`w-px h-6 ${c('divider')}`} />}
-                                    {totalQueueSize > 0 && (
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-                                            <span className={`text-sm ${c('textBody')}`}>
-                                                <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{totalQueueSize} in queue</span>
-                                                {queuedJobs[0] && <span className={c('textMuted') + ' ml-2'}> - Next: {queuedJobs[0].story_title}</span>}
-                                                {totalQueueSize > 1 && <span className={c('textMuted')}> (+{totalQueueSize - 1} more)</span>}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+          {error && (
+            <section
+              className="rounded-2xl border px-5 py-4 text-sm sm:px-6"
+              style={{ background: panelBackground, borderColor: '#dc2626', color: isDark ? '#f87171' : '#dc2626' }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>{error}</span>
+                <button onClick={fetchJobs} className="underline">Retry</button>
+              </div>
+            </section>
+          )}
 
-                    <div className="flex flex-wrap items-center justify-start gap-2">
-                        <button onClick={() => navigate('/bedread')} className="lg-btn-primary shadow-lg shadow-indigo-600/30">
-                            <Icon icon={appIcons.add} className="w-3.5 h-3.5" />
-                            New Job
-                        </button>
-                        <button onClick={toggleDeleteMode}
-                            className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${deleteMode
-                                ? isDark ? 'text-red-300 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20' : 'text-red-600 border border-red-300 bg-red-50 hover:bg-red-100'
-                                : isDark ? 'text-white/50 border border-white/5 hover:text-white/70 hover:bg-white/[0.04]' : 'text-[rgba(0,0,0,0.4)] border border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'
-                                }`}>
-                            {deleteMode ? 'Cancel Delete' : 'Delete Mode'}
-                        </button>
-                        {deleteMode && (
-                            <button onClick={() => allVisibleSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(deletableVisibleJobs.map(j => j.batch_id)))}
-                                className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 ${isDark ? 'text-white/50 border border-white/5 hover:text-white/70 hover:bg-white/[0.04]' : 'text-[rgba(0,0,0,0.4)] border border-black/5 hover:text-[rgba(0,0,0,0.7)] hover:bg-[rgba(0,0,0,0.04)]'}`}>
-                                {allVisibleSelected ? 'Unselect All' : 'Select All'}
-                            </button>
-                        )}
-                        {deleteMode && selectedIds.size > 0 && (
-                            <button onClick={handleDeleteClick} disabled={isDeleting}
-                                className={`px-3 py-1.5 text-sm rounded-xl transition-colors flex items-center gap-1.5 shadow-lg ${isDeleting
-                                    ? isDark ? 'text-red-400 bg-red-500/20 cursor-not-allowed shadow-none' : 'text-red-400 bg-red-100 cursor-not-allowed shadow-none'
-                                    : 'text-white bg-red-600 hover:bg-red-500 shadow-red-600/30'} `}>
-                                {isDeleting ? 'Removing...' : `Delete (${selectedIds.size})`}
-                            </button>
-                        )}
-                    </div>
+          {!isLoading && filtered.length === 0 && (
+            <section
+              className="rounded-2xl border px-5 py-12 text-sm sm:px-6"
+              style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
+            >
+              {filter === 'all' ? (
+                <>
+                  No BedRead jobs yet.{' '}
+                  <button onClick={() => navigate('/bedread')} className="underline">
+                    Start your first TTS job
+                  </button>
+                </>
+              ) : (
+                `No ${filter} jobs.`
+              )}
+            </section>
+          )}
 
-                    {deleteMode && (
-                        <div className={`rounded-2xl p-3 flex items-center justify-between gap-3 ${isDark
-                            ? 'bg-red-500/10 border border-red-500/20'
-                            : 'bg-red-50 border border-red-200'}`}>
-                            <div className="flex items-center gap-2">
-                                <Icon icon={appIcons.delete} className={`w-5 h-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
-                                <span className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Delete Mode Active</span>
-                                {selectedIds.size > 0 && <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-500'}`}>({selectedIds.size} selected)</span>}
-                            </div>
-                            <button onClick={toggleDeleteMode} className={`text-xs underline ${isDark ? 'text-red-300 hover:text-white' : 'text-red-500 hover:text-red-700'}`}>Exit Delete Mode</button>
-                        </div>
-                    )}
+          {filtered.length > 0 && (
+            <section
+              className="overflow-hidden rounded-2xl border"
+              style={{ background: panelBackground, borderColor: panelBorder }}
+            >
+              <div
+                className="flex items-center justify-between border-b px-5 py-3 text-xs uppercase tracking-[0.14em] sm:px-6"
+                style={{ borderColor: panelBorder, color: tertiaryText }}
+              >
+                <span>Jobs</span>
+                <span>{visibleJobs.length} shown</span>
+              </div>
 
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
-                        <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
-                            {([
-                                ['all', `All (${filteredCounts.all})`],
-                                ['running', `Running (${filteredCounts.running})`],
-                                ['queued', `Queued (${filteredCounts.queued})`],
-                                ['completed', `Done (${filteredCounts.completed})`],
-                                ['failed', `Failed (${filteredCounts.failed})`],
-                            ] as const).map(([value, label]) => (
-                                <button key={value} onClick={() => setFilter(value)}
-                                    className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${filter === value ? filterBtnActive : filterBtnInactive}`}>
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
+              <div>
+                {visibleJobs.map((job, index) => (
+                  <JobCard
+                    key={job.batch_id}
+                    job={job}
+                    order={index + 1}
+                    isSelected={selectedIds.has(job.batch_id)}
+                    deleteMode={deleteMode}
+                    isDark={isDark}
+                    canSelectForDelete={canDeleteBatchJob(job)}
+                    panelBorder={panelBorder}
+                    pageText={pageText}
+                    secondaryText={secondaryText}
+                    tertiaryText={tertiaryText}
+                    mutedSurface={mutedSurface}
+                    selectedSurface={selectedSurface}
+                    onToggleSelect={handleToggleSelect}
+                    onCancel={handleCancel}
+                    onDownloadChapter={handleDownloadChapter}
+                    onDownloadZip={handleDownloadZip}
+                  />
+                ))}
+              </div>
 
-                        <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
-                            <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Sort:</span>
-                            <button onClick={() => setSortOrder('newest')} className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${sortOrder === 'newest' ? filterBtnActive : filterBtnInactive}`}>Newest</button>
-                            <button onClick={() => setSortOrder('oldest')} className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${sortOrder === 'oldest' ? filterBtnActive : filterBtnInactive}`}>Oldest</button>
-                        </div>
-
-                        <div className={`flex items-center gap-1 rounded-xl ${filterBarBase}`}>
-                            <span className={`px-2 text-xs hidden sm:inline ${c('textSub')}`}>Time:</span>
-                            {(['all', 'today', 'week', 'month'] as const).map(val => (
-                                <button key={val} onClick={() => { setTimeRange(val); setSpecificDate(''); }}
-                                    className={`px-3 py-1 text-xs sm:text-sm rounded-lg transition-colors ${timeRange === val ? filterBtnActive : filterBtnInactive}`}>
-                                    {val === 'all' ? 'All' : val === 'today' ? 'Today' : val === 'week' ? '7d' : '30d'}
-                                </button>
-                            ))}
-                        </div>
-
-                        <DatePicker value={specificDate} onDateChange={(date) => { setSpecificDate(date); setTimeRange(date ? 'specific' : 'all'); }} isDark={isDark} />
-
-                        <button onClick={() => { setIsLoading(true); fetchJobs().finally(() => setIsLoading(false)); }}
-                            className="lg-icon-btn" title="Refresh now">
-                            <Icon icon={appIcons.refresh} className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                        </button>
-                    </div>
-
-                    {isLoading && jobs.length === 0 && (
-                        <div className={`flex items-center justify-center py-16 gap-3 ${c('textMuted')}`}>
-                            <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
-                            <span>Loading...</span>
-                        </div>
-                    )}
-
-                    {error && (
-                        <div className={`flex items-center justify-between gap-3 p-4 rounded-2xl text-sm ${isDark
-                            ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                            : 'bg-red-50 border border-red-200 text-red-600'}`}>
-                            <span>{error}</span>
-                            <button onClick={fetchJobs} className="underline hover:no-underline">Retry</button>
-                        </div>
-                    )}
-
-                    {!isLoading && filtered.length === 0 && (
-                        <div className={`text-center py-20 space-y-3 ${c('textMuted')}`}>
-                            <div className="flex justify-center">
-                                <Icon icon={appIcons.music} className={`w-12 h-12 ${isDark ? 'text-white/10' : 'text-[rgba(0,0,0,0.1)]'}`} />
-                            </div>
-                            <p className={c('textMuted')}>{filter === 'all' ? 'No BedRead jobs yet.' : `No ${filter} jobs.`}</p>
-                            <button onClick={() => navigate('/bedread')} className={`text-sm underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}>
-                                Start your first TTS job
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="space-y-3">
-                        {visibleJobs.map((job, index) => (
-                            <JobCard
-                                key={job.batch_id}
-                                job={job}
-                                order={index + 1}
-                                isSelected={selectedIds.has(job.batch_id)}
-                                deleteMode={deleteMode}
-                                isDark={isDark}
-                                canSelectForDelete={canDeleteBatchJob(job)}
-                                onToggleSelect={handleToggleSelect}
-                                onCancel={handleCancel}
-                                onDownloadChapter={handleDownloadChapter}
-                                onDownloadZip={handleDownloadZip}
-                                nowMs={nowMs}
-                                c={c}
-                            />
-                        ))}
-                        {hasMore && <div ref={loadMoreRef} className={`py-6 text-center text-xs ${c('textSub')}`}>Loading more jobs...</div>}
-                    </div>
-
-                    {!isLoading && filtered.length > 0 && (
-                        <div className="flex justify-center pt-2">
-                            <button onClick={fetchJobs}
-                                className={`px-4 py-2 text-sm border rounded-xl transition-colors ${isDark
-                                    ? 'text-white/40 hover:text-white/70 border-white/5 hover:bg-white/[0.04]'
-                                    : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)] border-black/5 hover:bg-[rgba(0,0,0,0.04)]'
-                                    }`}>
-                                Refresh
-                            </button>
-                        </div>
-                    )}
-                    {cancelConfirmation.open && (
-                        <div className="lg-modal-overlay">
-                            <div className="lg-glass-deep p-6 max-w-md w-full space-y-4">
-                                <h3 className={`text-lg font-semibold ${c('text')}`}>Cancel this TTS job?</h3>
-                                <p className={`text-sm ${c('textBody')}`}>
-                                    Are you sure you want to cancel: <span className={`font-medium ${c('textBodyStrong')}`}>{cancelConfirmation.storyTitle}</span>
-                                </p>
-                                <p className={`text-sm ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>This will stop the audio generation and cannot be undone.</p>
-                                <div className="flex gap-2 justify-end pt-2">
-                                    <button onClick={() => setCancelConfirmation({ open: false, batchId: null, storyTitle: '' })}
-                                        disabled={_cancellingIds.size > 0} className="lg-btn-ghost">Keep Running</button>
-                                    <button onClick={handleConfirmCancel} disabled={_cancellingIds.size > 0}
-                                        className="lg-btn-danger" style={{ opacity: _cancellingIds.size > 0 ? 0.4 : 1 }}>
-                                        {_cancellingIds.size > 0 ? 'Cancelling...' : 'Cancel Job'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </main>
-            </div>
-        </div>
-    );
+              {hasMore && (
+                <div
+                  ref={loadMoreRef}
+                  className="border-t px-5 py-4 text-center text-sm sm:px-6"
+                  style={{ borderColor: panelBorder, color: secondaryText }}
+                >
+                  Loading more jobs…
+                </div>
+              )}
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
+  );
 }

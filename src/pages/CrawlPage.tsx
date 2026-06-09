@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cancelCrawl } from '../api/client';
-import { useCrawlStream } from '../hooks/useCrawlStream';
+import { CrawlLog } from '../components/CrawlLog';
+import { Icon, appIcons } from '../components/Icon';
 import { ProgressBar } from '../components/ProgressBar';
 import { StatsPanel } from '../components/StatsPanel';
-import { CrawlLog } from '../components/CrawlLog';
+import { useCrawlStream } from '../hooks/useCrawlStream';
 import type { ThemeMode } from '../types/theme';
 
 interface CrawlPageProps {
@@ -35,7 +36,7 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
         setTimeout(() => navigate(`/results?session=${sessionId}`), 1500);
       }
     });
-  }, [onFirstComplete]);
+  }, [onFirstComplete, navigate]);
 
   const handleCancel = async () => {
     if (!crawlId) return;
@@ -54,85 +55,142 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
   const chaptersTotal = progress?.chapters_total ?? 0;
   const currentTitle = progress?.current_title ?? '';
   const startedAt = null;
-  const finishedAt = (status === 'completed' || status === 'failed' || status === 'cancelled')
+  const finishedAt = status === 'completed' || status === 'failed' || status === 'cancelled'
     ? new Date().toLocaleTimeString()
     : null;
+  const isFinished = status === 'completed' || status === 'failed' || status === 'cancelled';
 
-  const pageBg = isDark
-    ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)'
-    : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)';
+  const pageBackground = isDark
+    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
+    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
-  const c = (key: string) => {
-    const map: Record<string, [string, string]> = {
-      text:      ['text-white/90',      'text-[rgba(0,0,0,0.85)]'],
-      textMuted: ['text-white/40',       'text-[rgba(0,0,0,0.4)]'],
-      textSub:   ['text-white/25',       'text-[rgba(0,0,0,0.25)]'],
-      textBody:  ['text-white/70',       'text-[rgba(0,0,0,0.65)]'],
-      textBodyStrong: ['text-white/90', 'text-[rgba(0,0,0,0.85)]'],
-      glassBg:   ['bg-white/[0.03]',     'bg-white/70'],
-      glassBorder: ['border-white/[0.06]','border-black/[0.06]'],
-      glassHover:['hover:bg-white/[0.05]','hover:bg-white/80'],
-      rowBg:     ['bg-white/[0.04]',     'bg-[rgba(0,0,0,0.04)]'],
-      rowBorder:  ['border-white/[0.05]', 'border-black/[0.05]'],
-      divider:   ['border-white/[0.06]', 'border-black/[0.06]'],
-      glassNav:  ['bg-[#0f0f1e]/90',    'bg-white/80'],
+  const statusStyle = () => {
+    if (status === 'completed') {
+      return {
+        background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)',
+        borderColor: isDark ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.16)',
+        color: isDark ? '#6ee7b7' : '#047857',
+      };
+    }
+    if (status === 'failed') {
+      return {
+        background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
+        borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
+        color: isDark ? '#f87171' : '#dc2626',
+      };
+    }
+    if (status === 'cancelled') {
+      return {
+        background: isDark ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.06)',
+        borderColor: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.16)',
+        color: isDark ? '#fcd34d' : '#b45309',
+      };
+    }
+    return {
+      background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.06)',
+      borderColor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.16)',
+      color: isDark ? '#a5b4fc' : '#4338ca',
     };
-    return map[key]?.[isDark ? 0 : 1] ?? '';
   };
 
   return (
-    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: pageBg }}>
-      <div className="lg-orb lg-orb-1" />
-      <div className="lg-orb lg-orb-2" />
-      <div className="lg-orb lg-orb-3" />
-      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-        <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-          {/* Page Header */}
-          <div className="lg-glass-deep px-6 py-5 flex items-start justify-between gap-4">
-            <div>
-              <h1 className={`text-2xl sm:text-3xl font-bold ${c('text')}`}>Crawl Progress</h1>
-              <p className={`mt-1 text-sm sm:text-base ${c('textMuted')}`}>Your novel is being crawled</p>
+    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="space-y-5">
+          <section
+            className="rounded-2xl border px-5 py-5 sm:px-6"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <div className="space-y-2">
+              <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
+                Session
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+                Crawl progress
+              </h1>
+              <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+                Your novel is being crawled. Follow the live log, progress updates, and session status below.
+              </p>
             </div>
-          </div>
+          </section>
 
-          {/* Error banner */}
           {error && (
-            <div className={`lg-glass-card px-4 py-3 text-sm ${isDark ? 'text-red-400' : 'text-red-500'}`}>
+            <section className="rounded-xl border px-4 py-3 text-sm" style={{
+              background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
+              borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
+              color: isDark ? '#f87171' : '#dc2626',
+            }}>
               {error}
-            </div>
+            </section>
           )}
 
-          {/* Status redirect notice */}
-          {(status === 'completed' || status === 'failed' || status === 'cancelled') && (
-            <div className={`lg-glass-card px-4 py-3 text-sm ${status === 'completed'
-              ? isDark ? 'text-emerald-400' : 'text-emerald-600'
-              : status === 'failed'
-                ? isDark ? 'text-red-400' : 'text-red-600'
-                : isDark ? 'text-amber-400' : 'text-amber-600'
-            }`}>
-              Redirecting to results page...
-            </div>
-          )}
-
-          {/* Source URL */}
-          {sourceUrl && (
-            <div className={`lg-glass px-4 py-3 text-sm ${c('textSub')}`}>
-              <span className="text-xs">
-                <span className="font-medium">Source:</span>{' '}
-                <a
-                  href={sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`underline hover:no-underline ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-700'}`}
-                >
-                  {sourceUrl}
-                </a>
+          <section className="rounded-xl border px-4 py-3 text-sm" style={statusStyle()}>
+            <div className="flex items-center gap-2">
+              {status === 'running' ? (
+                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+              ) : status === 'completed' ? (
+                <Icon icon={appIcons.checkCircle} className="h-4 w-4" />
+              ) : status === 'failed' ? (
+                <Icon icon={appIcons.info} className="h-4 w-4" />
+              ) : (
+                <Icon icon={appIcons.statusWarning} className="h-4 w-4" />
+              )}
+              <span>
+                {isFinished ? 'Redirecting to results page...' : 'Streaming crawl updates in real time.'}
               </span>
             </div>
+          </section>
+
+          {sourceUrl && (
+            <section
+              className="rounded-2xl border px-5 py-4 sm:px-6"
+              style={{ background: panelBackground, borderColor: panelBorder }}
+            >
+              <div className="text-xs uppercase tracking-[0.14em]" style={{ color: tertiaryText }}>
+                Source
+              </div>
+              <a
+                href={sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 block break-all text-sm underline hover:no-underline"
+                style={{ color: isDark ? '#818cf8' : '#4f46e5' }}
+              >
+                {sourceUrl}
+              </a>
+            </section>
           )}
 
-          {/* Progress */}
-          <section className="lg-glass p-5 sm:p-6 space-y-4">
+          <section
+            className="rounded-2xl border px-5 py-5 sm:px-6"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: pageText }}>
+                  Progress
+                </h2>
+                <p className="text-sm" style={{ color: secondaryText }}>
+                  {currentTitle || 'Waiting for crawl output...'}
+                </p>
+              </div>
+              <div className="rounded-xl border px-3 py-2 text-right" style={{ borderColor: panelBorder, background: mutedSurface }}>
+                <p className="text-sm font-semibold" style={{ color: pageText }}>
+                  {chaptersCrawled}
+                  {chaptersTotal > 0 ? ` / ${chaptersTotal}` : ''}
+                </p>
+                <p className="text-[10px]" style={{ color: tertiaryText }}>
+                  chapters
+                </p>
+              </div>
+            </div>
+
             <ProgressBar
               chaptersCrawled={chaptersCrawled}
               chaptersTotal={chaptersTotal}
@@ -142,7 +200,6 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
             />
           </section>
 
-          {/* Stats */}
           <StatsPanel
             chaptersCrawled={chaptersCrawled}
             chaptersTotal={chaptersTotal}
@@ -152,27 +209,30 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
             isDark={isDark}
           />
 
-          {/* Log */}
-          <section className="lg-glass p-5 sm:p-6">
+          <section
+            className="rounded-2xl border px-5 py-5 sm:px-6"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: pageText }}>
+                Crawl log
+              </h2>
+              <p className="text-sm" style={{ color: secondaryText }}>
+                Live output from the current crawl session.
+              </p>
+            </div>
             <CrawlLog lines={logLines} maxLines={200} isDark={isDark} />
           </section>
 
-          {/* Actions */}
           <div className="flex items-center gap-4">
             {status === 'running' && (
               <button
                 onClick={handleCancel}
                 disabled={cancelling}
-                className={`px-6 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 shadow-lg ${cancelling
-                  ? isDark
-                    ? 'bg-white/[0.04] text-white/30 cursor-not-allowed shadow-none border border-white/[0.05]'
-                    : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed shadow-none border border-black/5'
-                  : isDark
-                    ? 'text-white bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/30'
-                    : 'text-white bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/30'
-                }`}
+                className="rounded-md px-4 py-2.5 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed"
+                style={{ background: '#dc2626', opacity: cancelling ? 0.65 : 1 }}
               >
-                {cancelling ? 'Cancelling...' : 'Cancel Crawl'}
+                {cancelling ? 'Cancelling...' : 'Cancel crawl'}
               </button>
             )}
           </div>

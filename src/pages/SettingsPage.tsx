@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   clearBackendData,
   updateInkittCookies,
@@ -12,22 +12,63 @@ import {
   type DriveSyncConfig,
   FIXED_JSON_PREFIX,
 } from '../api/client';
-import { ConfigModal, type ConfigFormData } from '../components/ConfigModal';
+import { DriveConfig, type ConfigFormData } from '../components/DriveConfig';
 import { Icon, appIcons } from '../components/Icon';
 import type { ThemeMode } from '../types/theme';
 import { showToast } from '../components/Toast';
 
+type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'crawler' | 'audio' | 'danger';
+
 interface SettingsPageProps {
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
+  onClose: () => void;
+  onLogout: () => void | Promise<void>;
 }
 
-export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
+interface CategoryItem {
+  id: SettingsCategory;
+  label: string;
+  description: string;
+  icon: keyof typeof appIcons;
+}
+
+const CATEGORY_ITEMS: CategoryItem[] = [
+  { id: 'profile', label: 'Profile', description: 'Account information', icon: 'user' },
+  { id: 'appearance', label: 'Appearance', description: 'Theme and display', icon: 'moon' },
+  { id: 'driveSync', label: 'Drive Sync', description: 'Google Drive and API', icon: 'sync' },
+  { id: 'inkitt', label: 'Inkitt Cookies', description: 'Crawler login cookies', icon: 'shield' },
+  { id: 'crawler', label: 'Crawler', description: 'Default crawl behavior', icon: 'settings' },
+  { id: 'audio', label: 'Audio Pipeline', description: 'Auto Audio and TTS', icon: 'music' },
+  { id: 'danger', label: 'Advanced', description: 'Cleanup actions', icon: 'delete' },
+];
+
+function SectionTitle({
+  title,
+  description,
+  pageText,
+  secondaryText,
+}: {
+  title: string;
+  description: string;
+  pageText: string;
+  secondaryText: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <h2 className="text-sm font-semibold" style={{ color: pageText }}>{title}</h2>
+      <p className="text-xs leading-5" style={{ color: secondaryText }}>{description}</p>
+    </div>
+  );
+}
+
+export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: SettingsPageProps) {
   const isDark = themeMode === 'dark';
   const [, setSettings] = useState<SettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState('');
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance');
 
   const [localTheme, setLocalTheme] = useState<'light' | 'dark'>('light');
   const [crawlMode, setCrawlMode] = useState<'count' | 'range'>('count');
@@ -47,10 +88,24 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const authUser = getStoredAuthUser();
   const isAdmin = authUser?.role === 'admin';
 
-  // Drive Sync Config Modal
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.48)' : 'rgba(55,53,47,0.64)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.32)' : 'rgba(55,53,47,0.46)';
+  const shellBackground = isDark ? '#191919' : '#fbfbfa';
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const subtleSurface = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.05)';
+  const subtleSurfaceHover = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(55,53,47,0.08)';
+  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
+  const inputBackground = isDark ? '#232323' : '#ffffff';
+  const inputBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.16)';
+  const primaryButton = '#2f80ed';
+
+  const sectionClassName = 'rounded-lg border p-4 space-y-4';
+  const labelClassName = `block text-xs mb-1.5 ${isDark ? 'text-white/55' : 'text-[rgba(55,53,47,0.68)]'}`;
+  const fieldClassName = `w-full rounded-md border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent ${isDark ? 'text-white/90 placeholder:text-white/25' : 'text-[rgba(55,53,47,0.92)] placeholder:text-[rgba(55,53,47,0.35)]'}`;
+
   const [config, setConfig] = useState<DriveSyncConfig | null>(null);
-  const [configLoading, setConfigLoading] = useState(true);
-  const [showConfigModal, setShowConfigModal] = useState(false);
   const [isInitialSetup, setIsInitialSetup] = useState(false);
   const [configForm, setConfigForm] = useState<ConfigFormData>({
     folder_id: '',
@@ -63,7 +118,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   const [savingConfigError, setSavingConfigError] = useState('');
   const [credentialFileExists, setCredentialFileExists] = useState(true);
   const [uploadError, setUploadError] = useState('');
-  const [jsonText, setJsonText] = useState('');
   const [inkittUserCredentials, setInkittUserCredentials] = useState('');
   const [inkittCfClearance, setInkittCfClearance] = useState('');
   const [savingInkittCookies, setSavingInkittCookies] = useState(false);
@@ -74,7 +128,7 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
   useEffect(() => {
     setLocalTheme(themeMode === 'dark' ? 'dark' : 'light');
     getSettings()
-      .then(s => {
+      .then((s) => {
         setSettings(s);
         setLocalTheme(s.theme === 'dark' ? 'dark' : 'light');
         setCrawlMode(s.crawl_mode as 'count' | 'range');
@@ -93,7 +147,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
       .finally(() => setLoading(false));
   }, [themeMode]);
 
-  // Load Drive Sync config
   useEffect(() => {
     async function loadConfig() {
       try {
@@ -112,19 +165,35 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           setCredentialFileExists(exists);
         } else {
           setIsInitialSetup(true);
-          setShowConfigModal(true);
         }
       } catch {
         // ignore
-      } finally {
-        setConfigLoading(false);
       }
     }
     loadConfig();
   }, []);
 
+  const handleClose = onClose;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleClose();
+      }
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [handleClose]);
+
+  const categories = useMemo(() => CATEGORY_ITEMS, []);
+
   const handleConfigFormChange = (data: Partial<ConfigFormData>) => {
-    setConfigForm(prev => ({ ...prev, ...data }));
+    setConfigForm((prev) => ({ ...prev, ...data }));
   };
 
   const handleSaveConfig = async () => {
@@ -144,7 +213,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
         main_be_user_id: configForm.main_be_user_id,
       });
       setConfig(cfg);
-      setShowConfigModal(false);
       showToast('Drive Sync configuration saved successfully.', 'success', 2000, 'top-center');
     } catch (e) {
       setSavingConfigError(e instanceof Error ? e.message : 'Failed to save config.');
@@ -162,8 +230,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
     reader.onload = (event) => {
       try {
         let json = JSON.parse(event.target?.result as string);
-        
-        // Handle array - try to get first element
         if (Array.isArray(json)) {
           if (json.length === 0) {
             setUploadError('JSON array is empty');
@@ -171,8 +237,6 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           }
           json = json[0];
         }
-        
-        // Handle nested data structure
         if (json && typeof json === 'object' && !json.folder_id && !json.main_be_api_base_url) {
           if (json.data) json = json.data;
           else if (json.config) json = json.config;
@@ -180,26 +244,21 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           else if (json.attributes) json = json.attributes;
           else if (json.result) json = json.result;
         }
-        
-        // Handle case where nested value is an array
         if (Array.isArray(json)) {
           json = json[0] || {};
         }
-        
-        // Validate required fields exist
         if (!json || typeof json !== 'object') {
           setUploadError('Invalid JSON structure');
           return;
         }
-        
+
         const folderId = json.folder_id || json.folderId || json.folder || '';
         const apiUrl = json.main_be_api_base_url || json.apiBaseUrl || json.apiUrl || json.baseUrl || '';
-        
         if (!folderId && !apiUrl) {
           setUploadError('Missing required fields. Received keys: ' + Object.keys(json).join(', '));
           return;
         }
-        
+
         setConfigForm({
           folder_id: folderId,
           service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
@@ -208,75 +267,12 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
           main_be_user_id: json.main_be_user_id || json.userId || json.user_id || '',
         });
         setUploadError('');
-        setShowConfigModal(true);
       } catch (err) {
         setUploadError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
       }
     };
     reader.readAsText(file);
     e.target.value = '';
-  };
-
-  const handleJsonPaste = () => {
-    if (!jsonText.trim()) {
-      setUploadError('Please paste JSON first');
-      return;
-    }
-    setUploadError('');
-
-    try {
-      let json = JSON.parse(jsonText);
-      
-      // Handle array - try to get first element or use as-is
-      if (Array.isArray(json)) {
-        if (json.length === 0) {
-          setUploadError('JSON array is empty');
-          return;
-        }
-        json = json[0];
-      }
-      
-      // Handle nested data structure
-      if (json && typeof json === 'object' && !json.folder_id && !json.main_be_api_base_url) {
-        if (json.data) json = json.data;
-        else if (json.config) json = json.config;
-        else if (json.settings) json = json.settings;
-        else if (json.attributes) json = json.attributes;
-        else if (json.result) json = json.result;
-      }
-      
-      // Handle case where nested value is an array
-      if (Array.isArray(json)) {
-        json = json[0] || {};
-      }
-      
-      // Validate required fields exist
-      if (!json || typeof json !== 'object') {
-        setUploadError('Invalid JSON structure');
-        return;
-      }
-      
-      const folderId = json.folder_id || json.folderId || json.folder || '';
-      const apiUrl = json.main_be_api_base_url || json.apiBaseUrl || json.apiUrl || json.baseUrl || '';
-      
-      if (!folderId && !apiUrl) {
-        setUploadError('Missing required fields: folder_id or main_be_api_base_url. Received keys: ' + Object.keys(json).join(', '));
-        return;
-      }
-      
-      setConfigForm({
-        folder_id: folderId,
-        service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
-        main_be_api_base_url: apiUrl,
-        main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.token || '',
-        main_be_user_id: json.main_be_user_id || json.userId || json.user_id || '',
-      });
-      setJsonText('');
-      setUploadError('');
-      setShowConfigModal(true);
-    } catch (err) {
-      setUploadError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
-    }
   };
 
   const handleSave = async () => {
@@ -368,16 +364,13 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
     reader.onload = (event) => {
       try {
         let json = JSON.parse(event.target?.result as string);
-
         if (Array.isArray(json)) json = json[0] || {};
-
         if (json.data) json = json.data;
         else if (json.config) json = json.config;
         else if (json.attributes) json = json.attributes;
 
         const userCred = json.user_credentials || json.userCredentials || json.user_credentials_cookie || '';
-        const cfClear = json.cf_clearance || json.cfClearance || json.cfClearance || '';
-
+        const cfClear = json.cf_clearance || json.cfClearance || '';
         if (!userCred || !cfClear) {
           setInkittCookieError('Missing user_credentials or cf_clearance in JSON. Received keys: ' + Object.keys(json).join(', '));
           return;
@@ -403,16 +396,13 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
 
     try {
       let json = JSON.parse(inkittJsonText);
-
       if (Array.isArray(json)) json = json[0] || {};
-
       if (json.data) json = json.data;
       else if (json.config) json = json.config;
       else if (json.attributes) json = json.attributes;
 
       const userCred = json.user_credentials || json.userCredentials || json.user_credentials_cookie || '';
       const cfClear = json.cf_clearance || json.cfClearance || '';
-
       if (!userCred || !cfClear) {
         setInkittCookieError('Missing user_credentials or cf_clearance in JSON. Received keys: ' + Object.keys(json).join(', '));
         return;
@@ -428,784 +418,327 @@ export function SettingsPage({ themeMode, onThemeChange }: SettingsPageProps) {
     }
   };
 
-  if (loading) {
-    return (
-      <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: isDark ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)' : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)' }}>
-        <div className="lg-orb lg-orb-1" />
-        <div className="lg-orb lg-orb-2" />
-        <div className="lg-orb lg-orb-3" />
-        <div className="relative z-10 flex items-center justify-center min-h-screen">
-          <div className="flex items-center gap-3" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.5)' }}>
-            <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex min-h-[420px] items-center justify-center text-sm" style={{ color: secondaryText }}>
+          <div className="flex items-center gap-3">
+            <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
             <span>Loading settings...</span>
           </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  return (
-    <div className={`min-h-screen relative overflow-hidden ${isDark ? 'dark' : 'light'}`} style={{ background: isDark ? 'linear-gradient(135deg, #0a0a14 0%, #0f0f1e 40%, #12101f 70%, #0e0f1c 100%)' : 'linear-gradient(135deg, #e8e4f8 0%, #d8e8f8 30%, #f0e8f8 60%, #e0f0f8 100%)' }}>
-      <div className="lg-orb lg-orb-1" />
-      <div className="lg-orb lg-orb-2" />
-      <div className="lg-orb lg-orb-3" />
-
-      <div className="relative z-10 min-h-screen pb-20 lg:pb-0 pt-14 lg:pt-0">
-        <main className="w-full xl:max-w-[68vw] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-
-          {/* Page Header */}
-          <div className="lg-glass-deep px-6 py-5">
-            <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>
-              Settings
-            </h1>
-            <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-              Customize your experience
-            </p>
-          </div>
-
-        {/* Error */}
-        {error && (
-          <div className={`flex items-center gap-3 p-4 rounded-2xl text-sm ${isDark
-            ? 'bg-red-900/20 border border-red-800/30 text-red-400'
-            : 'bg-red-50 border border-red-200 text-red-600'
-          }`}>
-            <Icon icon={appIcons.info} className="w-5 h-5 flex-shrink-0" />
-            {error}
-          </div>
-        )}
-
-        {/* Theme Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <Icon icon={appIcons.moon} className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Appearance</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Toggle between light and dark theme</p>
-            </div>
-          </div>
-
-          <div className={`flex gap-3 ${isDark ? '' : ''}`}>
-            {/* Light option */}
-            <button
-              onClick={() => setLocalTheme('light')}
-              className={`flex-1 p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                localTheme === 'light'
-                  ? 'border-indigo-500 bg-indigo-600/10'
-                  : isDark
-                    ? 'border-white/[0.08] hover:border-white/[0.15] bg-white/[0.03]'
-                    : 'border-black/8 hover:border-indigo-200 bg-[rgba(0,0,0,0.02)]'
-              }`}
-            >
-              <Icon icon={appIcons.themeLight} className={`w-6 h-6 ${localTheme === 'light' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${localTheme === 'light' ? 'text-indigo-300' : isDark ? 'text-white/35' : 'text-gray-500'}`}>Light</span>
-            </button>
-
-            {/* Dark option */}
-            <button
-              onClick={() => setLocalTheme('dark')}
-              className={`flex-1 p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                localTheme === 'dark'
-                  ? 'border-indigo-500 bg-indigo-600/10'
-                  : isDark
-                    ? 'border-white/[0.08] hover:border-white/[0.15] bg-white/[0.03]'
-                    : 'border-black/8 hover:border-indigo-200 bg-[rgba(0,0,0,0.02)]'
-              }`}
-            >
-              <Icon icon={appIcons.themeDark} className={`w-6 h-6 ${localTheme === 'dark' ? 'text-indigo-400' : isDark ? 'text-white/35' : 'text-gray-400'}`} />
-              <span className={`text-sm font-medium ${localTheme === 'dark' ? 'text-indigo-300' : isDark ? 'text-white/35' : 'text-gray-500'}`}>Dark</span>
-            </button>
-          </div>
-        </section>
-
-        {/* Drive Sync Config Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <Icon icon={appIcons.sync} className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Drive Sync Configuration</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure Google Drive sync and backend API settings</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Configure Button */}
-            <button
-              onClick={() => setShowConfigModal(true)}
-              disabled={configLoading}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                isDark
-                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
-              } disabled:opacity-50`}
-            >
-              {configLoading ? (
-                <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
-              ) : (
-                <Icon icon={appIcons.settings} className="w-4 h-4" />
-              )}
-              Configure
-            </button>
-
-            {/* Upload JSON Button */}
-            <label className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer ${
-              isDark
-                ? 'bg-white/[0.06] hover:bg-white/[0.08] text-white/70 border border-white/[0.08]'
-                : 'bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)] text-[rgba(0,0,0,0.6)] border border-black/8'
-            }`}>
-              <Icon icon={appIcons.uploadFile} className="w-4 h-4" />
-              Upload JSON Preset
-              <input
-                type="file"
-                accept="application/json"
-                onChange={handleJsonFileUpload}
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          {/* Paste JSON Option */}
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className={`text-sm font-medium ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
-                Or paste JSON preset
-              </label>
-              <button
-                onClick={handleJsonPaste}
-                disabled={!jsonText.trim()}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  jsonText.trim()
-                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                    : isDark
-                      ? 'bg-white/[0.06] text-white/30 cursor-not-allowed'
-                      : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
-                }`}
-              >
-                Apply
-              </button>
-            </div>
-            <textarea
-              value={jsonText}
-              onChange={e => setJsonText(e.target.value)}
-              placeholder={'{\n  "folder_id": "...",\n  "main_be_api_base_url": "...",\n  ...\n}'}
-              rows={5}
-              className={`w-full px-3 py-2.5 rounded-xl border text-sm font-mono resize-none
-                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                ${isDark
-                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
-                  : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
-                }`}
-            />
-          </div>
-
-          {/* Upload Error */}
-          {uploadError && (
-            <div className={`text-sm ${isDark ? 'text-red-400' : 'text-red-500'} flex items-center gap-2`}>
-              <Icon icon={appIcons.statusWarning} className="w-4 h-4 flex-shrink-0" />
-              {uploadError}
-            </div>
-          )}
-
-          {/* Current Config Summary */}
-          {config && (
-            <div className={`mt-4 p-4 rounded-xl ${isDark ? 'bg-white/[0.02]' : 'bg-[rgba(0,0,0,0.02)]'}`}>
-              <h3 className={`text-sm font-medium mb-3 ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>Current Configuration</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+    switch (activeCategory) {
+      case 'profile':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="Profile" description="Basic account information for this workspace session." pageText={pageText} secondaryText={secondaryText} />
+            <div className="rounded-lg border px-4 py-3" style={{ borderColor: panelBorder, background: subtleSurface }}>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>API URL:</span>
-                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
-                    {config.main_be_api_base_url || <span className="italic text-gray-400">Not configured</span>}
-                  </span>
+                  <p className="text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>Email</p>
+                  <p className="mt-1 text-sm font-medium break-all" style={{ color: pageText }}>{authUser?.email || 'Unknown user'}</p>
                 </div>
                 <div>
-                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>User ID:</span>
-                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
-                    {config.main_be_user_id ? `${config.main_be_user_id.slice(0, 8)}...` : <span className="italic text-gray-400">Not configured</span>}
-                  </span>
-                </div>
-                <div>
-                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Folder ID:</span>
-                  <span className={`ml-2 font-mono text-xs break-all ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
-                    {config.folder_id ? `${config.folder_id.slice(0, 12)}...` : <span className="italic text-gray-400">Not configured</span>}
-                  </span>
-                </div>
-                <div>
-                  <span className={`${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Service Account:</span>
-                  <span className={`ml-2 font-mono text-xs ${isDark ? 'text-white/85' : 'text-[rgba(0,0,0,0.85)]'}`}>
-                    {config.service_account_json_name || <span className="italic text-gray-400">Not configured</span>}
-                  </span>
+                  <p className="text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>Role</p>
+                  <p className="mt-1 text-sm font-medium capitalize" style={{ color: pageText }}>{authUser?.role || 'unknown'}</p>
                 </div>
               </div>
             </div>
-          )}
-        </section>
-
-        {/* Inkitt Cookies Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-                <Icon icon={appIcons.shield} className="w-5 h-5" />
-              </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3" style={{ borderColor: panelBorder, background: subtleSurface }}>
               <div>
-                <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Inkitt Cookies</h2>
-                <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                  Update login cookies for Inkitt chapter crawling
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleSaveInkittCookies}
-              disabled={savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim()}
-              className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim()
-                  ? isDark
-                    ? 'bg-white/[0.05] text-white/25 cursor-not-allowed'
-                    : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25'
-              }`}
-            >
-              {savingInkittCookies ? (
-                <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
-              ) : (
-                <Icon icon={appIcons.save} className="w-4 h-4" />
-              )}
-              Save Cookies
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="settings-inkitt-user-credentials" className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                user_credentials value
-              </label>
-              <textarea
-                id="settings-inkitt-user-credentials"
-                value={inkittUserCredentials}
-                onChange={e => {
-                  setInkittUserCredentials(e.target.value);
-                  setInkittCookieError('');
-                  setInkittCookieMessage('');
-                }}
-                rows={4}
-                placeholder="Paste only the Cookie Value for user_credentials"
-                className={`w-full px-4 py-3 border rounded-xl text-xs font-mono resize-y min-h-[110px]
-                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                  ${isDark
-                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/25'
-                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
-                  }`}
-              />
-            </div>
-            <div>
-              <label htmlFor="settings-inkitt-cf-clearance" className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                cf_clearance value
-              </label>
-              <textarea
-                id="settings-inkitt-cf-clearance"
-                value={inkittCfClearance}
-                onChange={e => {
-                  setInkittCfClearance(e.target.value);
-                  setInkittCookieError('');
-                  setInkittCookieMessage('');
-                }}
-                rows={4}
-                placeholder="Paste only the Cookie Value for cf_clearance"
-                className={`w-full px-4 py-3 border rounded-xl text-xs font-mono resize-y min-h-[110px]
-                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                  ${isDark
-                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/25'
-                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
-                  }`}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <label className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer ${
-              isDark
-                ? 'bg-white/[0.06] hover:bg-white/[0.08] text-white/70 border border-white/[0.08]'
-                : 'bg-[rgba(0,0,0,0.04)] hover:bg-[rgba(0,0,0,0.06)] text-[rgba(0,0,0,0.6)] border border-black/8'
-            }`}>
-              <Icon icon={appIcons.uploadFile} className="w-4 h-4" />
-              Upload Inkitt Cookies JSON
-              <input
-                type="file"
-                accept="application/json"
-                onChange={handleInkittJsonFileUpload}
-                className="hidden"
-              />
-            </label>
-
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <textarea
-                value={inkittJsonText}
-                onChange={e => setInkittJsonText(e.target.value)}
-                placeholder={'{\n  "user_credentials": "...",\n  "cf_clearance": "..."\n}'}
-                rows={2}
-                className={`flex-1 px-3 py-2 rounded-xl border text-xs font-mono resize-none min-w-0
-                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                  ${isDark
-                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
-                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
-                  }`}
-              />
-              <button
-                onClick={handleInkittJsonPaste}
-                disabled={!inkittJsonText.trim()}
-                className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-shrink-0 ${
-                  inkittJsonText.trim()
-                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                    : isDark
-                      ? 'bg-white/[0.06] text-white/30 cursor-not-allowed'
-                      : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
-                }`}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-
-          <p className={`text-xs ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-            Copy these from Chrome DevTools: Application, Cookies, https://www.inkitt.com. Only the Cookie Value column is needed.
-          </p>
-
-          {inkittCookieMessage && (
-            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
-              <Icon icon={appIcons.checkCircle} className="w-4 h-4 flex-shrink-0" />
-              {inkittCookieMessage}
-            </div>
-          )}
-          {inkittCookieError && (
-            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-              <Icon icon={appIcons.statusWarning} className="w-4 h-4 flex-shrink-0" />
-              {inkittCookieError}
-            </div>
-          )}
-        </section>
-
-        {/* Crawl Defaults Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-5">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <Icon icon={appIcons.settings} className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Default Crawl Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Applied automatically on the crawl page</p>
-            </div>
-          </div>
-
-          {/* Mode toggle */}
-          <div className={`flex items-center gap-1 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
-            <button
-              onClick={() => setCrawlMode('count')}
-              className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                crawlMode === 'count'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                  : isDark
-                    ? 'text-white/40 hover:text-white/70'
-                    : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
-              }`}
-            >
-              Count
-            </button>
-            <button
-              onClick={() => setCrawlMode('range')}
-              className={`px-5 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                crawlMode === 'range'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                  : isDark
-                    ? 'text-white/40 hover:text-white/70'
-                    : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
-              }`}
-            >
-              Range
-            </button>
-          </div>
-
-          {/* Count input */}
-          {crawlMode === 'count' ? (
-            <div className="max-w-xs">
-              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                Default chapter count
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={100000}
-                value={count}
-                onChange={e => setCount(Math.max(1, parseInt(e.target.value) || 1))}
-                className={`w-full px-4 py-3 border rounded-xl
-                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                  ${isDark
-                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
-                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
-                  }`}
-              />
-            </div>
-          ) : (
-            <div className="flex items-end gap-3 max-w-sm">
-              <div className="flex-1">
-                <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                  From chapter
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={rangeFrom}
-                  onChange={e => setRangeFrom(Math.max(1, parseInt(e.target.value) || 1))}
-                  className={`w-full px-4 py-3 border rounded-xl
-                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                    ${isDark
-                      ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
-                      : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
-                    }`}
-                />
-              </div>
-              <span className={`pb-3 font-medium ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>to</span>
-              <div className="flex-1">
-                <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                  To chapter
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={rangeTo}
-                  onChange={e => setRangeTo(Math.max(1, parseInt(e.target.value) || 1))}
-                  className={`w-full px-4 py-3 border rounded-xl
-                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                    ${isDark
-                      ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
-                      : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
-                    }`}
-                />
-              </div>
-            </div>
-          )}
-
-          <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-            {crawlMode === 'count'
-              ? `Default: crawl up to ${count} chapter${count !== 1 ? 's' : ''}`
-              : `Default: crawl chapters ${rangeFrom} to ${rangeTo} (${Math.max(0, rangeTo - rangeFrom + 1)} total)`
-            }
-          </p>
-        </section>
-
-        {/* Auto Audio Settings Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-5">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <Icon icon={appIcons.autoAudio} className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Auto Audio Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Configure backoff, pipeline window, upload workers, and test story IDs</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
-            <div>
-              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                Backoff after failed story (seconds)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={600}
-                value={autoAudioRestSeconds}
-                onChange={e => setAutoAudioRestSeconds(Math.max(0, parseInt(e.target.value) || 0))}
-                className={`w-full px-4 py-3 border rounded-xl
-                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                  ${isDark
-                    ? 'bg-white/[0.05] border-white/[0.08] text-white/90'
-                    : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)]'
-                  }`}
-              />
-              <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-                Successful stories continue immediately.
-              </p>
-            </div>
-
-            <div>
-              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                Upload workers
-              </label>
-              <div className={`flex flex-wrap items-center gap-2 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
-                {[1, 2, 3, 4].map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setAutoAudioUploadWorkers(v)}
-                    className={`min-w-10 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                      autoAudioUploadWorkers === v
-                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                        : isDark
-                          ? 'text-white/40 hover:text-white/70'
-                          : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
-                    }`}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-                Handles download, compression, and upload in parallel.
-              </p>
-            </div>
-
-            <div>
-              <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                Batch window
-              </label>
-              <div className={`flex flex-wrap items-center gap-2 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
-                {[1, 2].map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setAutoAudioBatchWindow(v)}
-                    className={`min-w-10 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                      autoAudioBatchWindow === v
-                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                        : isDark
-                          ? 'text-white/40 hover:text-white/70'
-                          : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
-                    }`}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-                Max story batches started or queued at once. Use 2 for one-story lookahead.
-              </p>
-            </div>
-          </div>
-
-          {/* Test Story IDs */}
-          <div className="max-w-lg">
-            <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-              Test Story IDs
-            </label>
-            <textarea
-              value={autoAudioTestIdsText}
-              onChange={e => {
-                setAutoAudioTestIdsText(e.target.value);
-                const ids = e.target.value
-                  .split(/[\n,]/)
-                  .map(s => s.trim())
-                  .filter(s => s.length > 0);
-                setAutoAudioTestStoryIds(ids);
-              }}
-              placeholder="ce6176c4-aeb5-4ee1-847f-ee56df64a386, 07d59e98-d693-429b-a9d1-53ce2fd89e55"
-              rows={3}
-              className={`w-full px-4 py-3 border rounded-xl text-sm font-mono resize-none
-                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                ${isDark
-                  ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/30'
-                  : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.3)]'
-                }`}
-            />
-            <p className={`text-xs mt-1 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-              Comma or newline separated story IDs. Used in test mode.
-            </p>
-          </div>
-        </section>
-
-        {/* TTS Concurrency Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <Icon icon={appIcons.music} className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>TTS Concurrency</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Number of concurrent voice generation workers</p>
-            </div>
-          </div>
-
-          <div className="max-w-md">
-            <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-              Concurrent workers
-            </label>
-            <div className={`flex flex-wrap items-center gap-2 p-1 rounded-xl w-fit ${isDark ? 'bg-white/[0.04]' : 'bg-[rgba(0,0,0,0.04)]'}`}>
-              {ttsConcurrencyOptions.map(v => (
-                <button
-                  key={v}
-                  onClick={() => setTtsConcurrency(v)}
-                  className={`min-w-12 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                    ttsConcurrency === v
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                      : isDark
-                        ? 'text-white/40 hover:text-white/70'
-                        : 'text-[rgba(0,0,0,0.4)] hover:text-[rgba(0,0,0,0.7)]'
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-            <p className={`text-xs mt-2 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-              Use 1 for stability or 2 for faster throughput. Kokoro concurrency is capped at 2.
-            </p>
-          </div>
-        </section>
-
-        {/* Crawl Auto Settings Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-5">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-white/[0.06] text-indigo-400' : 'bg-[rgba(0,0,0,0.04)] text-indigo-600'}`}>
-              <Icon icon={appIcons.uploadFile} className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Crawl Auto Settings</h2>
-              <p className={`text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>Auto-fill and range limits for crawl after URL detection</p>
-            </div>
-          </div>
-
-          {/* Auto fill full chapters toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={`text-sm font-medium ${isDark ? 'text-white/70' : 'text-[rgba(0,0,0,0.7)]'}`}>
-                Auto-fill full available chapters
-              </p>
-              <p className={`text-xs mt-0.5 ${isDark ? 'text-white/30' : 'text-[rgba(0,0,0,0.3)]'}`}>
-                Automatically fill the chapter count to the full number of available chapters after detecting a story URL
-              </p>
-            </div>
-            <button
-              onClick={() => setCrawlAutoMaxChapters(m => !m)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                crawlAutoMaxChapters
-                  ? 'bg-indigo-600'
-                  : isDark ? 'bg-white/10' : 'bg-black/10'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                  crawlAutoMaxChapters ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-        </section>
-
-        {/* Development Cleanup Section */}
-        <section className="lg-glass p-5 sm:p-6 space-y-5">
-          <div className="flex items-start gap-3">
-            <div className={`p-2.5 rounded-xl ${isDark ? 'bg-red-500/10 text-red-300' : 'bg-red-50 text-red-600'}`}>
-              <Icon icon={appIcons.delete} className="w-5 h-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className={`text-base font-semibold ${isDark ? 'text-white/90' : 'text-[rgba(0,0,0,0.85)]'}`}>Development Cleanup</h2>
-              <p className={`mt-1 text-sm ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                Clear runtime histories, generated outputs, sessions, jobs, logs, settings, Drive credentials, and saved tokens. Admin accounts are preserved, then this browser signs out.
-              </p>
-            </div>
-          </div>
-
-          {!isAdmin ? (
-            <div className={`rounded-xl border px-4 py-3 text-sm ${isDark ? 'border-white/[0.08] bg-white/[0.03] text-white/45' : 'border-black/8 bg-[rgba(0,0,0,0.03)] text-[rgba(0,0,0,0.45)]'}`}>
-              Admin access is required.
-            </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-              <div className="flex-1 max-w-md">
-                <label className={`block text-sm mb-2 ${isDark ? 'text-white/40' : 'text-[rgba(0,0,0,0.4)]'}`}>
-                  Confirmation
-                </label>
-                <input
-                  type="text"
-                  value={clearConfirm}
-                  onChange={e => setClearConfirm(e.target.value)}
-                  placeholder="CLEAR_BACKEND_DATA"
-                  className={`w-full px-4 py-3 border rounded-xl font-mono text-sm
-                    focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent
-                    ${isDark
-                      ? 'bg-white/[0.05] border-white/[0.08] text-white/90 placeholder:text-white/25'
-                      : 'bg-[rgba(0,0,0,0.04)] border-black/8 text-[rgba(0,0,0,0.85)] placeholder:text-[rgba(0,0,0,0.25)]'
-                    }`}
-                />
+                <p className="text-sm font-medium" style={{ color: pageText }}>Session</p>
+                <p className="text-xs" style={{ color: tertiaryText }}>Sign out of this account on this device.</p>
               </div>
               <button
                 type="button"
-                onClick={handleClearBackendData}
-                disabled={clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA'}
-                className={`px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
-                  clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA'
-                    ? isDark
-                      ? 'bg-white/[0.05] text-white/25 cursor-not-allowed'
-                      : 'bg-[rgba(0,0,0,0.04)] text-[rgba(0,0,0,0.3)] cursor-not-allowed'
-                    : 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/25'
-                }`}
+                onClick={async () => {
+                  await onLogout();
+                  handleClose();
+                }}
+                className="rounded-md px-3 py-2 text-sm font-medium"
+                style={{ background: isDark ? 'rgba(239,68,68,0.14)' : 'rgba(220,38,38,0.08)', color: isDark ? 'rgb(252 165 165)' : 'rgb(220 38 38)' }}
               >
-                {clearState === 'clearing' ? (
-                  <>
-                    <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
-                    Clearing...
-                  </>
-                ) : (
-                  'Clear Backend Data'
-                )}
+                Logout
               </button>
             </div>
-          )}
-        </section>
-
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={saveState !== 'idle'}
-            className={`px-6 py-3 font-semibold rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg ${
-              saveState !== 'idle'
-                ? saveState === 'saved'
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
-                  : isDark
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
-                    : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30'
-            }`}
-          >
-            {saveState === 'saving' ? (
-              <>
-                <Icon icon={appIcons.spinner} className="animate-spin h-5 w-5" />
-                Saving...
-              </>
-            ) : saveState === 'saved' ? (
-              <>
-                <Icon icon={appIcons.check} className="w-5 h-5" />
-                Saved!
-              </>
-            ) : (
-              <>
-                <Icon icon={appIcons.save} className="w-5 h-5" />
-                Save Settings
-              </>
+          </section>
+        );
+      case 'appearance':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="Appearance" description="Choose the theme used across the app." pageText={pageText} secondaryText={secondaryText} />
+            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: panelBorder, background: subtleSurface }}>
+              <div className="min-w-0">
+                <p className="text-sm font-medium" style={{ color: pageText }}>Theme</p>
+                <p className="text-xs" style={{ color: tertiaryText }}>Switch between light and dark mode.</p>
+              </div>
+              <div className="inline-flex items-center gap-1 rounded-full p-0.5" style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(55,53,47,0.06)' }}>
+                {(['light', 'dark'] as const).map((mode) => {
+                  const active = localTheme === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setLocalTheme(mode)}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-colors"
+                      style={{
+                        background: active ? activeSurface : 'transparent',
+                        color: active ? pageText : tertiaryText,
+                        boxShadow: active ? (isDark ? '0 1px 2px rgba(0,0,0,0.35)' : '0 1px 2px rgba(15,23,42,0.08)') : 'none',
+                      }}
+                    >
+                      <Icon icon={appIcons[mode === 'light' ? 'themeLight' : 'themeDark']} className="h-3.5 w-3.5" />
+                      <span className="capitalize">{mode}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        );
+      case 'driveSync':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="Drive Sync Configuration" description="Configure Google Drive sync and backend API connection details." pageText={pageText} secondaryText={secondaryText} />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                Upload JSON
+                <input type="file" accept="application/json" onChange={handleJsonFileUpload} className="hidden" />
+              </label>
+            </div>
+            {uploadError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{uploadError}</div>}
+            <DriveConfig
+              embedded
+              config={config}
+              configForm={configForm}
+              onFormChange={handleConfigFormChange}
+              onSave={handleSaveConfig}
+              savingConfig={savingConfig}
+              savingConfigError={savingConfigError}
+              isInitialSetup={isInitialSetup}
+              themeMode={themeMode}
+              credentialFileExists={credentialFileExists}
+              onCredentialUploadSuccess={() => setCredentialFileExists(true)}
+            />
+            {config && (
+              <div className="rounded-lg border p-4" style={{ borderColor: panelBorder, background: subtleSurface }}>
+                <h3 className="mb-3 text-sm font-medium" style={{ color: pageText }}>Current configuration</h3>
+                <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  <div><span style={{ color: tertiaryText }}>API URL:</span><span className="ml-2 break-all font-mono text-xs" style={{ color: pageText }}>{config.main_be_api_base_url || 'Not configured'}</span></div>
+                  <div><span style={{ color: tertiaryText }}>User ID:</span><span className="ml-2 break-all font-mono text-xs" style={{ color: pageText }}>{config.main_be_user_id ? `${config.main_be_user_id.slice(0, 8)}...` : 'Not configured'}</span></div>
+                  <div><span style={{ color: tertiaryText }}>Folder ID:</span><span className="ml-2 break-all font-mono text-xs" style={{ color: pageText }}>{config.folder_id ? `${config.folder_id.slice(0, 12)}...` : 'Not configured'}</span></div>
+                  <div><span style={{ color: tertiaryText }}>Service Account:</span><span className="ml-2 font-mono text-xs" style={{ color: pageText }}>{config.service_account_json_name || 'Not configured'}</span></div>
+                </div>
+              </div>
             )}
-          </button>
+          </section>
+        );
+      case 'inkitt':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="Inkitt Cookies" description="Update login cookies for Inkitt chapter crawling." pageText={pageText} secondaryText={secondaryText} />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div>
+                <label htmlFor="settings-inkitt-user-credentials" className={labelClassName}>`user_credentials` value</label>
+                <textarea id="settings-inkitt-user-credentials" value={inkittUserCredentials} onChange={(e) => { setInkittUserCredentials(e.target.value); setInkittCookieError(''); setInkittCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-inkitt-cf-clearance" className={labelClassName}>`cf_clearance` value</label>
+                <textarea id="settings-inkitt-cf-clearance" value={inkittCfClearance} onChange={(e) => { setInkittCfClearance(e.target.value); setInkittCookieError(''); setInkittCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={handleSaveInkittCookies} disabled={savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim() ? subtleSurface : primaryButton, color: savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim() ? tertiaryText : '#fff' }}>
+                {savingInkittCookies ? 'Saving...' : 'Save Cookies'}
+              </button>
+              <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                Upload Cookies JSON
+                <input type="file" accept="application/json" onChange={handleInkittJsonFileUpload} className="hidden" />
+              </label>
+            </div>
+            <div className="flex min-w-0 items-center gap-2">
+              <textarea value={inkittJsonText} onChange={(e) => setInkittJsonText(e.target.value)} rows={2} placeholder={'{\n  "user_credentials": "...",\n  "cf_clearance": "..."\n}'} className={`${fieldClassName} min-w-0 flex-1 resize-none font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+              <button onClick={handleInkittJsonPaste} disabled={!inkittJsonText.trim()} className="rounded-lg px-3 py-2 text-sm font-medium disabled:cursor-not-allowed" style={{ background: inkittJsonText.trim() ? primaryButton : subtleSurface, color: inkittJsonText.trim() ? '#fff' : tertiaryText }}>Apply</button>
+            </div>
+            <p className="text-xs" style={{ color: tertiaryText }}>Copy these from Chrome DevTools under Application → Cookies for `https://www.inkitt.com`.</p>
+            {inkittCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{inkittCookieMessage}</div>}
+            {inkittCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{inkittCookieError}</div>}
+          </section>
+        );
+      case 'crawler':
+        return (
+          <div className="space-y-4">
+            <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+              <SectionTitle title="Default Crawl Settings" description="Applied automatically on the crawl page." pageText={pageText} secondaryText={secondaryText} />
+              <div className="inline-flex items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
+                <button onClick={() => setCrawlMode('count')} className="rounded-md px-3 py-1.5 text-sm font-medium" style={{ background: crawlMode === 'count' ? activeSurface : 'transparent', color: pageText }}>Count</button>
+                <button onClick={() => setCrawlMode('range')} className="rounded-md px-3 py-1.5 text-sm font-medium" style={{ background: crawlMode === 'range' ? activeSurface : 'transparent', color: pageText }}>Range</button>
+              </div>
+              {crawlMode === 'count' ? (
+                <div className="max-w-xs">
+                  <label className={labelClassName}>Default chapter count</label>
+                  <input type="number" min={1} max={100000} value={count} onChange={(e) => setCount(Math.max(1, parseInt(e.target.value) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                </div>
+              ) : (
+                <div className="flex max-w-sm items-end gap-3">
+                  <div className="flex-1">
+                    <label className={labelClassName}>From chapter</label>
+                    <input type="number" min={1} value={rangeFrom} onChange={(e) => setRangeFrom(Math.max(1, parseInt(e.target.value) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                  </div>
+                  <span className="pb-3 text-sm font-medium" style={{ color: tertiaryText }}>to</span>
+                  <div className="flex-1">
+                    <label className={labelClassName}>To chapter</label>
+                    <input type="number" min={1} value={rangeTo} onChange={(e) => setRangeTo(Math.max(1, parseInt(e.target.value) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                  </div>
+                </div>
+              )}
+              <p className="text-sm" style={{ color: secondaryText }}>{crawlMode === 'count' ? `Default: crawl up to ${count} chapter${count !== 1 ? 's' : ''}` : `Default: crawl chapters ${rangeFrom} to ${rangeTo} (${Math.max(0, rangeTo - rangeFrom + 1)} total)`}</p>
+            </section>
+            <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+              <SectionTitle title="Crawl Auto Settings" description="Auto-fill and range limits for crawl after URL detection." pageText={pageText} secondaryText={secondaryText} />
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium" style={{ color: pageText }}>Auto-fill full available chapters</p>
+                  <p className="mt-0.5 text-xs" style={{ color: tertiaryText }}>Automatically fill the chapter count to the full number of available chapters after detecting a story URL.</p>
+                </div>
+                <button onClick={() => setCrawlAutoMaxChapters((value) => !value)} className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ background: crawlAutoMaxChapters ? primaryButton : subtleSurfaceHover }}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${crawlAutoMaxChapters ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </section>
+          </div>
+        );
+      case 'audio':
+        return (
+          <div className="space-y-4">
+            <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+              <SectionTitle title="Auto Audio Settings" description="Configure backoff, pipeline window, upload workers, and test story IDs." pageText={pageText} secondaryText={secondaryText} />
+              <div className="grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <label className={labelClassName}>Backoff after failed story (seconds)</label>
+                  <input type="number" min={0} max={600} value={autoAudioRestSeconds} onChange={(e) => setAutoAudioRestSeconds(Math.max(0, parseInt(e.target.value) || 0))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                </div>
+                <div>
+                  <label className={labelClassName}>Upload workers</label>
+                  <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
+                    {[1, 2, 3, 4].map((v) => (
+                      <button key={v} onClick={() => setAutoAudioUploadWorkers(v)} className="min-w-10 rounded-md px-3 py-2 text-sm font-medium" style={{ background: autoAudioUploadWorkers === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClassName}>Batch window</label>
+                  <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
+                    {[1, 2].map((v) => (
+                      <button key={v} onClick={() => setAutoAudioBatchWindow(v)} className="min-w-10 rounded-md px-3 py-2 text-sm font-medium" style={{ background: autoAudioBatchWindow === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="max-w-lg">
+                <label className={labelClassName}>Test Story IDs</label>
+                <textarea value={autoAudioTestIdsText} onChange={(e) => { setAutoAudioTestIdsText(e.target.value); const ids = e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean); setAutoAudioTestStoryIds(ids); }} rows={3} className={`${fieldClassName} resize-none font-mono text-sm`} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+            </section>
+            <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+              <SectionTitle title="TTS Concurrency" description="Number of concurrent voice generation workers." pageText={pageText} secondaryText={secondaryText} />
+              <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
+                {ttsConcurrencyOptions.map((v) => (
+                  <button key={v} onClick={() => setTtsConcurrency(v)} className="min-w-12 rounded-md px-4 py-2 text-sm font-medium" style={{ background: ttsConcurrency === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
+                ))}
+              </div>
+            </section>
+          </div>
+        );
+      case 'danger':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: isDark ? 'rgba(248,113,113,0.25)' : 'rgba(220,38,38,0.18)' }}>
+            <SectionTitle title="Development Cleanup" description="Clear runtime histories, outputs, sessions, jobs, logs, settings, Drive credentials, and saved tokens." pageText={pageText} secondaryText={secondaryText} />
+            {!isAdmin ? (
+              <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: panelBorder, background: subtleSurface, color: secondaryText }}>Admin access is required.</div>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="max-w-md flex-1">
+                  <label className={labelClassName}>Confirmation</label>
+                  <input type="text" value={clearConfirm} onChange={(e) => setClearConfirm(e.target.value)} placeholder="CLEAR_BACKEND_DATA" className={`${fieldClassName} font-mono text-sm`} style={{ background: inputBackground, borderColor: inputBorder }} />
+                </div>
+                <button type="button" onClick={handleClearBackendData} disabled={clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA'} className="rounded-lg px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed" style={{ background: clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA' ? subtleSurface : '#dc2626', color: clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA' ? tertiaryText : '#fff' }}>
+                  {clearState === 'clearing' ? 'Clearing...' : 'Clear Backend Data'}
+                </button>
+              </div>
+            )}
+          </section>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[70]" style={{ background: 'rgba(15, 23, 42, 0.28)', backdropFilter: 'blur(6px)' }} onClick={handleClose} />
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-2 sm:p-4 lg:p-6">
+        <div className="flex h-[min(82vh,760px)] w-full max-w-[80vw] overflow-hidden rounded-2xl border shadow-2xl" style={{ background: shellBackground, borderColor: panelBorder, color: pageText }}>
+          <aside className="hidden w-[208px] shrink-0 border-r md:flex md:flex-col" style={{ borderColor: panelBorder, background: isDark ? '#1b1b1b' : '#f7f6f3' }}>
+            <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
+              {categories.map((category) => {
+                const active = category.id === activeCategory;
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => setActiveCategory(category.id)}
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors"
+                    style={{ background: active ? activeSurface : 'transparent', color: active ? pageText : secondaryText }}
+                  >
+                    <Icon icon={appIcons[category.icon]} className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="text-sm font-medium">{category.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col" style={{ background: shellBackground }}>
+            <div className="flex items-center justify-between border-b px-4 py-2.5 md:px-5" style={{ borderColor: panelBorder }}>
+              <div className="md:hidden">
+                <p className="text-sm font-semibold" style={{ color: pageText }}>Settings</p>
+                <p className="text-xs" style={{ color: tertiaryText }}>{categories.find((item) => item.id === activeCategory)?.label}</p>
+              </div>
+              <div className="hidden md:block">
+                <p className="text-base font-semibold" style={{ color: pageText }}>{categories.find((item) => item.id === activeCategory)?.label}</p>
+              </div>
+              <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-md" style={{ background: subtleSurface, color: secondaryText }}>
+                <Icon icon={appIcons.close} className="h-4 w-4" />
+              </button>
+            </div>
+
+            {error && (
+              <div className="mx-4 mt-4 rounded-lg border px-4 py-3 text-sm md:mx-5" style={{ borderColor: isDark ? 'rgba(248,113,113,0.28)' : 'rgba(220,38,38,0.2)', background: isDark ? 'rgba(127,29,29,0.18)' : 'rgba(254,242,242,0.95)', color: isDark ? 'rgb(252 165 165)' : 'rgb(185 28 28)' }}>
+                {error}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-4">
+              <div className="mx-auto w-full max-w-[60%]">
+                {renderContent()}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t px-4 py-2.5 md:px-5" style={{ borderColor: panelBorder, background: isDark ? '#1b1b1b' : '#fafafa' }}>
+              <p className="text-xs" style={{ color: tertiaryText }}>Changes apply to this workspace after saving.</p>
+              <button onClick={handleSave} disabled={saveState !== 'idle'} className="rounded-md px-4 py-2 text-sm font-semibold transition-colors" style={{ background: saveState !== 'idle' ? (saveState === 'saved' ? '#16a34a' : subtleSurface) : primaryButton, color: saveState !== 'idle' && saveState !== 'saved' ? tertiaryText : '#fff' }}>
+                {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : 'Save Settings'}
+              </button>
+            </div>
+          </div>
         </div>
-
-      </main>
-
-      {/* Drive Sync Config Modal */}
-      <ConfigModal
-        isOpen={showConfigModal}
-        onClose={() => setShowConfigModal(false)}
-        config={config}
-        configForm={configForm}
-        onFormChange={handleConfigFormChange}
-        onSave={handleSaveConfig}
-        savingConfig={savingConfig}
-        savingConfigError={savingConfigError}
-        isInitialSetup={isInitialSetup}
-        themeMode={themeMode}
-        credentialFileExists={credentialFileExists}
-        onCredentialUploadSuccess={() => setCredentialFileExists(true)}
-      />
       </div>
-    </div>
+    </>
   );
 }
+
+export default SettingsPage;

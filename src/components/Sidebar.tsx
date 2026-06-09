@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
+import type { AuthUser } from '../api/client';
 import { AppIcon } from './AppIcon';
+import { AccountMenu } from './AccountMenu';
 import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../types/theme';
 
 interface SidebarProps {
     themeMode: ThemeMode;
     onThemeChange: (mode: ThemeMode) => void;
+    isSettingsOpen?: boolean;
+    onOpenSettings: () => void;
+    authUser: AuthUser;
+    onLogout: () => void;
 }
-
-const PHASE_ACCENT = '#6366f1';
 
 function navActive(locationPath: string, expect: string) {
     if (expect === '/results/all') {
@@ -85,88 +89,85 @@ const NAV_SECTIONS: NavSection[] = [
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ];
 
-export function Sidebar({ themeMode, onThemeChange: _onThemeChange }: SidebarProps) {
+export function Sidebar({ themeMode, onThemeChange: _onThemeChange, isSettingsOpen = false, onOpenSettings, authUser, onLogout }: SidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
-
-    const activeAccent = PHASE_ACCENT;
-
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+    const [accountOpen, setAccountOpen] = useState(false);
+
+    const asideBackground = isDark ? '#191919' : '#fbfbfa';
+    const asideBorder = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.08)';
+    const headerText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+    const mutedText = isDark ? 'rgba(255,255,255,0.42)' : 'rgba(55,53,47,0.58)';
+    const sectionText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.52)';
+    const itemText = isDark ? 'rgba(255,255,255,0.74)' : 'rgba(55,53,47,0.84)';
+    const itemMuted = isDark ? 'rgba(255,255,255,0.44)' : 'rgba(55,53,47,0.58)';
+    const hoverBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)';
+    const activeBackground = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
 
     const makeNavItem = (item: NavItem) => {
-        const active = navActive(location.pathname, item.to);
+        const active = item.to === '/settings' ? isSettingsOpen : navActive(location.pathname, item.to);
         const hovered = hoveredItem === item.to;
+        const background = active ? activeBackground : hovered ? hoverBackground : 'transparent';
+        const color = active ? headerText : hovered ? itemText : itemMuted;
 
-        const showHover = hovered && !active;
-        const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.07)';
-        const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.72)';
-        const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(15,23,42,0.86)';
-        const hoverBorderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.14)';
+        if (item.to === '/settings') {
+            return (
+                <button
+                    key={item.to}
+                    type="button"
+                    className="group relative flex w-full items-center gap-2.5 rounded-md transition-colors duration-150"
+                    style={{
+                        textDecoration: 'none',
+                        padding: '6px 10px',
+                        background,
+                    }}
+                    onClick={onOpenSettings}
+                    onMouseEnter={() => setHoveredItem(item.to)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                >
+                    <span
+                        className="flex h-5 w-5 items-center justify-center flex-shrink-0 transition-colors duration-150"
+                        style={{ color }}
+                    >
+                        <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-4 h-4" />
+                    </span>
+
+                    <span
+                        className="min-w-0 flex-1 truncate text-sm font-medium text-left transition-colors duration-150"
+                        style={{ color }}
+                    >
+                        {item.label}
+                    </span>
+                </button>
+            );
+        }
 
         return (
             <Link
                 key={item.to}
                 to={item.to}
-                className="group relative flex items-center gap-3 transition-all duration-200"
-                style={{ textDecoration: 'none' }}
+                className="group relative flex items-center gap-2.5 rounded-md transition-colors duration-150"
+                style={{
+                    textDecoration: 'none',
+                    padding: '6px 10px',
+                    background,
+                }}
                 onMouseEnter={() => setHoveredItem(item.to)}
                 onMouseLeave={() => setHoveredItem(null)}
             >
-                {/* Active indicator bar */}
                 <span
-                    className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full transition-all duration-300"
-                    style={{
-                        width: active ? 4 : 0,
-                        height: active ? 24 : 0,
-                        background: activeAccent,
-                        boxShadow: active ? `0 0 10px ${activeAccent}80` : 'none',
-                    }}
-                />
-
-                {/* Glass card for active / badge state */}
-                <span
-                    className="relative flex items-center gap-3 rounded-[14px] transition-all duration-200 w-full"
-                    style={{
-                        padding: '10px 14px',
-                        background: active
-                            ? `linear-gradient(135deg, ${activeAccent}18, ${activeAccent}10)`
-                            : showHover
-                            ? hoverBg
-                            : 'transparent',
-                        border: active
-                            ? `1px solid ${activeAccent}30`
-                            : showHover
-                            ? `1px solid ${hoverBorderColor}`
-                            : '1px solid transparent',
-                        boxShadow: active
-                            ? `0 2px 12px ${activeAccent}15, inset 0 1px 0 rgba(255,255,255,0.05)`
-                            : showHover
-                            ? `inset 0 1px 0 rgba(255,255,255,0.04)`
-                            : 'none',
-                    }}
+                    className="flex h-5 w-5 items-center justify-center flex-shrink-0 transition-colors duration-150"
+                    style={{ color }}
                 >
-                    <span
-                        className="flex-shrink-0 transition-colors duration-200"
-                        style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
-                    >
-                        <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-5 h-5 flex-shrink-0" />
-                    </span>
+                    <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-4 h-4" />
+                </span>
 
-                    <span
-                        className="text-sm font-medium truncate transition-colors duration-200"
-                        style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
-                    >
-                        {item.label}
-                    </span>
-
-                    {active && (
-                        <span className="ml-auto">
-                            <span
-                                className="block rounded-full"
-                                style={{ width: 6, height: 6, background: activeAccent, boxShadow: `0 0 6px ${activeAccent}80` }}
-                            />
-                        </span>
-                    )}
+                <span
+                    className="min-w-0 flex-1 truncate text-sm font-medium transition-colors duration-150"
+                    style={{ color }}
+                >
+                    {item.label}
                 </span>
             </Link>
         );
@@ -174,55 +175,49 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange }: SidebarPro
 
     return (
         <aside
-            className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-50 transition-all duration-300"
+            className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-50 transition-colors duration-200"
             style={{
                 width: 248,
-                background: isDark
-                    ? 'rgba(15, 15, 35, 0.55)'
-                    : 'rgba(248, 250, 252, 0.9)',
-                backdropFilter: 'blur(32px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(32px) saturate(180%)',
-                borderRight: isDark
-                    ? '1px solid rgba(255,255,255,0.07)'
-                    : '1px solid rgba(15,23,42,0.12)',
-                boxShadow: isDark
-                    ? '0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)'
-                    : '0 18px 48px rgba(15,23,42,0.13), inset 0 1px 0 rgba(255,255,255,0.9)',
+                background: asideBackground,
+                borderRight: `1px solid ${asideBorder}`,
             }}
         >
             <div
                 className="flex items-center gap-3"
                 style={{
-                    padding: '20px 16px',
-                    borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
+                    padding: '14px 14px 12px',
                 }}
             >
-                <AppIcon size="xl" className="flex-shrink-0" />
+                <div
+                    className="flex h-8 w-8 items-center justify-center rounded-md overflow-hidden flex-shrink-0"
+                    style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.06)' }}
+                >
+                    <AppIcon size="md" className="flex-shrink-0" />
+                </div>
                 <div className="flex-1 min-w-0">
                     <h1
-                        className="text-base font-bold truncate"
-                        style={{ color: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)' }}
+                        className="text-sm font-semibold truncate"
+                        style={{ color: headerText }}
                     >
                         Novel Crawler
                     </h1>
-                    <p className="text-xs truncate" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.58)' }}>
-                        Content Fetcher
+                    <p className="text-xs truncate" style={{ color: mutedText }}>
+                        Workspace
                     </p>
                 </div>
             </div>
 
             <nav
-                className="flex-1 overflow-y-auto py-4 space-y-5"
+                className="flex-1 overflow-y-auto"
                 style={{
-                    paddingLeft: 12,
-                    paddingRight: 12,
+                    padding: '4px 8px 16px',
                 }}
             >
                 {NAV_SECTIONS.map((section) => (
-                    <div key={section.label}>
+                    <div key={section.label} style={{ marginTop: 14 }}>
                         <p
-                            className="px-3 pb-2 text-[0.65rem] font-semibold uppercase tracking-widest"
-                            style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.46)' }}
+                            className="px-2 pb-1 text-[11px] font-medium"
+                            style={{ color: sectionText }}
                         >
                             {section.label}
                         </p>
@@ -232,13 +227,21 @@ export function Sidebar({ themeMode, onThemeChange: _onThemeChange }: SidebarPro
                     </div>
                 ))}
             </nav>
-{/* 
+
             <div
-                style={{
-                    padding: '12px 12px',
-                    borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.1)',
-                }}
-            /> */}
+                className="px-3 pb-3 pt-3"
+                style={{ borderTop: `1px solid ${asideBorder}` }}
+            >
+                <AccountMenu
+                    authUser={authUser}
+                    isDark={isDark}
+                    isOpen={accountOpen}
+                    onToggle={() => setAccountOpen((open) => !open)}
+                    onClose={() => setAccountOpen(false)}
+                    onLogout={onLogout}
+                    placement="sidebar"
+                />
+            </div>
         </aside>
     );
 }

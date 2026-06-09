@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { type CheckUpdatedResponse, type CoverUpdateEntry } from '../api/client';
-import type { ThemeMode } from '../types/theme';
 import { Icon, appIcons } from './Icon';
 import { EmptyState } from './SyncTabShared';
+import type { ThemeMode } from '../types/theme';
 
 function formatLastUpdated(value: string) {
   const date = new Date(value);
@@ -45,91 +45,105 @@ export function CheckUpdatedCoverTab({
   const [filterSection, setFilterSection] = useState<'all' | 'updated' | 'no_cover'>('all');
   const [bulkUploading, setBulkUploading] = useState(false);
 
-  const q = search.toLowerCase().trim();
-
+  const query = search.toLowerCase().trim();
   const filter = (entries: CoverUpdateEntry[]) =>
-    entries.filter(e =>
-      !q ||
-      e.story_title.toLowerCase().includes(q) ||
-      e.folder_name.toLowerCase().includes(q)
+    entries.filter(
+      (entry) =>
+        !query ||
+        entry.story_title.toLowerCase().includes(query) ||
+        entry.folder_name.toLowerCase().includes(query),
     );
 
   const allEntries = data?.entries ?? [];
   const filteredEntries = filter(allEntries);
-
-  const filteredUpdated = filteredEntries.filter(e => e.status === 'updated');
-  const filteredNoCover = filteredEntries.filter(e => e.status === 'no_cover1_file');
+  const filteredUpdated = filteredEntries.filter((entry) => entry.status === 'updated');
+  const filteredNoCover = filteredEntries.filter((entry) => entry.status === 'no_cover1_file');
 
   const updatedCount = filteredUpdated.length;
   const noCoverCount = filteredNoCover.length;
-  const availableUpdateEntries = filteredUpdated.filter(
-    entry => entry.story_id && !uploadingIds.has(entry.folder_id)
-  );
+  const availableUpdateEntries = filteredUpdated.filter((entry) => entry.story_id && !uploadingIds.has(entry.folder_id));
+
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const searchBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   const handleUpdateAll = async () => {
     if (bulkUploading || availableUpdateEntries.length === 0) return;
     setBulkUploading(true);
     try {
       await Promise.allSettled(
-        availableUpdateEntries.map(entry => onUploadCover(entry.folder_id, entry.story_id!))
+        availableUpdateEntries.map((entry) => onUploadCover(entry.folder_id, entry.story_id!)),
       );
     } finally {
       setBulkUploading(false);
     }
   };
 
-  const inputBase = isDark
-    ? 'bg-white/8 border-white/12 text-white/85 placeholder:text-white/30 focus:border-indigo-500 focus:ring-0'
-    : 'bg-black/4 border-black/10 text-black/80 placeholder:text-black/30 focus:border-indigo-500 focus:ring-0';
-
   return (
-    <div className="flex flex-col min-h-[400px] h-full">
-      <div className="lg-glass flex flex-col sm:flex-row gap-3 p-4 sticky top-0 z-10" style={{ borderRadius: 0 }}>
-        <div className="relative flex-1 min-w-0">
-          <Icon icon={appIcons.search} className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-white/50' : 'text-black/30'}`} />
+    <div className="flex h-full min-h-[400px] flex-col">
+      <div
+        className="sticky top-0 z-10 flex flex-col gap-3 p-4 sm:flex-row"
+        style={{ background: isDark ? '#202020' : '#ffffff', borderBottom: `1px solid ${panelBorder}` }}
+      >
+        <div className="relative min-w-0 flex-1">
+          <Icon icon={appIcons.search} className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: tertiaryText }} />
           <input
             type="text"
             placeholder="Search stories..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition-colors ${inputBase}`}
+            onChange={(event) => setSearch(event.target.value)}
+            className="w-full rounded-xl border py-2.5 pl-9 pr-4 text-sm outline-none transition"
+            style={{
+              background: searchBg,
+              borderColor: panelBorder,
+              color: pageText,
+              boxShadow: 'none',
+            }}
           />
           {search && (
-            <button
-              onClick={() => setSearch('')}
-              className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded ${isDark ? 'text-white/50 hover:text-white/80' : 'text-black/30 hover:text-black/60'}`}
-            >
-              <Icon icon={appIcons.close} className="w-4 h-4" />
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 transition-colors" style={{ color: secondaryText }}>
+              <Icon icon={appIcons.close} className="h-4 w-4" />
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleUpdateAll}
             disabled={bulkUploading || loading || availableUpdateEntries.length === 0}
-            className={bulkUploading || loading || availableUpdateEntries.length === 0 ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : 'lg-btn-primary'}
+            className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
+            style={{
+              background: bulkUploading || loading || availableUpdateEntries.length === 0 ? mutedSurface : isDark ? '#b45309' : '#d97706',
+              borderColor: bulkUploading || loading || availableUpdateEntries.length === 0 ? panelBorder : isDark ? '#b45309' : '#d97706',
+              color: bulkUploading || loading || availableUpdateEntries.length === 0 ? secondaryText : '#ffffff',
+              opacity: bulkUploading || loading || availableUpdateEntries.length === 0 ? 0.65 : 1,
+            }}
           >
-            {bulkUploading ? (
-              <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
-            ) : (
-              <Icon icon={appIcons.uploadFile} className="w-4 h-4" />
-            )}
+            <Icon icon={bulkUploading ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${bulkUploading ? 'animate-spin' : ''}`} />
             Update All ({availableUpdateEntries.length})
           </button>
           <button
             onClick={onCheck}
             disabled={loading}
-            className={loading ? 'lg-btn-ghost opacity-50 cursor-not-allowed' : 'lg-btn-primary'}
+            className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
+            style={{
+              background: loading ? mutedSurface : isDark ? '#b45309' : '#d97706',
+              borderColor: loading ? panelBorder : isDark ? '#b45309' : '#d97706',
+              color: loading ? secondaryText : '#ffffff',
+              opacity: loading ? 0.65 : 1,
+            }}
           >
             {loading ? (
               <>
-                <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
+                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
                 Loading...
               </>
             ) : (
               <>
-                <Icon icon={appIcons.refresh} className="w-4 h-4" />
+                <Icon icon={appIcons.refresh} className="h-4 w-4" />
                 Check Updated Cover
               </>
             )}
@@ -138,14 +152,14 @@ export function CheckUpdatedCoverTab({
       </div>
 
       {error && (
-        <div className="mx-4 mt-4 flex items-center gap-3 p-3 lg-glass" style={{ border: isDark ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(239,68,68,0.3)', background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)' }}>
-          <Icon icon={appIcons.error} className="w-5 h-5 flex-shrink-0 text-red-400" />
+        <div className="mx-4 mt-4 flex items-center gap-3 rounded-xl border p-3" style={{ background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)', borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)', color: isDark ? '#f87171' : '#dc2626' }}>
+          <Icon icon={appIcons.error} className="h-5 w-5 shrink-0" />
           {error}
         </div>
       )}
 
       {data && (
-        <div className={`flex items-center gap-1 px-4 py-2 ${isDark ? 'bg-black/20 border-b border-white/6' : 'bg-black/5 border-b border-black/6'}`}>
+        <div className="flex items-center gap-1 border-b px-4 py-2" style={{ background: mutedSurface, borderColor: panelBorder }}>
           <FilterChip label="All" count={filteredEntries.length} active={filterSection === 'all'} onClick={() => setFilterSection('all')} isDark={isDark} />
           <FilterChip label="Updated" count={updatedCount} active={filterSection === 'updated'} onClick={() => setFilterSection('updated')} variant="green" isDark={isDark} />
           <FilterChip label="No Cover1" count={noCoverCount} active={filterSection === 'no_cover'} onClick={() => setFilterSection('no_cover')} variant="red" isDark={isDark} />
@@ -153,77 +167,68 @@ export function CheckUpdatedCoverTab({
       )}
 
       {data && !loading && (
-        <div className={`mx-4 mt-3 flex flex-wrap items-center gap-3 px-4 py-2 rounded-xl text-xs ${isDark ? 'bg-black/10' : 'bg-black/5'}`}>
-          <div className={`flex items-center gap-1.5 ${isDark ? 'text-white/75' : 'text-black/45'}`}>
-            <Icon icon={appIcons.folder} className="w-3.5 h-3.5 text-indigo-400" />
+        <div className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs" style={{ background: mutedSurface, color: secondaryText }}>
+          <div className="flex items-center gap-1.5">
+            <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#fcd34d' : '#b45309' }} />
             {allEntries.length} total records
           </div>
           {updatedCount > 0 && (
-            <div className={`flex items-center gap-1.5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-              <Icon icon={appIcons.check} className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#fcd34d' : '#b45309' }}>
+              <Icon icon={appIcons.check} className="h-3.5 w-3.5" />
               {updatedCount} updated
             </div>
           )}
           {noCoverCount > 0 && (
-            <div className={`flex items-center gap-1.5 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-              <Icon icon={appIcons.close} className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
+              <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
               {noCoverCount} no cover1
             </div>
           )}
         </div>
       )}
 
-      <div className="p-4 flex-1">
+      <div className="flex-1 p-4">
         {!loading && !data && (
-          <EmptyState
-            isDark={isDark}
-            message="Click 'Check Updated Cover' to view all cover update history records."
-            icon={<Icon icon={appIcons.folder} className={`w-8 h-8 ${isDark ? 'text-white/40' : 'text-black/20'}`} />}
-          />
+          <EmptyState isDark={isDark} message="Click 'Check Updated Cover' to view all cover update history records." icon={<Icon icon={appIcons.folder} className="h-8 w-8" style={{ color: tertiaryText }} />} />
         )}
 
         {loading && (
-          <div className="flex flex-col items-center justify-center py-16 w-full h-full">
-            <div className="lg-glass w-16 h-16 rounded-full flex items-center justify-center mb-4">
-              <Icon icon={appIcons.spinner} className="w-8 h-8 animate-spin text-indigo-400" />
+          <div className="flex h-full w-full flex-col items-center justify-center py-16">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}>
+              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#fcd34d' : '#b45309' }} />
             </div>
-            <p className={`text-sm ${isDark ? 'text-white/65' : 'text-black/45'}`}>Loading cover update history...</p>
+            <p className="text-sm" style={{ color: secondaryText }}>
+              Loading cover update history...
+            </p>
           </div>
         )}
 
         {data && filterSection === 'all' && filteredEntries.length > 0 && (
           <div className="space-y-2">
-            {filteredEntries.map(entry => (
+            {filteredEntries.map((entry) => (
               <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} />
             ))}
           </div>
         )}
+        {data && filterSection === 'all' && filteredEntries.length === 0 && <EmptySection isDark={isDark} message="No records found." />}
 
         {data && filterSection === 'updated' && filteredUpdated.length > 0 && (
           <div className="space-y-2">
-            {filteredUpdated.map(entry => (
+            {filteredUpdated.map((entry) => (
               <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} />
             ))}
           </div>
         )}
-        {data && filterSection === 'updated' && filteredUpdated.length === 0 && (
-          <EmptySection isDark={isDark} message="No updated cover records found." />
-        )}
+        {data && filterSection === 'updated' && filteredUpdated.length === 0 && <EmptySection isDark={isDark} message="No updated cover records found." />}
 
         {data && filterSection === 'no_cover' && filteredNoCover.length > 0 && (
           <div className="space-y-2">
-            {filteredNoCover.map(entry => (
+            {filteredNoCover.map((entry) => (
               <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} />
             ))}
           </div>
         )}
-        {data && filterSection === 'no_cover' && filteredNoCover.length === 0 && (
-          <EmptySection isDark={isDark} message="No no-cover1 records found." />
-        )}
-
-        {data && filterSection === 'all' && filteredEntries.length === 0 && (
-          <EmptySection isDark={isDark} message="No records found." />
-        )}
+        {data && filterSection === 'no_cover' && filteredNoCover.length === 0 && <EmptySection isDark={isDark} message="No no-cover1 records found." />}
       </div>
     </div>
   );
@@ -231,28 +236,20 @@ export function CheckUpdatedCoverTab({
 
 function FilterChip({ label, count, active, onClick, variant, isDark }: { label: string; count: number; active: boolean; onClick: () => void; variant?: 'green' | 'amber' | 'red'; isDark: boolean }) {
   const colors = variant === 'green'
-    ? { active: 'rgba(52,211,153,0.15)', activeText: isDark ? '#34d399' : '#059669', inactive: isDark ? 'text-white/75' : 'text-black/30' }
+    ? { active: 'rgba(52,211,153,0.15)', activeText: isDark ? '#34d399' : '#059669', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'amber'
-    ? { active: 'rgba(251,191,36,0.15)', activeText: isDark ? '#fbbf24' : '#d97706', inactive: isDark ? 'text-white/75' : 'text-black/30' }
+    ? { active: 'rgba(251,191,36,0.15)', activeText: isDark ? '#fcd34d' : '#b45309', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'red'
-    ? { active: 'rgba(248,113,113,0.15)', activeText: isDark ? '#f87171' : '#b91c1c', inactive: isDark ? 'text-white/75' : 'text-black/30' }
-    : { active: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', activeText: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)', inactive: isDark ? 'text-white/75' : 'text-black/30' };
+    ? { active: 'rgba(248,113,113,0.15)', activeText: isDark ? '#f87171' : '#b91c1c', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
+    : { active: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.06)', activeText: isDark ? 'rgba(255,255,255,0.85)' : '#37352f', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' };
 
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200"
-      style={{ background: active ? colors.active : 'transparent', color: active ? colors.activeText : colors.inactive }}
-    >
-      {label} ({count})
-    </button>
-  );
+  return <button onClick={onClick} className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors" style={{ background: active ? colors.active : 'transparent', color: active ? colors.activeText : colors.inactive }}>{label} ({count})</button>;
 }
 
 function EmptySection({ isDark, message }: { isDark: boolean; message: string }) {
   return (
-    <div className={`text-center py-8 ${isDark ? 'text-white/75' : 'text-black/35'}`}>
-      <Icon icon={appIcons.checkCircle} className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-white/40' : 'text-black/15'}`} />
+    <div className="py-8 text-center" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.42)' }}>
+      <Icon icon={appIcons.checkCircle} className="mx-auto mb-2 h-8 w-8" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.34)' }} />
       <p className="text-sm">{message}</p>
     </div>
   );
@@ -275,35 +272,30 @@ function HistoryEntryCard({
   const isNoCover = entry.status === 'no_cover1_file';
   const canUpload = isUpdated && Boolean(entry.story_id) && !isUploading;
   const isSuccess = result?.success;
-  const isFailed = result && !result.success;
+  const isFailed = result ? !result.success : false;
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
-  const borderColor = isNoCover
-    ? (isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.25)')
-    : undefined;
+  const borderColor = isNoCover ? (isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.25)') : panelBorder;
 
   return (
-    <div className="lg-glass-card p-4" style={{ border: borderColor ? `1px solid ${borderColor}` : undefined }}>
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+    <div className="rounded-xl border p-4" style={{ background: mutedSurface, borderColor }}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2">
             <HistoryStatusChip status={entry.status} isDark={isDark} />
-            <h4 className={`text-sm font-medium truncate ${isDark ? 'text-white/85' : 'text-black/85'}`}>
-              {entry.story_title || entry.folder_name}
-            </h4>
+            <h4 className="truncate text-sm font-medium" style={{ color: pageText }}>{entry.story_title || entry.folder_name}</h4>
           </div>
-          <p className={`text-xs font-mono mb-1 ${isDark ? 'text-white/50' : 'text-black/30'}`}>{entry.folder_name}</p>
-          {entry.cover_file_name && (
-            <p className={`text-xs ${isDark ? 'text-white/40' : 'text-black/25'}`}>cover: {entry.cover_file_name}</p>
-          )}
-          {entry.last_updated && (
-            <p className={`text-xs mt-1 ${isDark ? 'text-white/40' : 'text-black/25'}`}>
-              last updated: {formatLastUpdated(entry.last_updated)}
-            </p>
-          )}
+          <p className="mb-1 font-mono text-xs" style={{ color: secondaryText }}>{entry.folder_name}</p>
+          {entry.cover_file_name && <p className="text-xs" style={{ color: tertiaryText }}>cover: {entry.cover_file_name}</p>}
+          {entry.last_updated && <p className="mt-1 text-xs" style={{ color: tertiaryText }}>last updated: {formatLastUpdated(entry.last_updated)}</p>}
           {result && (
-            <p className={`text-xs mt-1.5 flex items-center gap-1 ${isSuccess ? 'text-emerald-400' : isFailed ? 'text-red-400' : ''}`}>
-              {isSuccess && <Icon icon={appIcons.check} className="w-3.5 h-3.5" />}
-              {isFailed && <Icon icon={appIcons.close} className="w-3.5 h-3.5" />}
+            <p className="mt-1.5 flex items-center gap-1 text-xs" style={{ color: isSuccess ? (isDark ? '#34d399' : '#059669') : isFailed ? (isDark ? '#f87171' : '#dc2626') : tertiaryText }}>
+              {isSuccess && <Icon icon={appIcons.check} className="h-3.5 w-3.5" />}
+              {isFailed && <Icon icon={appIcons.close} className="h-3.5 w-3.5" />}
               {result.message}
             </p>
           )}
@@ -311,31 +303,28 @@ function HistoryEntryCard({
 
         <div className="flex items-end">
           {canUpload ? (
-            <button
-              onClick={() => onUpload(entry.folder_id, entry.story_id!)}
-              className="lg-btn-primary"
-            >
-              <Icon icon={appIcons.uploadFile} className="w-4 h-4" />
+            <button onClick={() => onUpload(entry.folder_id, entry.story_id!)} className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors" style={{ background: isDark ? '#b45309' : '#d97706', borderColor: isDark ? '#b45309' : '#d97706', color: '#ffffff' }}>
+              <Icon icon={appIcons.uploadFile} className="h-4 w-4" />
               Update Cover
             </button>
           ) : isUploading ? (
-            <button className="lg-btn-ghost opacity-50 cursor-not-allowed">
-              <Icon icon={appIcons.spinner} className="w-4 h-4 animate-spin" />
+            <button className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium opacity-65" style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}>
+              <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
               Uploading...
             </button>
           ) : isUpdated ? (
-            <span className="lg-chip lg-chip-green">
-              <Icon icon={appIcons.check} className="w-3.5 h-3.5" />
+            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(52,211,153,0.14)' : 'rgba(5,150,105,0.08)', borderColor: isDark ? 'rgba(52,211,153,0.24)' : 'rgba(5,150,105,0.2)', color: isDark ? '#34d399' : '#059669' }}>
+              <Icon icon={appIcons.check} className="h-3.5 w-3.5" />
               Updated
             </span>
           ) : isNoCover ? (
-            <span className="lg-chip lg-chip-red">
-              <Icon icon={appIcons.close} className="w-3.5 h-3.5" />
+            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)', borderColor: isDark ? 'rgba(239,68,68,0.24)' : 'rgba(239,68,68,0.2)', color: isDark ? '#f87171' : '#dc2626' }}>
+              <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
               No Cover1
             </span>
           ) : (
-            <span className="lg-chip">
-              <Icon icon={appIcons.folder} className="w-3.5 h-3.5" />
+            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}>
+              <Icon icon={appIcons.folder} className="h-3.5 w-3.5" />
               {entry.status}
             </span>
           )}
@@ -347,31 +336,12 @@ function HistoryEntryCard({
 
 function HistoryStatusChip({ status, isDark }: { status: string; isDark: boolean }) {
   const variants: Record<string, { bg: string; text: string; label: string }> = {
-    updated: {
-      bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)',
-      text: isDark ? '#34d399' : '#059669',
-      label: 'UPDATED',
-    },
-    no_cover1_file: {
-      bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)',
-      text: isDark ? '#f87171' : '#dc2626',
-      label: 'NO COVER1',
-    },
-    error: {
-      bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)',
-      text: isDark ? '#f87171' : '#dc2626',
-      label: 'ERROR',
-    },
+    updated: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'UPDATED' },
+    no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NO COVER1' },
+    error: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'ERROR' },
   };
 
-  const v = variants[status] ?? { bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', text: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.5)', label: status };
+  const variant = variants[status] ?? { bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.06)', text: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(55,53,47,0.55)', label: status };
 
-  return (
-    <span
-      className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-md"
-      style={{ background: v.bg, color: v.text }}
-    >
-      {v.label}
-    </span>
-  );
+  return <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold" style={{ background: variant.bg, color: variant.text }}>{variant.label}</span>;
 }

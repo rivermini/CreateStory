@@ -8,17 +8,17 @@ export interface CrawlLogProps {
 }
 
 const levelStylesDark: Record<string, string> = {
-  error:   'text-red-400',
-  warning: 'text-amber-400',
-  info:    'text-white/55',
-  debug:   'text-white/30',
+  error: '#f87171',
+  warning: '#fbbf24',
+  info: 'rgba(255,255,255,0.62)',
+  debug: 'rgba(255,255,255,0.34)',
 };
 
 const levelStylesLight: Record<string, string> = {
-  error:   'text-red-600',
-  warning: 'text-amber-600',
-  info:    'text-black/65',
-  debug:   'text-black/30',
+  error: '#dc2626',
+  warning: '#d97706',
+  info: 'rgba(55,53,47,0.72)',
+  debug: 'rgba(55,53,47,0.42)',
 };
 
 export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps) {
@@ -33,38 +33,55 @@ export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps
   }, [lines, userScrolledUp]);
 
   const handleScroll = () => {
-    const el = containerRef.current;
-    if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    const element = containerRef.current;
+    if (!element) return;
+    const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 40;
     setUserScrolledUp(!atBottom);
   };
 
   const displayLines = lines.slice(-maxLines);
   const levelStyles = isDark ? levelStylesDark : levelStylesLight;
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const logBackground = isDark ? 'rgba(0,0,0,0.18)' : 'rgba(55,53,47,0.03)';
+  const pageText = isDark ? 'rgba(255,255,255,0.72)' : 'rgba(55,53,47,0.72)';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className={`text-sm font-semibold ${isDark ? 'text-white/65' : 'text-black/65'}`}>Crawl Log</h3>
-        <span className="lg-chip" style={{ background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.08)', color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: secondaryText }}>Crawl Log</h3>
+        <span className="rounded-md border px-2 py-0.5 text-[11px]" style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(55,53,47,0.04)', borderColor: panelBorder, color: tertiaryText }}>
           {displayLines.length} lines
         </span>
       </div>
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="lg-log-container"
-        style={{ maxHeight: 'min(400px, 40vh)' }}
+        className="overflow-y-auto rounded-2xl border p-4"
+        style={{
+          maxHeight: 'min(400px, 40vh)',
+          background: logBackground,
+          borderColor: panelBorder,
+          boxShadow: `inset 0 1px 0 ${isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.6)'}`,
+        }}
       >
         {displayLines.length === 0 ? (
-          <p className={`text-sm italic ${isDark ? 'text-white/30' : 'text-black/30'}`}>Waiting for output...</p>
+          <p className="text-sm italic" style={{ color: tertiaryText }}>Waiting for output...</p>
         ) : (
-          displayLines.map((entry, idx) => (
-            <div key={idx} className={`font-mono text-xs leading-relaxed ${levelStyles[entry.level] ?? levelStyles.info}`}>
-              <span className={isDark ? 'text-white/15' : 'text-black/15'}>[{entry.timestamp}]</span>{' '}
-              <span>{entry.message}</span>
-            </div>
-          ))
+          <div className="space-y-1.5">
+            {displayLines.map((entry, index) => (
+              <div
+                key={index}
+                className="rounded-lg px-2 py-1.5 font-mono text-xs leading-relaxed"
+                style={{ background: isDark ? 'rgba(255,255,255,0.02)' : panelBackground, color: levelStyles[entry.level] ?? levelStyles.info }}
+              >
+                <span style={{ color: tertiaryText }}>[{entry.timestamp}]</span>{' '}
+                <span style={{ color: levelStyles[entry.level] ?? pageText }}>{entry.message}</span>
+              </div>
+            ))}
+          </div>
         )}
         <div ref={bottomRef} />
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   getAutoAudioStatus,
   startAutoAudio,
@@ -64,6 +65,8 @@ const STEP_NAMES: Record<number, string> = {
 
 export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: AutoAudioPageProps) {
   const isDark = themeMode === 'dark';
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [session, setSession] = useState<AutoAudioSession | null>(() => {
     try {
@@ -277,7 +280,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
             isDark={isDark}
             isConfigLoading={configLoading}
             isConfigValid={config ? Boolean(config.main_be_api_base_url && config.main_be_user_id) : undefined}
-            onConfigure={() => window.location.href = '/settings'}
+            onConfigure={() => navigate('/settings', { state: { backgroundPath: location.pathname + location.search } })}
           />
 
           {error && (

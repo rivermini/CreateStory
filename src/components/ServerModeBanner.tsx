@@ -21,27 +21,6 @@ const VARIANT_ACCENT: Record<BannerVariant, string> = {
   token_invalid: '#f97316',
 };
 
-const VARIANT_LIGHT_BG: Record<BannerVariant, string> = {
-  error: 'rgba(239,68,68,0.09)',
-  production: 'rgba(16,185,129,0.09)',
-  nonproduction: 'rgba(99,102,241,0.09)',
-  token_invalid: 'rgba(249,115,22,0.09)',
-};
-
-const VARIANT_LIGHT_BORDER: Record<BannerVariant, string> = {
-  error: 'rgba(239,68,68,0.2)',
-  production: 'rgba(16,185,129,0.2)',
-  nonproduction: 'rgba(99,102,241,0.2)',
-  token_invalid: 'rgba(249,115,22,0.2)',
-};
-
-const VARIANT_LIGHT_SOFT: Record<BannerVariant, string> = {
-  error: 'rgba(255,255,255,0.56)',
-  production: 'rgba(240,253,250,0.6)',
-  nonproduction: 'rgba(238,242,255,0.6)',
-  token_invalid: 'rgba(255,247,237,0.62)',
-};
-
 export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigValid, tokenInvalid, onConfigure }: ServerModeBannerProps) {
   if (isConfigLoading) return null;
 
@@ -58,83 +37,66 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
   }
 
   const accent = VARIANT_ACCENT[variant];
-  const lightBg = VARIANT_LIGHT_BG[variant];
-  const lightBorder = VARIANT_LIGHT_BORDER[variant];
-  const lightSoft = VARIANT_LIGHT_SOFT[variant];
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
-  const iconColor = accent;
-  const textPrimary = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)';
-  const textSecondary = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.68)';
   return (
     <div
-      className="lg-glass px-4 py-3"
+      className="rounded-xl border px-4 py-3"
       style={{
-        border: isDark ? `1px solid ${accent}25` : `1px solid ${lightBorder}`,
-        background: isDark
-          ? `linear-gradient(135deg, ${accent}12, ${accent}06)`
-          : `linear-gradient(135deg, ${lightSoft}, ${lightBg})`,
-        boxShadow: isDark
-          ? `0 4px 20px ${accent}10, inset 0 1px 0 rgba(255,255,255,0.05)`
-          : `0 8px 24px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.55)`,
-        backdropFilter: isDark ? undefined : 'blur(10px)',
+        background: mutedSurface,
+        borderColor: isDark ? `${accent}22` : `${accent}16`,
       }}
     >
       <div className="flex items-start gap-3">
-        {/* Icon */}
         <div
-          className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center mt-0.5"
-          style={{ background: isDark ? `${accent}15` : `${accent}16`, boxShadow: isDark ? 'none' : `inset 0 0 0 1px ${lightBorder}` }}
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: isDark ? `${accent}15` : `${accent}12`, border: `1px solid ${isDark ? `${accent}28` : `${accent}22`}` }}
         >
           {variant === 'error' || variant === 'token_invalid' ? (
-            <Icon icon={appIcons.statusWarning} className="w-4 h-4" style={{ color: iconColor }} />
+            <Icon icon={appIcons.statusWarning} className="h-4 w-4" style={{ color: accent }} />
           ) : variant === 'production' ? (
-            <Icon icon={appIcons.shield} className="w-4 h-4" style={{ color: iconColor }} />
+            <Icon icon={appIcons.shield} className="h-4 w-4" style={{ color: accent }} />
           ) : (
-            <Icon icon={appIcons.info} className="w-4 h-4" style={{ color: iconColor }} />
+            <Icon icon={appIcons.info} className="h-4 w-4" style={{ color: accent }} />
           )}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold" style={{ color: textPrimary }}>
-            {variant === 'error' ? 'Drive Sync Not Configured' : variant === 'token_invalid' ? 'Bearer Token Invalid' : variant === 'production' ? 'Production Server' : 'Non-Production Server'}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold" style={{ color: pageText }}>
+            {variant === 'error' ? 'Drive Sync Not Configured'
+              : variant === 'token_invalid' ? 'Bearer Token Invalid'
+              : variant === 'production' ? 'Production Server'
+              : 'Non-Production Server'}
           </p>
-          <p className="text-xs mt-0.5" style={{ color: textSecondary }}>
+          <p className="mt-0.5 text-xs" style={{ color: secondaryText }}>
             {variant === 'error'
               ? 'Auto Audio requires Drive Sync configuration to be set up before use.'
               : variant === 'token_invalid'
               ? <>Connected to <span className="font-mono" style={{ fontSize: '0.65rem' }}>{serverUrl}</span> — The stored bearer token is invalid or expired (401).</>
-              : <>Connected to <span className="font-mono" style={{ fontSize: '0.65rem' }}>{serverUrl}</span></>
-            }
+              : <>Connected to <span className="font-mono" style={{ fontSize: '0.65rem' }}>{serverUrl}</span></>}
           </p>
 
           {variant === 'production' && (
-            <p className="text-xs mt-1" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
+            <p className="mt-1 text-xs" style={{ color: '#f59e0b' }}>
               <strong>Warning:</strong> Actions will affect real data. Please double-check before proceeding.
             </p>
           )}
           {variant === 'nonproduction' && (
-            <p className="text-xs mt-1" style={{ color: textSecondary }}>
+            <p className="mt-1 text-xs" style={{ color: secondaryText }}>
               Feel free to test and experiment — changes here won't affect production data.
             </p>
           )}
 
-          {variant === 'error' && onConfigure && (
+          {(variant === 'error' || variant === 'token_invalid') && onConfigure && (
             <button
               onClick={onConfigure}
-              className="lg-btn-ghost mt-2"
-              style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: 10 }}
+              className="mt-2 rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors"
+              style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}
             >
-              Configure Drive Sync
-            </button>
-          )}
-          {variant === 'token_invalid' && onConfigure && (
-            <button
-              onClick={onConfigure}
-              className="lg-btn-ghost mt-2"
-              style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: 10 }}
-            >
-              Update Bearer Token
+              {variant === 'error' ? 'Configure Drive Sync' : 'Update Bearer Token'}
             </button>
           )}
         </div>

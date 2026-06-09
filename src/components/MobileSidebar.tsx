@@ -7,6 +7,8 @@ import type { ThemeMode } from '../types/theme';
 interface MobileSidebarProps {
     themeMode: ThemeMode;
     onThemeChange: (mode: ThemeMode) => void;
+    isSettingsOpen: boolean;
+    onOpenSettings: () => void;
     isOpen: boolean;
     onClose: () => void;
 }
@@ -90,7 +92,7 @@ const NAV_SECTIONS: NavSection[] = [
     },
 ];
 
-export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen, onClose }: MobileSidebarProps) {
+export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isSettingsOpen, onOpenSettings, isOpen, onClose }: MobileSidebarProps) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
@@ -99,13 +101,80 @@ export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isOpen
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
     const makeNavItem = (item: NavItem) => {
-        const active = navActive(location.pathname, item.to);
+        const active = item.to === '/settings' ? isSettingsOpen : navActive(location.pathname, item.to);
         const hovered = hoveredItem === item.to;
 
         const showHover = hovered && !active;
         const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.07)';
         const hoverIconColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.72)';
         const hoverTextColor = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(15,23,42,0.86)';
+
+        if (item.to === '/settings') {
+            return (
+                <button
+                    key={item.to}
+                    type="button"
+                    onClick={() => {
+                        onClose();
+                        onOpenSettings();
+                    }}
+                    className="group relative flex items-center gap-3 transition-all duration-200 w-full"
+                    style={{ textDecoration: 'none' }}
+                    onMouseEnter={() => setHoveredItem(item.to)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                >
+                    <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full transition-all duration-300"
+                        style={{
+                            width: active ? 4 : 0,
+                            height: active ? 24 : 0,
+                            background: activeAccent,
+                            boxShadow: active ? `0 0 10px ${activeAccent}80` : 'none',
+                        }}
+                    />
+                    <span
+                        className="relative flex items-center gap-3 rounded-[14px] transition-all duration-200 w-full"
+                        style={{
+                            padding: '10px 14px',
+                            background: active
+                                ? `linear-gradient(135deg, ${activeAccent}18, ${activeAccent}10)`
+                                : showHover
+                                ? hoverBg
+                                : 'transparent',
+                            border: active
+                                ? `1px solid ${activeAccent}30`
+                                : showHover
+                                ? isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.14)'
+                                : '1px solid transparent',
+                            boxShadow: active
+                                ? `0 2px 12px ${activeAccent}15, inset 0 1px 0 rgba(255,255,255,0.05)`
+                                : showHover
+                                ? 'inset 0 1px 0 rgba(255,255,255,0.04)'
+                                : 'none',
+                        }}
+                    >
+                        <span
+                            className="flex-shrink-0 transition-colors duration-200"
+                            style={{ color: active ? activeAccent : showHover ? hoverIconColor : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.55)') }}
+                        >
+                            <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-5 h-5 flex-shrink-0" />
+                        </span>
+                        <span
+                            className="text-sm font-medium truncate transition-colors duration-200 text-left"
+                            style={{ color: active ? (isDark ? 'rgba(255,255,255,0.9)' : 'rgba(15,23,42,0.92)') : showHover ? hoverTextColor : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.66)') }}
+                        >
+                            {item.label}
+                        </span>
+
+                        {active && (
+                            <span className="ml-auto">
+                                <span className="block rounded-full" style={{ width: 6, height: 6, background: activeAccent, boxShadow: `0 0 6px ${activeAccent}80` }} />
+                            </span>
+                        )}
+                    </span>
+                </button>
+            );
+        }
 
         return (
             <Link

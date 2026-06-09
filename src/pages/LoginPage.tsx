@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { login, type AuthUser } from '../api/client';
+import { AppIcon } from '../components/AppIcon';
 
 interface LoginPageProps {
   themeMode: 'light' | 'dark';
@@ -7,11 +8,12 @@ interface LoginPageProps {
   onAuthenticated: (user: AuthUser) => void;
 }
 
-export function LoginPage({ onAuthenticated }: LoginPageProps) {
+export function LoginPage({ themeMode, onThemeChange, onAuthenticated }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isDark = themeMode === 'dark';
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -27,74 +29,174 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     }
   };
 
+  const pageBackground = isDark
+    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
+    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const inputBackground = isDark ? 'rgba(255,255,255,0.05)' : '#ffffff';
+  const inputBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.16)';
+  const themeLabel = isDark ? 'Dark' : 'Light';
+
   return (
     <main
-      className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f8fbff_0%,#eef6ff_50%,#f8fafc_100%)] px-4 py-8 text-slate-900 sm:px-6 lg:px-8"
-      style={{ colorScheme: 'light' }}
+      className={`${isDark ? 'dark' : 'light'} min-h-screen px-4 py-8 sm:px-6 lg:px-8`}
+      style={{ background: pageBackground, colorScheme: isDark ? 'dark' : 'light' }}
     >
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-20 h-56 w-56 -translate-x-1/2 rounded-full bg-sky-200/40 blur-3xl" />
-        <div className="absolute bottom-16 right-10 h-44 w-44 rounded-full bg-cyan-100/60 blur-3xl" />
-      </div>
-
-      <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-md items-center">
-        <section className="w-full rounded-[2rem] border border-white/70 bg-white/55 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.10)] backdrop-blur-2xl sm:p-8">
-          <div className="mb-8 text-center">
-            <h1 className="bg-[linear-gradient(135deg,#0f172a,#334155)] bg-clip-text text-3xl font-semibold tracking-tight text-transparent">
-              CreateStory
-            </h1>
-            <p className="mt-2 text-sm text-slate-600">Sign in to continue</p>
-          </div>
-
-          <form onSubmit={submit} className="space-y-5">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700" htmlFor="auth-email">
-                Email
-              </label>
-              <input
-                id="auth-email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
-                required
-                placeholder="you@example.com"
-                className="h-12 w-full rounded-2xl border border-white/80 bg-white/65 px-4 text-sm text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] outline-none backdrop-blur-md transition focus:border-sky-300 focus:bg-white/75 focus:ring-4 focus:ring-sky-100"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700" htmlFor="auth-password">
-                Password
-              </label>
-              <input
-                id="auth-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-                placeholder="Enter your password"
-                className="h-12 w-full rounded-2xl border border-white/80 bg-white/65 px-4 text-sm text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] outline-none backdrop-blur-md transition focus:border-sky-300 focus:bg-white/75 focus:ring-4 focus:ring-sky-100"
-              />
-            </div>
-
-            {error && (
-              <div className="rounded-2xl border border-rose-200/80 bg-rose-50/85 px-4 py-3 text-sm text-rose-700 backdrop-blur-md">
-                {error}
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl items-center justify-center">
+        <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1.05fr)_420px] lg:items-center">
+          <section className="hidden lg:block">
+            <div className="max-w-xl space-y-5">
+              <div className="text-xs font-medium uppercase tracking-[0.18em]" style={{ color: tertiaryText }}>
+                CreateStory
               </div>
-            )}
+              <h1 className="text-4xl font-semibold tracking-tight" style={{ color: pageText }}>
+                Sign in to continue your crawling workflow.
+              </h1>
+              <p className="text-base leading-7" style={{ color: secondaryText }}>
+                Access crawl sessions, output files, admin tools, and the updated workspace from a single account.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FeatureCard
+                  title="Unified sessions"
+                  description="Jump between crawl results, histories, and dashboard tools without leaving the app."
+                  isDark={isDark}
+                />
+                <FeatureCard
+                  title="Cleaner workflow"
+                  description="The interface now uses a flatter document-style system across search, admin, and result screens."
+                  isDark={isDark}
+                />
+              </div>
+            </div>
+          </section>
 
-            <button
-              type="submit"
-              disabled={busy}
-              className="h-12 w-full rounded-2xl border border-white/60 bg-[linear-gradient(135deg,rgba(14,165,233,0.92),rgba(59,130,246,0.88))] text-sm font-semibold text-white shadow-[0_16px_30px_rgba(14,165,233,0.24),inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
-        </section>
+          <section
+            className="w-full rounded-2xl border px-5 py-6 sm:px-6 sm:py-7"
+            style={{ background: panelBackground, borderColor: panelBorder }}
+          >
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <AppIcon size="xl" className="shrink-0" />
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight" style={{ color: pageText }}>
+                    Welcome back
+                  </h2>
+                  <p className="mt-1 text-sm" style={{ color: secondaryText }}>
+                    Sign in to continue
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onThemeChange(isDark ? 'light' : 'dark')}
+                className="rounded-md border px-3 py-2 text-sm transition-colors"
+                style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+              >
+                {themeLabel}
+              </button>
+            </div>
+
+            <form onSubmit={submit} className="space-y-5">
+              <div>
+                <label className="mb-2 block text-sm" style={{ color: secondaryText }} htmlFor="auth-email">
+                  Email
+                </label>
+                <input
+                  id="auth-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  required
+                  placeholder="you@example.com"
+                  className="h-11 w-full rounded-md border px-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                  style={{
+                    background: inputBackground,
+                    borderColor: inputBorder,
+                    color: pageText,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm" style={{ color: secondaryText }} htmlFor="auth-password">
+                  Password
+                </label>
+                <input
+                  id="auth-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                  placeholder="Enter your password"
+                  className="h-11 w-full rounded-md border px-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                  style={{
+                    background: inputBackground,
+                    borderColor: inputBorder,
+                    color: pageText,
+                  }}
+                />
+              </div>
+
+              {error && (
+                <div
+                  className="rounded-xl border px-4 py-3 text-sm"
+                  style={{
+                    background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
+                    borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
+                    color: isDark ? '#f87171' : '#dc2626',
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="h-11 w-full rounded-md text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed"
+                style={{ background: '#4f46e5', opacity: busy ? 0.6 : 1 }}
+              >
+                {busy ? 'Signing in...' : 'Sign in'}
+              </button>
+            </form>
+          </section>
+        </div>
       </div>
     </main>
+  );
+}
+
+function FeatureCard({
+  title,
+  description,
+  isDark,
+}: {
+  title: string;
+  description: string;
+  isDark: boolean;
+}) {
+  return (
+    <div
+      className="rounded-2xl border px-4 py-4"
+      style={{
+        background: isDark ? '#202020' : '#ffffff',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)',
+      }}
+    >
+      <h3 className="text-sm font-semibold" style={{ color: isDark ? 'rgba(255,255,255,0.9)' : '#37352f' }}>
+        {title}
+      </h3>
+      <p className="mt-2 text-sm leading-6" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)' }}>
+        {description}
+      </p>
+    </div>
   );
 }
