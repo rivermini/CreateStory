@@ -7,8 +7,8 @@ import {
   validateMainBeToken,
   type DriveSyncConfig,
 } from '../api/client';
-import type { ConfigFormData } from '../components/DriveConfig';
-import { showToast } from '../components/Toast';
+import type { ConfigFormData } from '../components/Shared/DriveConfig';
+import { showToast } from '../components/Shared/Toast';
 
 interface UseDriveSyncConfigOptions {
   validateToken?: boolean;
