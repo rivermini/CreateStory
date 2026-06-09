@@ -1174,6 +1174,52 @@ export async function deleteJobs(jobIds: string[]): Promise<{ deleted: number }>
 }
 
 // ---------------------------------------------------------------------------
+// Drive Sync — Cover Update
+// ---------------------------------------------------------------------------
+
+export interface CoverUpdateEntry {
+  story_id: string | null;
+  story_title: string;
+  folder_id: string;
+  folder_name: string;
+  cover_file_name: string | null;
+  status: string;
+  last_updated: string | null;
+}
+
+export interface CheckAllResponse {
+  can_update: CoverUpdateEntry[];
+  updated: CoverUpdateEntry[];
+  no_cover1_file: CoverUpdateEntry[];
+  no_server_match: CoverUpdateEntry[];
+}
+
+export interface CheckUpdatedResponse {
+  entries: CoverUpdateEntry[];
+}
+
+export interface CoverUpdateUploadResponse {
+  success: boolean;
+  message: string;
+  cover_url?: string | null;
+}
+
+export async function checkCoverUpdateAll(): Promise<CheckAllResponse> {
+  return apiFetch<CheckAllResponse>('/api/drive-sync/cover-update/check-all', { timeout: 120000 });
+}
+
+export async function checkCoverUpdateUpdated(): Promise<CheckUpdatedResponse> {
+  return apiFetch<CheckUpdatedResponse>('/api/drive-sync/cover-update/check-updated', { timeout: 30000 });
+}
+
+export async function uploadCoverUpdate(folderId: string, storyId: string): Promise<CoverUpdateUploadResponse> {
+  return apiFetch<CoverUpdateUploadResponse>(
+    `/api/drive-sync/cover-update/upload/${encodeURIComponent(folderId)}/${encodeURIComponent(storyId)}`,
+    { method: 'POST', timeout: 120000 }
+  );
+}
+
+// ---------------------------------------------------------------------------
 // TTS — Kokoro text-to-speech
 // ---------------------------------------------------------------------------
 
