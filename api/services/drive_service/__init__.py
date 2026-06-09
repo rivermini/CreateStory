@@ -10,6 +10,7 @@ from api.services.drive_service.drive_service import (
 from api.services.drive_service.drive_service import (  # noqa: F401
     _download_file_content as _get_file_content,
 )
+from api.services.drive_service._cover_update import CoverUpdateMixin
 
 __all__ = [
     "DriveSyncService",
@@ -18,4 +19,5 @@ __all__ = [
     "_RE_STATUS_PREFIX",
     "_RE_SOURCE_SUFFIX",
     "_get_file_content",
+    "CoverUpdateMixin",
 ]

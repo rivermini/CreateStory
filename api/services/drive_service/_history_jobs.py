@@ -614,6 +614,7 @@ class HistoryJobsMixin:
             return jobs
 
         self._with_jobs_lock(_mutate)
+        self._repo._enforce_jobs_limit(_MAX_JOBS_ENTRIES)
         return job
 
     def create_job_once(
@@ -663,6 +664,8 @@ class HistoryJobsMixin:
             return jobs
 
         self._with_jobs_lock(_mutate)
+        if created:
+            self._repo._enforce_jobs_limit(_MAX_JOBS_ENTRIES)
         return selected_job, created
 
     def get_job(self, job_id: str) -> Optional["SyncJob"]:
@@ -831,6 +834,7 @@ class HistoryJobsMixin:
             return jobs
 
         self._with_jobs_lock(_mutate)
+        self._repo._enforce_jobs_limit(_MAX_JOBS_ENTRIES)
         return job
 
     # -------------------------------------------------------------------------

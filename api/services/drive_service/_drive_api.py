@@ -43,6 +43,7 @@ class DriveAPIMixin:
       - _batch_get_chapter_counts, _batch_count_chapters_in_extended
       - _batch_check_duplicates_and_count_extended
       - _batch_get_free_and_tag_counts
+      - _batch_find_cover1_files
       - _download_file_content  (backward-compat alias for _get_file_content)
     """
 
@@ -803,6 +804,56 @@ class DriveAPIMixin:
                     break
 
         return (has_free, has_tags)
+
+    def _batch_find_cover1_files(
+        self, drive_service: Any, folder_ids: list[str]
+    ) -> dict[str, Optional[dict]]:
+        """
+        Batch-search for cover1.jpg (case-insensitive) across Drive folders.
+        Uses the same chunked OR query pattern as the other batch checks.
+        """
+        result: dict[str, Optional[dict]] = {fid: None for fid in folder_ids}
+        if not folder_ids:
+            return result
+
+        for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
+            chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
+            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            query = (
+                f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
+                "and trashed=false"
+            )
+            page_token = None
+
+            while True:
+                _pt = page_token
+
+                def _call() -> dict:
+                    return drive_service.files().list(
+                        q=query,
+                        fields="files(id, name, parents),nextPageToken",
+                        pageSize=_CHECK_BATCH_PAGE_SIZE,
+                        pageToken=_pt,
+                    ).execute()
+
+                try:
+                    response = self._retry_drive_call(_call)
+                except (ssl.SSLError, TimeoutError):
+                    break
+
+                for file_info in response.get("files", []):
+                    if file_info.get("name", "").lower() != "cover1.jpg":
+                        continue
+                    for parent in file_info.get("parents", []):
+                        if parent in result and result[parent] is None:
+                            result[parent] = file_info
+                            break
+
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
+
+        return result
 
 
 logger = logging.getLogger(__name__)
