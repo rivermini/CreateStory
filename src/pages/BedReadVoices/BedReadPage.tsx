@@ -453,21 +453,19 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
       <div className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col px-3 py-4 sm:px-4 lg:px-6 lg:py-5">
         <main className="space-y-4">
           <section
-            className="rounded-lg border px-4 py-4 sm:px-5"
+            className="rounded-lg border px-4 py-3 sm:px-5 sm:py-4"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em]" style={{ color: tertiaryText }}>
-                  BedRead voices
-                </div>
-                <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" style={{ color: pageText }}>
-                  Compact batch TTS workspace
-                </h1>
-                <p className="max-w-3xl text-sm leading-5" style={{ color: secondaryText }}>
-                  Browse stories, narrow the chapter range, and generate audio with a quieter monochrome layout.
-                </p>
+            <div className="space-y-1">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color: tertiaryText }}>
+                BedRead voices
               </div>
+              <h1 className="text-lg font-semibold tracking-tight sm:text-xl" style={{ color: pageText }}>
+                Compact batch TTS workspace
+              </h1>
+              <p className="max-w-2xl text-sm leading-5" style={{ color: secondaryText }}>
+                Browse stories, narrow the chapter range, and generate audio with a quieter monochrome layout.
+              </p>
             </div>
           </section>
 
@@ -481,16 +479,16 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
             }}
           />
 
-          <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[340px_minmax(0,1fr)]">
             <section
               className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
-              <div className="border-b px-4 py-4" style={{ borderColor: panelBorder }}>
-                <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="border-b px-4 py-4">
+                <div className="mb-3 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <StepBadge number={1} isDark={isDark} />
-                    <div>
+                    <div className="flex flex-col">
                       <h2 className="text-base font-semibold" style={{ color: pageText }}>
                         Library
                       </h2>
@@ -499,7 +497,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {!hasLoadedAll && (
                       <button
                         onClick={loadAllStories}

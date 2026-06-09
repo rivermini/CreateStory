@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   createAdminUser,
   deleteAdminUser,
@@ -14,8 +14,8 @@ import { showToast } from '../../components/Shared/Toast';
 import type { ThemeMode } from '../../types/theme';
 
 interface AdminUsersPanelProps {
-  themeMode: ThemeMode;
-  embedded?: boolean;
+  readonly themeMode: ThemeMode;
+  readonly embedded?: boolean;
 }
 
 type Role = 'admin' | 'user';
@@ -68,10 +68,20 @@ export function AdminUsersPanel({ themeMode, embedded = false }: AdminUsersPanel
   };
 
   useEffect(() => {
-    void loadUsers();
+    (async () => {
+      setError('');
+      setLoading(true);
+      try {
+        setUsers(await listAdminUsers());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load users.');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  const handleCreate = async (event: FormEvent) => {
+  const handleCreate = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     setSaving(true);
     setError('');
@@ -105,7 +115,7 @@ export function AdminUsersPanel({ themeMode, embedded = false }: AdminUsersPanel
     });
   };
 
-  const handleUpdate = async (event: FormEvent) => {
+  const handleUpdate = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     if (!editingUser) return;
     setSaving(true);
@@ -170,7 +180,7 @@ export function AdminUsersPanel({ themeMode, embedded = false }: AdminUsersPanel
     return (
       <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
         <div className={embedded ? 'p-0' : headerShell}>
-          <main className={embedded ? 'space-y-5' : 'space-y-5'}>
+          <main className="space-y-5">
             <section
               className="rounded-2xl border px-5 py-5 sm:px-6"
               style={{ background: panelBackground, borderColor: panelBorder }}
@@ -564,7 +574,7 @@ export function AdminUsersPanel({ themeMode, embedded = false }: AdminUsersPanel
   );
 }
 
-function Field({ label, secondaryText, children }: { label: string; secondaryText: string; children: ReactNode }) {
+function Field({ label, secondaryText, children }: { readonly label: string; readonly secondaryText: string; readonly children: ReactNode }) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm" style={{ color: secondaryText }}>{label}</span>
@@ -584,15 +594,15 @@ function PasswordInput({
   name,
   autoComplete,
 }: {
-  value: string;
-  onChange: (value: string) => void;
-  visible: boolean;
-  onToggle: () => void;
-  isDark: boolean;
-  required?: boolean;
-  placeholder?: string;
-  name?: string;
-  autoComplete?: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly visible: boolean;
+  readonly onToggle: () => void;
+  readonly isDark: boolean;
+  readonly required?: boolean;
+  readonly placeholder?: string;
+  readonly name?: string;
+  readonly autoComplete?: string;
 }) {
   return (
     <div className="relative">
@@ -626,14 +636,14 @@ function PasswordInput({
   );
 }
 
-function RoleBadge({ role, isDark }: { role: Role; isDark: boolean }) {
+function RoleBadge({ role, isDark }: { readonly role: Role; readonly isDark: boolean }) {
   const color = role === 'admin'
     ? isDark ? 'bg-indigo-500/12 text-indigo-200 border-indigo-400/25' : 'bg-indigo-50 text-indigo-700 border-indigo-200'
     : isDark ? 'bg-white/[0.05] text-white/55 border-white/[0.08]' : 'bg-black/[0.04] text-black/55 border-black/10';
   return <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium uppercase border ${color}`}>{role}</span>;
 }
 
-function StatusBadge({ active, isDark }: { active: boolean; isDark: boolean }) {
+function StatusBadge({ active, isDark }: { readonly active: boolean; readonly isDark: boolean }) {
   const color = active
     ? isDark ? 'bg-emerald-500/12 text-emerald-200 border-emerald-400/25' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
     : isDark ? 'bg-red-500/10 text-red-200 border-red-400/20' : 'bg-red-50 text-red-700 border-red-200';

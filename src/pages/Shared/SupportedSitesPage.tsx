@@ -3,8 +3,7 @@ import type { ThemeMode } from '../../types/theme';
 import { listSites, type SiteInfoResponse } from '../../api/client';
 
 interface SupportedSitesPageProps {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
+  readonly themeMode: ThemeMode;
 }
 
 const SITE_FEATURES: Record<string, string[]> = {

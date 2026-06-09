@@ -11,8 +11,7 @@ import {
 import { DatePicker } from '../../components/Shared/DatePicker';
 
 interface BedReadJobsPageProps {
-  themeMode: 'light' | 'dark';
-  onThemeChange: (mode: 'light' | 'dark') => void;
+  readonly themeMode: 'light' | 'dark';
 }
 
 function formatDate(iso: string | null): string {
@@ -41,7 +40,7 @@ function canDeleteBatchJob(job: BatchJob): boolean {
 
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
   pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
-  queued: (d) => d ? 'bg-amber-400' : 'bg-amber-400',
+  queued: () => 'bg-amber-400',
   running: (d) => d ? 'bg-blue-400' : 'bg-blue-500',
   completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
   failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
@@ -59,7 +58,7 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 
 const CHAPTER_STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
   pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
-  queued: (d) => d ? 'bg-indigo-400' : 'bg-indigo-400',
+  queued: () => 'bg-indigo-400',
   processing: (d) => d ? 'bg-blue-400' : 'bg-blue-500',
   completed: (d) => d ? 'bg-emerald-400' : 'bg-emerald-500',
   failed: (d) => d ? 'bg-red-400' : 'bg-red-500',
@@ -74,22 +73,22 @@ const CHAPTER_STATUS_TEXT_MAP: Record<string, (isDark: boolean) => string> = {
 };
 
 interface JobCardProps {
-  job: BatchJob;
-  order: number;
-  isSelected: boolean;
-  deleteMode: boolean;
-  isDark: boolean;
-  canSelectForDelete: boolean;
-  panelBorder: string;
-  pageText: string;
-  secondaryText: string;
-  tertiaryText: string;
-  mutedSurface: string;
-  selectedSurface: string;
-  onToggleSelect: (batchId: string) => void;
-  onCancel: (batchId: string, storyTitle: string) => void;
-  onDownloadChapter: (batchId: string, chapterNum: number) => void;
-  onDownloadZip: (batchId: string) => void;
+  readonly job: BatchJob;
+  readonly order: number;
+  readonly isSelected: boolean;
+  readonly deleteMode: boolean;
+  readonly isDark: boolean;
+  readonly canSelectForDelete: boolean;
+  readonly panelBorder: string;
+  readonly pageText: string;
+  readonly secondaryText: string;
+  readonly tertiaryText: string;
+  readonly mutedSurface: string;
+  readonly selectedSurface: string;
+  readonly onToggleSelect: (batchId: string) => void;
+  readonly onCancel: (batchId: string, storyTitle: string) => void;
+  readonly onDownloadChapter: (batchId: string, chapterNum: number) => void;
+  readonly onDownloadZip: (batchId: string) => void;
 }
 
 function JobCard({
@@ -134,6 +133,12 @@ function JobCard({
       className={`transition-colors ${deleteMode ? (canSelectForDelete ? 'cursor-pointer select-none' : 'opacity-75') : ''}`}
       style={{ background: deleteMode && isSelected ? selectedSurface : 'transparent' }}
       onClick={deleteMode && canSelectForDelete ? () => onToggleSelect(job.batch_id) : undefined}
+      onKeyDown={deleteMode && canSelectForDelete ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onToggleSelect(job.batch_id);
+        }
+      } : undefined}
     >
       <div
         className="px-5 py-4 sm:px-6"
@@ -168,7 +173,7 @@ function JobCard({
             </div>
 
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: secondaryText }}>
-              <span>{totalCount} chapter{totalCount !== 1 ? 's' : ''}</span>
+              <span>{totalCount} chapter{totalCount === 1 ? '' : 's'}</span>
               {completedCount > 0 && <span>{completedCount} done</span>}
               {failedCount > 0 && <span style={{ color: isDark ? '#f87171' : '#dc2626' }}>{failedCount} failed</span>}
               {(job.status === 'running' || job.status === 'queued') && (
@@ -328,6 +333,7 @@ function JobCard({
 export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
   const isDark = themeMode === 'dark';
   const PAGE_SIZE = 15;
+  const INITIAL_VISIBLE_COUNT = PAGE_SIZE;
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<BatchJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -336,8 +342,8 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'specific'>('all');
   const [specificDate, setSpecificDate] = useState<string>('');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
+  const [lastRefresh, setLastRefresh] = useState(() => new Date());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
@@ -351,20 +357,24 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     batchId: string | null;
     storyTitle: string;
   }>({ open: false, batchId: null, storyTitle: '' });
-  const [_cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const fetchJobs = useCallback((): Promise<void> => {
     return listAllBatchJobs()
-      .then((data) => setJobs(data))
+      .then((data) => {
+        setJobs(data);
+        setError('');
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLastRefresh(new Date()));
   }, []);
 
   useEffect(() => {
-    setIsLoading(true);
-    setError('');
     fetchJobs().finally(() => setIsLoading(false));
+  }, [fetchJobs]);
+
+  useEffect(() => {
     const interval = setInterval(fetchJobs, 1000);
     return () => clearInterval(interval);
   }, [fetchJobs]);
@@ -409,7 +419,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
       if ('start' in timeCutoff && 'end' in timeCutoff) {
         return jobTime >= timeCutoff.start.getTime() && jobTime <= timeCutoff.end.getTime();
       }
-      return jobTime >= (timeCutoff as Date).getTime();
+      return jobTime >= timeCutoff.getTime();
     })
     .sort((a, b) => {
       const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
@@ -424,9 +434,6 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     deletableVisibleJobs.length > 0 &&
     deletableVisibleJobs.every((j) => selectedIds.has(j.batch_id));
 
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [filter, sortOrder, timeRange, specificDate]);
 
   useEffect(() => {
     if (!hasMore) return;
@@ -447,9 +454,13 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
   const handleToggleSelect = (batchId: string) => {
     const job = jobs.find((j) => j.batch_id === batchId);
     if (!job || !canDeleteBatchJob(job)) return;
-    const s = new Set(selectedIds);
-    s.has(batchId) ? s.delete(batchId) : s.add(batchId);
-    setSelectedIds(s);
+    const nextSelectedIds = new Set(selectedIds);
+    if (nextSelectedIds.has(batchId)) {
+      nextSelectedIds.delete(batchId);
+    } else {
+      nextSelectedIds.add(batchId);
+    }
+    setSelectedIds(nextSelectedIds);
   };
 
   const toggleDeleteMode = () => {
@@ -518,7 +529,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     a.download = `chapter_${chapterNum}.wav`;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
   };
 
   const handleDownloadZip = (batchId: string) => {
@@ -527,7 +538,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     a.download = `bedread_${batchId}.zip`;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
   };
 
   const runningJob = filtered.find((j) => j.status === 'running');
@@ -551,7 +562,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
   const panelBackground = isDark ? '#202020' : '#ffffff';
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const selectedSurface = isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.08)';
+  const selectedSurface = 'rgba(239,68,68,0.08)';
   const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
 
   const statusOptions: Array<{ value: typeof filter; label: string }> = [
@@ -594,7 +605,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
               <div className="mt-3 space-y-2 text-sm" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
                 <p>
                   You are about to delete {deleteConfirmation.ids.length} job
-                  {deleteConfirmation.ids.length !== 1 ? 's' : ''}, including active
+                  {deleteConfirmation.ids.length === 1 ? '' : 's'}, including active
                   job(s).
                 </p>
                 <p className="font-medium">This action cannot be undone.</p>
@@ -602,7 +613,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
             ) : (
               <p className="mt-3 text-sm leading-6" style={{ color: secondaryText }}>
                 Delete {deleteConfirmation.ids.length} job
-                {deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+                {deleteConfirmation.ids.length === 1 ? '' : 's'}? This action cannot be undone.
               </p>
             )}
             <div className="mt-4 flex justify-end gap-2">
@@ -640,13 +651,13 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
               Are you sure you want to cancel{' '}
               <span className="font-semibold" style={{ color: pageText }}>
                 {cancelConfirmation.storyTitle}
-              </span>
-              ? This will stop the audio generation and cannot be undone.
+              </span>{' '}
+              This will stop the audio generation and cannot be undone.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setCancelConfirmation({ open: false, batchId: null, storyTitle: '' })}
-                disabled={_cancellingIds.size > 0}
+                disabled={cancellingIds.size > 0}
                 className="rounded-md border px-3 py-2 text-sm transition-colors"
                 style={{ borderColor: panelBorder, color: secondaryText, background: mutedSurface }}
               >
@@ -654,11 +665,11 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
               </button>
               <button
                 onClick={handleConfirmCancel}
-                disabled={_cancellingIds.size > 0}
+                disabled={cancellingIds.size > 0}
                 className="rounded-md px-3 py-2 text-sm text-white transition-opacity"
-                style={{ background: '#dc2626', opacity: _cancellingIds.size > 0 ? 0.6 : 1 }}
+                style={{ background: '#dc2626', opacity: cancellingIds.size > 0 ? 0.6 : 1 }}
               >
-                {_cancellingIds.size > 0 ? 'Cancelling…' : 'Cancel Job'}
+                {cancellingIds.size > 0 ? 'Cancelling…' : 'Cancel Job'}
               </button>
             </div>
           </div>
@@ -720,6 +731,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                 <DatePicker
                   value={specificDate}
                   onDateChange={(date) => {
+                    setVisibleCount(INITIAL_VISIBLE_COUNT);
                     setSpecificDate(date);
                     setTimeRange(date ? 'specific' : 'all');
                   }}
@@ -752,7 +764,10 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
               {statusOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setFilter(option.value)}
+                  onClick={() => {
+                    setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    setFilter(option.value);
+                  }}
                   className="rounded-md px-3 py-1.5 text-sm transition-colors"
                   style={{
                     background: filter === option.value ? activeSurface : mutedSurface,
@@ -769,7 +784,11 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
               {timeRangeOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => { setTimeRange(option.value); setSpecificDate(''); }}
+                  onClick={() => {
+                    setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    setTimeRange(option.value);
+                    setSpecificDate('');
+                  }}
                   className="rounded-md px-3 py-1.5 text-sm transition-colors"
                   style={{
                     background: timeRange === option.value ? activeSurface : mutedSurface,
@@ -787,7 +806,10 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
-                  onClick={() => setSortOrder(value)}
+                  onClick={() => {
+                    setVisibleCount(INITIAL_VISIBLE_COUNT);
+                    setSortOrder(value);
+                  }}
                   className="rounded-md px-3 py-1.5 text-sm transition-colors"
                   style={{
                     background: sortOrder === value ? activeSurface : mutedSurface,
@@ -872,7 +894,7 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>{error}</span>
-                <button onClick={fetchJobs} className="underline">Retry</button>
+                <button onClick={() => { void fetchJobs(); }} className="underline">Retry</button>
               </div>
             </section>
           )}

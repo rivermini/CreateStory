@@ -29,7 +29,8 @@ const DashboardPage = lazy(() => import('./pages/Admin/DashboardPage').then(m =>
 const THEME_COOKIE = 'novel_crawler_theme';
 
 function readThemeCookie(): ThemeMode | null {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${THEME_COOKIE}=([^;]*)`));
+  const re = new RegExp(`(?:^|; )${THEME_COOKIE}=([^;]*)`);
+  const match = re.exec(document.cookie);
   if (!match) return null;
   const value = decodeURIComponent(match[1]);
   return value === 'light' || value === 'dark' ? value : null;
@@ -93,7 +94,7 @@ function App() {
         v7_relativeSplatPath: true,
       }}
     >
-      {!authChecked ? (
+      {authChecked === false ? (
         <AuthLoading themeMode={themeMode} />
       ) : authUser ? (
         <Shell
@@ -120,12 +121,12 @@ function Shell({
   onThemeChange,
   authUser,
   onLogout,
-}: {
+}: Readonly<{
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
   authUser: AuthUser;
   onLogout: () => void;
-}) {
+}>) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const location = useLocation();
@@ -194,8 +195,8 @@ function Shell({
               <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/results" element={<ResultPage themeMode={themeMode} />} />
               <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} />} />
-              <Route path="/bedread" element={<BedReadPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/bedread" element={<BedReadPage themeMode={themeMode} />} />
+              <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} />} />
               <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync/content-update" element={<ChapterContentUpdatePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/drive-sync/cover-update" element={<CoverUpdatePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
@@ -203,7 +204,7 @@ function Shell({
               <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/auto-audio/history" element={<AutoAudioHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
               <Route path="/settings" element={<Navigate to="/" replace />} />
-              <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} />} />
               <Route path="/dashboard/*" element={authUser.role === 'admin' ? <DashboardPage themeMode={themeMode} authUser={authUser} /> : <Navigate to="/" replace />} />
               <Route path="/admin/users" element={<Navigate to="/dashboard/users" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
@@ -221,7 +222,7 @@ function Shell({
   );
 }
 
-function AuthLoading({ themeMode: _themeMode }: { themeMode: ThemeMode }) {
+function AuthLoading({ themeMode: _ }: Readonly<{ themeMode: ThemeMode }>) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white/45">
       Loading...
