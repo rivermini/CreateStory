@@ -59,6 +59,7 @@ class DriveSyncJobRecord(Base):
     main_be_api_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     chapters_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class AppSetting(Base):
