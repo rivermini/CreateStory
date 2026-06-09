@@ -1,6 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { login, type AuthUser } from '../../api/client';
-import { AppIcon } from '../../components/Shared/AppIcon';
 
 interface LoginPageProps {
   themeMode: 'light' | 'dark';
@@ -8,24 +7,26 @@ interface LoginPageProps {
   onAuthenticated: (user: AuthUser) => void;
 }
 
-export function LoginPage({ themeMode: _themeMode, onThemeChange: _onThemeChange, onAuthenticated }: LoginPageProps) {
+export function LoginPage({ onAuthenticated }: Readonly<LoginPageProps>) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async (event: FormEvent) => {
+  const submit: NonNullable<React.ComponentProps<'form'>['onSubmit']> = (event) => {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const tokens = await login(email, password);
-      onAuthenticated(tokens.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed.');
-    } finally {
-      setBusy(false);
-    }
+    void (async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        const tokens = await login(email, password);
+        onAuthenticated(tokens.user);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Authentication failed.');
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   return (
@@ -35,9 +36,9 @@ export function LoginPage({ themeMode: _themeMode, onThemeChange: _onThemeChange
     >
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-md items-center justify-center">
         <section className="w-full rounded-3xl border border-white/10 bg-[#111111] px-5 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] sm:px-6 sm:py-7">
-          <div className="mb-2  flex flex-col items-center text-center gap-2">
-          <h1 className="mt-2 text-xl text-sm text-white">CreateStory</h1>
-            <p className=" font-semibold tracking-tight text-white/55">Sign in</p>
+          <div className="mb-2 flex flex-col items-center gap-2 text-center">
+            <h1 className="mt-2 text-xl text-white">CreateStory</h1>
+            <p className="font-semibold tracking-tight text-white/55">Sign in</p>
           </div>
 
           <form onSubmit={submit} className="space-y-4">
@@ -79,10 +80,14 @@ export function LoginPage({ themeMode: _themeMode, onThemeChange: _onThemeChange
               </div>
             )}
 
+            <div>
+              
+            </div>
+
             <button
               type="submit"
               disabled={busy}
-              className="h-11 w-full rounded-xl bg-[#FFFFFF] text-sm font-medium text-black transition hover:bg-white/92 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-4 h-11 w-full rounded-xl bg-[#FFFFFF] text-sm font-medium text-black transition hover:bg-white/92 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy ? 'Signing in...' : 'Sign in'}
             </button>

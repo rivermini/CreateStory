@@ -48,12 +48,12 @@ function SectionTitle({
   description,
   pageText,
   secondaryText,
-}: {
+}: Readonly<{
   title: string;
   description: string;
   pageText: string;
   secondaryText: string;
-}) {
+}>) {
   return (
     <div className="space-y-1">
       <h2 className="text-sm font-semibold" style={{ color: pageText }}>{title}</h2>
@@ -62,15 +62,15 @@ function SectionTitle({
   );
 }
 
-export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: SettingsPageProps) {
+export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Readonly<SettingsPageProps>) {
   const isDark = themeMode === 'dark';
-  const [, setSettings] = useState<SettingsResponse | null>(null);
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState('');
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance');
 
-  const [localTheme, setLocalTheme] = useState<'light' | 'dark'>('light');
+  const [localTheme, setLocalTheme] = useState<'light' | 'dark'>(themeMode === 'dark' ? 'dark' : 'light');
   const [crawlMode, setCrawlMode] = useState<'count' | 'range'>('count');
   const [count, setCount] = useState(10);
   const [rangeFrom, setRangeFrom] = useState(1);
@@ -126,7 +126,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
   const [inkittJsonText, setInkittJsonText] = useState('');
 
   useEffect(() => {
-    setLocalTheme(themeMode === 'dark' ? 'dark' : 'light');
     getSettings()
       .then((s) => {
         setSettings(s);
@@ -145,7 +144,7 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
       })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
-  }, [themeMode]);
+  }, [themeMode, setSettings]);
 
   useEffect(() => {
     async function loadConfig() {
@@ -183,10 +182,10 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
     };
 
     document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', onKeyDown);
+    globalThis.addEventListener('keydown', onKeyDown);
     return () => {
       document.body.style.overflow = '';
-      window.removeEventListener('keydown', onKeyDown);
+      globalThis.removeEventListener('keydown', onKeyDown);
     };
   }, [handleClose]);
 
@@ -221,58 +220,55 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
     }
   };
 
-  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadError('');
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        let json = JSON.parse(event.target?.result as string);
-        if (Array.isArray(json)) {
-          if (json.length === 0) {
-            setUploadError('JSON array is empty');
-            return;
-          }
-          json = json[0];
-        }
-        if (json && typeof json === 'object' && !json.folder_id && !json.main_be_api_base_url) {
-          if (json.data) json = json.data;
-          else if (json.config) json = json.config;
-          else if (json.settings) json = json.settings;
-          else if (json.attributes) json = json.attributes;
-          else if (json.result) json = json.result;
-        }
-        if (Array.isArray(json)) {
-          json = json[0] || {};
-        }
-        if (!json || typeof json !== 'object') {
-          setUploadError('Invalid JSON structure');
+    try {
+      let json = JSON.parse(await file.text());
+      if (Array.isArray(json)) {
+        if (json.length === 0) {
+          setUploadError('JSON array is empty');
           return;
         }
-
-        const folderId = json.folder_id || json.folderId || json.folder || '';
-        const apiUrl = json.main_be_api_base_url || json.apiBaseUrl || json.apiUrl || json.baseUrl || '';
-        if (!folderId && !apiUrl) {
-          setUploadError('Missing required fields. Received keys: ' + Object.keys(json).join(', '));
-          return;
-        }
-
-        setConfigForm({
-          folder_id: folderId,
-          service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
-          main_be_api_base_url: apiUrl,
-          main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.token || '',
-          main_be_user_id: json.main_be_user_id || json.userId || json.user_id || '',
-        });
-        setUploadError('');
-      } catch (err) {
-        setUploadError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+        json = json[0];
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+      if (json && typeof json === 'object' && !json.folder_id && !json.main_be_api_base_url) {
+        if (json.data) json = json.data;
+        else if (json.config) json = json.config;
+        else if (json.settings) json = json.settings;
+        else if (json.attributes) json = json.attributes;
+        else if (json.result) json = json.result;
+      }
+      if (Array.isArray(json)) {
+        json = json[0] || {};
+      }
+      if (!json || typeof json !== 'object') {
+        setUploadError('Invalid JSON structure');
+        return;
+      }
+
+      const folderId = json.folder_id || json.folderId || json.folder || '';
+      const apiUrl = json.main_be_api_base_url || json.apiBaseUrl || json.apiUrl || json.baseUrl || '';
+      if (!folderId && !apiUrl) {
+        setUploadError('Missing required fields. Received keys: ' + Object.keys(json).join(', '));
+        return;
+      }
+
+      setConfigForm({
+        folder_id: folderId,
+        service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
+        main_be_api_base_url: apiUrl,
+        main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.token || '',
+        main_be_user_id: json.main_be_user_id || json.userId || json.user_id || '',
+      });
+      setUploadError('');
+    } catch (err) {
+      setUploadError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleSave = async () => {
@@ -319,7 +315,7 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
         3500,
         'top-center',
       );
-      window.setTimeout(() => window.location.assign('/'), 600);
+      globalThis.setTimeout(() => globalThis.location.assign('/'), 600);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clear backend data.');
       showToast('Failed to clear backend data.', 'error', 3000, 'top-center');
@@ -356,36 +352,33 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
     }
   };
 
-  const handleInkittJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInkittJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        let json = JSON.parse(event.target?.result as string);
-        if (Array.isArray(json)) json = json[0] || {};
-        if (json.data) json = json.data;
-        else if (json.config) json = json.config;
-        else if (json.attributes) json = json.attributes;
+    try {
+      let json = JSON.parse(await file.text());
+      if (Array.isArray(json)) json = json[0] || {};
+      if (json.data) json = json.data;
+      else if (json.config) json = json.config;
+      else if (json.attributes) json = json.attributes;
 
-        const userCred = json.user_credentials || json.userCredentials || json.user_credentials_cookie || '';
-        const cfClear = json.cf_clearance || json.cfClearance || '';
-        if (!userCred || !cfClear) {
-          setInkittCookieError('Missing user_credentials or cf_clearance in JSON. Received keys: ' + Object.keys(json).join(', '));
-          return;
-        }
-
-        setInkittUserCredentials(userCred);
-        setInkittCfClearance(cfClear);
-        setInkittCookieError('');
-        showToast('Inkitt cookie values loaded from file.', 'success', 2000, 'top-center');
-      } catch (err) {
-        setInkittCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+      const userCred = json.user_credentials || json.userCredentials || json.user_credentials_cookie || '';
+      const cfClear = json.cf_clearance || json.cfClearance || '';
+      if (!userCred || !cfClear) {
+        setInkittCookieError('Missing user_credentials or cf_clearance in JSON. Received keys: ' + Object.keys(json).join(', '));
+        return;
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+
+      setInkittUserCredentials(userCred);
+      setInkittCfClearance(cfClear);
+      setInkittCookieError('');
+      showToast('Inkitt cookie values loaded from file.', 'success', 2000, 'top-center');
+    } catch (err) {
+      setInkittCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleInkittJsonPaste = () => {
@@ -504,8 +497,8 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
           <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
             <SectionTitle title="Drive Sync Configuration" description="Configure Google Drive sync and backend API connection details." pageText={pageText} secondaryText={secondaryText} />
             <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
-                Upload JSON
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                <span>Upload JSON</span>
                 <input type="file" accept="application/json" onChange={handleJsonFileUpload} className="hidden" />
               </label>
             </div>
@@ -554,8 +547,8 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
               <button type="button" onClick={handleSaveInkittCookies} disabled={savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim() ? subtleSurface : primaryButton, color: savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim() ? tertiaryText : '#fff' }}>
                 {savingInkittCookies ? 'Saving...' : 'Save Cookies'}
               </button>
-              <label className="inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
-                Upload Cookies JSON
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                <span>Upload Cookies JSON</span>
                 <input type="file" accept="application/json" onChange={handleInkittJsonFileUpload} className="hidden" />
               </label>
             </div>
@@ -579,23 +572,28 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
               </div>
               {crawlMode === 'count' ? (
                 <div className="max-w-xs">
-                  <label className={labelClassName}>Default chapter count</label>
-                  <input type="number" min={1} max={100000} value={count} onChange={(e) => setCount(Math.max(1, parseInt(e.target.value) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                  <label htmlFor="settings-default-chapter-count" className={labelClassName}>Default chapter count</label>
+                  <input id="settings-default-chapter-count" type="number" min={1} max={100000} value={count} onChange={(e) => setCount(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
                 </div>
               ) : (
                 <div className="flex max-w-sm items-end gap-3">
                   <div className="flex-1">
-                    <label className={labelClassName}>From chapter</label>
-                    <input type="number" min={1} value={rangeFrom} onChange={(e) => setRangeFrom(Math.max(1, parseInt(e.target.value) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                    <label htmlFor="settings-range-from" className={labelClassName}>From chapter</label>
+                    <input id="settings-range-from" type="number" min={1} value={rangeFrom} onChange={(e) => setRangeFrom(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
                   </div>
                   <span className="pb-3 text-sm font-medium" style={{ color: tertiaryText }}>to</span>
                   <div className="flex-1">
-                    <label className={labelClassName}>To chapter</label>
-                    <input type="number" min={1} value={rangeTo} onChange={(e) => setRangeTo(Math.max(1, parseInt(e.target.value) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                    <label htmlFor="settings-range-to" className={labelClassName}>To chapter</label>
+                    <input id="settings-range-to" type="number" min={1} value={rangeTo} onChange={(e) => setRangeTo(Math.max(1, Number.parseInt(e.target.value, 10) || 1))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
                   </div>
                 </div>
               )}
-              <p className="text-sm" style={{ color: secondaryText }}>{crawlMode === 'count' ? `Default: crawl up to ${count} chapter${count !== 1 ? 's' : ''}` : `Default: crawl chapters ${rangeFrom} to ${rangeTo} (${Math.max(0, rangeTo - rangeFrom + 1)} total)`}</p>
+              <p className="text-sm" style={{ color: secondaryText }}>{crawlMode === 'count' ? `Default: crawl up to ${count} chapter${count === 1 ? '' : 's'}` : `Default: crawl chapters ${rangeFrom} to ${rangeTo} (${Math.max(0, rangeTo - rangeFrom + 1)} total)`}</p>
+              {settings && (
+                <p className="text-xs" style={{ color: tertiaryText }}>
+                  Saved mode: {settings.crawl_mode === 'count' ? 'Count' : 'Range'}
+                </p>
+              )}
             </section>
             <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
               <SectionTitle title="Crawl Auto Settings" description="Auto-fill and range limits for crawl after URL detection." pageText={pageText} secondaryText={secondaryText} />
@@ -618,29 +616,29 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
               <SectionTitle title="Auto Audio Settings" description="Configure backoff, pipeline window, upload workers, and test story IDs." pageText={pageText} secondaryText={secondaryText} />
               <div className="grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
-                  <label className={labelClassName}>Backoff after failed story (seconds)</label>
-                  <input type="number" min={0} max={600} value={autoAudioRestSeconds} onChange={(e) => setAutoAudioRestSeconds(Math.max(0, parseInt(e.target.value) || 0))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
+                  <label htmlFor="settings-audio-rest-seconds" className={labelClassName}>Backoff after failed story (seconds)</label>
+                  <input id="settings-audio-rest-seconds" type="number" min={0} max={600} value={autoAudioRestSeconds} onChange={(e) => setAutoAudioRestSeconds(Math.max(0, Number.parseInt(e.target.value, 10) || 0))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
                 </div>
-                <div>
-                  <label className={labelClassName}>Upload workers</label>
+                <fieldset>
+                  <legend className={labelClassName}>Upload workers</legend>
                   <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
                     {[1, 2, 3, 4].map((v) => (
                       <button key={v} onClick={() => setAutoAudioUploadWorkers(v)} className="min-w-10 rounded-md px-3 py-2 text-sm font-medium" style={{ background: autoAudioUploadWorkers === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
                     ))}
                   </div>
-                </div>
-                <div>
-                  <label className={labelClassName}>Batch window</label>
+                </fieldset>
+                <fieldset>
+                  <legend className={labelClassName}>Batch window</legend>
                   <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
                     {[1, 2].map((v) => (
                       <button key={v} onClick={() => setAutoAudioBatchWindow(v)} className="min-w-10 rounded-md px-3 py-2 text-sm font-medium" style={{ background: autoAudioBatchWindow === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
                     ))}
                   </div>
-                </div>
+                </fieldset>
               </div>
               <div className="max-w-lg">
-                <label className={labelClassName}>Test Story IDs</label>
-                <textarea value={autoAudioTestIdsText} onChange={(e) => { setAutoAudioTestIdsText(e.target.value); const ids = e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean); setAutoAudioTestStoryIds(ids); }} rows={3} className={`${fieldClassName} resize-none font-mono text-sm`} style={{ background: inputBackground, borderColor: inputBorder }} />
+                <label htmlFor="settings-audio-test-story-ids" className={labelClassName}>Test Story IDs</label>
+                <textarea id="settings-audio-test-story-ids" value={autoAudioTestIdsText} onChange={(e) => { setAutoAudioTestIdsText(e.target.value); const ids = e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean); setAutoAudioTestStoryIds(ids); }} rows={3} className={`${fieldClassName} resize-none font-mono text-sm`} style={{ background: inputBackground, borderColor: inputBorder }} />
               </div>
             </section>
             <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
@@ -657,18 +655,18 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
         return (
           <section className={sectionClassName} style={{ background: panelBackground, borderColor: isDark ? 'rgba(248,113,113,0.25)' : 'rgba(220,38,38,0.18)' }}>
             <SectionTitle title="Development Cleanup" description="Clear runtime histories, outputs, sessions, jobs, logs, settings, Drive credentials, and saved tokens." pageText={pageText} secondaryText={secondaryText} />
-            {!isAdmin ? (
-              <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: panelBorder, background: subtleSurface, color: secondaryText }}>Admin access is required.</div>
-            ) : (
+            {isAdmin ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="max-w-md flex-1">
-                  <label className={labelClassName}>Confirmation</label>
-                  <input type="text" value={clearConfirm} onChange={(e) => setClearConfirm(e.target.value)} placeholder="CLEAR_BACKEND_DATA" className={`${fieldClassName} font-mono text-sm`} style={{ background: inputBackground, borderColor: inputBorder }} />
+                  <label htmlFor="settings-clear-confirmation" className={labelClassName}>Confirmation</label>
+                  <input id="settings-clear-confirmation" type="text" value={clearConfirm} onChange={(e) => setClearConfirm(e.target.value)} placeholder="CLEAR_BACKEND_DATA" className={`${fieldClassName} font-mono text-sm`} style={{ background: inputBackground, borderColor: inputBorder }} />
                 </div>
-                <button type="button" onClick={handleClearBackendData} disabled={clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA'} className="rounded-lg px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed" style={{ background: clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA' ? subtleSurface : '#dc2626', color: clearState !== 'idle' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA' ? tertiaryText : '#fff' }}>
+                <button type="button" onClick={handleClearBackendData} disabled={clearState === 'clearing' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA'} className="rounded-lg px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed" style={{ background: clearState === 'clearing' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA' ? subtleSurface : '#dc2626', color: clearState === 'clearing' || clearConfirm.trim() !== 'CLEAR_BACKEND_DATA' ? tertiaryText : '#fff' }}>
                   {clearState === 'clearing' ? 'Clearing...' : 'Clear Backend Data'}
                 </button>
               </div>
+            ) : (
+              <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: panelBorder, background: subtleSurface, color: secondaryText }}>Admin access is required.</div>
             )}
           </section>
         );
@@ -679,7 +677,13 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
 
   return (
     <>
-      <div className="fixed inset-0 z-[70]" style={{ background: 'rgba(15, 23, 42, 0.28)', backdropFilter: 'blur(6px)' }} onClick={handleClose} />
+      <button
+        type="button"
+        aria-label="Close settings"
+        className="fixed inset-0 z-[70]"
+        style={{ background: 'rgba(15, 23, 42, 0.28)', backdropFilter: 'blur(6px)' }}
+        onClick={handleClose}
+      />
       <div className="fixed inset-0 z-[80] flex items-center justify-center p-2 sm:p-4 lg:p-6">
         <div className="flex h-[min(82vh,760px)] w-full max-w-[80vw] overflow-hidden rounded-2xl border shadow-2xl" style={{ background: shellBackground, borderColor: panelBorder, color: pageText }}>
           <aside className="hidden w-[208px] shrink-0 border-r md:flex md:flex-col" style={{ borderColor: panelBorder, background: isDark ? '#1b1b1b' : '#f7f6f3' }}>
@@ -730,7 +734,7 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Se
 
             <div className="flex items-center justify-between border-t px-4 py-2.5 md:px-5" style={{ borderColor: panelBorder, background: isDark ? '#1b1b1b' : '#fafafa' }}>
               <p className="text-xs" style={{ color: tertiaryText }}>Changes apply to this workspace after saving.</p>
-              <button onClick={handleSave} disabled={saveState !== 'idle'} className="rounded-md px-4 py-2 text-sm font-semibold transition-colors" style={{ background: saveState !== 'idle' ? (saveState === 'saved' ? '#16a34a' : subtleSurface) : primaryButton, color: saveState !== 'idle' && saveState !== 'saved' ? tertiaryText : '#fff' }}>
+              <button onClick={handleSave} disabled={saveState === 'saving' || saveState === 'saved'} className="rounded-md px-4 py-2 text-sm font-semibold transition-colors" style={{ background: saveState === 'saving' || saveState === 'saved' ? (saveState === 'saved' ? '#16a34a' : subtleSurface) : primaryButton, color: saveState === 'saving' || saveState === 'saved' ? (saveState === 'saved' ? '#fff' : tertiaryText) : '#fff' }}>
                 {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : 'Save Settings'}
               </button>
             </div>

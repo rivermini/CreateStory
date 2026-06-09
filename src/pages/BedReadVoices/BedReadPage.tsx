@@ -468,12 +468,6 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                   Browse stories, narrow the chapter range, and generate audio with a quieter monochrome layout.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[440px]">
-                <MetricPill label="Library" value={totalStories.toLocaleString()} sublabel={hasLoadedAll ? 'cached' : 'indexed'} isDark={isDark} />
-                <MetricPill label="Visible" value={filteredStories.length.toLocaleString()} sublabel={`page ${currentVisiblePage}/${filteredTotalPages}`} isDark={isDark} />
-                <MetricPill label="Chapters" value={selectedStory ? chaptersToGenerate.length.toString() : '—'} sublabel={selectedStory ? 'selected' : 'pick story'} isDark={isDark} />
-                <MetricPill label="Job" value={batchJob ? `${progressPct}%` : 'Idle'} sublabel={batchJob ? batchJob.status : 'not running'} isDark={isDark} />
-              </div>
             </div>
           </section>
 
@@ -505,7 +499,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     {!hasLoadedAll && (
                       <button
                         onClick={loadAllStories}
@@ -736,8 +730,8 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
             <div className="grid h-full gap-4 lg:sticky lg:top-4">
               {selectedStory && (
                 <section className="rounded-lg border p-4" style={{ background: panelBackground, borderColor: panelBorder }}>
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-                    <div className="min-w-0">
+                  <div className="space-y-4">
+                    <div className="rounded-lg border p-3" style={{ background: mutedSurface, borderColor: panelBorder }}>
                       <div className="flex items-start gap-3">
                         {selectedStory.coverUrl && (
                           <img
@@ -764,7 +758,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                             {selectedStory.author}
                           </p>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]" style={{ color: tertiaryText }}>
-                            <span className="inline-flex min-w-[5.5rem] items-center justify-center rounded-full px-2.5 py-0.5 tabular-nums" style={{ background: mutedSurface }}>
+                            <span className="inline-flex min-w-[5.5rem] items-center justify-center rounded-full px-2.5 py-0.5 tabular-nums" style={{ background: panelBackground }}>
                               {selectedStory.chapterCount.toLocaleString()} chapters
                             </span>
                             {selectedStory.tags.slice(0, 4).map((tag) => (
@@ -782,97 +776,97 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                       </div>
                     </div>
 
-                    <div className="grid gap-4">
-                      <div className="rounded-lg border p-3" style={{ background: mutedSurface, borderColor: panelBorder }}>
-                        <div className="mb-2 flex items-center justify-between">
-                          <h3 className="text-sm font-medium" style={{ color: pageText }}>
-                            Chapter range
-                          </h3>
-                          <span className="text-[11px]" style={{ color: tertiaryText }}>
-                            {chaptersLoading ? 'Loading…' : `${chapters.length} available`}
-                          </span>
-                        </div>
-                        <div className="space-y-2.5">
-                          <label className="flex items-center justify-between gap-3 rounded-md px-2.5 py-2" style={{ background: tagSurface }}>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="radio"
-                                name="chapter-mode"
-                                checked={allChapters}
-                                onChange={() => setAllChapters(true)}
-                                className="accent-neutral-500"
-                              />
-                              <span className="text-sm" style={{ color: secondaryText }}>
-                                All chapters
-                              </span>
-                            </div>
-                            <span className="text-[11px]" style={{ color: tertiaryText }}>
-                              {chapters.length}
-                            </span>
-                          </label>
-                          <label className="flex items-center gap-2 rounded-md px-2.5 py-2" style={{ background: tagSurface }}>
+                    <div className="rounded-lg border p-3" style={{ background: mutedSurface, borderColor: panelBorder }}>
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-sm font-medium" style={{ color: pageText }}>
+                          Chapter range
+                        </h3>
+                        <span className="text-[11px]" style={{ color: tertiaryText }}>
+                          {chaptersLoading ? 'Loading…' : `${chapters.length} available`}
+                        </span>
+                      </div>
+                      <div className="space-y-2.5">
+                        <label className="flex items-center justify-between gap-3 rounded-md px-2.5 py-2" style={{ background: tagSurface }}>
+                          <div className="flex items-center gap-2">
                             <input
                               type="radio"
                               name="chapter-mode"
-                              checked={!allChapters}
-                              onChange={() => setAllChapters(false)}
+                              checked={allChapters}
+                              onChange={() => setAllChapters(true)}
                               className="accent-neutral-500"
                             />
                             <span className="text-sm" style={{ color: secondaryText }}>
-                              Custom range
+                              All chapters
                             </span>
-                          </label>
-                          {!allChapters && (
-                            <div className="grid grid-cols-[1fr_auto_1fr_auto] items-end gap-2">
-                              <div>
-                                <label htmlFor="chapter-range-start" className="mb-1 block text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>
-                                  From
-                                </label>
-                                <input
-                                  id="chapter-range-start"
-                                  type="number"
-                                  min={1}
-                                  max={rangeEnd}
-                                  value={rangeStart}
-                                  onChange={(event) => setRangeStart(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
-                                  className="w-full rounded-md border px-3 py-2 text-sm outline-none transition"
-                                  style={{ background: panelBackground, borderColor: panelBorder, color: pageText }}
-                                />
-                              </div>
-                              <span className="pb-2 text-xs" style={{ color: tertiaryText }}>
-                                to
-                              </span>
-                              <div>
-                                <label htmlFor="chapter-range-end" className="mb-1 block text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>
-                                  To
-                                </label>
-                                <input
-                                  id="chapter-range-end"
-                                  type="number"
-                                  min={rangeStart}
-                                  max={chapters.length || 999}
-                                  value={rangeEnd}
-                                  onChange={(event) => setRangeEnd(Math.max(rangeStart, Number.parseInt(event.target.value, 10) || rangeStart))}
-                                  className="w-full rounded-md border px-3 py-2 text-sm outline-none transition"
-                                  style={{ background: panelBackground, borderColor: panelBorder, color: pageText }}
-                                />
-                              </div>
-                              <span className="pb-2 text-[11px]" style={{ color: tertiaryText }}>
-                                {Math.max(0, rangeEnd - rangeStart + 1)} selected
-                              </span>
+                          </div>
+                          <span className="text-[11px]" style={{ color: tertiaryText }}>
+                            {chapters.length}
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 rounded-md px-2.5 py-2" style={{ background: tagSurface }}>
+                          <input
+                            type="radio"
+                            name="chapter-mode"
+                            checked={!allChapters}
+                            onChange={() => setAllChapters(false)}
+                            className="accent-neutral-500"
+                          />
+                          <span className="text-sm" style={{ color: secondaryText }}>
+                            Custom range
+                          </span>
+                        </label>
+                        {!allChapters && (
+                          <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr_auto] sm:items-end">
+                            <div>
+                              <label htmlFor="chapter-range-start" className="mb-1 block text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>
+                                From
+                              </label>
+                              <input
+                                id="chapter-range-start"
+                                type="number"
+                                min={1}
+                                max={rangeEnd}
+                                value={rangeStart}
+                                onChange={(event) => setRangeStart(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
+                                className="w-full rounded-md border px-3 py-2 text-sm outline-none transition"
+                                style={{ background: panelBackground, borderColor: panelBorder, color: pageText }}
+                              />
                             </div>
-                          )}
-                        </div>
+                            <span className="hidden pb-2 text-xs sm:block" style={{ color: tertiaryText }}>
+                              to
+                            </span>
+                            <div>
+                              <label htmlFor="chapter-range-end" className="mb-1 block text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>
+                                To
+                              </label>
+                              <input
+                                id="chapter-range-end"
+                                type="number"
+                                min={rangeStart}
+                                max={chapters.length || 999}
+                                value={rangeEnd}
+                                onChange={(event) => setRangeEnd(Math.max(rangeStart, Number.parseInt(event.target.value, 10) || rangeStart))}
+                                className="w-full rounded-md border px-3 py-2 text-sm outline-none transition"
+                                style={{ background: panelBackground, borderColor: panelBorder, color: pageText }}
+                              />
+                            </div>
+                            <span className="pb-1 text-[11px] sm:pb-2" style={{ color: tertiaryText }}>
+                              {Math.max(0, rangeEnd - rangeStart + 1)} selected
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border p-3" style={{ background: mutedSurface, borderColor: panelBorder }}>
+                      <div className="mb-3 flex items-center gap-2">
+                        <StepBadge number={3} isDark={isDark} />
+                        <h3 className="text-sm font-medium" style={{ color: pageText }}>
+                          Voice settings
+                        </h3>
                       </div>
 
-                      <div className="rounded-lg border p-3" style={{ background: mutedSurface, borderColor: panelBorder }}>
-                        <div className="mb-3 flex items-center gap-2">
-                          <StepBadge number={3} isDark={isDark} />
-                          <h3 className="text-sm font-medium" style={{ color: pageText }}>
-                            Voice settings
-                          </h3>
-                        </div>
-
+                      <div className="space-y-3">
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <div>
                             <label htmlFor="voice-language" className="mb-1 block text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>
@@ -921,7 +915,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                           </div>
                         </div>
 
-                        <div className="mt-3">
+                        <div>
                           <div className="mb-1.5 flex items-center justify-between">
                             <label htmlFor="voice-speed" className="text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>
                               Speed
@@ -930,57 +924,59 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
                               {speed.toFixed(2)}x
                             </span>
                           </div>
-                    <div className="flex items-center gap-3">
-                      <input
-                        id="voice-speed"
-                        type="range"
-                        min={0.25}
-                        max={2}
-                        step={0.05}
-                        value={speed}
-                        onChange={(event) => setSpeed(Number.parseFloat(event.target.value))}
-                        disabled={isGenerating}
-                        className="flex-1 accent-neutral-500"
-                      />
-                      <input
-                        type="number"
-                        min={0.25}
-                        max={2}
-                        step={0.01}
-                        value={speed}
-                        onChange={(event) => {
-                          const value = Number.parseFloat(event.target.value);
-                          if (!Number.isNaN(value) && value >= 0.25 && value <= 2) {
-                            setSpeed(value);
-                          }
-                        }}
-                        disabled={isGenerating}
-                        className="w-20 rounded-md border px-2 py-1.5 text-center text-sm font-mono outline-none transition"
-                        style={{ background: panelBackground, borderColor: panelBorder, color: pageText }}
-                      />
-                    </div>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                            <input
+                              id="voice-speed"
+                              type="range"
+                              min={0.25}
+                              max={2}
+                              step={0.05}
+                              value={speed}
+                              onChange={(event) => setSpeed(Number.parseFloat(event.target.value))}
+                              disabled={isGenerating}
+                              className="flex-1 accent-neutral-500"
+                            />
+                            <input
+                              type="number"
+                              min={0.25}
+                              max={2}
+                              step={0.01}
+                              value={speed}
+                              onChange={(event) => {
+                                const value = Number.parseFloat(event.target.value);
+                                if (!Number.isNaN(value) && value >= 0.25 && value <= 2) {
+                                  setSpeed(value);
+                                }
+                              }}
+                              disabled={isGenerating}
+                              className="w-full rounded-md border px-2 py-1.5 text-center text-sm font-mono outline-none transition sm:w-20"
+                              style={{ background: panelBackground, borderColor: panelBorder, color: pageText }}
+                            />
+                          </div>
                         </div>
 
-                        <div className="mt-3 flex items-center gap-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                           <span className="text-[11px] uppercase tracking-[0.12em]" style={{ color: tertiaryText }}>
                             Format
                           </span>
-                          {(['wav', 'mp3'] as const).map((audioFormat) => (
-                            <label key={audioFormat} className="flex items-center gap-2">
-                              <input
-                                type="radio"
-                                name="format"
-                                value={audioFormat}
-                                checked={format === audioFormat}
-                                onChange={() => setFormat(audioFormat)}
-                                disabled={isGenerating}
-                                className="accent-neutral-500"
-                              />
-                              <span className="text-sm uppercase" style={{ color: secondaryText }}>
-                                {audioFormat}
-                              </span>
-                            </label>
-                          ))}
+                          <div className="flex flex-wrap items-center gap-4">
+                            {(['wav', 'mp3'] as const).map((audioFormat) => (
+                              <label key={audioFormat} className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="format"
+                                  value={audioFormat}
+                                  checked={format === audioFormat}
+                                  onChange={() => setFormat(audioFormat)}
+                                  disabled={isGenerating}
+                                  className="accent-neutral-500"
+                                />
+                                <span className="text-sm uppercase" style={{ color: secondaryText }}>
+                                  {audioFormat}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1168,38 +1164,6 @@ function StepBadge({ number, isDark }: Readonly<{ number: number; isDark: boolea
     >
       {number}
     </span>
-  );
-}
-
-function MetricPill({
-  label,
-  value,
-  sublabel,
-  isDark,
-}: Readonly<{
-  label: string;
-  value: string;
-  sublabel: string;
-  isDark: boolean;
-}>) {
-  return (
-    <div
-      className="rounded-lg border px-3 py-2.5"
-      style={{
-        background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(24,24,27,0.03)',
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(24,24,27,0.08)',
-      }}
-    >
-      <div className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(24,24,27,0.45)' }}>
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-semibold" style={{ color: isDark ? '#fafafa' : '#111827' }}>
-        {value}
-      </div>
-      <div className="mt-0.5 text-[11px]" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(24,24,27,0.55)' }}>
-        {sublabel}
-      </div>
-    </div>
   );
 }
 
