@@ -20,7 +20,7 @@ function formatDisplayDate(value: string): string {
   }
 }
 
-export function DatePicker({ value, onDateChange, isDark }: DatePickerProps) {
+export function DatePicker({ value, onDateChange, isDark }: Readonly<DatePickerProps>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -88,7 +88,7 @@ interface DatePickerPanelProps {
   onClose: () => void;
 }
 
-function DatePickerPanel({ value, onDateChange, isDark, onClose }: DatePickerPanelProps) {
+function DatePickerPanel({ value, onDateChange, isDark, onClose }: Readonly<DatePickerPanelProps>) {
   const today = new Date();
   const [viewYear, setViewYear] = useState(() => {
     if (value) {
@@ -125,7 +125,7 @@ function DatePickerPanel({ value, onDateChange, isDark, onClose }: DatePickerPan
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
   const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
+    ...new Array(firstDay).fill(null),
     ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
   ];
 
@@ -223,9 +223,9 @@ function DatePickerPanel({ value, onDateChange, isDark, onClose }: DatePickerPan
       </div>
 
       <div className="grid grid-cols-7 gap-1">
-        {cells.map((day, index) => {
+        {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`empty-${index}`} className="h-9 w-9" />;
+            return <div key={`${viewYear}-${viewMonth}-cell-${i}`} className="h-9 w-9" />;
           }
 
           const selectedDay = isSelected(day);

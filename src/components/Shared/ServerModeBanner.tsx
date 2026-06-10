@@ -21,7 +21,7 @@ const VARIANT_ACCENT: Record<BannerVariant, string> = {
   token_invalid: '#f97316',
 };
 
-export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigValid, tokenInvalid, onConfigure }: ServerModeBannerProps) {
+export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigValid, tokenInvalid, onConfigure }: Readonly<ServerModeBannerProps>) {
   if (isConfigLoading) return null;
 
   let variant: BannerVariant;
@@ -29,11 +29,11 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
     variant = 'token_invalid';
   } else if (isConfigValid === false) {
     variant = 'error';
-  } else if (!serverUrl) {
-    return null;
-  } else {
+  } else if (serverUrl) {
     const normalizedUrl = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl;
     variant = (normalizedUrl === PRODUCTION_URL_V2 || normalizedUrl === PRODUCTION_URL) ? 'production' : 'nonproduction';
+  } else {
+    return null;
   }
 
   const accent = VARIANT_ACCENT[variant];
@@ -41,19 +41,22 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const iconBgAlpha = isDark ? '15' : '12';
+  const iconBorderAlpha = isDark ? '28' : '22';
+  const bannerBorderAlpha = isDark ? '22' : '16';
 
   return (
     <div
       className="rounded-xl border px-4 py-3"
       style={{
         background: mutedSurface,
-        borderColor: isDark ? `${accent}22` : `${accent}16`,
+        borderColor: `${accent}${bannerBorderAlpha}`,
       }}
     >
       <div className="flex items-start gap-3">
         <div
           className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
-          style={{ background: isDark ? `${accent}15` : `${accent}12`, border: `1px solid ${isDark ? `${accent}28` : `${accent}22`}` }}
+          style={{ background: `${accent}${iconBgAlpha}`, border: `1px solid ${accent}${iconBorderAlpha}` }}
         >
           {variant === 'error' || variant === 'token_invalid' ? (
             <Icon icon={appIcons.statusWarning} className="h-4 w-4" style={{ color: accent }} />

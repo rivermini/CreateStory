@@ -4,7 +4,7 @@ import { Icon, appIcons } from './Icon';
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 export type ToastPosition = 'bottom-right' | 'top-center';
 
-export interface toast {
+export interface Toast {
   id: string;
   message: string;
   type: ToastType;
@@ -13,15 +13,16 @@ export interface toast {
 }
 
 let toastCounter = 0;
-const listeners = new Set<(toast: toast) => void>();
+const listeners = new Set<(toast: Toast) => void>();
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function showToast(
   message: string,
   type: ToastType = 'success',
   duration = 2000,
   position: ToastPosition = 'bottom-right',
 ) {
-  const t: toast = {
+  const t: Toast = {
     id: `toast-${++toastCounter}`,
     message,
     type,
@@ -31,23 +32,35 @@ export function showToast(
   listeners.forEach((listener) => listener(t));
 }
 
+function dismissToast(id: string) {
+  setToastsForDismiss((prev) => prev.filter((x) => x.id !== id));
+}
+
+let setToastsForDismiss: (fn: (prev: Toast[]) => Toast[]) => void = () => {};
+
 export function ToastContainer() {
-  const [toasts, setToasts] = useState<toast[]>([]);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => {
-    const handler = (t: toast) => {
-      setToasts((prev) => [...prev, t]);
+    setToastsForDismiss = setToasts;
+  }, [setToasts]);
 
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((x) => x.id !== t.id));
-      }, t.duration ?? 2000);
-    };
-
-    listeners.add(handler);
-    return () => {
-      listeners.delete(handler);
-    };
+  const scheduleAutoDismiss = useCallback((t: Toast) => {
+    const delay = t.duration ?? 2000;
+    setTimeout(() => dismissToast(t.id), delay);
   }, []);
+
+  const addToast = useCallback((t: Toast) => {
+    setToasts((prev) => [...prev, t]);
+    scheduleAutoDismiss(t);
+  }, [scheduleAutoDismiss]);
+
+  useEffect(() => {
+    listeners.add(addToast);
+    return () => {
+      listeners.delete(addToast);
+    };
+  }, [addToast]);
 
   if (toasts.length === 0) return null;
 
@@ -75,26 +88,34 @@ export function ToastContainer() {
   );
 }
 
-function ToastItem({ toast }: { toast: toast }) {
+function ToastItem({ toast }: Readonly<{ toast: Readonly<Toast> }>) {
   const isDark = document.documentElement.dataset.theme !== 'light';
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const startExitTimer = useCallback((duration: number) => {
+    exitTimerRef.current = setTimeout(() => setExiting(true), duration - 300);
+  }, []);
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
-
-    timerRef.current = setTimeout(() => {
-      setExiting(true);
-    }, (toast.duration ?? 2000) - 300);
-
+    startExitTimer(toast.duration ?? 2000);
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
     };
-  }, [toast.duration]);
+  }, [toast.duration, startExitTimer]);
 
   const handleClose = useCallback(() => {
     setExiting(true);
+  }, []);
+
+  const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.opacity = '1';
+  }, []);
+
+  const handleMouseLeave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.opacity = '0.7';
   }, []);
 
   const config: Record<
@@ -176,12 +197,8 @@ function ToastItem({ toast }: { toast: toast }) {
         onClick={handleClose}
         className="shrink-0 rounded-lg p-1 transition-opacity"
         style={{ color: close, opacity: 0.7 }}
-        onMouseEnter={(event) => {
-          event.currentTarget.style.opacity = '1';
-        }}
-        onMouseLeave={(event) => {
-          event.currentTarget.style.opacity = '0.7';
-        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         <Icon icon={appIcons.close} className="h-4 w-4" />
       </button>

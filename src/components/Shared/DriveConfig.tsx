@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import {
-  type DriveSyncConfig,
   uploadDriveCredentials,
 } from '../../api/client';
 import { Icon, appIcons } from './Icon';
@@ -18,7 +17,6 @@ export interface DriveConfigProps {
   embedded?: boolean;
   isOpen?: boolean;
   onClose?: () => void;
-  config: DriveSyncConfig | null;
   configForm: ConfigFormData;
   onFormChange: (data: Partial<ConfigFormData>) => void;
   onSave: () => Promise<void>;
@@ -43,7 +41,7 @@ export function DriveConfig({
   themeMode,
   credentialFileExists = true,
   onCredentialUploadSuccess,
-}: DriveConfigProps) {
+}: Readonly<DriveConfigProps>) {
   const isDark = themeMode === 'dark';
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -60,50 +58,47 @@ export function DriveConfig({
   const labelClassName = `block text-xs mb-1.5 ${isDark ? 'text-white/55' : 'text-[rgba(55,53,47,0.68)]'}`;
   const fieldClassName = `w-full rounded-md border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent ${isDark ? 'text-white/90 placeholder:text-white/25' : 'text-[rgba(55,53,47,0.92)] placeholder:text-[rgba(55,53,47,0.35)]'}`;
 
-  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        let json = JSON.parse(event.target?.result as string);
+    try {
+      const text = await file.text();
+      let json = JSON.parse(text);
 
-        if (Array.isArray(json)) {
-          if (json.length === 0) return;
-          json = json[0];
-        }
-
-        if (json && typeof json === 'object' && !json.folder_id && !json.main_be_api_base_url) {
-          if (json.data) json = json.data;
-          else if (json.config) json = json.config;
-          else if (json.settings) json = json.settings;
-          else if (json.attributes) json = json.attributes;
-          else if (json.result) json = json.result;
-        }
-
-        if (Array.isArray(json)) {
-          json = json[0] || {};
-        }
-
-        if (!json || typeof json !== 'object') return;
-
-        const folderId = json.folder_id || json.folderId || json.folder || '';
-        const apiUrl = json.main_be_api_base_url || json.apiBaseUrl || json.apiUrl || json.baseUrl || '';
-        if (!folderId && !apiUrl) return;
-
-        onFormChange({
-          folder_id: folderId,
-          service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
-          main_be_api_base_url: apiUrl,
-          main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.beToken || '',
-          main_be_user_id: json.main_be_user_id || json.userId || json.main_be_user_id_header || json.xUserId || '',
-        });
-      } catch {
-        // silently ignore parse errors
+      if (Array.isArray(json)) {
+        if (json.length === 0) return;
+        json = json[0];
       }
-    };
-    reader.readAsText(file);
+
+      if (json && typeof json === 'object' && !json.folder_id && !json.main_be_api_base_url) {
+        if (json.data) json = json.data;
+        else if (json.config) json = json.config;
+        else if (json.settings) json = json.settings;
+        else if (json.attributes) json = json.attributes;
+        else if (json.result) json = json.result;
+      }
+
+      if (Array.isArray(json)) {
+        json = json[0] || {};
+      }
+
+      if (!json || typeof json !== 'object') return;
+
+      const folderId = json.folder_id || json.folderId || json.folder || '';
+      const apiUrl = json.main_be_api_base_url || json.apiBaseUrl || json.apiUrl || json.baseUrl || '';
+      if (!folderId && !apiUrl) return;
+
+      onFormChange({
+        folder_id: folderId,
+        service_account_json_name: json.service_account_json_name || json.serviceAccountJsonName || json.serviceAccount || 'google-service-account.json',
+        main_be_api_base_url: apiUrl,
+        main_be_bearer_token: json.main_be_bearer_token || json.bearerToken || json.beToken || '',
+        main_be_user_id: json.main_be_user_id || json.userId || json.main_be_user_id_header || json.xUserId || '',
+      });
+    } catch {
+      // silently ignore parse errors
+    }
   };
 
   useEffect(() => {
@@ -130,10 +125,11 @@ export function DriveConfig({
 
       <div className="space-y-4">
         <div>
-          <label className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
+          <label htmlFor="drive-user-id" className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
             User ID (x-user-id)
           </label>
           <input
+            id="drive-user-id"
             type="text"
             value={configForm.main_be_user_id}
             onChange={e => onFormChange({ main_be_user_id: e.target.value })}
@@ -144,10 +140,11 @@ export function DriveConfig({
         </div>
 
         <div>
-          <label className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
+          <label htmlFor="drive-api-url" className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
             Main BE API URL
           </label>
           <input
+            id="drive-api-url"
             type="text"
             value={configForm.main_be_api_base_url}
             onChange={e => onFormChange({ main_be_api_base_url: e.target.value })}
@@ -158,10 +155,11 @@ export function DriveConfig({
         </div>
 
         <div>
-          <label className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
+          <label htmlFor="drive-folder-id" className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
             Drive Folder ID
           </label>
           <input
+            id="drive-folder-id"
             type="text"
             value={configForm.folder_id}
             onChange={e => onFormChange({ folder_id: e.target.value })}
@@ -172,7 +170,7 @@ export function DriveConfig({
         </div>
 
         <div>
-          <label className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
+          <label htmlFor="service-account-file" className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
             Service Account JSON File
           </label>
           <div
@@ -206,8 +204,9 @@ export function DriveConfig({
                 </span>
               )}
               <label className="rounded-md px-3 py-1.5 text-xs font-medium cursor-pointer transition-colors" style={{ background: primaryButton, color: '#fff' }}>
-                Choose File
+                {' '}Choose File
                 <input
+                  id="service-account-file"
                   type="file"
                   accept=".json"
                   className="hidden"
@@ -232,10 +231,11 @@ export function DriveConfig({
         </div>
 
         <div>
-          <label className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
+          <label htmlFor="drive-bearer-token" className={labelClassName} style={embedded ? undefined : { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' }}>
             Main BE Bearer Token <span className="font-normal" style={{ color: tertiaryText }}>(for check-uploadable &amp; chapter update features)</span>
           </label>
           <input
+            id="drive-bearer-token"
             type="password"
             value={configForm.main_be_bearer_token}
             onChange={e => onFormChange({ main_be_bearer_token: e.target.value })}
@@ -280,6 +280,7 @@ export function DriveConfig({
     <div
       ref={overlayRef}
       className="lg-modal-overlay"
+      aria-hidden="true"
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose?.();
       }}

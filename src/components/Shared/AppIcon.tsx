@@ -13,7 +13,7 @@ const sizeMap = {
     xl: 'w-12 h-12',
 };
 
-export function AppIcon({ size = 'md', className = '' }: AppIconProps) {
+export function AppIcon({ size = 'md', className = '' }: Readonly<AppIconProps>) {
     const isDark = document.documentElement.dataset.theme === 'dark';
 
     return (

@@ -21,7 +21,7 @@ export function AccountMenu({
   onClose,
   onLogout,
   placement = 'floating',
-}: AccountMenuProps) {
+}: Readonly<AccountMenuProps>) {
   const isAdmin = authUser.role === 'admin';
   const menuRef = useRef<HTMLDivElement>(null);
   const isSidebar = placement === 'sidebar';
@@ -136,7 +136,7 @@ export function AccountMenu({
               type="button"
               onClick={() => {
                 onClose();
-                void onLogout();
+                onLogout();
               }}
               className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
                 isDark ? 'text-red-300 hover:bg-red-500/10' : 'text-red-600 hover:bg-red-50'

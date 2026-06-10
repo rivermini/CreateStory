@@ -59,6 +59,7 @@ import {
 import { faCirclePause, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
 import { faGoogleDrive } from '@fortawesome/free-brands-svg-icons';
 
+/* eslint-disable react-refresh/only-export-components */
 export const appIcons = {
   add: faPlus,
   back: faArrowLeft,
@@ -139,6 +140,6 @@ interface IconProps extends Omit<FontAwesomeIconProps, 'icon'> {
   icon: IconDefinition;
 }
 
-export function Icon({ icon, className, ...props }: IconProps) {
+export function Icon({ icon, className, ...props }: Readonly<IconProps>) {
   return <FontAwesomeIcon icon={icon} className={className} {...props} />;
 }
