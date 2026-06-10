@@ -4,12 +4,12 @@ import { getFileContent, previewFile } from '../../api/client';
 import { Icon, appIcons } from '../Shared/Icon';
 
 export interface FilePreviewProps {
-  crawlId: string;
-  filename: string;
-  sizeBytes: number;
-  onDownload: () => void;
-  accent?: 'emerald' | 'indigo' | 'cyan' | 'none';
-  isDark?: boolean;
+  readonly crawlId: string;
+  readonly filename: string;
+  readonly sizeBytes: number;
+  readonly onDownload: () => void;
+  readonly accent?: 'emerald' | 'indigo' | 'cyan' | 'none';
+  readonly isDark?: boolean;
 }
 
 function formatBytes(bytes: number): string {

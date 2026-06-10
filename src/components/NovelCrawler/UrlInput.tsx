@@ -4,12 +4,12 @@ import { useSiteDetection } from '../../hooks/useSiteDetection';
 import type { ThemeMode } from '../../types/theme';
 
 export interface UrlInputProps {
-  onSlugDetected?: (slug: string) => void;
-  initialUrl?: string;
-  themeMode?: ThemeMode;
+  readonly onSlugDetected?: (slug: string) => void;
+  readonly initialUrl?: string;
+  readonly themeMode?: ThemeMode;
 }
 
-export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }: UrlInputProps) {
+export function UrlInput({ onSlugDetected, initialUrl = '', themeMode = 'dark' }: Readonly<UrlInputProps>) {
   const isDark = themeMode === 'dark';
   const [url, setUrl] = useState(initialUrl);
   const { siteInfo, slug, isValid, isLoading, error, detect } = useSiteDetection();

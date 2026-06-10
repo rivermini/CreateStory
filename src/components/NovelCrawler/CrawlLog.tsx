@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { LogEntry } from '../../hooks/useCrawlStream';
 
 export interface CrawlLogProps {
-  lines: LogEntry[];
-  maxLines?: number;
-  isDark?: boolean;
+  readonly lines: LogEntry[];
+  readonly maxLines?: number;
+  readonly isDark?: boolean;
 }
 
 const levelStylesDark: Record<string, string> = {
@@ -73,7 +73,7 @@ export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps
           <div className="space-y-1">
             {displayLines.map((entry, index) => (
               <div
-                key={index}
+                key={`${entry.timestamp}-${index}`}
                 className="rounded-md px-2 py-1 font-mono text-[11px] leading-relaxed"
                 style={{ background: isDark ? 'rgba(255,255,255,0.025)' : panelBackground, color: levelStyles[entry.level] ?? levelStyles.info }}
               >

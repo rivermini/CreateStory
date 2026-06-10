@@ -494,7 +494,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
           {config && !configLoading && (
             <StorySyncTabs
-              config={config}
               activeTab={activeSubTab}
               onTabChange={setActiveSubTab}
               themeMode={themeMode}

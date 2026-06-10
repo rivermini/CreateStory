@@ -1,12 +1,12 @@
 import { type ReactNode } from 'react';
 
 export interface StatsPanelProps {
-  chaptersCrawled: number;
-  chaptersTotal: number;
-  status: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  isDark?: boolean;
+  readonly chaptersCrawled: number;
+  readonly chaptersTotal: number;
+  readonly status: string;
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+  readonly isDark?: boolean;
 }
 
 function formatDuration(started: string | null, finished: string | null): string {
@@ -90,10 +90,10 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
 }
 
 function StatCard({ label, value, sub, isDark }: {
-  label: string;
-  value: ReactNode;
-  sub?: string;
-  isDark: boolean;
+  readonly label: string;
+  readonly value: ReactNode;
+  readonly sub?: string;
+  readonly isDark: boolean;
 }) {
   return (
     <div

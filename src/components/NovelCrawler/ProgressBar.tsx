@@ -1,14 +1,14 @@
 import { Icon, appIcons } from '../Shared/Icon';
 
 export interface ProgressBarProps {
-  chaptersCrawled: number;
-  chaptersTotal: number;
-  currentTitle: string;
-  status: string;
-  isDark?: boolean;
+  readonly chaptersCrawled: number;
+  readonly chaptersTotal: number;
+  readonly currentTitle: string;
+  readonly status: string;
+  readonly isDark?: boolean;
 }
 
-export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, status, isDark = true }: ProgressBarProps) {
+export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, status, isDark = true }: Readonly<ProgressBarProps>) {
   const pct = chaptersTotal > 0 ? Math.min(chaptersCrawled / chaptersTotal, 1) : 0;
   const pctStr = (pct * 100).toFixed(0);
   const trackBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)';

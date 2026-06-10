@@ -505,7 +505,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
             {uploadError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{uploadError}</div>}
             <DriveConfig
               embedded
-              config={config}
               configForm={configForm}
               onFormChange={handleConfigFormChange}
               onSave={handleSaveConfig}

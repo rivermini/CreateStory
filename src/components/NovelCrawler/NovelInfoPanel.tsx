@@ -4,19 +4,19 @@ import { formatNumber } from '../../api/client';
 import { Icon, appIcons } from '../Shared/Icon';
 
 export interface NovelInfoPanelProps {
-  storyTitle: string | null;
-  siteName: string | null;
-  chapters: ChapterEntry[];
-  chapterCount: number;
-  totalChapterCount: number | null;
-  isLoading: boolean;
-  isDetecting: boolean;
-  error: string;
-  warning: string | null;
-  isChapterUrl: boolean;
-  novelMetadata: NovelMetadata | null | undefined;
-  onCrawlNovel: (toChapter: number) => void;
-  isDark?: boolean;
+  readonly storyTitle: string | null;
+  readonly siteName: string | null;
+  readonly chapters: ChapterEntry[];
+  readonly chapterCount: number;
+  readonly totalChapterCount: number | null;
+  readonly isLoading: boolean;
+  readonly isDetecting: boolean;
+  readonly error: string;
+  readonly warning: string | null;
+  readonly isChapterUrl: boolean;
+  readonly novelMetadata: NovelMetadata | null | undefined;
+  readonly onCrawlNovel: (toChapter: number) => void;
+  readonly isDark?: boolean;
 }
 
 export function NovelInfoPanel({
@@ -63,12 +63,8 @@ export function NovelInfoPanel({
     );
   }
 
-  const isPaywalled = novelMetadata?.is_paywalled === true;
-  const displayedTotal = totalChapterCount != null
-    ? totalChapterCount
-    : chapters.length > 0
-      ? Math.max(...chapters.map((chapter) => chapter.chapter_number))
-      : 0;
+  const isPaywalled = novelMetadata?.is_paywalled ?? false;
+  const displayedTotal = totalChapterCount ?? (chapters.length > 0 ? Math.max(...chapters.map((chapter) => chapter.chapter_number)) : 0);
   const estimatedMax = totalChapterCount ?? displayedTotal;
   const showPartial = totalChapterCount != null && chapterCount < totalChapterCount;
   const panelTitle = novelMetadata?.title || storyTitle || 'Novel Info';
@@ -177,7 +173,7 @@ export function NovelInfoPanel({
         </div>
       )}
 
-      <div className="min-h-0 min-h-[200px] flex-1 overflow-y-auto" ref={tocRef}>
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: '200px' }} ref={tocRef}>
         {chapters.length === 0 ? (
           <div className="flex items-center gap-2 p-4 text-sm" style={{ color: tertiaryText }}>
             <Icon icon={appIcons.file} className="h-4 w-4" />
@@ -241,7 +237,7 @@ export function NovelInfoPanel({
   );
 }
 
-function CoverImage({ url, title, isDark }: { url?: string; title: string; isDark: boolean }) {
+function CoverImage({ url, title, isDark }: { readonly url?: string; readonly title: string; readonly isDark: boolean }) {
   const [failed, setFailed] = useState(false);
   if (!url || failed) {
     return (
@@ -263,7 +259,7 @@ function CoverImage({ url, title, isDark }: { url?: string; title: string; isDar
   );
 }
 
-function DescriptionBlock({ text, expanded, onToggle, isDark }: { text: string; expanded: boolean; onToggle: () => void; isDark: boolean }) {
+function DescriptionBlock({ text, expanded, onToggle, isDark }: { readonly text: string; readonly expanded: boolean; readonly onToggle: () => void; readonly isDark: boolean }) {
   const [tooLong] = useState(text.length > 200);
   return (
     <div>
@@ -279,7 +275,7 @@ function DescriptionBlock({ text, expanded, onToggle, isDark }: { text: string; 
   );
 }
 
-function ChapterRow({ chapter, isDark, isLast }: { chapter: ChapterEntry; isDark: boolean; isLast: boolean }) {
+function ChapterRow({ chapter, isDark, isLast }: { readonly chapter: ChapterEntry; readonly isDark: boolean; readonly isLast: boolean }) {
   return (
     <tr className="transition-colors" style={{ borderBottom: isLast ? 'none' : `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.08)'}` }}>
       <td className="whitespace-nowrap px-4 py-2.5 align-top text-xs font-mono" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }}>
@@ -294,7 +290,7 @@ function ChapterRow({ chapter, isDark, isLast }: { chapter: ChapterEntry; isDark
   );
 }
 
-function StatPill({ icon, value, isDark }: { icon: typeof appIcons.eye; value: string; isDark: boolean }) {
+function StatPill({ icon, value, isDark }: { readonly icon: typeof appIcons.eye; readonly value: string; readonly isDark: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1" style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(55,53,47,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)' }}>
       <Icon icon={icon} className="h-3.5 w-3.5" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }} />
@@ -303,7 +299,7 @@ function StatPill({ icon, value, isDark }: { icon: typeof appIcons.eye; value: s
   );
 }
 
-function BadgeCompleted({ isDark }: { isDark: boolean }) {
+function BadgeCompleted({ isDark }: { readonly isDark: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)', color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
       <Icon icon={appIcons.check} className="h-3 w-3" />
@@ -312,11 +308,11 @@ function BadgeCompleted({ isDark }: { isDark: boolean }) {
   );
 }
 
-function BadgeOngoing({ isDark }: { isDark: boolean }) {
+function BadgeOngoing({ isDark }: { readonly isDark: boolean }) {
   return <span className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)', color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>Ongoing</span>;
 }
 
-function BadgeMature({ isDark }: { isDark: boolean }) {
+function BadgeMature({ isDark }: { readonly isDark: boolean }) {
   return <span className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)', borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.18)', color: isDark ? '#f87171' : '#dc2626' }}>18+</span>;
 }
 
@@ -328,7 +324,7 @@ function InfoIcon() {
   return <Icon icon={appIcons.info} className="h-3.5 w-3.5" />;
 }
 
-function NovelInfoPanelSkeleton({ isDetecting, isDark }: { isDetecting: boolean; isDark: boolean }) {
+function NovelInfoPanelSkeleton({ isDetecting, isDark }: { readonly isDetecting: boolean; readonly isDark: boolean }) {
   const shimmer = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)';
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const secondaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
@@ -373,10 +369,10 @@ function NovelInfoPanelSkeleton({ isDetecting, isDark }: { isDetecting: boolean;
         </div>
       </div>
       <div className="space-y-2 px-4 pb-5">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <div key={index} className="flex items-center gap-3 animate-pulse">
+        {(['skeleton-row-0', 'skeleton-row-1', 'skeleton-row-2', 'skeleton-row-3', 'skeleton-row-4', 'skeleton-row-5', 'skeleton-row-6', 'skeleton-row-7'] as const).map((key) => (
+          <div key={key} className="flex items-center gap-3 animate-pulse">
             <div className="h-3 w-8 shrink-0 rounded" style={{ background: shimmer }} />
-            <div className={`h-3 rounded ${index % 3 === 0 ? 'w-full' : index % 3 === 1 ? 'w-11/12' : 'w-10/12'}`} style={{ background: shimmer }} />
+            <div className={`h-3 rounded ${key.endsWith('-0') ? 'w-full' : key.endsWith('-1') ? 'w-11/12' : 'w-10/12'}`} style={{ background: shimmer }} />
           </div>
         ))}
       </div>
