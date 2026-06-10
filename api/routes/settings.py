@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api.auth import require_active_user, require_admin
+from api.auth import require_active_user
 from api.db import get_db
 from api.models.settings import SettingsResponse, SettingsUpdateRequest
 from api.repositories.shared_state import SETTINGS_KEY, SharedStateRepository
@@ -88,7 +88,7 @@ async def get_settings(
 async def update_settings(
     req: SettingsUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
-    _admin=Depends(require_admin),
+    _user=Depends(require_active_user),
 ) -> SettingsResponse:
     """Partially update shared settings. Only explicitly sent fields are updated."""
     data = _load_settings(db)
