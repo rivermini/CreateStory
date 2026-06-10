@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import {
   checkUploadable,
   checkUpdatable,
@@ -19,9 +19,45 @@ import { StorySyncTabs, type StorySyncTab } from '../../components/BedReadDriveS
 import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
 import type { ThemeMode } from '../../types/theme';
 
+const pollUpdate = (
+  jobId: string,
+  storyId: string,
+  lockKey: string,
+  setResults: (fn: (prev: Map<string, { success: boolean; message: string }>) => Map<string, { success: boolean; message: string }>) => void,
+  setJobs: (fn: (prev: Map<string, string>) => Map<string, string>) => void,
+  locksRef: MutableRefObject<Set<string>>,
+) => {
+  const poll = async () => {
+    while (true) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      try {
+        const { job } = await getJob(jobId);
+        if (job.status !== 'queued' && job.status !== 'running') {
+          setResults((prev) => {
+            const next = new Map(prev).set(storyId, {
+              success: job.status === 'success',
+              message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
+            });
+            return next;
+          });
+          setJobs((prev) => {
+            const next = new Map(prev);
+            next.delete(storyId);
+            return next;
+          });
+          locksRef.current.delete(lockKey);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+  poll();
+};
+
 interface DriveSyncPageProps {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
+  readonly themeMode: ThemeMode;
 }
 
 export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
@@ -81,23 +117,11 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
           completedIds.push(tracked.jobId);
 
-          if (job.status === 'success') {
-            setUploadResults((prev) => {
-              const next = new Map(prev).set(tracked.folderId, {
-                success: true,
-                message: job.result_message ?? 'Done',
-              });
-              return next;
-            });
-          } else {
-            setUploadResults((prev) => {
-              const next = new Map(prev).set(tracked.folderId, {
-                success: false,
-                message: job.error ?? 'Upload failed',
-              });
-              return next;
-            });
-          }
+          const uploadResult = {
+            success: job.status === 'success',
+            message: job.status === 'success' ? (job.result_message ?? 'Done') : (job.error ?? 'Upload failed'),
+          };
+          setUploadResults((prev) => new Map(prev).set(tracked.folderId, uploadResult));
         } catch {
           // ignore
         }
@@ -105,13 +129,12 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
       if (completedIds.length > 0) {
         setTrackedJobs((prev) => prev.filter((job) => !completedIds.includes(job.jobId)));
+        const jobsToRemove = trackedJobs.filter((t) => completedIds.includes(t.jobId));
         setUploadingJobs((prev) => {
           const next = new Map(prev);
-          for (const tracked of trackedJobs) {
-            if (completedIds.includes(tracked.jobId)) {
-              next.delete(tracked.folderId);
-              uploadLocksRef.current.delete(tracked.folderId);
-            }
+          for (const tracked of jobsToRemove) {
+            next.delete(tracked.folderId);
+            uploadLocksRef.current.delete(tracked.folderId);
           }
           return next;
         });
@@ -319,33 +342,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         return server_story.id;
       }
 
-      const poll = async () => {
-        while (true) {
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-          try {
-            const { job } = await getJob(jobId);
-            if (job.status !== 'queued' && job.status !== 'running') {
-              setUpdateResults((prev) => {
-                const next = new Map(prev).set(server_story.id, {
-                  success: job.status === 'success',
-                  message: job.result_message ?? (job.status === 'success' ? 'Updated' : job.error ?? 'Update failed'),
-                });
-                return next;
-              });
-              setUpdatingJobs((prev) => {
-                const next = new Map(prev);
-                next.delete(server_story.id);
-                return next;
-              });
-              updateLocksRef.current.delete(lockKey);
-              return;
-            }
-          } catch {
-            // ignore
-          }
-        }
-      };
-      poll();
+      pollUpdate(jobId, server_story.id, lockKey, setUpdateResults, setUpdatingJobs, updateLocksRef);
 
       return server_story.id;
     },
@@ -360,7 +357,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         handleUpdateSingle(entry, count);
       }
     },
-    [handleUpdateSingle, config],
+    [handleUpdateSingle],
   );
 
   const hasActiveJobs = trackedJobs.length > 0 || updatingJobs.size > 0;

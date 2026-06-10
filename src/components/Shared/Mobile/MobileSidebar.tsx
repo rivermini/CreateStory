@@ -5,7 +5,6 @@ import type { ThemeMode } from '../../../types/theme';
 
 interface MobileSidebarProps {
     themeMode: ThemeMode;
-    onThemeChange: (mode: ThemeMode) => void;
     isSettingsOpen: boolean;
     onOpenSettings: () => void;
     isOpen: boolean;

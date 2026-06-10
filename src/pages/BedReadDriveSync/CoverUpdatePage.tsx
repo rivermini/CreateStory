@@ -14,8 +14,7 @@ import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
 import type { ThemeMode } from '../../types/theme';
 
 interface CoverUpdatePageProps {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
+  readonly themeMode: ThemeMode;
 }
 
 export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {

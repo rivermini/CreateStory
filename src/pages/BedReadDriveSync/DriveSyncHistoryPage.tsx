@@ -8,8 +8,7 @@ import type { ThemeMode } from '../../types/theme';
 const PRODUCTION_API_BASE = 'https://api-novel.santngo.com';
 
 interface DriveSyncHistoryPageProps {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
+  readonly themeMode: ThemeMode;
 }
 
 type FilterStatus = 'all' | 'queued' | 'running' | 'success' | 'error' | 'cancelled';
@@ -95,20 +94,20 @@ function getDisplayName(job: SyncJob): string {
 }
 
 interface JobCardProps {
-  job: SyncJob;
-  order: number;
-  isSelected: boolean;
-  isExpanded: boolean;
-  deleteMode: boolean;
-  isDark: boolean;
-  panelBorder: string;
-  pageText: string;
-  secondaryText: string;
-  tertiaryText: string;
-  mutedSurface: string;
-  selectedSurface: string;
-  onToggleExpand: (jobId: string) => void;
-  onToggleSelect: (jobId: string) => void;
+  readonly job: SyncJob;
+  readonly order: number;
+  readonly isSelected: boolean;
+  readonly isExpanded: boolean;
+  readonly deleteMode: boolean;
+  readonly isDark: boolean;
+  readonly panelBorder: string;
+  readonly pageText: string;
+  readonly secondaryText: string;
+  readonly tertiaryText: string;
+  readonly mutedSurface: string;
+  readonly selectedSurface: string;
+  readonly onToggleExpand: (jobId: string) => void;
+  readonly onToggleSelect: (jobId: string) => void;
 }
 
 function JobCard({
@@ -144,22 +143,44 @@ function JobCard({
       className={`transition-colors ${deleteMode ? 'cursor-pointer select-none' : ''}`}
       style={{ background: deleteMode && isSelected ? selectedSurface : 'transparent' }}
       onClick={deleteMode ? () => onToggleSelect(job.id) : undefined}
+      onKeyDown={deleteMode ? (e) => {
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onToggleSelect(job.id); }
+      } : undefined}
+    >
+      {deleteMode && (
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={isSelected}
+          onChange={() => onToggleSelect(job.id)}
+          aria-label={`Select job ${order}`}
+        />
+      )}
+    <div
+      className="px-5 py-4 sm:px-6"
+      style={{ borderTop: order === 1 ? 'none' : `1px solid ${panelBorder}` }}
     >
       <div
-        className="px-5 py-4 sm:px-6"
-        style={{ borderTop: order === 1 ? 'none' : `1px solid ${panelBorder}` }}
-      >
-        <div
-          className={`flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between ${deleteMode ? '' : 'cursor-pointer'}`}
-          onClick={(event) => {
+        className={`flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between ${deleteMode ? '' : 'cursor-pointer'}`}
+        onClick={(event) => {
+          if (deleteMode) {
+            event.stopPropagation();
+            onToggleSelect(job.id);
+          } else {
+            onToggleExpand(job.id);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
             if (deleteMode) {
-              event.stopPropagation();
               onToggleSelect(job.id);
             } else {
               onToggleExpand(job.id);
             }
-          }}
-        >
+          }
+        }}
+      >
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium" style={{ color: tertiaryText }}>#{order}</span>
@@ -274,8 +295,8 @@ function JobCard({
   );
 }
 
-export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
-  const isDark = themeMode === 'dark';
+export function DriveSyncHistoryPage({ themeMode: _themeMode }: DriveSyncHistoryPageProps) {
+  const isDark = _themeMode === 'dark';
   const PAGE_SIZE = 15;
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<SyncJob[]>([]);
@@ -312,7 +333,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   const inputBackground = isDark ? '#232323' : '#ffffff';
   const inputBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.16)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const selectedSurface = isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.08)';
+  const selectedSurface = isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)';
   const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
 
   const loadJobs = useCallback(async (): Promise<void> => {
@@ -328,14 +349,14 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
 
   useEffect(() => {
     let cancelled = false;
-    const timer = window.setTimeout(() => {
+    const timer = setTimeout(() => {
       void loadJobs().finally(() => {
         if (!cancelled) setLoading(false);
       });
     }, 0);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      clearTimeout(timer);
     };
   }, [loadJobs]);
 
@@ -404,7 +425,7 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   const liveSelectedIds = new Set(Array.from(selectedIds).filter((id) => liveJobIds.has(id)));
   const allVisibleSelected = visibleJobs.length > 0 && visibleJobs.every((job) => liveSelectedIds.has(job.id));
   const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'running');
-  const primaryActiveJob = jobs.find((job) => job.status === 'running') ?? jobs.find((job) => job.status === 'queued') ?? null;
+  const primaryActiveJob = activeJobs.find((job) => job.status === 'running') ?? activeJobs.find((job) => job.status === 'queued') ?? null;
 
   const filteredCounts = {
     all: baseFiltered.length,
@@ -416,13 +437,13 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setVisibleCount(PAGE_SIZE), 0);
-    return () => window.clearTimeout(timer);
+    const timer = setTimeout(() => setVisibleCount(PAGE_SIZE), 0);
+    return () => clearTimeout(timer);
   }, [PAGE_SIZE, filter, filterKind, showChapterContentUpdates, sortOrder, timeRange, specificDate, search]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setSelectedIds(new Set()), 0);
-    return () => window.clearTimeout(timer);
+    const timer = setTimeout(() => setSelectedIds(new Set()), 0);
+    return () => clearTimeout(timer);
   }, [filter, filterKind, showChapterContentUpdates, timeRange, specificDate, search]);
 
   useEffect(() => {
@@ -454,7 +475,11 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
   const handleToggleSelect = (jobId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(jobId) ? next.delete(jobId) : next.add(jobId);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
       return next;
     });
   };
@@ -541,12 +566,12 @@ export function DriveSyncHistoryPage({ themeMode }: DriveSyncHistoryPageProps) {
             </h3>
             {deleteConfirmation.hasRunning ? (
               <div className="mt-3 space-y-2 text-sm" style={{ color: isDark ? '#fbbf24' : '#b45309' }}>
-                <p>You are about to delete {deleteConfirmation.ids.length} sync job{deleteConfirmation.ids.length !== 1 ? 's' : ''}, including active job(s).</p>
+                <p>You are about to delete {deleteConfirmation.ids.length} sync job{deleteConfirmation.ids.length > 1 ? 's' : ''}, including active job(s).</p>
                 <p className="font-medium">This action cannot be undone.</p>
               </div>
             ) : (
               <p className="mt-3 text-sm leading-6" style={{ color: secondaryText }}>
-                Delete {deleteConfirmation.ids.length} sync job{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+                Delete {deleteConfirmation.ids.length} sync job{deleteConfirmation.ids.length > 1 ? 's' : ''}? This action cannot be undone.
               </p>
             )}
             {selectedJobs.length > 0 && (

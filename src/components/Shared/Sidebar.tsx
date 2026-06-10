@@ -8,7 +8,6 @@ import type { ThemeMode } from '../../types/theme';
 
 interface SidebarProps {
     themeMode: ThemeMode;
-    onThemeChange: (mode: ThemeMode) => void;
     isSettingsOpen?: boolean;
     onOpenSettings: () => void;
     authUser: AuthUser;

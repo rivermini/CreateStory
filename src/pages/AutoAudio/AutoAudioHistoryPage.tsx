@@ -13,7 +13,6 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 
 interface AutoAudioHistoryPageProps {
   themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
 }
 
 type FilterStatus = 'all' | 'running' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'error';

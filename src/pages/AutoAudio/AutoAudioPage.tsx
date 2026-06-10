@@ -16,7 +16,6 @@ import type { ThemeMode } from '../../types/theme';
 
 interface AutoAudioPageProps {
   themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
 }
 
 function formatTime(ts: string | null): string {

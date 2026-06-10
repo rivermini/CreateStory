@@ -146,7 +146,7 @@ function Shell({
       {!isDashboard && (
         <Sidebar
           themeMode={themeMode}
-          onThemeChange={onThemeChange}
+          
           isSettingsOpen={settingsOpen}
           onOpenSettings={handleOpenSettings}
           authUser={authUser}
@@ -157,7 +157,7 @@ function Shell({
       {!isDashboard && (
         <MobileSidebar
           themeMode={themeMode}
-          onThemeChange={onThemeChange}
+          
           isSettingsOpen={settingsOpen}
           onOpenSettings={handleOpenSettings}
           isOpen={mobileSidebarOpen}
@@ -191,18 +191,18 @@ function Shell({
             </div>
           }>
             <Routes>
-              <Route path="/" element={<HomePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/crawl" element={<CrawlPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/" element={<HomePage themeMode={themeMode}  />} />
+              <Route path="/crawl" element={<CrawlPage themeMode={themeMode}  />} />
               <Route path="/results" element={<ResultPage themeMode={themeMode} />} />
               <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} />} />
               <Route path="/bedread" element={<BedReadPage themeMode={themeMode} />} />
               <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} />} />
-              <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/drive-sync/content-update" element={<ChapterContentUpdatePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/drive-sync/cover-update" element={<CoverUpdatePage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
-              <Route path="/auto-audio/history" element={<AutoAudioHistoryPage themeMode={themeMode} onThemeChange={onThemeChange} />} />
+              <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode}  />} />
+              <Route path="/drive-sync/content-update" element={<ChapterContentUpdatePage themeMode={themeMode}  />} />
+              <Route path="/drive-sync/cover-update" element={<CoverUpdatePage themeMode={themeMode}  />} />
+              <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode}  />} />
+              <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode}  />} />
+              <Route path="/auto-audio/history" element={<AutoAudioHistoryPage themeMode={themeMode}  />} />
               <Route path="/settings" element={<Navigate to="/" replace />} />
               <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} />} />
               <Route path="/dashboard/*" element={authUser.role === 'admin' ? <DashboardPage themeMode={themeMode} authUser={authUser} /> : <Navigate to="/" replace />} />

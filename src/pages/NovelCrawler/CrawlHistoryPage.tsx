@@ -30,19 +30,19 @@ function formatDuration(start: string | null, finish: string | null): string {
 }
 
 interface SessionCardProps {
-  session: CrawlSessionSummary;
-  order?: number;
-  isSelected?: boolean;
-  onToggleSelect?: (crawlId: string) => void;
-  deleteMode?: boolean;
-  isDark: boolean;
-  panelBorder: string;
-  pageText: string;
-  secondaryText: string;
-  tertiaryText: string;
-  mutedSurface: string;
-  selectedSurface: string;
-  navigate: ReturnType<typeof useNavigate>;
+  readonly session: CrawlSessionSummary;
+  readonly order?: number;
+  readonly isSelected?: boolean;
+  readonly onToggleSelect?: (crawlId: string) => void;
+  readonly deleteMode?: boolean;
+  readonly isDark: boolean;
+  readonly panelBorder: string;
+  readonly pageText: string;
+  readonly secondaryText: string;
+  readonly tertiaryText: string;
+  readonly mutedSurface: string;
+  readonly selectedSurface: string;
+  readonly navigate: ReturnType<typeof useNavigate>;
 }
 
 function SessionCard({
@@ -100,7 +100,7 @@ function SessionCard({
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
   };
 
   const isRetryable = session.status === 'failed' || session.status === 'cancelled';
@@ -110,7 +110,7 @@ function SessionCard({
     if (session.source_url) params.set('retryUrl', session.source_url);
     if (session.chapters_crawled > 0) params.set('retryLimit', String(session.chapters_crawled));
     const queryString = params.toString();
-    navigate(`/${queryString ? `?${queryString}` : ''}`);
+    navigate(queryString ? `/${queryString}` : '/');
   };
 
   return (
@@ -118,6 +118,7 @@ function SessionCard({
       className={`transition-colors ${deleteMode ? 'cursor-pointer select-none' : ''}`}
       style={{ background: deleteMode && isSelected ? selectedSurface : 'transparent' }}
       onClick={deleteMode && onToggleSelect ? () => onToggleSelect(session.crawl_id) : undefined}
+      onKeyDown={deleteMode && onToggleSelect ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') onToggleSelect(session.crawl_id); } : undefined}
     >
       <div
         className="px-4 py-3.5 sm:px-5"
@@ -160,7 +161,7 @@ function SessionCard({
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: secondaryText }}>
               <span style={{ color: tone.text }}>{label}</span>
               {session.chapters_crawled > 0 && (
-                <span>{session.chapters_crawled} chapter{session.chapters_crawled !== 1 ? 's' : ''}</span>
+                <span>{session.chapters_crawled} chapter{session.chapters_crawled === 1 ? '' : 's'}</span>
               )}
               {session.finished_at && (
                 <span style={{ color: pageText }}>{formatDuration(session.started_at, session.finished_at)}</span>
@@ -225,7 +226,7 @@ function SessionCard({
                 a.download = '';
                 document.body.appendChild(a);
                 a.click();
-                document.body.removeChild(a);
+                a.remove();
               }}
               className="rounded-md border px-3 py-2 text-sm transition-colors"
               style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
@@ -286,7 +287,7 @@ function SessionCard({
   );
 }
 
-export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }) {
+export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: ThemeMode }>) {
   const isDark = themeMode === 'dark';
   const PAGE_SIZE = 15;
   const navigate = useNavigate();
@@ -310,15 +311,17 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
   const [deleteMode, setDeleteMode] = useState(false);
 
   const fetchSessions = useCallback((): Promise<void> => {
+    setIsLoading(true);
+    setError('');
     return listAllResults()
       .then((data) => setSessions(data))
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
+      .finally(() => setIsLoading(false));
   }, []);
 
   useEffect(() => {
-    setIsLoading(true);
-    setError('');
-    fetchSessions().finally(() => setIsLoading(false));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchSessions();
     const interval = setInterval(fetchSessions, 3000);
     return () => clearInterval(interval);
   }, [fetchSessions]);
@@ -362,7 +365,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
       if ('start' in timeCutoff && 'end' in timeCutoff) {
         return sessionTime >= timeCutoff.start.getTime() && sessionTime <= timeCutoff.end.getTime();
       }
-      return sessionTime >= (timeCutoff as Date).getTime();
+      return sessionTime >= timeCutoff.getTime();
     })
     .sort((a, b) => {
       const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
@@ -377,6 +380,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
   const hasCombinedFiles = sessions.some((session) => session.combined_file || session.combined_txt_file);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisibleCount(PAGE_SIZE);
   }, [filter, sortOrder, timeRange, specificDate]);
 
@@ -493,8 +497,8 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
             {deleteConfirmation.hasRunning ? (
               <div className="mt-3 space-y-2 text-sm" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
                 <p>
-                  You are about to delete {deleteConfirmation.crawlIds.length} session
-                  {deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}, including running crawl(s).
+                  You are about to delete                   {deleteConfirmation.crawlIds.length} session
+                  {deleteConfirmation.crawlIds.length === 1 ? '' : 's'}, including running crawl(s).
                 </p>
                 <p>Deleting a running session stops the crawl and removes all downloaded data.</p>
                 <p className="font-medium">This action cannot be undone.</p>
@@ -502,7 +506,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
             ) : (
               <p className="mt-3 text-sm leading-6" style={{ color: secondaryText }}>
                 Delete {deleteConfirmation.crawlIds.length} session
-                {deleteConfirmation.crawlIds.length !== 1 ? 's' : ''}? This action cannot be undone.
+                {deleteConfirmation.crawlIds.length === 1 ? '' : 's'}? This action cannot be undone.
               </p>
             )}
             <div className="mt-4 flex justify-end gap-2">
@@ -549,7 +553,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
               {runningSessions.length > 0 && (
                 <div>
                   <span style={{ color: pageText }}>
-                    {runningSessions.length} running session{runningSessions.length !== 1 ? 's' : ''}
+                    {runningSessions.length} running session{runningSessions.length === 1 ? '' : 's'}
                   </span>
                 </div>
               )}
@@ -597,7 +601,7 @@ export default function CrawlHistoryPage({ themeMode }: { themeMode: ThemeMode }
                     a.href = getDownloadAllCombinedUrl();
                     document.body.appendChild(a);
                     a.click();
-                    document.body.removeChild(a);
+                    a.remove();
                     setTimeout(() => setDownloadingAllCombined(false), 2000);
                   }}
                   disabled={downloadingAllCombined || !hasCombinedFiles}

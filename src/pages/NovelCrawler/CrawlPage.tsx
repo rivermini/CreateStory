@@ -9,8 +9,7 @@ import { useCrawlStream } from '../../hooks/useCrawlStream';
 import type { ThemeMode } from '../../types/theme';
 
 interface CrawlPageProps {
-  themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
+  readonly themeMode: ThemeMode;
 }
 
 export function CrawlPage({ themeMode }: CrawlPageProps) {

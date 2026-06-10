@@ -14,7 +14,6 @@ import type { ThemeMode } from '../../types/theme';
 
 interface ChapterContentUpdatePageProps {
   themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
 }
 
 type ChapterResult = { success: boolean; message: string };

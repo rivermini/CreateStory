@@ -14,7 +14,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 
 interface ResultPageProps {
-  themeMode: ThemeMode;
+  readonly themeMode: ThemeMode;
 }
 
 function formatDate(iso: string | null): string {
@@ -108,7 +108,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
       .catch((e) => {
         setError(e instanceof Error ? e.message : 'Failed to load crawl results.');
       })
-      .finally(() => {
+        .finally(() => {
         setIsLoading(false);
       });
   }, [crawlId]);
@@ -125,8 +125,8 @@ export function ResultPage({ themeMode }: ResultPageProps) {
       navigate('/');
       return;
     }
-    setIsLoading(true);
     fetchResult();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchHistory();
   }, [crawlId, navigate, fetchResult, fetchHistory]);
 
@@ -136,6 +136,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     }
     const interval = setInterval(fetchResult, 3000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result?.status, fetchResult]);
 
   if (!crawlId) return null;
@@ -257,7 +258,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
   };
 
   const handleDownloadCombined = () => {
@@ -267,7 +268,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     a.download = combinedFilename;
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    a.remove();
   };
 
   const otherSessions = sessions.filter((session) => session.crawl_id !== crawlId);
@@ -472,7 +473,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                     {statusLabels[result.status] ?? result.status}
                   </span>
                   {result.chapters_crawled > 0 && (
-                    <> · {result.chapters_crawled} chapter{result.chapters_crawled !== 1 ? 's' : ''}</>
+                    <> · {result.chapters_crawled} chapter{result.chapters_crawled === 1 ? '' : 's'}</>
                   )}
                 </p>
                 {result.source_url && (
@@ -498,7 +499,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                     a.href = getDownloadAllUrl(result.crawl_id);
                     document.body.appendChild(a);
                     a.click();
-                    document.body.removeChild(a);
+                    a.remove();
                   }}
                   className="rounded-md px-4 py-2 text-sm font-medium"
                   style={{ background: strongSurface, color: strongSurfaceText }}
@@ -611,7 +612,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 </p>
               )}
             </section>
-          ) : !combinedFilename ? (
+          ) : combinedFilename.length === 0 ? (
             <section
               className="rounded-xl border px-4 py-8 text-center sm:px-5"
               style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
@@ -662,10 +663,10 @@ function MetaItem({
   secondaryText,
   pageText,
 }: {
-  label: string;
-  value: string;
-  secondaryText: string;
-  pageText: string;
+  readonly label: string;
+  readonly value: string;
+  readonly secondaryText: string;
+  readonly pageText: string;
 }) {
   return (
     <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'rgba(127,127,127,0.12)' }}>
@@ -684,9 +685,9 @@ function InlineChip({
   tone,
   isDark,
 }: {
-  label: string;
-  tone: 'strong' | 'soft' | 'neutral';
-  isDark: boolean;
+  readonly label: string;
+  readonly tone: 'strong' | 'soft' | 'neutral';
+  readonly isDark: boolean;
 }) {
   const styles: Record<'strong' | 'soft' | 'neutral', { background: string; color: string; border: string }> = {
     strong: {

@@ -11,10 +11,9 @@ import type { ThemeMode } from '../../types/theme';
 
 interface HomePageProps {
   themeMode: ThemeMode;
-  onThemeChange: (mode: ThemeMode) => void;
 }
 
-export function HomePage({ themeMode }: HomePageProps) {
+export function HomePage({ themeMode }: Readonly<HomePageProps>) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,32 +74,35 @@ export function HomePage({ themeMode }: HomePageProps) {
     const retryLimit = searchParams.get('retryLimit');
 
     if (retryUrl) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing input state from URL params on mount
       setInputUrl(retryUrl);
       detect(retryUrl);
       refresh(retryUrl);
     }
     if (retryRangeFrom && retryRangeTo) {
       setRangeMode('range');
-      setRangeFrom(parseInt(retryRangeFrom) || 1);
-      setRangeTo(parseInt(retryRangeTo) || 10);
+      setRangeFrom(Number.parseInt(retryRangeFrom) || 1);
+      setRangeTo(Number.parseInt(retryRangeTo) || 10);
     } else if (retryLimit) {
       setRangeMode('count');
-      setToChapter(parseInt(retryLimit) || 10);
+      setToChapter(Number.parseInt(retryLimit) || 10);
     }
 
     if (retryUrl || retryRangeFrom || retryRangeTo || retryLimit) {
       setSearchParams({});
     }
-  }, []);
+  }, [detect, refresh, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!autoMaxChapters || !totalChapterCount || totalChapterCount <= 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing chapter cap to discovered total is the intentional purpose of this effect
     setToChapter(totalChapterCount);
     setRangeTo(totalChapterCount);
   }, [autoMaxChapters, totalChapterCount]);
 
   useEffect(() => {
     if (siteInfo?.config_name !== 'inkitt' || !isValid || !inputUrl.trim()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting state when site/input changes is the intended purpose of this effect
       setInkittCookieStatus(null);
       setIsCheckingInkittCookies(false);
       return;
@@ -424,7 +426,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         max={effectiveMax}
                         value={toChapter}
                         disabled={inputsLocked}
-                        onChange={(event) => handleToChapterChange(parseInt(event.target.value) || 1)}
+                        onChange={(event) => handleToChapterChange(Number.parseInt(event.target.value) || 1)}
                         className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
                         style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       />
@@ -450,7 +452,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         max={effectiveMax}
                         value={rangeFrom}
                         disabled={inputsLocked}
-                        onChange={(event) => handleRangeFromChange(parseInt(event.target.value) || 1)}
+                        onChange={(event) => handleRangeFromChange(Number.parseInt(event.target.value) || 1)}
                         className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
                         style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       />
@@ -471,7 +473,7 @@ export function HomePage({ themeMode }: HomePageProps) {
                         max={effectiveMax}
                         value={rangeTo}
                         disabled={inputsLocked}
-                        onChange={(event) => handleRangeToChange(parseInt(event.target.value) || rangeFrom)}
+                        onChange={(event) => handleRangeToChange(Number.parseInt(event.target.value) || rangeFrom)}
                         className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
                         style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
                       />
@@ -480,9 +482,9 @@ export function HomePage({ themeMode }: HomePageProps) {
                 )}
 
                 <div className="flex items-center gap-3">
-                  <label className="text-sm" style={{ color: secondaryText }}>
+                  <span className="text-sm" style={{ color: secondaryText }}>
                     Format:
-                  </label>
+                  </span>
                   <span
                     className="inline-flex items-center rounded-md px-3 py-1 text-sm font-medium"
                     style={{ background: activeSurface, border: `1px solid ${panelBorder}`, color: pageText }}
@@ -557,7 +559,7 @@ export function HomePage({ themeMode }: HomePageProps) {
   );
 }
 
-function StepBadge({ number, isDark }: { number: number; isDark: boolean }) {
+function StepBadge({ number, isDark }: Readonly<{ number: number; isDark: boolean }>) {
   return (
     <span
       className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-semibold"
@@ -576,12 +578,12 @@ function FeedbackBox({
   isDark,
   icon,
   children,
-}: {
+}: Readonly<{
   tone: 'error';
   isDark: boolean;
   icon: IconDefinition;
   children: React.ReactNode;
-}) {
+}>) {
   const style = tone === 'error'
     ? {
         background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
