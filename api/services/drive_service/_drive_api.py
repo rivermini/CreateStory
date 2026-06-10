@@ -173,7 +173,7 @@ class DriveAPIMixin:
             try:
                 response = self._retry_drive_call(
                     lambda: drive_service.files().list(
-                        q=_q, fields="files(id, name, parents)", pageSize=500, pageToken=_pt
+                        q=_q, fields="files(id, name, parents),nextPageToken", pageSize=500, pageToken=_pt
                     ).execute()
                 )
             except (ssl.SSLError, TimeoutError):
@@ -206,7 +206,7 @@ class DriveAPIMixin:
                 response = self._retry_drive_call(
                     lambda: drive_service.files().list(
                         q=f"'{subfolder_id}' in parents and name contains '.md' and trashed=false",
-                        fields="files(id, name, parents)",
+                        fields="files(id, name, parents),nextPageToken",
                         pageSize=500,
                         pageToken=_pt,
                     ).execute()
@@ -290,7 +290,7 @@ class DriveAPIMixin:
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
-                    fields="files(id, name, modifiedTime)",
+                    fields="files(id, name, modifiedTime),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
                 ).execute()
@@ -312,7 +312,7 @@ class DriveAPIMixin:
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false",
-                    fields="files(id, name, modifiedTime)",
+                    fields="files(id, name, modifiedTime),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
                 ).execute()
@@ -424,7 +424,7 @@ class DriveAPIMixin:
                 return drive_service.files().list(
                     q=f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
                     f"and name='chapters-extended' and trashed=false",
-                    fields="files(id, name, parents)",
+                    fields="files(id, name, parents),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
                 ).execute()
@@ -460,7 +460,7 @@ class DriveAPIMixin:
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"({all_parents_clause}) and name contains '.md' and trashed=false",
-                    fields="files(id, name, parents)",
+                    fields="files(id, name, parents),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
                 ).execute()
@@ -509,7 +509,7 @@ class DriveAPIMixin:
                 return drive_service.files().list(
                     q=f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
                     f"and name='chapters-extended' and trashed=false",
-                    fields="files(id, name, parents)",
+                    fields="files(id, name, parents),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
                 ).execute()
@@ -538,7 +538,7 @@ class DriveAPIMixin:
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"({ext_clause}) and name contains '.md' and trashed=false",
-                    fields="files(id, name, parents)",
+                    fields="files(id, name, parents),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
                 ).execute()
@@ -647,7 +647,7 @@ class DriveAPIMixin:
                 def _call() -> dict:
                     return drive_service.files().list(
                         q=q,
-                        fields="files(id, name, parents)",
+                        fields="files(id, name, parents),nextPageToken",
                         pageSize=_CHECK_BATCH_PAGE_SIZE,
                         pageToken=_pt,
                     ).execute()
@@ -686,7 +686,7 @@ class DriveAPIMixin:
                 def _call() -> dict:
                     return drive_service.files().list(
                         q=q,
-                        fields="files(id, name, parents)",
+                        fields="files(id, name, parents),nextPageToken",
                         pageSize=_CHECK_BATCH_PAGE_SIZE,
                         pageToken=_pt,
                     ).execute()
@@ -783,7 +783,7 @@ class DriveAPIMixin:
                 def _call() -> dict:
                     return drive_service.files().list(
                         q=q,
-                        fields="files(id, name, parents)",
+                        fields="files(id, name, parents),nextPageToken",
                         pageSize=_CHECK_BATCH_PAGE_SIZE,
                         pageToken=_pt,
                     ).execute()

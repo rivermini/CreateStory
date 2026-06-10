@@ -94,7 +94,7 @@ class ParsersMixin:
             def _call() -> dict:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType!='application/vnd.google-apps.folder' and name='Push.md' and trashed=false",
-                    fields="files(id, name)",
+                    fields="files(id, name),nextPageToken",
                     pageSize=10,
                     pageToken=page_token,
                 ).execute()
@@ -171,7 +171,7 @@ class ParsersMixin:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' "
                     f"and name='chapters-extended' and trashed=false",
-                    fields="files(id, name)",
+                    fields="files(id, name),nextPageToken",
                     pageSize=10,
                     pageToken=page_token,
                 ).execute()
@@ -195,7 +195,7 @@ class ParsersMixin:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType!='application/vnd.google-apps.folder' "
                     f"and (name='synopsis.md' or name='Synopsis.md') and trashed=false",
-                    fields="files(id, name)",
+                    fields="files(id, name),nextPageToken",
                     pageSize=10,
                     pageToken=page_token,
                 ).execute()
@@ -234,7 +234,7 @@ class ParsersMixin:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType!='application/vnd.google-apps.folder' "
                     f"and (name='cover.jpg' or name='cover.jpeg') and trashed=false",
-                    fields="files(id, name)",
+                    fields="files(id, name),nextPageToken",
                     pageSize=10,
                     pageToken=page_token,
                 ).execute()
@@ -258,7 +258,7 @@ class ParsersMixin:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType!='application/vnd.google-apps.folder' "
                     f"and name='free.md' and trashed=false",
-                    fields="files(id, name)",
+                    fields="files(id, name),nextPageToken",
                     pageSize=10,
                     pageToken=page_token,
                 ).execute()
@@ -289,7 +289,7 @@ class ParsersMixin:
                 return drive_service.files().list(
                     q=f"'{parent_id}' in parents and mimeType!='application/vnd.google-apps.folder' "
                     f"and name='{filename}' and trashed=false",
-                    fields="files(id, name)",
+                    fields="files(id, name),nextPageToken",
                     pageSize=10,
                     pageToken=page_token,
                 ).execute()
