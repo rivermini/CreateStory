@@ -8,7 +8,6 @@ import type { ThemeMode } from '../../types/theme';
 
 interface SidebarProps {
     themeMode: ThemeMode;
-    isSettingsOpen?: boolean;
     onOpenSettings: () => void;
     authUser: AuthUser;
     onLogout: () => void;
@@ -48,7 +47,6 @@ const NAV_ICONS = {
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
     '/supported-sites': 'supportedSites',
-    '/settings': 'settings',
 } as const;
 
 const NAV_ITEMS_CRAWL: NavItem[] = [
@@ -75,7 +73,6 @@ const NAV_ITEMS_AUTO_AUDIO: NavItem[] = [
 
 const NAV_ITEMS_SYSTEM: NavItem[] = [
     { to: '/supported-sites', label: 'Supported Sites', iconKey: NAV_ICONS['/supported-sites'] },
-    { to: '/settings', label: 'Settings', iconKey: NAV_ICONS['/settings'] },
 ];
 
 const NAV_SECTIONS: NavSection[] = [
@@ -88,7 +85,6 @@ const NAV_SECTIONS: NavSection[] = [
 
 export function Sidebar({
     themeMode,
-    isSettingsOpen = false,
     onOpenSettings,
     authUser,
     onLogout,
@@ -109,42 +105,10 @@ export function Sidebar({
     const activeBackground = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
 
     const makeNavItem = (item: NavItem) => {
-        const active = item.to === '/settings' ? isSettingsOpen : navActive(location.pathname, item.to);
+        const active = navActive(location.pathname, item.to);
         const hovered = hoveredItem === item.to;
         const background = active ? activeBackground : hovered ? hoverBackground : 'transparent';
         const color = active ? headerText : hovered ? itemText : itemMuted;
-
-        if (item.to === '/settings') {
-            return (
-                <button
-                    key={item.to}
-                    type="button"
-                    className="group relative flex w-full items-center gap-2.5 rounded-md transition-colors duration-150"
-                    style={{
-                        textDecoration: 'none',
-                        padding: '6px 10px',
-                        background,
-                    }}
-                    onClick={onOpenSettings}
-                    onMouseEnter={() => setHoveredItem(item.to)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                >
-                    <span
-                        className="flex h-5 w-5 items-center justify-center flex-shrink-0 transition-colors duration-150"
-                        style={{ color }}
-                    >
-                        <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-4 h-4" />
-                    </span>
-
-                    <span
-                        className="min-w-0 flex-1 truncate text-sm font-medium text-left transition-colors duration-150"
-                        style={{ color }}
-                    >
-                        {item.label}
-                    </span>
-                </button>
-            );
-        }
 
         return (
             <Link
@@ -208,6 +172,17 @@ export function Sidebar({
                         Workspace
                     </p>
                 </div>
+                <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md flex-shrink-0 transition-colors duration-150"
+                    style={{ background: hoveredItem === '/settings' ? hoverBackground : 'transparent', color: mutedText }}
+                    onClick={onOpenSettings}
+                    onMouseEnter={() => setHoveredItem('/settings')}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    aria-label="Open settings"
+                >
+                    <Icon icon={appIcons.settings} className="w-4 h-4" />
+                </button>
             </div>
 
             <nav

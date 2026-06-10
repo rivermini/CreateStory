@@ -675,7 +675,7 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   };
 
   return (
-    <>
+    <div className="hidden lg:block">
       <button
         type="button"
         aria-label="Close settings"
@@ -684,7 +684,11 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         onClick={handleClose}
       />
       <div className="fixed inset-0 z-[80] flex items-center justify-center p-2 sm:p-4 lg:p-6">
-        <div className="flex h-[min(82vh,760px)] w-full max-w-[80vw] overflow-hidden rounded-2xl border shadow-2xl" style={{ background: shellBackground, borderColor: panelBorder, color: pageText }}>
+        <dialog
+          open
+          className="flex h-[min(82vh,760px)] w-full max-w-[80vw] overflow-hidden rounded-2xl border shadow-2xl"
+          style={{ background: shellBackground, borderColor: panelBorder, color: pageText }}
+        >
           <aside className="hidden w-[208px] shrink-0 border-r md:flex md:flex-col" style={{ borderColor: panelBorder, background: isDark ? '#1b1b1b' : '#f7f6f3' }}>
             <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
               {categories.map((category) => {
@@ -706,17 +710,36 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
           </aside>
 
           <div className="flex min-w-0 flex-1 flex-col" style={{ background: shellBackground }}>
+            {/* Header */}
             <div className="flex items-center justify-between border-b px-4 py-2.5 md:px-5" style={{ borderColor: panelBorder }}>
-              <div className="md:hidden">
-                <p className="text-sm font-semibold" style={{ color: pageText }}>Settings</p>
-                <p className="text-xs" style={{ color: tertiaryText }}>{categories.find((item) => item.id === activeCategory)?.label}</p>
-              </div>
-              <div className="hidden md:block">
-                <p className="text-base font-semibold" style={{ color: pageText }}>{categories.find((item) => item.id === activeCategory)?.label}</p>
-              </div>
+              <p className="text-sm font-semibold md:text-base" style={{ color: pageText }}>{categories.find((item) => item.id === activeCategory)?.label}</p>
               <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-md" style={{ background: subtleSurface, color: secondaryText }}>
                 <Icon icon={appIcons.close} className="h-4 w-4" />
               </button>
+            </div>
+
+            {/* Mobile: horizontal scrollable category tabs */}
+            <div className="flex md:hidden border-b overflow-x-auto" style={{ borderColor: panelBorder, scrollbarWidth: 'none' }}>
+              <div className="flex">
+                {categories.map((category) => {
+                  const active = category.id === activeCategory;
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => setActiveCategory(category.id)}
+                      className="flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-medium transition-colors"
+                      style={{
+                        borderColor: active ? primaryButton : 'transparent',
+                        color: active ? primaryButton : secondaryText,
+                      }}
+                    >
+                      <Icon icon={appIcons[category.icon]} className="h-3.5 w-3.5 flex-shrink-0" />
+                      {category.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {error && (
@@ -738,9 +761,9 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       </div>
-    </>
+    </div>
   );
 }
 

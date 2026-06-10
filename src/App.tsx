@@ -24,6 +24,7 @@ const AutoAudioPage = lazy(() => import('./pages/AutoAudio/AutoAudioPage').then(
 const AutoAudioHistoryPage = lazy(() => import('./pages/AutoAudio/AutoAudioHistoryPage').then(m => ({ default: m.AutoAudioHistoryPage })));
 const SupportedSitesPage = lazy(() => import('./pages/Shared/SupportedSitesPage').then(m => ({ default: m.SupportedSitesPage })));
 const SettingsPage = lazy(() => import('./pages/Shared/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const MobileSettingsPage = lazy(() => import('./pages/Shared/Mobile/MobileSettingsPage').then(m => ({ default: m.MobileSettingsPage })));
 const DashboardPage = lazy(() => import('./pages/Admin/DashboardPage').then(m => ({ default: m.DashboardPage })));
 
 const THEME_COOKIE = 'novel_crawler_theme';
@@ -146,8 +147,6 @@ function Shell({
       {!isDashboard && (
         <Sidebar
           themeMode={themeMode}
-          
-          isSettingsOpen={settingsOpen}
           onOpenSettings={handleOpenSettings}
           authUser={authUser}
           onLogout={onLogout}
@@ -157,8 +156,6 @@ function Shell({
       {!isDashboard && (
         <MobileSidebar
           themeMode={themeMode}
-          
-          isSettingsOpen={settingsOpen}
           onOpenSettings={handleOpenSettings}
           isOpen={mobileSidebarOpen}
           onClose={() => setMobileSidebarOpen(false)}
@@ -214,7 +211,10 @@ function Shell({
       </div>
 
       {settingsOpen && (
-        <SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} onClose={handleCloseSettings} onLogout={onLogout} />
+        <>
+          <MobileSettingsPage themeMode={themeMode} onThemeChange={onThemeChange} onClose={handleCloseSettings} onLogout={onLogout} />
+          <SettingsPage themeMode={themeMode} onThemeChange={onThemeChange} onClose={handleCloseSettings} onLogout={onLogout} />
+        </>
       )}
 
       <ToastContainer />
