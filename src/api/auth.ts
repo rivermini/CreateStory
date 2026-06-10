@@ -1,4 +1,4 @@
-import { apiFetch, clearAuth, storeAuth } from './client';
+import { apiFetch, clearAuth, storeAuth, getStoredRefreshToken, AUTH_USER_KEY } from './client';
 import type { AuthTokensResponse } from './types';
 
 export async function login(email: string, password: string): Promise<AuthTokensResponse> {
@@ -22,7 +22,6 @@ export async function register(email: string, password: string): Promise<AuthTok
 }
 
 export async function logout(): Promise<void> {
-  const { getStoredRefreshToken } = await import('./client');
   const refreshToken = getStoredRefreshToken();
   if (refreshToken) {
     try {
@@ -40,7 +39,6 @@ export async function logout(): Promise<void> {
 
 export async function getCurrentUser(): Promise<import('./types').AuthUser> {
   const user = await apiFetch<import('./types').AuthUser>('/api/auth/me');
-  const { AUTH_USER_KEY } = await import('./client');
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
   return user;
 }
