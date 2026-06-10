@@ -6,11 +6,10 @@ import {
   stopAutoAudio,
   pauseAutoAudio,
   resumeAutoAudio,
-  getDriveSyncConfig,
   type AutoAudioSession,
   type AutoAudioStoryResult,
-  type DriveSyncConfig,
-} from '../../api/client';
+} from '../../api/AutoAudio';
+import { getDriveSyncConfig, type DriveSyncConfig } from '../../api/BedReadDriveSync';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';

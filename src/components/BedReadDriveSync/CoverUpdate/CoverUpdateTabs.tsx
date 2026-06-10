@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type CheckAllResponse, type CheckUpdatedResponse } from '../../../api/client';
+import { type CheckAllResponse, type CheckUpdatedResponse } from '../../../api';
 import { CheckAllTab } from './CheckAllTab';
 import { CheckUpdatedCoverTab } from './CheckUpdatedCoverTab';
 import type { ThemeMode } from '../../../types/theme';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { login, type AuthUser } from '../../api/client';
+import { login, type AuthUser } from '../../api';
 
 interface LoginPageProps {
   themeMode: 'light' | 'dark';

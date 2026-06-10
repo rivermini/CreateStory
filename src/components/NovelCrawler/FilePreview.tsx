@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { FilePreview as FilePreviewType } from '../../api/client';
-import { getFileContent, previewFile } from '../../api/client';
+import type { FilePreview as FilePreviewType } from '../../api';
+import { getFileContent, previewFile } from '../../api';
 import { Icon, appIcons } from '../Shared/Icon';
 
 export interface FilePreviewProps {

@@ -7,7 +7,7 @@ import {
   deleteCrawlSessions,
   getDownloadAllCombinedUrl,
   type CrawlSessionSummary,
-} from '../../api/client';
+} from '../../api';
 import { DatePicker } from '../../components/Shared/DatePicker';
 import type { ThemeMode } from '../../types/theme';
 

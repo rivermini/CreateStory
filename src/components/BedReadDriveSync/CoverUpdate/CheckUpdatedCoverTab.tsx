@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { type CheckUpdatedResponse, type CoverUpdateEntry } from '../../../api/client';
+import { type CheckUpdatedResponse, type CoverUpdateEntry } from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
 import { EmptyState } from '../DriveSync/SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';

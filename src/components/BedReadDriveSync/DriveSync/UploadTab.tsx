@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   type CheckUploadableResponse,
   type DriveFolderEntry,
-} from '../../../api/client';
+} from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
 import { StatusBadge, EmptyState } from './SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';

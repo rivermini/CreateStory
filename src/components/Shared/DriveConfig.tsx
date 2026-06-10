@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   uploadDriveCredentials,
-} from '../../api/client';
+} from '../../api';
 import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../../types/theme';
 

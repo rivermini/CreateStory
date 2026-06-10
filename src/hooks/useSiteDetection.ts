@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
-import type { NovelMetadata, SiteDetectResponse } from '../api/client';
-import { detectSite } from '../api/client';
+import type { NovelMetadata, SiteDetectResponse } from '../api';
+import { detectSite } from '../api';
 
 export interface UseSiteDetectionResult {
   siteInfo: SiteDetectResponse['site'];

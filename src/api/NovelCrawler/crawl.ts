@@ -1,0 +1,62 @@
+import { apiFetch } from '../client';
+import type {
+  CrawlRequest,
+  CrawlStartResponse,
+  CrawlCancelResponse,
+  InkittCookieUpdateResponse,
+  InkittCookieStatusResponse,
+  CrawlStatusWithLogs,
+  ProgressUpdate,
+  ActiveCrawl,
+} from '../types';
+
+export async function startCrawl(request: CrawlRequest): Promise<CrawlStartResponse> {
+  return apiFetch<CrawlStartResponse>('/api/crawl/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+}
+
+export async function startBatchCrawl(requests: CrawlRequest[]): Promise<CrawlStartResponse[]> {
+  return apiFetch<CrawlStartResponse[]>('/api/crawl/start-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requests),
+  });
+}
+
+export async function updateInkittCookies(cookies: string): Promise<InkittCookieUpdateResponse> {
+  return apiFetch<InkittCookieUpdateResponse>('/api/crawl/inkitt-cookies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies }),
+  });
+}
+
+export async function checkInkittCookies(storyUrl?: string): Promise<InkittCookieStatusResponse> {
+  return apiFetch<InkittCookieStatusResponse>('/api/crawl/inkitt-cookies/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ story_url: storyUrl }),
+    timeout: 45000,
+  });
+}
+
+export async function cancelCrawl(crawlId: string): Promise<CrawlCancelResponse> {
+  return apiFetch<CrawlCancelResponse>(`/api/crawl/cancel?crawl_id=${encodeURIComponent(crawlId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getCrawlStatusWithLogs(crawlId: string): Promise<CrawlStatusWithLogs> {
+  return apiFetch<CrawlStatusWithLogs>(`/api/crawl/status/${encodeURIComponent(crawlId)}`);
+}
+
+export async function getCrawlStatus(crawlId: string): Promise<ProgressUpdate> {
+  return apiFetch<ProgressUpdate>(`/api/crawl/status?crawl_id=${encodeURIComponent(crawlId)}`);
+}
+
+export async function getActiveCrawls(): Promise<ActiveCrawl[]> {
+  return apiFetch<ActiveCrawl[]>('/api/crawl/active');
+}

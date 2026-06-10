@@ -8,7 +8,7 @@ import {
   type AdminUser,
   type AdminUserCreateRequest,
   type AdminUserUpdateRequest,
-} from '../../api/client';
+} from '../../api';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { showToast } from '../../components/Shared/Toast';
 import type { ThemeMode } from '../../types/theme';

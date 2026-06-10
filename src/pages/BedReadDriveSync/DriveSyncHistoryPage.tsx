@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { deleteJob, deleteJobs, listJobs, type JobLogEntry, type SyncJob } from '../../api/client';
+import { deleteJob, deleteJobs, listJobs, type JobLogEntry, type SyncJob } from '../../api/BedReadDriveSync';
 import { DatePicker } from '../../components/Shared/DatePicker';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';

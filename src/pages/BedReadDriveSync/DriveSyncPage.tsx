@@ -12,7 +12,7 @@ import {
   type CheckUpdatableResponse,
   type TrackedJob,
   type StoriesNeedingUpdateEntry,
-} from '../../api/client';
+} from '../../api/BedReadDriveSync';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 import { StorySyncTabs, type StorySyncTab } from '../../components/BedReadDriveSync/DriveSync/StorySyncTabs';

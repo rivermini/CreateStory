@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ThemeMode } from '../../types/theme';
-import { listSites, type SiteInfoResponse } from '../../api/client';
+import { listSites, type SiteInfoResponse } from '../../api';
 
 interface SupportedSitesPageProps {
   readonly themeMode: ThemeMode;

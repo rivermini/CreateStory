@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import type { AuthUser } from '../../api/client';
+import type { AuthUser } from '../../api';
 import { AppIcon } from './AppIcon';
 import { AccountMenu } from './AccountMenu';
 import { Icon, appIcons } from './Icon';

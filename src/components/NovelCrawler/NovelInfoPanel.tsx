@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
-import type { ChapterEntry, NovelMetadata } from '../../api/client';
-import { formatNumber } from '../../api/client';
+import type { ChapterEntry, NovelMetadata } from '../../api';
+import { formatNumber } from '../../api';
 import { Icon, appIcons } from '../Shared/Icon';
 
 export interface NovelInfoPanelProps {

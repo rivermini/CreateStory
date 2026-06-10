@@ -11,7 +11,7 @@ import {
   type SettingsResponse,
   type DriveSyncConfig,
   FIXED_JSON_PREFIX,
-} from '../../api/client';
+} from '../../api';
 import { DriveConfig, type ConfigFormData } from '../../components/Shared/DriveConfig';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';

@@ -1,7 +1,7 @@
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppIcon } from '../../components/Shared/AppIcon';
 import { Icon, appIcons } from '../../components/Shared/Icon';
-import type { AuthUser } from '../../api/client';
+import type { AuthUser } from '../../api';
 import type { ThemeMode } from '../../types/theme';
 import { AdminUsersPanel } from './AdminUsersPage';
 

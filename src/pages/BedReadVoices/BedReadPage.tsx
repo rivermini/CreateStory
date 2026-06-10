@@ -6,7 +6,6 @@ import {
   getBatchZipUrl,
   getBedReadChapters,
   getChapterAudioUrl,
-  getDriveSyncConfig,
   getLanguages,
   getVoices,
   searchBedReadStories,
@@ -17,7 +16,8 @@ import {
   type BedReadStorySearchResponse,
   type TTSLanguage,
   type TTSVoice,
-} from '../../api/client';
+} from '../../api/BedReadVoices';
+import { getDriveSyncConfig } from '../../api/BedReadDriveSync';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 

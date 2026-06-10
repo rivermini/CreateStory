@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import {
   type UpdatableStoryEntry,
-} from '../../../api/client';
+  type CheckUploadableResponse,
+  type CheckUpdatableResponse,
+  type DriveFolderEntry,
+  type StoriesNeedingUpdateEntry,
+  type ServerOnlyStoryEntry,
+} from '../../../api';
 import { BatchConfirmDialog } from '../../Shared/BatchConfirmDialog';
 import { Icon, appIcons } from '../../Shared/Icon';
 import { UpdateTab } from './UpdateTab';
@@ -14,28 +19,28 @@ export interface StorySyncTabsProps {
   readonly activeTab: StorySyncTab;
   readonly onTabChange: (tab: StorySyncTab) => void;
   readonly themeMode: ThemeMode;
-  readonly uploadableData: import('../../../api/client').CheckUploadableResponse | null;
+  readonly uploadableData: CheckUploadableResponse | null;
   readonly uploadableLoading: boolean;
   readonly uploadableError: string;
   readonly uploadResults: Map<string, { success: boolean; message: string }>;
   readonly uploadingIds: Set<string>;
   readonly onCheckUploadable: () => void;
-  readonly onUploadSingle: (folder: import('../../../api/client').DriveFolderEntry) => Promise<string>;
+  readonly onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
   readonly onUploadAll: () => void;
-  readonly updatableData: import('../../../api/client').CheckUpdatableResponse | null;
+  readonly updatableData: CheckUpdatableResponse | null;
   readonly updatableLoading: boolean;
   readonly updatableError: string;
   readonly updateResults: Map<string, { success: boolean; message: string }>;
   readonly updatingIds: Set<string>;
   readonly onCheckUpdatable: () => void;
   readonly onCheckReaderFinished: () => void;
-  readonly onUpdateSingle: (entry: import('../../../api/client').UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
+  readonly onUpdateSingle: (entry: UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
   readonly onUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>, newErrors?: Map<string, string>) => void;
-  readonly updatableInvalid: import('../../../api/client').UpdatableStoryEntry[];
-  readonly updatableNoServerMatch?: import('../../../api/client').DriveFolderEntry[];
-  readonly updatableEmptyExtended?: import('../../../api/client').DriveFolderEntry[];
-  readonly storiesNeedingUpdate?: import('../../../api/client').StoriesNeedingUpdateEntry[];
-  readonly noDriveFolder?: import('../../../api/client').ServerOnlyStoryEntry[];
+  readonly updatableInvalid: UpdatableStoryEntry[];
+  readonly updatableNoServerMatch?: DriveFolderEntry[];
+  readonly updatableEmptyExtended?: DriveFolderEntry[];
+  readonly storiesNeedingUpdate?: StoriesNeedingUpdateEntry[];
+  readonly noDriveFolder?: ServerOnlyStoryEntry[];
 }
 
 export function StorySyncTabs({

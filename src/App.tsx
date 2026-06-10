@@ -5,7 +5,7 @@ import faviconDarkUrl from './assets/favicon-dark.svg';
 import { Sidebar } from './components/Shared/Sidebar';
 import { MobileSidebar } from './components/Shared/Mobile/MobileSidebar';
 import { ToastContainer } from './components/Shared/Toast';
-import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api/client';
+import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api';
 import { Icon, appIcons } from './components/Shared/Icon';
 import { type ThemeMode } from './types/theme';
 

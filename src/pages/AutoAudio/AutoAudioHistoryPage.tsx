@@ -6,7 +6,7 @@ import {
   type AutoAudioHistoryEntry,
   type AutoAudioSession,
   type AutoAudioLogEntry,
-} from '../../api/client';
+} from '../../api/AutoAudio';
 import type { ThemeMode } from '../../types/theme';
 import { DatePicker } from '../../components/Shared/DatePicker';
 import { Icon, appIcons } from '../../components/Shared/Icon';

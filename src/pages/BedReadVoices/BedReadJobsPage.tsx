@@ -7,7 +7,7 @@ import {
   listAllBatchJobs,
   removeBatchJob,
   type BatchJob,
-} from '../../api/client';
+} from '../../api/BedReadVoices';
 import { DatePicker } from '../../components/Shared/DatePicker';
 
 interface BedReadJobsPageProps {

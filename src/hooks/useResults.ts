@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import type { CrawlResult } from '../api/client';
-import { getCrawlResult, getCombinedResult, getDownloadUrl } from '../api/client';
+import type { CrawlResult } from '../api';
+import { getCrawlResult, getCombinedResult, getDownloadUrl } from '../api';
 
 export interface UseResultsResult {
   result: CrawlResult | null;

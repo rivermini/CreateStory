@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { cancelCrawl } from '../../api/client';
+import { cancelCrawl } from '../../api';
 import { CrawlLog } from '../../components/NovelCrawler/CrawlLog';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ProgressBar } from '../../components/NovelCrawler/ProgressBar';

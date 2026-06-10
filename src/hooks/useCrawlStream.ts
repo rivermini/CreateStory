@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getCrawlStatusWithLogs, type ProgressUpdate } from '../api/client';
+import { getCrawlStatusWithLogs, type ProgressUpdate } from '../api';
 
 export interface LogEntry {
   timestamp: string;

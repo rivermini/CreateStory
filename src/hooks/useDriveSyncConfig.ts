@@ -6,7 +6,7 @@ import {
   initDriveSyncConfig,
   validateMainBeToken,
   type DriveSyncConfig,
-} from '../api/client';
+} from '../api';
 import type { ConfigFormData } from '../components/Shared/DriveConfig';
 import { showToast } from '../components/Shared/Toast';
 

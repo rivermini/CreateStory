@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon, appIcons } from './Icon';
-import type { AuthUser } from '../../api/client';
+import type { AuthUser } from '../../api';
 
 interface AccountMenuProps {
   authUser: AuthUser;

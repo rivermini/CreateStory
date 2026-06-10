@@ -5,7 +5,7 @@ import {
   uploadCoverUpdate,
   type CheckAllResponse,
   type CheckUpdatedResponse,
-} from '../../api/client';
+} from '../../api/BedReadDriveSync';
 import { CoverUpdateTabs } from '../../components/BedReadDriveSync/CoverUpdate/CoverUpdateTabs';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';

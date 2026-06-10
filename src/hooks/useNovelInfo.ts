@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getBinarySearchTotal, getNovelChapters } from '../api/client';
-import type { BinarySearchTotalResponse, ChapterEntry, ChapterListResponse } from '../api/client';
+import { getBinarySearchTotal, getNovelChapters } from '../api';
+import type { BinarySearchTotalResponse, ChapterEntry, ChapterListResponse } from '../api';
 
 export interface UseNovelInfoResult {
   chapters: ChapterEntry[];

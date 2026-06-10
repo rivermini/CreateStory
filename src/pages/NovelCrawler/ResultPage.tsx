@@ -8,7 +8,7 @@ import {
   getDownloadAllUrl,
   listAllResults,
   type CrawlSessionSummary,
-} from '../../api/client';
+} from '../../api';
 import { FilePreview } from '../../components/NovelCrawler/FilePreview';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';

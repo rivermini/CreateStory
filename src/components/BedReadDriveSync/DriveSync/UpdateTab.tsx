@@ -7,7 +7,7 @@ import {
   type ServerOnlyStoryEntry,
   getDriveFileContent,
   type DriveFileContentResponse,
-} from '../../../api/client';
+} from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
 import { ValidationErrorBadge, EmptyState } from './SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';

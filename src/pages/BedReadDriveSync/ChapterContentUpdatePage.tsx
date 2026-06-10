@@ -5,7 +5,7 @@ import {
   type ContentUpdateChapterStatus,
   type ContentUpdateScanResponse,
   type ContentUpdateStoryRef,
-} from '../../api/client';
+} from '../../api/BedReadDriveSync';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 import { showToast } from '../../components/Shared/Toast';
