@@ -826,10 +826,10 @@ function UpdatableEntryCard({
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+          <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
             {entry.folder.display_name}
           </p>
-          <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+          <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
             {entry.folder.name}
           </p>
           <div className="mt-1 flex items-center gap-3 text-xs">
@@ -985,10 +985,10 @@ function InvalidEntryCard({
     >
       <Icon icon={appIcons.error} className="h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {entry.folder.display_name}
         </p>
-        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {entry.folder.name}
         </p>
         <div className="mt-1 flex items-center gap-3 text-xs">
@@ -1027,10 +1027,10 @@ function UpToDateCard({
     >
       <Icon icon={appIcons.check} className="h-4 w-4 shrink-0" style={{ color: secondaryText }} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {entry.folder.display_name}
         </p>
-        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {entry.folder.name}
         </p>
         <div className="mt-1 flex items-center gap-3 text-xs">
@@ -1068,10 +1068,10 @@ function FolderOnlyCard({
     >
       <Icon icon={appIcons.folder} className="h-4 w-4 shrink-0" style={{ color: '#94a3b8' }} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
         </p>
-        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
         </p>
       </div>

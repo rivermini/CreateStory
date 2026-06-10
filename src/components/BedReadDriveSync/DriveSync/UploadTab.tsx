@@ -522,10 +522,10 @@ function UploadCard({
       style={{ background: mutedSurface, borderColor: panelBorder }}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
         </p>
-        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
         </p>
         <p className="mt-1 text-xs" style={{ color: secondaryText }}>
@@ -590,10 +590,10 @@ function InvalidUploadCard({
     >
       <Icon icon={appIcons.error} className="h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
         </p>
-        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
         </p>
         <p className="mt-1 text-xs" style={{ color: '#f87171' }}>
@@ -624,10 +624,10 @@ function AlreadyCard({
     >
       <Icon icon={appIcons.check} className="h-4 w-4 shrink-0" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
         </p>
-        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
         </p>
         <p className="mt-1 text-xs" style={{ color: secondaryText }}>
