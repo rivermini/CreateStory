@@ -1,6 +1,6 @@
 import { Icon, appIcons } from '../../Shared/Icon';
 
-function ValidationErrorBadge({ error, isDark }: { error: string; isDark: boolean }) {
+function ValidationErrorBadge({ error, isDark }: { readonly error: string; readonly isDark: boolean }) {
   const isFormat = error.startsWith("WRONG FORMAT");
   return (
     <span
@@ -21,7 +21,7 @@ function ValidationErrorBadge({ error, isDark }: { error: string; isDark: boolea
   );
 }
 
-function StatusBadge({ prefix, isDark }: { prefix: string; isDark: boolean }) {
+function StatusBadge({ prefix, isDark }: { readonly prefix: string; readonly isDark: boolean }) {
   const isDone = prefix === 'DONE' || prefix === 'EXTENDED';
   const isIng = prefix === 'ING';
   const isError = prefix === 'ERROR';
@@ -48,7 +48,7 @@ function StatusBadge({ prefix, isDark }: { prefix: string; isDark: boolean }) {
   );
 }
 
-function EmptyState({ message, icon, isDark }: { message: string; icon: React.ReactNode; isDark: boolean }) {
+function EmptyState({ message, icon, isDark }: { readonly message: string; readonly icon: React.ReactNode; readonly isDark: boolean }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
 

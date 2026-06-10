@@ -13,27 +13,27 @@ import { ValidationErrorBadge, EmptyState } from './SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';
 
 interface UpdateTabProps {
-  data: CheckUpdatableResponse | null;
-  loading: boolean;
-  error: string;
-  updateResults: Map<string, { success: boolean; message: string }>;
-  updatingIds: Set<string>;
-  onCheck: () => void;
-  onCheckReaderFinished: () => void;
-  onUpdateSingle: (entry: UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
-  onRequestUpdateAll: (
+  readonly data: CheckUpdatableResponse | null;
+  readonly loading: boolean;
+  readonly error: string;
+  readonly updateResults: ReadonlyMap<string, { success: boolean; message: string }>;
+  readonly updatingIds: ReadonlySet<string>;
+  readonly onCheck: () => void;
+  readonly onCheckReaderFinished: () => void;
+  readonly onUpdateSingle: (entry: UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
+  readonly onRequestUpdateAll: (
     entries: UpdatableStoryEntry[],
-    chapterInputs: Map<string, number>,
+    chapterInputs: ReadonlyMap<string, number>,
     newErrors?: Map<string, string>,
   ) => void;
-  hasChapterErrors: boolean;
-  onChapterErrorsChange: (hasErrors: boolean) => void;
-  invalid?: UpdatableStoryEntry[];
-  noServerMatch?: DriveFolderEntry[];
-  emptyExtended?: DriveFolderEntry[];
-  storiesNeedingUpdate?: StoriesNeedingUpdateEntry[];
-  noDriveFolder?: ServerOnlyStoryEntry[];
-  themeMode: ThemeMode;
+  readonly hasChapterErrors: boolean;
+  readonly onChapterErrorsChange: (hasErrors: boolean) => void;
+  readonly invalid?: readonly UpdatableStoryEntry[];
+  readonly noServerMatch?: readonly DriveFolderEntry[];
+  readonly emptyExtended?: readonly DriveFolderEntry[];
+  readonly storiesNeedingUpdate?: readonly StoriesNeedingUpdateEntry[];
+  readonly noDriveFolder?: readonly ServerOnlyStoryEntry[];
+  readonly themeMode: ThemeMode;
 }
 
 export function UpdateTab({
@@ -61,7 +61,7 @@ export function UpdateTab({
     'all' | 'ready' | 'invalid' | 'uptodate' | 'noServerMatch' | 'emptyExtended' | 'noDriveFolder'
   >('invalid');
   const [chapterCountInputs, setChapterCountInputs] = useState<Map<string, number>>(new Map());
-  const [chapterErrors, setChapterErrorsLocal] = useState<Map<string, string>>(new Map());
+  const [chapterErrors, setChapterErrors] = useState<Map<string, string>>(new Map());
   const [openFilePanels, setOpenFilePanels] = useState<
     Map<string, { loading: boolean; data: DriveFileContentResponse | null }>
   >(new Map());
@@ -81,6 +81,7 @@ export function UpdateTab({
   useEffect(() => {
     if (!data) return;
     const updatable = data.updatable;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing chapter count inputs when new updatable entries appear; returns same reference when no new entries exist to avoid cascading renders
     setChapterCountInputs((prev) => {
       const next = new Map(prev);
       let changed = false;
@@ -317,7 +318,6 @@ export function UpdateTab({
             active={filterSection === 'all'}
             onClick={() => setFilterSection('all')}
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           <FilterChip
             label="Can Update"
@@ -326,7 +326,6 @@ export function UpdateTab({
             onClick={() => setFilterSection('ready')}
             variant="amber"
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           <FilterChip
             label="Invalid"
@@ -335,7 +334,6 @@ export function UpdateTab({
             onClick={() => setFilterSection('invalid')}
             variant="red"
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           <FilterChip
             label="Up-to-date"
@@ -343,7 +341,6 @@ export function UpdateTab({
             active={filterSection === 'uptodate'}
             onClick={() => setFilterSection('uptodate')}
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           {filteredNoServerMatch.length > 0 && (
             <FilterChip
@@ -352,7 +349,6 @@ export function UpdateTab({
               active={filterSection === 'noServerMatch'}
               onClick={() => setFilterSection('noServerMatch')}
               isDark={isDark}
-              panelBorder={panelBorder}
             />
           )}
           {filteredEmptyExtended.length > 0 && (
@@ -362,7 +358,6 @@ export function UpdateTab({
               active={filterSection === 'emptyExtended'}
               onClick={() => setFilterSection('emptyExtended')}
               isDark={isDark}
-              panelBorder={panelBorder}
             />
           )}
           {filteredNoDriveFolder.length > 0 && (
@@ -373,7 +368,6 @@ export function UpdateTab({
               variant="red"
               onClick={() => setFilterSection('noDriveFolder')}
               isDark={isDark}
-              panelBorder={panelBorder}
             />
           )}
         </div>
@@ -507,7 +501,7 @@ export function UpdateTab({
                           } else {
                             newErrors.delete(entry.server_story.id);
                           }
-                          setChapterErrorsLocal(newErrors);
+                          setChapterErrors(newErrors);
                         }}
                         chapterError={entryError}
                         result={result}
@@ -710,13 +704,12 @@ function FilterChip({
   variant,
   isDark,
 }: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-  variant?: 'green' | 'amber' | 'red';
-  isDark: boolean;
-  panelBorder: string;
+  readonly label: string;
+  readonly count: number;
+  readonly active: boolean;
+  readonly onClick: () => void;
+  readonly variant?: 'green' | 'amber' | 'red';
+  readonly isDark: boolean;
 }) {
   const colors =
     variant === 'amber'
@@ -757,10 +750,10 @@ function SectionHeader({
   icon,
   panelBorder,
 }: {
-  label: string;
-  color: string;
-  icon: React.ReactNode;
-  panelBorder: string;
+  readonly label: string;
+  readonly color: string;
+  readonly icon: React.ReactNode;
+  readonly panelBorder: string;
 }) {
   return (
     <div className="mb-2 flex items-center gap-2 border-b pb-2 text-sm font-medium" style={{ borderColor: panelBorder, color }}>
@@ -776,10 +769,10 @@ function StatPill({
   color,
   isDark,
 }: {
-  label: string;
-  value: number;
-  color: string;
-  isDark: boolean;
+  readonly label: string;
+  readonly value: number;
+  readonly color: string;
+  readonly isDark: boolean;
 }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -803,18 +796,18 @@ function UpdatableEntryCard({
   onToggleFilePanel,
   isDark,
 }: {
-  entry: UpdatableStoryEntry;
-  chapterCount: number;
-  onChapterCountChange: (count: number) => void;
-  chapterError?: string;
-  result?: { success: boolean; message: string };
-  isUpdating: boolean;
-  isSuccess?: boolean;
-  isFailed: boolean;
-  onUpdate: () => void;
-  openFilePanels: Map<string, { loading: boolean; data: DriveFileContentResponse | null }>;
-  onToggleFilePanel: (entryId: string, filename: 'free.md' | 'tags.md', folderId: string) => void;
-  isDark: boolean;
+  readonly entry: UpdatableStoryEntry;
+  readonly chapterCount: number;
+  readonly onChapterCountChange: (count: number) => void;
+  readonly chapterError?: string;
+  readonly result?: { success: boolean; message: string };
+  readonly isUpdating: boolean;
+  readonly isSuccess?: boolean;
+  readonly isFailed: boolean;
+  readonly onUpdate: () => void;
+  readonly openFilePanels: ReadonlyMap<string, { readonly loading: boolean; readonly data: DriveFileContentResponse | null }>;
+  readonly onToggleFilePanel: (entryId: string, filename: 'free.md' | 'tags.md', folderId: string) => void;
+  readonly isDark: boolean;
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
@@ -834,14 +827,23 @@ function UpdatableEntryCard({
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" style={{ color: pageText }}>
-            {entry.server_story.title}
-          </p>
-          <p className="mt-0.5 truncate text-xs" style={{ color: secondaryText }}>
             {entry.folder.display_name}
           </p>
-          <p className="mt-1 text-xs" style={{ color: '#f59e0b' }}>
-            {entry.new_chapters_count ?? 0} new chapters available
+          <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+            {entry.folder.name}
           </p>
+          <div className="mt-1 flex items-center gap-3 text-xs">
+            <span style={{ color: secondaryText }}>
+              Server: <span className="font-semibold" style={{ color: pageText }}>{entry.server_story.maxChapter}</span>
+            </span>
+            <Icon icon={appIcons.external} className="h-3 w-3" style={{ color: secondaryText }} />
+            <span style={{ color: secondaryText }}>
+              Drive: <span className="font-semibold" style={{ color: pageText }}>{entry.folder.extended_chapter_count ?? 0}</span>
+            </span>
+            <span style={{ color: '#f59e0b' }}>
+              +{entry.new_chapters_count ?? 0} new
+            </span>
+          </div>
           {chapterError && (
             <p className="mt-1 text-xs" style={{ color: '#f87171' }}>
               {chapterError}
@@ -859,15 +861,16 @@ function UpdatableEntryCard({
 
         <div className="flex shrink-0 items-center gap-2">
           <div className="flex flex-col items-center gap-1">
-            <label className="text-xs" style={{ color: secondaryText }}>
+            <label htmlFor={`chapters-${entry.server_story.id}`} className="text-xs" style={{ color: secondaryText }}>
               Chapters
             </label>
             <input
+              id={`chapters-${entry.server_story.id}`}
               type="number"
               min={1}
               max={entry.new_chapters_count ?? 1}
               value={chapterCount}
-              onChange={(event) => onChapterCountChange(Math.max(1, parseInt(event.target.value) || 1))}
+              onChange={(event) => onChapterCountChange(Math.max(1, Number.parseInt(event.target.value) || 1))}
               className="w-16 rounded-md border px-2 py-1.5 text-center text-xs outline-none transition focus:border-amber-500"
               style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
             />
@@ -967,11 +970,12 @@ function InvalidEntryCard({
   entry,
   isDark,
 }: {
-  entry: UpdatableStoryEntry;
-  isDark: boolean;
+  readonly entry: UpdatableStoryEntry;
+  readonly isDark: boolean;
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   return (
@@ -982,11 +986,20 @@ function InvalidEntryCard({
       <Icon icon={appIcons.error} className="h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium" style={{ color: pageText }}>
-          {entry.server_story.title}
+          {entry.folder.display_name}
         </p>
-        <p className="truncate text-xs" style={{ color: '#f87171' }}>
-          Invalid
+        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+          {entry.folder.name}
         </p>
+        <div className="mt-1 flex items-center gap-3 text-xs">
+          <span style={{ color: secondaryText }}>
+            Server: <span className="font-semibold" style={{ color: pageText }}>{entry.server_story.maxChapter}</span>
+          </span>
+          <Icon icon={appIcons.external} className="h-3 w-3" style={{ color: secondaryText }} />
+          <span style={{ color: secondaryText }}>
+            Drive: <span className="font-semibold" style={{ color: pageText }}>{entry.folder.extended_chapter_count ?? 0}</span>
+          </span>
+        </div>
       </div>
       {entry.server_story.title && (
         <ValidationErrorBadge error={entry.server_story.title} isDark={isDark} />
@@ -999,8 +1012,8 @@ function UpToDateCard({
   entry,
   isDark,
 }: {
-  entry: UpdatableStoryEntry;
-  isDark: boolean;
+  readonly entry: UpdatableStoryEntry;
+  readonly isDark: boolean;
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
@@ -1015,11 +1028,20 @@ function UpToDateCard({
       <Icon icon={appIcons.check} className="h-4 w-4 shrink-0" style={{ color: secondaryText }} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium" style={{ color: pageText }}>
-          {entry.server_story.title}
+          {entry.folder.display_name}
         </p>
-        <p className="truncate text-xs" style={{ color: secondaryText }}>
-          {entry.folder.display_name} — up to date
+        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+          {entry.folder.name}
         </p>
+        <div className="mt-1 flex items-center gap-3 text-xs">
+          <span style={{ color: secondaryText }}>
+            Server: <span className="font-semibold" style={{ color: pageText }}>{entry.server_story.maxChapter}</span>
+          </span>
+          <Icon icon={appIcons.external} className="h-3 w-3" style={{ color: secondaryText }} />
+          <span style={{ color: secondaryText }}>
+            Drive: <span className="font-semibold" style={{ color: pageText }}>{entry.folder.extended_chapter_count ?? 0}</span>
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -1031,12 +1053,13 @@ function FolderOnlyCard({
   panelBorder,
   mutedSurface,
 }: {
-  folder: DriveFolderEntry;
-  isDark: boolean;
-  panelBorder: string;
-  mutedSurface: string;
+  readonly folder: DriveFolderEntry;
+  readonly isDark: boolean;
+  readonly panelBorder: string;
+  readonly mutedSurface: string;
 }) {
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
 
   return (
     <div
@@ -1044,9 +1067,14 @@ function FolderOnlyCard({
       style={{ background: mutedSurface, borderColor: panelBorder }}
     >
       <Icon icon={appIcons.folder} className="h-4 w-4 shrink-0" style={{ color: '#94a3b8' }} />
-      <p className="min-w-0 flex-1 truncate text-sm font-medium" style={{ color: pageText }}>
-        {folder.display_name}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium" style={{ color: pageText }}>
+          {folder.display_name}
+        </p>
+        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+          {folder.name}
+        </p>
+      </div>
     </div>
   );
 }
@@ -1055,8 +1083,8 @@ function ServerOnlyCard({
   entry,
   isDark,
 }: {
-  entry: ServerOnlyStoryEntry;
-  isDark: boolean;
+  readonly entry: ServerOnlyStoryEntry;
+  readonly isDark: boolean;
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';

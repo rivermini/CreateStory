@@ -34,7 +34,7 @@ export function CoverUpdateTabs({
   onCheckUpdated,
   onUploadCover,
   themeMode,
-}: CoverUpdateTabsProps) {
+}: Readonly<CoverUpdateTabsProps>) {
   const isDark = themeMode === 'dark';
   const [activeTab, setActiveTab] = useState<CoverUpdateTab>('check-all');
 
@@ -79,19 +79,19 @@ export function CoverUpdateTabs({
               className="rounded-md border px-2 py-0.5 text-xs font-medium"
               style={{
                 background:
-                  activeTab !== 'check-all'
+                  activeTab === 'check-all'
                     ? mutedSurface
                     : isDark
                       ? 'rgba(16,185,129,0.14)'
                       : 'rgba(16,185,129,0.12)',
                 borderColor:
-                  activeTab !== 'check-all'
+                  activeTab === 'check-all'
                     ? panelBorder
                     : isDark
                       ? 'rgba(16,185,129,0.3)'
                       : 'rgba(16,185,129,0.24)',
                 color:
-                  activeTab !== 'check-all'
+                  activeTab === 'check-all'
                     ? isDark
                       ? 'rgba(255,255,255,0.5)'
                       : 'rgba(55,53,47,0.55)'
@@ -146,19 +146,19 @@ export function CoverUpdateTabs({
               className="rounded-md border px-2 py-0.5 text-xs font-medium"
               style={{
                 background:
-                  activeTab !== 'check-updated'
+                  activeTab === 'check-updated'
                     ? mutedSurface
                     : isDark
                       ? 'rgba(16,185,129,0.14)'
                       : 'rgba(16,185,129,0.12)',
                 borderColor:
-                  activeTab !== 'check-updated'
+                  activeTab === 'check-updated'
                     ? panelBorder
                     : isDark
                       ? 'rgba(16,185,129,0.3)'
                       : 'rgba(16,185,129,0.24)',
                 color:
-                  activeTab !== 'check-updated'
+                  activeTab === 'check-updated'
                     ? isDark
                       ? 'rgba(255,255,255,0.5)'
                       : 'rgba(55,53,47,0.55)'

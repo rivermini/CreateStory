@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  type DriveSyncConfig,
   type UpdatableStoryEntry,
 } from '../../../api/client';
 import { BatchConfirmDialog } from '../../Shared/BatchConfirmDialog';
@@ -12,32 +11,31 @@ import type { ThemeMode } from '../../../types/theme';
 export type StorySyncTab = 'uploadable' | 'updatable';
 
 export interface StorySyncTabsProps {
-  config: DriveSyncConfig | null;
-  activeTab: StorySyncTab;
-  onTabChange: (tab: StorySyncTab) => void;
-  themeMode: ThemeMode;
-  uploadableData: import('../../../api/client').CheckUploadableResponse | null;
-  uploadableLoading: boolean;
-  uploadableError: string;
-  uploadResults: Map<string, { success: boolean; message: string }>;
-  uploadingIds: Set<string>;
-  onCheckUploadable: () => void;
-  onUploadSingle: (folder: import('../../../api/client').DriveFolderEntry) => Promise<string>;
-  onUploadAll: () => void;
-  updatableData: import('../../../api/client').CheckUpdatableResponse | null;
-  updatableLoading: boolean;
-  updatableError: string;
-  updateResults: Map<string, { success: boolean; message: string }>;
-  updatingIds: Set<string>;
-  onCheckUpdatable: () => void;
-  onCheckReaderFinished: () => void;
-  onUpdateSingle: (entry: import('../../../api/client').UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
-  onUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>, newErrors?: Map<string, string>) => void;
-  updatableInvalid: import('../../../api/client').UpdatableStoryEntry[];
-  updatableNoServerMatch?: import('../../../api/client').DriveFolderEntry[];
-  updatableEmptyExtended?: import('../../../api/client').DriveFolderEntry[];
-  storiesNeedingUpdate?: import('../../../api/client').StoriesNeedingUpdateEntry[];
-  noDriveFolder?: import('../../../api/client').ServerOnlyStoryEntry[];
+  readonly activeTab: StorySyncTab;
+  readonly onTabChange: (tab: StorySyncTab) => void;
+  readonly themeMode: ThemeMode;
+  readonly uploadableData: import('../../../api/client').CheckUploadableResponse | null;
+  readonly uploadableLoading: boolean;
+  readonly uploadableError: string;
+  readonly uploadResults: Map<string, { success: boolean; message: string }>;
+  readonly uploadingIds: Set<string>;
+  readonly onCheckUploadable: () => void;
+  readonly onUploadSingle: (folder: import('../../../api/client').DriveFolderEntry) => Promise<string>;
+  readonly onUploadAll: () => void;
+  readonly updatableData: import('../../../api/client').CheckUpdatableResponse | null;
+  readonly updatableLoading: boolean;
+  readonly updatableError: string;
+  readonly updateResults: Map<string, { success: boolean; message: string }>;
+  readonly updatingIds: Set<string>;
+  readonly onCheckUpdatable: () => void;
+  readonly onCheckReaderFinished: () => void;
+  readonly onUpdateSingle: (entry: import('../../../api/client').UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
+  readonly onUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>, newErrors?: Map<string, string>) => void;
+  readonly updatableInvalid: import('../../../api/client').UpdatableStoryEntry[];
+  readonly updatableNoServerMatch?: import('../../../api/client').DriveFolderEntry[];
+  readonly updatableEmptyExtended?: import('../../../api/client').DriveFolderEntry[];
+  readonly storiesNeedingUpdate?: import('../../../api/client').StoriesNeedingUpdateEntry[];
+  readonly noDriveFolder?: import('../../../api/client').ServerOnlyStoryEntry[];
 }
 
 export function StorySyncTabs({
@@ -164,25 +162,25 @@ export function StorySyncTabs({
                 className="rounded-md border px-2 py-0.5 text-xs font-medium"
                 style={{
                   background:
-                    activeTab !== 'uploadable'
-                      ? mutedSurface
-                      : isDark
-                        ? 'rgba(99,102,241,0.14)'
-                        : 'rgba(99,102,241,0.12)',
-                  borderColor:
-                    activeTab !== 'uploadable'
-                      ? panelBorder
-                      : isDark
-                        ? 'rgba(99,102,241,0.3)'
-                        : 'rgba(99,102,241,0.24)',
-                  color:
-                    activeTab !== 'uploadable'
+                    activeTab === 'uploadable'
                       ? isDark
-                        ? 'rgba(255,255,255,0.5)'
-                        : 'rgba(55,53,47,0.55)'
-                      : isDark
+                        ? 'rgba(99,102,241,0.14)'
+                        : 'rgba(99,102,241,0.12)'
+                      : mutedSurface,
+                  borderColor:
+                    activeTab === 'uploadable'
+                      ? isDark
+                        ? 'rgba(99,102,241,0.3)'
+                        : 'rgba(99,102,241,0.24)'
+                      : panelBorder,
+                  color:
+                    activeTab === 'uploadable'
+                      ? isDark
                         ? '#818cf8'
-                        : '#4f46e5',
+                        : '#4f46e5'
+                      : isDark
+                        ? 'rgba(255,255,255,0.5)'
+                        : 'rgba(55,53,47,0.55)',
                 }}
               >
                 {uploadableCount}
@@ -232,25 +230,25 @@ export function StorySyncTabs({
                 className="rounded-md border px-2 py-0.5 text-xs font-medium"
                 style={{
                   background:
-                    activeTab !== 'updatable'
-                      ? mutedSurface
-                      : isDark
-                        ? 'rgba(245,158,11,0.14)'
-                        : 'rgba(245,158,11,0.12)',
-                  borderColor:
-                    activeTab !== 'updatable'
-                      ? panelBorder
-                      : isDark
-                        ? 'rgba(245,158,11,0.3)'
-                        : 'rgba(245,158,11,0.24)',
-                  color:
-                    activeTab !== 'updatable'
+                    activeTab === 'updatable'
                       ? isDark
-                        ? 'rgba(255,255,255,0.5)'
-                        : 'rgba(55,53,47,0.55)'
-                      : isDark
+                        ? 'rgba(245,158,11,0.14)'
+                        : 'rgba(245,158,11,0.12)'
+                      : mutedSurface,
+                  borderColor:
+                    activeTab === 'updatable'
+                      ? isDark
+                        ? 'rgba(245,158,11,0.3)'
+                        : 'rgba(245,158,11,0.24)'
+                      : panelBorder,
+                  color:
+                    activeTab === 'updatable'
+                      ? isDark
                         ? '#fcd34d'
-                        : '#b45309',
+                        : '#b45309'
+                      : isDark
+                        ? 'rgba(255,255,255,0.5)'
+                        : 'rgba(55,53,47,0.55)',
                 }}
               >
                 {updatableCount}
@@ -298,11 +296,11 @@ export function StorySyncTabs({
               onUpdateSingle={onUpdateSingle}
               onRequestUpdateAll={(
                 entries: UpdatableStoryEntry[],
-                chapterInputs: Map<string, number>,
+                chapterInputs: ReadonlyMap<string, number>,
                 newErrors?: Map<string, string>,
               ) => {
                 setPendingUpdateEntries(entries);
-                setPendingChapterInputs(chapterInputs);
+                setPendingChapterInputs(new Map(chapterInputs));
                 setPendingChapterErrors(newErrors ?? new Map());
                 setChapterErrors(!!newErrors && newErrors.size > 0);
                 setShowUpdateConfirm(true);

@@ -39,7 +39,7 @@ export function CheckUpdatedCoverTab({
   onCheck,
   onUploadCover,
   themeMode,
-}: CheckUpdatedCoverTabProps) {
+}: Readonly<CheckUpdatedCoverTabProps>) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
   const [filterSection, setFilterSection] = useState<'all' | 'updated' | 'no_cover'>('all');
@@ -95,7 +95,6 @@ export function CheckUpdatedCoverTab({
             background: searchBg,
             borderColor: panelBorder,
           }}
-          onClick={() => searchInputRef.current?.focus()}
         >
           <Icon icon={appIcons.search} className="h-4 w-4 shrink-0" style={{ color: tertiaryText }} />
           <input
@@ -104,6 +103,8 @@ export function CheckUpdatedCoverTab({
             placeholder="Search stories..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            onClick={() => searchInputRef.current?.focus()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') searchInputRef.current?.focus(); }}
             className="min-w-0 flex-1 bg-transparent text-sm outline-none"
             style={{
               color: pageText,
@@ -241,7 +242,7 @@ export function CheckUpdatedCoverTab({
   );
 }
 
-function FilterChip({ label, count, active, onClick, variant, isDark }: { label: string; count: number; active: boolean; onClick: () => void; variant?: 'green' | 'amber' | 'red'; isDark: boolean }) {
+function FilterChip({ label, count, active, onClick, variant, isDark }: Readonly<{ label: string; count: number; active: boolean; onClick: () => void; variant?: 'green' | 'amber' | 'red'; isDark: boolean }>) {
   const colors = variant === 'green'
     ? { active: 'rgba(52,211,153,0.15)', activeText: isDark ? '#34d399' : '#059669', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'amber'
@@ -253,7 +254,7 @@ function FilterChip({ label, count, active, onClick, variant, isDark }: { label:
   return <button onClick={onClick} className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors" style={{ background: active ? colors.active : 'transparent', color: active ? colors.activeText : colors.inactive }}>{label} ({count})</button>;
 }
 
-function EmptySection({ isDark, message }: { isDark: boolean; message: string }) {
+function EmptySection({ isDark, message }: Readonly<{ isDark: boolean; message: string }>) {
   return (
     <div className="py-8 text-center" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.42)' }}>
       <Icon icon={appIcons.checkCircle} className="mx-auto mb-2 h-8 w-8" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.34)' }} />
@@ -268,13 +269,13 @@ function HistoryEntryCard({
   isUploading,
   onUpload,
   isDark,
-}: {
+}: Readonly<{
   entry: CoverUpdateEntry;
   result?: { success: boolean; message: string };
   isUploading: boolean;
   onUpload: (folderId: string, storyId: string) => Promise<void>;
   isDark: boolean;
-}) {
+}>) {
   const isUpdated = entry.status === 'updated';
   const isNoCover = entry.status === 'no_cover1_file';
   const canUpload = isUpdated && Boolean(entry.story_id) && !isUploading;
@@ -341,7 +342,7 @@ function HistoryEntryCard({
   );
 }
 
-function HistoryStatusChip({ status, isDark }: { status: string; isDark: boolean }) {
+function HistoryStatusChip({ status, isDark }: Readonly<{ status: string; isDark: boolean }>) {
   const variants: Record<string, { bg: string; text: string; label: string }> = {
     updated: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'UPDATED' },
     no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NO COVER1' },

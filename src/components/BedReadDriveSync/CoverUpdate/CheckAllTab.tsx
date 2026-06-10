@@ -39,7 +39,7 @@ export function CheckAllTab({
   onCheck,
   onUploadCover,
   themeMode,
-}: CheckAllTabProps) {
+}: Readonly<CheckAllTabProps>) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
   const [filterSection, setFilterSection] = useState<'all' | 'can_update' | 'updated' | 'no_cover' | 'no_match'>('all');
@@ -316,7 +316,7 @@ export function CheckAllTab({
   );
 }
 
-function FilterChip({ label, count, active, onClick, variant, isDark }: { label: string; count: number; active: boolean; onClick: () => void; variant?: 'green' | 'amber' | 'red'; isDark: boolean }) {
+function FilterChip({ label, count, active, onClick, variant, isDark }: { readonly label: string; readonly count: number; readonly active: boolean; readonly onClick: () => void; readonly variant?: 'green' | 'amber' | 'red'; readonly isDark: boolean }) {
   const colors = variant === 'green'
     ? { active: 'rgba(52,211,153,0.15)', activeText: isDark ? '#34d399' : '#059669', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'amber'
@@ -332,11 +332,11 @@ function FilterChip({ label, count, active, onClick, variant, isDark }: { label:
   );
 }
 
-function SectionHeader({ label, color, icon }: { label: string; color: string; icon: React.ReactNode }) {
+function SectionHeader({ label, color, icon }: { readonly label: string; readonly color: string; readonly icon: React.ReactNode }) {
   return <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider" style={{ color }}>{icon}{label}</h3>;
 }
 
-function EmptySection({ isDark, message }: { isDark: boolean; message: string }) {
+function EmptySection({ isDark, message }: { readonly isDark: boolean; readonly message: string }) {
   return (
     <div className="py-8 text-center" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.42)' }}>
       <Icon icon={appIcons.checkCircle} className="mx-auto mb-2 h-8 w-8" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.34)' }} />
@@ -352,11 +352,11 @@ function CoverEntryCard({
   onUpload,
   isDark,
 }: {
-  entry: CoverUpdateEntry;
-  result?: { success: boolean; message: string };
-  isUploading: boolean;
-  onUpload: (folderId: string, storyId: string) => Promise<void>;
-  isDark: boolean;
+  readonly entry: CoverUpdateEntry;
+  readonly result?: { success: boolean; message: string };
+  readonly isUploading: boolean;
+  readonly onUpload: (folderId: string, storyId: string) => Promise<void>;
+  readonly isDark: boolean;
 }) {
   const isUpdated = entry.status === 'updated';
   const isNoCover = entry.status === 'no_cover1_file';
@@ -374,7 +374,7 @@ function CoverEntryCard({
   const borderColor = isNoCover
     ? isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.25)'
     : isUpdated
-      ? isDark ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.2)'
+      ? isDark ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.15)'
       : panelBorder;
 
   return (
@@ -435,7 +435,7 @@ function CoverEntryCard({
   );
 }
 
-function StatusChip({ status, isDark }: { status: string; isDark: boolean }) {
+function StatusChip({ status, isDark }: { readonly status: string; readonly isDark: boolean }) {
   const variants: Record<string, { bg: string; text: string; label: string }> = {
     can_update: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'CAN UPDATE' },
     updated: { bg: 'rgba(251,191,36,0.15)', text: isDark ? '#fbbf24' : '#d97706', label: 'UPDATED' },

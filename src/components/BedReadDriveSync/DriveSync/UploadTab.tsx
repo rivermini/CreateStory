@@ -8,15 +8,15 @@ import { StatusBadge, EmptyState } from './SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';
 
 interface UploadTabProps {
-  data: CheckUploadableResponse | null;
-  loading: boolean;
-  error: string;
-  uploadResults: Map<string, { success: boolean; message: string }>;
-  uploadingIds: Set<string>;
-  onCheck: () => void;
-  onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
-  onRequestUploadAll: () => void;
-  themeMode: ThemeMode;
+  readonly data: CheckUploadableResponse | null;
+  readonly loading: boolean;
+  readonly error: string;
+  readonly uploadResults: Map<string, { success: boolean; message: string }>;
+  readonly uploadingIds: Set<string>;
+  readonly onCheck: () => void;
+  readonly onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
+  readonly onRequestUploadAll: () => void;
+  readonly themeMode: ThemeMode;
 }
 
 export function UploadTab({
@@ -429,13 +429,13 @@ function FilterChip({
   isDark,
   panelBorder: _panelBorder,
 }: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-  variant?: 'green' | 'amber' | 'red';
-  isDark: boolean;
-  panelBorder: string;
+  readonly label: string;
+  readonly count: number;
+  readonly active: boolean;
+  readonly onClick: () => void;
+  readonly variant?: 'green' | 'amber' | 'red';
+  readonly isDark: boolean;
+  readonly panelBorder: string;
 }) {
   const colors =
     variant === 'green'
@@ -477,11 +477,11 @@ function SectionHeader({
   panelBorder,
   secondaryText: _secondaryText,
 }: {
-  label: string;
-  color: string;
-  icon: React.ReactNode;
-  panelBorder: string;
-  secondaryText: string;
+  readonly label: string;
+  readonly color: string;
+  readonly icon: React.ReactNode;
+  readonly panelBorder: string;
+  readonly secondaryText: string;
 }) {
   return (
     <div
@@ -503,16 +503,17 @@ function UploadCard({
   onUpload,
   isDark,
 }: {
-  folder: DriveFolderEntry;
-  result?: { success: boolean; message: string };
-  isUploading: boolean;
-  isSuccess?: boolean;
-  isFailed: boolean;
-  onUpload: () => void;
-  isDark: boolean;
+  readonly folder: DriveFolderEntry;
+  readonly result?: { success: boolean; message: string };
+  readonly isUploading: boolean;
+  readonly isSuccess?: boolean;
+  readonly isFailed: boolean;
+  readonly onUpload: () => void;
+  readonly isDark: boolean;
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   return (
@@ -523,6 +524,12 @@ function UploadCard({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
+        </p>
+        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+          {folder.name}
+        </p>
+        <p className="mt-1 text-xs" style={{ color: secondaryText }}>
+          Chapters: <span className="font-semibold" style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
         </p>
         {result && (
           <p className="mt-0.5 truncate text-xs" style={{ color: isSuccess ? (isDark ? '#34d399' : '#059669') : '#f87171' }}>
@@ -568,11 +575,12 @@ function InvalidUploadCard({
   folder,
   isDark,
 }: {
-  folder: DriveFolderEntry;
-  isDark: boolean;
+  readonly folder: DriveFolderEntry;
+  readonly isDark: boolean;
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   return (
@@ -585,8 +593,11 @@ function InvalidUploadCard({
         <p className="truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
         </p>
-        <p className="truncate text-xs" style={{ color: '#f87171' }}>
-          Invalid format
+        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+          {folder.name}
+        </p>
+        <p className="mt-1 text-xs" style={{ color: '#f87171' }}>
+          Chapters: <span style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
         </p>
       </div>
       <StatusBadge prefix="ERROR" isDark={isDark} />
@@ -598,11 +609,12 @@ function AlreadyCard({
   folder,
   isDark,
 }: {
-  folder: DriveFolderEntry;
-  isDark: boolean;
+  readonly folder: DriveFolderEntry;
+  readonly isDark: boolean;
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   return (
@@ -615,8 +627,11 @@ function AlreadyCard({
         <p className="truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
         </p>
-        <p className="truncate text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }}>
-          Already on server
+        <p className="truncate text-xs font-mono" style={{ color: secondaryText }}>
+          {folder.name}
+        </p>
+        <p className="mt-1 text-xs" style={{ color: secondaryText }}>
+          Chapters: <span className="font-semibold" style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
         </p>
       </div>
       <StatusBadge prefix="DONE" isDark={isDark} />
