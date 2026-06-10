@@ -8,6 +8,7 @@ import {
   resumeAutoAudio,
   getDriveSyncConfig,
   type AutoAudioSession,
+  type AutoAudioStoryResult,
   type DriveSyncConfig,
 } from '../../api/client';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
@@ -15,7 +16,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 
 interface AutoAudioPageProps {
-  themeMode: ThemeMode;
+  readonly themeMode: ThemeMode;
 }
 
 function formatTime(ts: string | null): string {
@@ -77,7 +78,7 @@ const STEP_NAMES: Record<number, string> = {
   11: 'Complete',
 };
 
-export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: AutoAudioPageProps) {
+export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const isDark = themeMode === 'dark';
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,7 +97,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
     }
     return null;
   });
-  const [selectedPhase, setSelectedPhase] = useState<string>(() => 'phase1');
+  const [selectedPhase, setSelectedPhase] = useState<string>('phase1');
   const [phase2Limit, setPhase2Limit] = useState(20);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -107,6 +108,10 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
   const [configLoading, setConfigLoading] = useState(true);
   const [elapsed, setElapsed] = useState(0);
 
+  const effectivePhase = session?.phase && (session.status === 'running' || session.status === 'paused')
+    ? session.phase
+    : selectedPhase;
+
   const logEndRef = useRef<HTMLDivElement>(null);
   const prevLogLenRef = useRef(0);
 
@@ -116,7 +121,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
   const isStopping = session?.status === 'stopping';
   const isLive = isActive || isStopping;
   const isDone = session?.status === 'completed' || session?.status === 'error' || session?.status === 'stopped';
-  const currentPhaseInfo = PHASES.find((phase) => phase.id === selectedPhase)!;
+  const currentPhaseInfo = PHASES.find((phase) => phase.id === effectivePhase)!;
   const runningPhase = session?.phase || 'phase1';
   const runningPalette = PHASE_ACCENT[runningPhase] || PHASE_ACCENT.phase1;
   const runningAccent = isDark ? runningPalette.dark : runningPalette.light;
@@ -151,15 +156,9 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
   useEffect(() => {
     getDriveSyncConfig()
       .then((cfg) => setConfig(cfg))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setConfigLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (session?.phase && (session.status === 'running' || session.status === 'paused')) {
-      setSelectedPhase(session.phase);
-    }
-  }, [session?.phase, session?.status]);
 
   useEffect(() => {
     if (logEndRef.current && session?.logs && session.logs.length > prevLogLenRef.current) {
@@ -168,9 +167,14 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
     }
   }, [session?.logs]);
 
+  const elapsedRef = useRef(elapsed);
+  useEffect(() => {
+    elapsedRef.current = elapsed;
+  }, [elapsed]);
+
   useEffect(() => {
     if (!session?.started_at || !isLive) {
-      setElapsed(0);
+      if (elapsedRef.current !== 0) setElapsed(0);
       return;
     }
     const startMs = new Date(session.started_at).getTime();
@@ -426,7 +430,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                     {currentPhaseInfo.label}
                   </h2>
                   <span className={chipBase} style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}>
-                    Phase {selectedPhase.replace('phase', '')}
+                    Phase {effectivePhase.replace('phase', '')}
                   </span>
                 </div>
                 <p className="mt-1 text-sm" style={{ color: secondaryText }}>
@@ -435,29 +439,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                {!isLive ? (
-                  !showStartConfirm ? (
-                    <button
-                      onClick={() => setShowStartConfirm(true)}
-                      disabled={needsConfig}
-                      className={buttonBase}
-                      style={{ ...primaryButtonStyle, opacity: needsConfig ? 0.45 : 1 }}
-                    >
-                      {needsConfig ? <Icon icon={appIcons.settings} className="h-[14px] w-[14px]" /> : null}
-                      {needsConfig ? 'Setup' : 'Start Session'}
-                    </button>
-                  ) : (
-                    <>
-                      <button onClick={() => setShowStartConfirm(false)} disabled={loading} className={buttonBase} style={neutralButtonStyle}>
-                        Cancel
-                      </button>
-                      <button onClick={handleStart} disabled={loading} className={buttonBase} style={primaryButtonStyle}>
-                        {loading ? <Icon icon={appIcons.spinner} className="h-[14px] w-[14px] animate-spin" /> : null}
-                        {loading ? 'Starting…' : 'Launch'}
-                      </button>
-                    </>
-                  )
-                ) : (
+                {isLive ? (
                   <>
                     {isActive && (
                       <button
@@ -482,11 +464,31 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                       {isStopping ? 'Stopping…' : 'Stop'}
                     </button>
                   </>
+                ) : showStartConfirm ? (
+                  <>
+                    <button onClick={() => setShowStartConfirm(false)} disabled={loading} className={buttonBase} style={neutralButtonStyle}>
+                      Cancel
+                    </button>
+                    <button onClick={handleStart} disabled={loading} className={buttonBase} style={primaryButtonStyle}>
+                      {loading ? <Icon icon={appIcons.spinner} className="h-[14px] w-[14px] animate-spin" /> : null}
+                      {loading ? 'Starting…' : 'Launch'}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setShowStartConfirm(true)}
+                    disabled={needsConfig}
+                    className={buttonBase}
+                    style={{ ...primaryButtonStyle, opacity: needsConfig ? 0.45 : 1 }}
+                  >
+                    {needsConfig ? <Icon icon={appIcons.settings} className="h-[14px] w-[14px]" /> : null}
+                    {needsConfig ? 'Setup' : 'Start Session'}
+                  </button>
                 )}
               </div>
             </div>
 
-            {selectedPhase === 'phase2' && (
+            {effectivePhase === 'phase2' && (
               <div className="mt-5 flex flex-wrap items-center gap-4">
                 <span className="text-sm font-medium" style={{ color: secondaryText }}>
                   Stories to scan
@@ -505,7 +507,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                     min={1}
                     max={500}
                     value={phase2Limit}
-                    onChange={(e) => setPhase2Limit(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
+                    onChange={(e) => setPhase2Limit(Math.max(1, Math.min(500, Number.parseInt(e.target.value) || 1)))}
                     disabled={isLive}
                     className="w-16 rounded-xl border py-1.5 text-center text-sm font-semibold outline-none"
                     style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
@@ -524,14 +526,14 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
 
             {isLive && (
               <div className="mt-5 space-y-4">
-                {session!.progress.total > 0 && (
+                {session.progress.total > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium" style={{ color: secondaryText }}>
                         Stories
                       </span>
                       <span className="text-xs font-bold tabular-nums" style={{ color: runningAccent }}>
-                        {session!.progress.done} / {session!.progress.total}
+                        {session.progress.done} / {session.progress.total}
                       </span>
                     </div>
                     <div
@@ -546,14 +548,14 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                   </div>
                 )}
 
-                {session!.chapter_progress?.total > 0 && (
+                {session.chapter_progress?.total > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium" style={{ color: secondaryText }}>
                         Chapters
                       </span>
                       <span className="text-xs font-bold tabular-nums" style={{ color: isDark ? '#fcd34d' : '#b45309' }}>
-                        {session!.chapter_progress.done} / {session!.chapter_progress.total}
+                        {session.chapter_progress.done} / {session.chapter_progress.total}
                       </span>
                     </div>
                     <div
@@ -572,8 +574,8 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                   <div className="grid flex-1 grid-cols-11 gap-1">
                     {Array.from({ length: 11 }, (_, index) => {
                       const step = index + 1;
-                      const done = (session!.current_step || 0) >= step;
-                      const active = (session!.current_step || 0) === step;
+                      const done = (session.current_step || 0) >= step;
+                      const active = (session.current_step || 0) === step;
                       return (
                         <div
                           key={step}
@@ -587,12 +589,12 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                     })}
                   </div>
                   <span className="shrink-0 text-xs tabular-nums" style={{ color: tertiaryText }}>
-                    Step {session!.current_step || 1}/11
+                    Step {session.current_step || 1}/11
                   </span>
                 </div>
 
                 <p className="text-xs" style={{ color: secondaryText }}>
-                  {session!.current_step_desc || STEP_NAMES[session!.current_step || 1] || 'Initializing…'}
+                  {session.current_step_desc || STEP_NAMES[session.current_step || 1] || 'Initializing…'}
                 </p>
 
                 {session?.current_story && (
@@ -690,13 +692,9 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                 </button>
               </div>
 
-              {!(session?.stories_missing_audio ?? []).length ? (
-                <p className="text-sm" style={{ color: secondaryText }}>
-                  {isLive ? 'Scanning stories...' : 'No preview available. Start a session.'}
-                </p>
-              ) : (
+              {session && session.stories_missing_audio.length > 0 ? (
                 <div className="max-h-[220px] space-y-1.5 overflow-y-auto pr-1">
-                  {session!.stories_missing_audio.map((story) => (
+                  {session.stories_missing_audio.map((story) => (
                     <div
                       key={story.storyId}
                       className="flex items-center justify-between rounded-xl border px-3 py-2.5"
@@ -714,6 +712,10 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm" style={{ color: secondaryText }}>
+                  {isLive ? 'Scanning stories...' : 'No preview available. Start a session.'}
+                </p>
               )}
             </section>
 
@@ -723,22 +725,23 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
               </h3>
 
               {!session && <p className="text-sm" style={{ color: secondaryText }}>No active session</p>}
-              {session && (session.story_results!.length > 0 || session.current_story) && (
+              {session && (session.story_results.length > 0 || session.current_story) && (
                 <div className="max-h-[220px] space-y-1.5 overflow-y-auto pr-1">
                   {(() => {
                     const processedIds = new Set(session.story_results.map((result) => result.story_id));
                     const currentId = session.current_story;
-                    const displayResults = [
+                    type DisplayResult = AutoAudioStoryResult & { readonly _processing?: true };
+                    const displayResults: DisplayResult[] = [
                       ...session.story_results,
                       ...(currentId && !processedIds.has(currentId)
-                        ? [{ story_id: currentId, story_title: currentId, chapters_generated: 0, chapters_uploaded: 0, upload_errors: [], error: '', _processing: true }]
+                        ? [{ story_id: currentId, story_title: currentId, chapters_generated: 0, chapters_uploaded: 0, upload_errors: [], error: '', _processing: true } as DisplayResult]
                         : []),
                     ];
 
-                    return displayResults.map((result: any) => {
+                    return displayResults.map((result) => {
                       const expected =
                         result.chapters_expected ??
-                        session.stories_missing_audio.find((story) => story.storyId === result.story_id)?.missingCount ??
+                        session?.stories_missing_audio.find((story) => story.storyId === result.story_id)?.missingCount ??
                         result.chapters_generated;
 
                       return (
@@ -824,7 +827,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
             </div>
 
             {!session && <p className="text-sm" style={{ color: secondaryText }}>No active session</p>}
-            {session && session.logs.length === 0 && <p className="text-sm" style={{ color: secondaryText }}>Waiting for logs…</p>}
+            {session?.logs.length === 0 && <p className="text-sm" style={{ color: secondaryText }}>Waiting for logs…</p>}
             {session && session.logs.length > 0 && (
               <div
                 className="max-h-[320px] overflow-y-auto rounded-xl border p-4 font-mono text-xs"
@@ -844,7 +847,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                           : secondaryText;
 
                     return (
-                      <div key={index} className="flex items-start gap-2">
+                      <div key={`${log.timestamp}_${index}`} className="flex items-start gap-2">
                         <span className="shrink-0" style={{ color: tertiaryText, fontSize: '0.62rem' }}>
                           [{log.timestamp}]
                         </span>
@@ -913,7 +916,7 @@ export function AutoAudioPage({ themeMode, onThemeChange: _onThemeChange }: Auto
                 onClick={handleStop}
                 disabled={stopConfirmText !== 'CONFIRM'}
                 className={buttonBase}
-                style={{ ...dangerButtonStyle, opacity: stopConfirmText !== 'CONFIRM' ? 0.45 : 1 }}
+                style={{ ...dangerButtonStyle, opacity: stopConfirmText === 'CONFIRM' ? 1 : 0.45 }}
               >
                 Stop Session
               </button>

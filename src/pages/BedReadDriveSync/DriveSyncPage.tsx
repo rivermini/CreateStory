@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import {
   checkUploadable,
   checkUpdatable,
@@ -25,7 +25,7 @@ const pollUpdate = (
   lockKey: string,
   setResults: (fn: (prev: Map<string, { success: boolean; message: string }>) => Map<string, { success: boolean; message: string }>) => void,
   setJobs: (fn: (prev: Map<string, string>) => Map<string, string>) => void,
-  locksRef: MutableRefObject<Set<string>>,
+  locksRef: RefObject<Set<string>>,
 ) => {
   const poll = async () => {
     while (true) {
@@ -45,7 +45,7 @@ const pollUpdate = (
             next.delete(storyId);
             return next;
           });
-          locksRef.current.delete(lockKey);
+          locksRef.current?.delete(lockKey);
           return;
         }
       } catch {
@@ -55,6 +55,49 @@ const pollUpdate = (
   };
   poll();
 };
+
+async function pollUploadResults(
+  trackedJobs: TrackedJob[],
+  setTrackedJobs: (fn: (prev: TrackedJob[]) => TrackedJob[]) => void,
+  setUploadResults: (fn: (prev: Map<string, { success: boolean; message: string }>) => Map<string, { success: boolean; message: string }>) => void,
+  setUploadingJobs: (fn: (prev: Map<string, string>) => Map<string, string>) => void,
+  uploadLocksRef: RefObject<Set<string>>,
+) {
+  const completedIds: string[] = [];
+
+  for (const tracked of trackedJobs) {
+    try {
+      const { job } = await getJob(tracked.jobId);
+
+      if (job.status === 'queued' || job.status === 'running') {
+        continue;
+      }
+
+      completedIds.push(tracked.jobId);
+
+      const uploadResult = {
+        success: job.status === 'success',
+        message: job.status === 'success' ? (job.result_message ?? 'Done') : (job.error ?? 'Upload failed'),
+      };
+      setUploadResults((prev) => new Map(prev).set(tracked.folderId, uploadResult));
+    } catch {
+      // ignore
+    }
+  }
+
+  if (completedIds.length > 0) {
+    setTrackedJobs((prev) => prev.filter((job) => !completedIds.includes(job.jobId)));
+    const jobsToRemove = trackedJobs.filter((t) => completedIds.includes(t.jobId));
+    setUploadingJobs((prev) => {
+      const next = new Map(prev);
+      for (const tracked of jobsToRemove) {
+        next.delete(tracked.folderId);
+        uploadLocksRef.current?.delete(tracked.folderId);
+      }
+      return next;
+    });
+  }
+}
 
 interface DriveSyncPageProps {
   readonly themeMode: ThemeMode;
@@ -102,46 +145,10 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   useEffect(() => {
-    const doPoll = async () => {
-      if (trackedJobs.length === 0) return;
-
-      const completedIds: string[] = [];
-
-      for (const tracked of trackedJobs) {
-        try {
-          const { job } = await getJob(tracked.jobId);
-
-          if (job.status === 'queued' || job.status === 'running') {
-            continue;
-          }
-
-          completedIds.push(tracked.jobId);
-
-          const uploadResult = {
-            success: job.status === 'success',
-            message: job.status === 'success' ? (job.result_message ?? 'Done') : (job.error ?? 'Upload failed'),
-          };
-          setUploadResults((prev) => new Map(prev).set(tracked.folderId, uploadResult));
-        } catch {
-          // ignore
-        }
-      }
-
-      if (completedIds.length > 0) {
-        setTrackedJobs((prev) => prev.filter((job) => !completedIds.includes(job.jobId)));
-        const jobsToRemove = trackedJobs.filter((t) => completedIds.includes(t.jobId));
-        setUploadingJobs((prev) => {
-          const next = new Map(prev);
-          for (const tracked of jobsToRemove) {
-            next.delete(tracked.folderId);
-            uploadLocksRef.current.delete(tracked.folderId);
-          }
-          return next;
-        });
-      }
-    };
-
-    const interval = setInterval(doPoll, 4000);
+    const interval = setInterval(
+      () => pollUploadResults(trackedJobs, setTrackedJobs, setUploadResults, setUploadingJobs, uploadLocksRef),
+      4000,
+    );
     return () => clearInterval(interval);
   }, [trackedJobs]);
 

@@ -18,7 +18,7 @@ const BedReadPage = lazy(() => import('./pages/BedReadVoices/BedReadPage').then(
 const BedReadJobsPage = lazy(() => import('./pages/BedReadVoices/BedReadJobsPage').then(m => ({ default: m.default })));
 const DriveSyncPage = lazy(() => import('./pages/BedReadDriveSync/DriveSyncPage').then(m => ({ default: m.DriveSyncPage })));
 const DriveSyncHistoryPage = lazy(() => import('./pages/BedReadDriveSync/DriveSyncHistoryPage').then(m => ({ default: m.DriveSyncHistoryPage })));
-const ChapterContentUpdatePage = lazy(() => import('./pages/Admin/ChapterContentUpdatePage').then(m => ({ default: m.ChapterContentUpdatePage })));
+const ChapterContentUpdatePage = lazy(() => import('./pages/BedReadDriveSync/ChapterContentUpdatePage').then(m => ({ default: m.ChapterContentUpdatePage })));
 const CoverUpdatePage = lazy(() => import('./pages/BedReadDriveSync/CoverUpdatePage').then(m => ({ default: m.CoverUpdatePage })));
 const AutoAudioPage = lazy(() => import('./pages/AutoAudio/AutoAudioPage').then(m => ({ default: m.AutoAudioPage })));
 const AutoAudioHistoryPage = lazy(() => import('./pages/AutoAudio/AutoAudioHistoryPage').then(m => ({ default: m.AutoAudioHistoryPage })));

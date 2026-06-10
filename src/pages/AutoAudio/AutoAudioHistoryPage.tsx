@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   getAutoAudioHistory,
   getAutoAudioSession,
@@ -12,7 +12,7 @@ import { DatePicker } from '../../components/Shared/DatePicker';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 
 interface AutoAudioHistoryPageProps {
-  themeMode: ThemeMode;
+  readonly themeMode: ThemeMode;
 }
 
 type FilterStatus = 'all' | 'running' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'error';
@@ -104,23 +104,23 @@ function formatTotalDuration(totalSeconds: number): string {
 }
 
 interface SessionCardProps {
-  session: AutoAudioHistoryEntry;
-  order: number;
-  isExpanded: boolean;
-  expandedSession: AutoAudioSession | null;
-  loadingDetail: boolean;
-  isDark: boolean;
-  deleteMode: boolean;
-  isSelected: boolean;
-  nowMs: number;
-  panelBorder: string;
-  pageText: string;
-  secondaryText: string;
-  tertiaryText: string;
-  mutedSurface: string;
-  selectedSurface: string;
-  onToggleExpand: (sessionId: string) => void;
-  onToggleSelect: (sessionId: string) => void;
+  readonly session: AutoAudioHistoryEntry;
+  readonly order: number;
+  readonly isExpanded: boolean;
+  readonly expandedSession: AutoAudioSession | null;
+  readonly loadingDetail: boolean;
+  readonly isDark: boolean;
+  readonly deleteMode: boolean;
+  readonly isSelected: boolean;
+  readonly nowMs: number;
+  readonly panelBorder: string;
+  readonly pageText: string;
+  readonly secondaryText: string;
+  readonly tertiaryText: string;
+  readonly mutedSurface: string;
+  readonly selectedSurface: string;
+  readonly onToggleExpand: (sessionId: string) => void;
+  readonly onToggleSelect: (sessionId: string) => void;
 }
 
 function SessionCard({
@@ -158,17 +158,17 @@ function SessionCard({
     <article
       className={`transition-colors ${deleteMode ? 'cursor-pointer select-none' : ''}`}
       style={{ background: deleteMode && isSelected ? selectedSurface : 'transparent' }}
-      onClick={deleteMode ? () => onToggleSelect(session.session_id) : undefined}
     >
       <div
         className="px-5 py-4 sm:px-6"
         style={{ borderTop: order === 1 ? 'none' : `1px solid ${panelBorder}` }}
       >
-        <div
-          className={`flex flex-col gap-4 ${deleteMode ? '' : 'cursor-pointer'}`}
-          onClick={() => deleteMode ? onToggleSelect(session.session_id) : onToggleExpand(session.session_id)}
-        >
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        {deleteMode ? (
+          <button
+            type="button"
+            className="flex w-full flex-col gap-4 cursor-pointer text-left"
+            onClick={() => onToggleSelect(session.session_id)}
+          >
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium" style={{ color: tertiaryText }}>#{order}</span>
@@ -204,28 +204,70 @@ function SessionCard({
                 )}
               </div>
             </div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="flex w-full flex-col gap-4 cursor-pointer text-left"
+            onClick={() => onToggleExpand(session.session_id)}
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium" style={{ color: tertiaryText }}>#{order}</span>
+                  <div className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+                  <span
+                    className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                    style={{ background: mutedSurface, color: secondaryText }}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    className="rounded-md px-2 py-0.5 text-[11px] font-medium"
+                    style={{ background: mutedSurface, color: secondaryText }}
+                  >
+                    {session.test_mode ? 'Test' : 'Production'}
+                  </span>
+                  <span className="font-mono text-[11px]" style={{ color: tertiaryText }}>
+                    {session.session_id}
+                  </span>
+                </div>
 
-            <div className="flex items-start gap-3 lg:justify-end">
-              <div className="text-xs leading-5 text-left lg:text-right" style={{ color: secondaryText }}>
-                <div>Started {formatTime(session.started_at)}</div>
-                {session.finished_at && <div>Finished {formatTime(session.finished_at)}</div>}
+                <div className="mt-2 text-sm font-semibold sm:text-[15px]" style={{ color: pageText }}>
+                  Step {session.current_step}: {session.current_step_desc || '—'}
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: secondaryText }}>
+                  <span>{session.total_stories} stories</span>
+                  <span>{session.total_chapters} chapters</span>
+                  {(session.finished_at || isActive) && (
+                    <span style={{ color: pageText }}>
+                      {isActive ? `${getActiveDurationLabel(session.status)} ${duration}` : duration}
+                    </span>
+                  )}
+                </div>
               </div>
-              {!deleteMode && (
+
+              <div className="flex items-start gap-3 lg:justify-end">
+                <div className="text-xs leading-5 text-left lg:text-right" style={{ color: secondaryText }}>
+                  <div>Started {formatTime(session.started_at)}</div>
+                  {session.finished_at && <div>Finished {formatTime(session.finished_at)}</div>}
+                </div>
                 <Icon
                   icon={appIcons.chevronDown}
                   className={`mt-0.5 h-4 w-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
                   style={{ color: tertiaryText }}
                 />
-              )}
+              </div>
             </div>
-          </div>
+          </button>
+        )}
 
-          {session.error && (
-            <div className="text-sm" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
-              {session.error}
-            </div>
-          )}
-        </div>
+        {session.error && (
+          <div className="text-sm" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
+            {session.error}
+          </div>
+        )}
 
         {isExpanded && (
           <div className="mt-4 border-t pt-4" style={{ borderColor: panelBorder }}>
@@ -338,7 +380,7 @@ function SessionCard({
                       style={{ background: mutedSurface, borderColor: panelBorder }}
                     >
                       {expandedSession.logs.map((log: AutoAudioLogEntry, index: number) => (
-                        <div key={index} className="flex gap-2">
+                        <div key={`${log.timestamp}_${index}`} className="flex gap-2">
                           <span style={{ color: tertiaryText }}>[{log.timestamp}]</span>
                           <span style={{ color: pageText }}>S{log.step}</span>
                           <span className={logLevelColor(log.level)}>{log.message}</span>
@@ -379,8 +421,9 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; ids: string[] }>({ open: false, ids: [] });
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const pollingCancelledRef = useRef(false);
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = async () => {
     setLoading(true);
     setError('');
     try {
@@ -391,9 +434,24 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  useEffect(() => { loadHistory(); }, [loadHistory]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await getAutoAudioHistory();
+        if (!cancelled) setSessions(data);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load history.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -403,9 +461,16 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
   useEffect(() => {
     const hasRunning = sessions.some((session) => session.status === 'running' || session.status === 'paused' || session.status === 'stopping');
     if (!hasRunning) return;
-    const interval = setInterval(loadHistory, 10000);
-    return () => clearInterval(interval);
-  }, [sessions, loadHistory]);
+    const interval = setInterval(async () => {
+      try {
+        const data = await getAutoAudioHistory();
+        if (!pollingCancelledRef.current) setSessions(data);
+      } catch {
+        // ignore polling errors
+      }
+    }, 10000);
+    return () => { pollingCancelledRef.current = true; clearInterval(interval); };
+  }, [sessions]);
 
   const dateCutoff = specificDate ? (() => {
     const start = new Date(`${specificDate}T00:00:00`);
@@ -439,8 +504,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
   const visibleSessions = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
   const allVisibleSelected = visibleSessions.length > 0 && visibleSessions.every((session) => selectedIds.has(session.session_id));
-
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filterStatus, filterMode, sortOrder, specificDate, search]);
 
   useEffect(() => {
     if (!hasMore) return;
@@ -478,7 +541,8 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
 
   const handleToggleSelect = (sessionId: string) => {
     const next = new Set(selectedIds);
-    next.has(sessionId) ? next.delete(sessionId) : next.add(sessionId);
+    if (next.has(sessionId)) next.delete(sessionId);
+    else next.add(sessionId);
     setSelectedIds(next);
   };
 
@@ -543,7 +607,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
   const inputBackground = isDark ? '#232323' : '#ffffff';
   const inputBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.16)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const selectedSurface = isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.08)';
+  const selectedSurface = 'rgba(239,68,68,0.08)';
   const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
 
   const statusOptions: Array<{ value: FilterStatus; label: string }> = [
@@ -564,7 +628,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
           >
             <h3 className="text-lg font-semibold" style={{ color: pageText }}>Confirm delete</h3>
             <p className="mt-2 text-sm leading-6" style={{ color: secondaryText }}>
-              Delete {deleteConfirmation.ids.length} session{deleteConfirmation.ids.length !== 1 ? 's' : ''}? This action cannot be undone.
+              Delete {deleteConfirmation.ids.length} session{deleteConfirmation.ids.length > 1 ? 's' : ''}? This action cannot be undone.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -628,7 +692,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
             </div>
             {activeSessions.length > 0 && primaryActiveSession && (
               <div className="mt-4 border-t pt-4 text-sm" style={{ borderColor: panelBorder, color: secondaryText }}>
-                {activeSessions.length} active session{activeSessions.length !== 1 ? 's' : ''} · {getActiveDurationLabel(primaryActiveSession.status)} {formatSessionDuration(primaryActiveSession.started_at, primaryActiveSession.finished_at, nowMs, true)}
+                {activeSessions.length} active session{activeSessions.length > 1 ? 's' : ''} · {getActiveDurationLabel(primaryActiveSession.status)} {formatSessionDuration(primaryActiveSession.started_at, primaryActiveSession.finished_at, nowMs, true)}
               </div>
             )}
           </section>
@@ -643,14 +707,14 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
                 <input
                   type="text"
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => { setSearch(event.target.value); setVisibleCount(PAGE_SIZE); }}
                   placeholder="Search by session ID or error"
                   className="w-full rounded-md border py-2.5 pl-10 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                   style={{ background: inputBackground, borderColor: inputBorder, color: pageText }}
                 />
                 {search && (
                   <button
-                    onClick={() => setSearch('')}
+                    onClick={() => { setSearch(''); setVisibleCount(PAGE_SIZE); }}
                     className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
                     style={{ color: tertiaryText }}
                     title="Clear search"
@@ -672,14 +736,14 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
             </div>
 
             <div>
-              <DatePicker value={specificDate} onDateChange={setSpecificDate} isDark={isDark} />
+              <DatePicker value={specificDate} onDateChange={(date) => { setSpecificDate(date); setVisibleCount(PAGE_SIZE); }} isDark={isDark} />
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
               {statusOptions.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setFilterStatus(option.value)}
+                  onClick={() => { setFilterStatus(option.value); setVisibleCount(PAGE_SIZE); }}
                   className="rounded-md px-3 py-1.5 text-sm transition-colors"
                   style={{
                     background: filterStatus === option.value ? activeSurface : mutedSurface,
@@ -700,7 +764,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
-                  onClick={() => setFilterMode(value)}
+                  onClick={() => { setFilterMode(value); setVisibleCount(PAGE_SIZE); }}
                   className="rounded-md px-3 py-1.5 text-sm transition-colors"
                   style={{
                     background: filterMode === value ? activeSurface : mutedSurface,
@@ -718,7 +782,7 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
-                  onClick={() => setSortOrder(value)}
+                  onClick={() => { setSortOrder(value); setVisibleCount(PAGE_SIZE); }}
                   className="rounded-md px-3 py-1.5 text-sm transition-colors"
                   style={{
                     background: sortOrder === value ? activeSurface : mutedSurface,

@@ -18,7 +18,8 @@ interface ChapterContentUpdatePageProps {
 
 type ChapterResult = { success: boolean; message: string };
 
-export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePageProps) {
+export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePageProps>) {
+  const { themeMode } = props;
   const isDark = themeMode === 'dark';
 
   const {
@@ -52,7 +53,7 @@ export function ChapterContentUpdatePage({ themeMode }: ChapterContentUpdatePage
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
   const searchBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
-  const handleSearch = async (event?: React.FormEvent) => {
+  const handleSearch = async (event?: React.SubmitEvent) => {
     event?.preventDefault();
     const query = keyword.trim();
     if (!query) return;
@@ -395,7 +396,7 @@ function markChapterUpdated(
       ch.chapterNumber === chapterNumber
         ? {
             ...ch,
-            ...(updatedChapter ?? {}),
+            ...(updatedChapter ?? null),
             status: 'updated',
             message: 'Updated from Drive.',
             serverLength: updatedChapter?.serverLength ?? ch.driveLength,
@@ -405,21 +406,15 @@ function markChapterUpdated(
   };
 }
 
-function ChapterRow({
-  chapter,
-  isDark,
-  result,
-  isUpdating,
-  canUpdate,
-  onConfirm,
-}: {
+function ChapterRow(props: Readonly<{
   chapter: ContentUpdateChapterStatus;
   isDark: boolean;
   result?: ChapterResult;
   isUpdating: boolean;
   canUpdate: boolean;
   onConfirm: () => void;
-}) {
+}>) {
+  const { chapter, isDark, result, isUpdating, canUpdate, onConfirm } = props;
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
@@ -507,17 +502,13 @@ function ChapterRow({
   );
 }
 
-function StatBox({
-  label,
-  value,
-  color,
-  isDark,
-}: {
+function StatBox(props: Readonly<{
   label: string;
   value: number;
   color: string;
   isDark: boolean;
-}) {
+}>) {
+  const { label, value, color, isDark } = props;
   return (
     <div className="min-w-24 rounded-xl border px-3 py-2" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)' }}>
       <div className="text-lg font-bold" style={{ color }}>
@@ -530,7 +521,8 @@ function StatBox({
   );
 }
 
-function EmptyPanel({ isDark }: { isDark: boolean }) {
+function EmptyPanel(props: Readonly<{ isDark: boolean }>) {
+  const { isDark } = props;
   return (
     <div
       className="flex h-full min-h-[260px] flex-col items-center justify-center text-center"

@@ -86,7 +86,13 @@ const NAV_SECTIONS: NavSection[] = [
     { label: 'System', items: NAV_ITEMS_SYSTEM },
 ];
 
-export function Sidebar({ themeMode, onThemeChange: _onThemeChange, isSettingsOpen = false, onOpenSettings, authUser, onLogout }: SidebarProps) {
+export function Sidebar({
+    themeMode,
+    isSettingsOpen = false,
+    onOpenSettings,
+    authUser,
+    onLogout,
+}: Readonly<SidebarProps>) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);

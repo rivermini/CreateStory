@@ -92,13 +92,13 @@ function MobileNavItem({
     isDark,
     onClick,
     asButton = false,
-}: {
+}: Readonly<{
     item: NavItem;
     active: boolean;
     isDark: boolean;
     onClick: () => void;
     asButton?: boolean;
-}) {
+}>) {
     const panelBackground = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,17,17,0.04)';
     const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.08)';
     const activeBackground = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(17,17,17,0.08)';
@@ -162,7 +162,13 @@ function MobileNavItem({
     );
 }
 
-export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isSettingsOpen, onOpenSettings, isOpen, onClose }: MobileSidebarProps) {
+export function MobileSidebar({
+    themeMode,
+    isSettingsOpen,
+    onOpenSettings,
+    isOpen,
+    onClose,
+}: Readonly<MobileSidebarProps>) {
     const location = useLocation();
     const isDark = themeMode === 'dark';
 
@@ -191,12 +197,14 @@ export function MobileSidebar({ themeMode, onThemeChange: _onThemeChange, isSett
     return (
         <>
             {/* Backdrop */}
-            <div
-                className={`fixed inset-0 z-40 transition-opacity duration-200 lg:hidden ${isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
+            <button
+                type="button"
+                className={`fixed inset-0 z-40 transition-opacity duration-200 lg:hidden cursor-default ${isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
                 style={{
                     background: isDark ? 'rgba(0,0,0,0.42)' : 'rgba(17,17,17,0.18)',
                 }}
                 onClick={onClose}
+                aria-label="Close sidebar"
             />
 
             {/* Sidebar panel */}

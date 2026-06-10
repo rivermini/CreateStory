@@ -10,7 +10,8 @@ interface DashboardPageProps {
   authUser: AuthUser;
 }
 
-export function DashboardPage({ themeMode, authUser }: DashboardPageProps) {
+export function DashboardPage(props: Readonly<DashboardPageProps>) {
+  const { themeMode, authUser } = props;
   const isDark = themeMode === 'dark';
   const pageBackground = isDark
     ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
@@ -32,7 +33,8 @@ export function DashboardPage({ themeMode, authUser }: DashboardPageProps) {
   );
 }
 
-function DashboardSidebar({ themeMode, authUser }: { themeMode: ThemeMode; authUser: AuthUser }) {
+function DashboardSidebar(props: Readonly<{ themeMode: ThemeMode; authUser: AuthUser }>) {
+  const { themeMode, authUser } = props;
   const location = useLocation();
   const isDark = themeMode === 'dark';
   const active = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/users');
