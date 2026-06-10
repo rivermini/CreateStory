@@ -163,16 +163,16 @@ function Shell({
       )}
 
       {!isDashboard && (
-      <header className="fixed top-0 left-0 right-0 z-30 border-b border-white/10 bg-[#0f0f0f] safe-area-top lg:hidden">
+      <header className={`fixed top-0 left-0 right-0 z-30 border-b safe-area-top lg:hidden ${themeMode === 'dark' ? 'border-white/10 bg-[#191919]' : 'border-black/10 bg-[#fbfbfa]'}`}>
         <div className="flex items-center gap-2 px-3 py-2.5">
           <button
             onClick={() => setMobileSidebarOpen(true)}
-            className="rounded-lg border border-white/10 p-2 text-white/60 transition-colors hover:bg-white/5 hover:text-white/88"
+            className={`rounded-lg border p-2 transition-colors ${themeMode === 'dark' ? 'border-white/10 text-white/60 hover:bg-white/5 hover:text-white/88' : 'border-black/10 text-black/60 hover:bg-black/5 hover:text-black/88'}`}
             title="Open menu"
           >
             <Icon icon={appIcons.menu} className="h-4.5 w-4.5" />
           </button>
-          <h1 className="text-sm font-semibold tracking-[0.01em] text-white/92">
+          <h1 className={`text-sm font-semibold tracking-[0.01em] ${themeMode === 'dark' ? 'text-white/92' : 'text-[#37352f]'}`}>
             Novel Crawler
           </h1>
           <div className="ml-auto w-9" />
@@ -180,10 +180,10 @@ function Shell({
       </header>
       )}
 
-      <div className="min-h-screen bg-[#050505] transition-colors duration-300">
+      <div className={`min-h-screen transition-colors duration-300 ${themeMode === 'dark' ? 'bg-[#050505]' : 'bg-white'}`}>
         <div className={`${isDashboard ? 'pt-0 pl-0' : 'pt-14 lg:pt-0 pl-0 lg:pl-[248px]'} min-h-screen transition-all duration-300`}>
           <Suspense fallback={
-            <div className="flex h-screen items-center justify-center bg-[#050505] text-white/45">
+            <div className={`flex h-screen items-center justify-center ${themeMode === 'dark' ? 'bg-[#050505] text-white/45' : 'bg-white text-black/30'}`}>
               Loading...
             </div>
           }>
@@ -222,9 +222,10 @@ function Shell({
   );
 }
 
-function AuthLoading({ themeMode: _ }: Readonly<{ themeMode: ThemeMode }>) {
+function AuthLoading({ themeMode }: Readonly<{ themeMode: ThemeMode }>) {
+  const isDark = themeMode === 'dark';
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white/45">
+    <div className={`flex min-h-screen items-center justify-center ${isDark ? 'bg-[#050505] text-white/45' : 'bg-white text-black/30'}`}>
       Loading...
     </div>
   );
