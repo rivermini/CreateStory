@@ -219,7 +219,7 @@ export function UploadTab({
             panelBorder={panelBorder}
           />
           <FilterChip
-            label="Uploaded"
+            label="Already on Server"
             count={filteredAlready.length}
             active={filterSection === 'uploaded'}
             onClick={() => setFilterSection('uploaded')}
@@ -246,7 +246,7 @@ export function UploadTab({
           </div>
           <div className="flex items-center gap-1.5">
             <Icon icon={appIcons.trends} className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
-            {filteredAlready.length} uploaded
+            {filteredAlready.length} already on server
           </div>
           {filteredInvalid.length > 0 && (
             <div className="flex items-center gap-1.5">
@@ -629,9 +629,6 @@ function AlreadyCard({
         </p>
         <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
-        </p>
-        <p className="mt-1 text-xs" style={{ color: secondaryText }}>
-          Chapters: <span className="font-semibold" style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
         </p>
       </div>
       <StatusBadge prefix="DONE" isDark={isDark} />
