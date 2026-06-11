@@ -955,6 +955,7 @@ class MainBEClientMixin:
                             "id": story.get("id"),
                             "title": story.get("title"),
                             "maxChapter": story.get("maxChapter") or story.get("chapterCount") or 0,
+                            "updatedAt": story.get("updatedAt"),
                         })
                     page += 1
         except httpx.HTTPStatusError as exc:

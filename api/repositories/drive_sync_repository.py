@@ -117,6 +117,21 @@ class DriveSyncRepository:
                 row.value = config
             db.commit()
 
+    def load_app_setting(self, key: str) -> dict | None:
+        with self.session_factory() as db:
+            row = db.get(AppSetting, key)
+            return dict(row.value) if row is not None else None
+
+    def save_app_setting(self, key: str, value: dict) -> None:
+        with self.session_factory() as db:
+            row = db.get(AppSetting, key)
+            if row is None:
+                row = AppSetting(key=key, value=value)
+                db.add(row)
+            else:
+                row.value = value
+            db.commit()
+
     def load_drive_credential(self) -> tuple[str, bytes] | None:
         with self.session_factory() as db:
             row = db.scalar(select(ExternalCredential).where(ExternalCredential.name == "google_service_account"))
