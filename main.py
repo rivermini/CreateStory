@@ -11,6 +11,7 @@ The API will be available at http://localhost:8000.
 API docs: http://localhost:8000/docs
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -27,7 +28,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "api.main:app",
-        host="0.0.0.0",
+        host=os.getenv("FASTAPI_HOST", "0.0.0.0"),
         port=8000,
         reload=False,
     )
