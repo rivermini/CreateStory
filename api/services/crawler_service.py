@@ -399,11 +399,16 @@ class CrawlService:
             with self._lock:
                 if progress.status == "running":
                     if process.returncode == 0:
-                        progress.status = "completed"
                         progress.finished_at = self._now()
-                        progress.add_log("[DONE] Scrapy finished successfully.", "info")
-                        t = Thread(target=self._run_combine, args=(crawl_id,), daemon=True)
-                        t.start()
+                        if progress.chapters_crawled == 0 and progress.errors:
+                            progress.status = "failed"
+                            progress.error_message = "Scrapy finished without chapters after logging errors"
+                            progress.add_log("[FAIL] Scrapy finished without chapters after logging errors.", "error")
+                        else:
+                            progress.status = "completed"
+                            progress.add_log("[DONE] Scrapy finished successfully.", "info")
+                            t = Thread(target=self._run_combine, args=(crawl_id,), daemon=True)
+                            t.start()
                         self._persist_index()
                     else:
                         progress.status = "failed"

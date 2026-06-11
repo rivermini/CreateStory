@@ -41,7 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrandr2 \
     libxrender1 \
     libxss1 \
-    libxtst6 && \
+    libxtst6 \
+    xauth \
+    xvfb && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

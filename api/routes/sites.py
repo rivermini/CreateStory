@@ -45,6 +45,16 @@ def is_novelworm_chapter_url(url: str) -> bool:
     return bool(re.search(r"/\d{3,}/?$", url.rstrip("/")))
 
 
+def is_jobnib_chapter_url(url: str) -> bool:
+    parsed_path = urllib.parse.urlparse(url).path.lower().rstrip("/")
+    return bool(re.search(r"/book/[^/]+-chapter-\d+$", parsed_path))
+
+
+def is_scribblehub_chapter_url(url: str) -> bool:
+    parsed_path = urllib.parse.urlparse(url).path.lower().rstrip("/")
+    return bool(re.search(r"/read/\d+-[^/]+/chapter/\d+$", parsed_path))
+
+
 def is_chapter_url(url: str) -> bool:
     from urllib.parse import urlparse
 
@@ -59,6 +69,12 @@ def is_chapter_url(url: str) -> bool:
 
     if "novelworm" in parsed.netloc:
         return is_novelworm_chapter_url(url)
+
+    if "jobnib" in parsed.netloc:
+        return is_jobnib_chapter_url(url)
+
+    if "scribblehub" in parsed.netloc:
+        return is_scribblehub_chapter_url(url)
 
     return False
 
@@ -374,6 +390,108 @@ def _fetch_inkitt_chapters(story_url: str, timeout: int = 30) -> tuple[list[Chap
     return entries[:50], None, total_count, story_title
 
 
+def _fetch_jobnib_chapters(story_url: str, timeout: int = 60) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
+    try:
+        import requests
+        from spiders.jobnib import JobnibSpider
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/149.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://jobnib.com/",
+        }
+        resp = requests.get(
+            story_url,
+            headers=headers,
+            timeout=timeout,
+            proxies=requests_proxies("jobnib"),
+        )
+        resp.raise_for_status()
+
+        spider = JobnibSpider(novel=story_url, limit=50)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        story_title = spider._extract_story_title(soup)
+        links = spider._collect_chapter_links(soup, story_url)
+    except Exception as exc:
+        logger.warning("[jobnib] Chapter list fetch failed: %s", exc)
+        return [], f"Jobnib chapter list failed: {exc}", None, None
+
+    entries = [
+        ChapterEntry(
+            chapter_number=int(link["chapter_number"]),
+            title=link.get("title") or f"Chapter {link['chapter_number']}",
+            url=link["url"],
+        )
+        for link in links[:50]
+    ]
+    return entries, None, len(links), story_title
+
+
+def _fetch_scribblehub_chapters(story_url: str, timeout: int = 75) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
+    spider = None
+    try:
+        from spiders.scribblehub import ScribbleHubSpider
+
+        spider = ScribbleHubSpider(novel=story_url, limit=50)
+        normalized_url = spider._normalize_url(story_url)
+        series_url = spider._story_url_from_any_url(normalized_url)
+        html = spider._fetch_page_html(series_url, timeout=timeout)
+        soup = BeautifulSoup(html, "html.parser")
+        story_title = spider._extract_story_title(soup)
+        total_count = spider._extract_total_chapter_count(soup)
+
+        if spider._is_chapter_url(normalized_url):
+            start_chapter_id = spider._chapter_id_from_url(normalized_url)
+            links = spider._collect_chapter_links(
+                story_soup=soup,
+                story_url=series_url,
+                target_chapter_id=start_chapter_id,
+                fetch_all=True,
+            )
+            start_ordinal = spider._ordinal_for_chapter_id(links, start_chapter_id)
+            if start_ordinal is None:
+                _, direct_title = spider._chapter_title_from_direct_url(normalized_url)
+                links = [{
+                    "chapter_number": 1,
+                    "title": direct_title or "Chapter 1",
+                    "url": normalized_url,
+                }]
+            else:
+                links = [link for link in links if int(link["chapter_number"]) >= start_ordinal]
+        else:
+            max_entries = min(total_count or 50, 50)
+            links = spider._collect_chapter_links(
+                story_soup=soup,
+                story_url=series_url,
+                target_ordinals=set(range(1, max_entries + 1)),
+                fetch_all=False,
+            )
+    except Exception as exc:
+        logger.warning("[scribblehub] Chapter list fetch failed: %s", exc)
+        return [], f"ScribbleHub chapter list failed: {exc}", None, None
+    finally:
+        if spider is not None and getattr(spider, "_browser", None) is not None:
+            try:
+                spider._browser.close()
+            except Exception:
+                pass
+
+    entries = [
+        ChapterEntry(
+            chapter_number=int(link["chapter_number"]),
+            title=link.get("title") or f"Chapter {link['chapter_number']}",
+            url=link["url"],
+        )
+        for link in sorted(links, key=lambda item: int(item["chapter_number"]))[:50]
+    ]
+    return entries, None, total_count or len(links), story_title
+
+
 def _is_inkitt_blocked(html: str) -> bool:
     head = html[:10000]
     return (
@@ -468,15 +586,15 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
             valid=False, reason="invalid", message="URL must start with http:// or https://"
         )
 
-    if is_chapter_url(url):
+    service = get_site_service()
+    site_info = service._registry.match_url(url)
+
+    if is_chapter_url(url) and (site_info is None or site_info.config_name != "scribblehub"):
         return ChapterListResponse(
             valid=False,
             reason="chapter_url",
             message="This URL points to a chapter page. Please provide a story-level URL.",
         )
-
-    service = get_site_service()
-    site_info = service._registry.match_url(url)
 
     if site_info is None:
         known = ", ".join(service._registry.known_domains())
@@ -503,6 +621,18 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
                 story_title = fetched_story_title
         elif site_info.config_name == "inkitt":
             chapters, fetch_warning, total_chapter_count, fetched_story_title = _fetch_inkitt_chapters(story_url)
+            if fetch_warning:
+                warning = fetch_warning
+            if fetched_story_title:
+                story_title = fetched_story_title
+        elif site_info.config_name == "jobnib":
+            chapters, fetch_warning, total_chapter_count, fetched_story_title = _fetch_jobnib_chapters(story_url)
+            if fetch_warning:
+                warning = fetch_warning
+            if fetched_story_title:
+                story_title = fetched_story_title
+        elif site_info.config_name == "scribblehub":
+            chapters, fetch_warning, total_chapter_count, fetched_story_title = _fetch_scribblehub_chapters(story_url)
             if fetch_warning:
                 warning = fetch_warning
             if fetched_story_title:

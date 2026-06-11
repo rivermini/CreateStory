@@ -80,6 +80,56 @@ _INKITT_HEADERS = {
 }
 
 
+_SCRIBBLEHUB_SERIES_RE = re.compile(r"/series/(\d+)/([^/?#]+)", re.IGNORECASE)
+_SCRIBBLEHUB_CHAPTER_RE = re.compile(r"/read/(\d+)-([^/?#]+)/chapter/(\d+)", re.IGNORECASE)
+
+
+def _scribblehub_slug_from_url(url: str) -> Optional[str]:
+    path = urllib.parse.urlparse(url).path
+    match = _SCRIBBLEHUB_SERIES_RE.search(path)
+    if match:
+        return match.group(2)
+    match = _SCRIBBLEHUB_CHAPTER_RE.search(path)
+    if match:
+        return match.group(2)
+    return None
+
+
+def _fetch_scribblehub_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata]]:
+    spider = None
+    try:
+        from bs4 import BeautifulSoup
+        from spiders.scribblehub import ScribbleHubSpider
+
+        spider = ScribbleHubSpider(novel=url, limit=1)
+        story_url = spider._story_url_from_any_url(url)
+        html = spider._fetch_page_html(story_url)
+        soup = BeautifulSoup(html, "html.parser")
+        metadata = spider._extract_story_metadata(soup, story_url)
+    except Exception as exc:
+        logger.debug("[scribblehub] Metadata fetch failed for %s: %s", url, exc)
+        return None, None
+    finally:
+        if spider is not None and getattr(spider, "_browser", None) is not None:
+            try:
+                spider._browser.close()
+            except Exception:
+                pass
+
+    title = metadata.get("title")
+    author = metadata.get("author")
+    novel_meta = NovelMetadata(
+        title=title,
+        author=author,
+        authors=metadata.get("authors") or ([author] if author else None),
+        cover_url=metadata.get("cover_url"),
+        description=metadata.get("description"),
+        num_parts=metadata.get("num_parts"),
+        tags=metadata.get("tags") or [],
+    )
+    return title, novel_meta
+
+
 def _fetch_inkitt_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata]]:
     try:
         import json
@@ -273,6 +323,15 @@ class SiteService:
 
         elif site_info.config_name == "inkitt":
             story_title, novel_meta = _fetch_inkitt_metadata(url)
+
+        elif site_info.config_name == "jobnib":
+            story_title = slug.replace("-", " ").title() if slug else None
+
+        elif site_info.config_name == "scribblehub":
+            scribblehub_slug = _scribblehub_slug_from_url(url)
+            if scribblehub_slug:
+                slug = scribblehub_slug
+            story_title, novel_meta = _fetch_scribblehub_metadata(url)
 
         return SiteDetectResponse(
             site=SiteInfoResponse(

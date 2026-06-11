@@ -1,0 +1,32 @@
+site_name: ScribbleHub
+base_url: https://www.scribblehub.com
+
+mirror_domains:
+  - scribblehub.com
+  - www.scribblehub.com
+
+domains:
+  - www.scribblehub.com
+  - scribblehub.com
+
+story_url_pattern: "^https?://(?:www\\.)?scribblehub\\.com/(?:series/\\d+/[^/]+|read/\\d+-[^/]+/chapter/\\d+)/?"
+
+rate_limit: 1.5
+
+selectors:
+  novel_title: ".fic_title"
+  chapter_list: "a.toc_a[href*='/read/'][href*='/chapter/']"
+  chapter_body: "#chp_raw"
+  next_chapter: ".nextprev a[href*='/chapter/'], a[href*='/chapter/']"
+  cover_image: ".fic_image img, meta[property='og:image']"
+  author: ".auth_name_fic a, .auth_name_fic"
+
+promo_patterns:
+  - "Reading Options"
+  - "Table of Contents"
+  - "Login to Post Comment"
+
+spider_settings:
+  DOWNLOAD_DELAY: 1.5
+  AUTOTHROTTLE_ENABLED: true
+  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
