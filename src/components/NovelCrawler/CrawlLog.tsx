@@ -7,18 +7,18 @@ export interface CrawlLogProps {
   readonly isDark?: boolean;
 }
 
-const levelStylesDark: Record<string, string> = {
-  error: 'rgba(255,255,255,0.78)',
-  warning: 'rgba(255,255,255,0.62)',
-  info: 'rgba(255,255,255,0.62)',
-  debug: 'rgba(255,255,255,0.34)',
+const levelColorsDark: Record<string, { color: string; bg: string }> = {
+  error: { color: '#fca5a5', bg: 'rgba(239,68,68,0.08)' },
+  warning: { color: '#fcd34d', bg: 'rgba(245,158,11,0.08)' },
+  info: { color: '#93c5fd', bg: 'rgba(59,130,246,0.06)' },
+  debug: { color: 'rgba(255,255,255,0.34)', bg: 'rgba(255,255,255,0.015)' },
 };
 
-const levelStylesLight: Record<string, string> = {
-  error: 'rgba(17,17,17,0.78)',
-  warning: 'rgba(17,17,17,0.62)',
-  info: 'rgba(55,53,47,0.72)',
-  debug: 'rgba(55,53,47,0.42)',
+const levelColorsLight: Record<string, { color: string; bg: string }> = {
+  error: { color: '#dc2626', bg: 'rgba(220,38,38,0.07)' },
+  warning: { color: '#d97706', bg: 'rgba(217,119,6,0.07)' },
+  info: { color: '#2563eb', bg: 'rgba(37,99,235,0.06)' },
+  debug: { color: 'rgba(55,53,47,0.42)', bg: 'rgba(55,53,47,0.03)' },
 };
 
 export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps) {
@@ -40,11 +40,9 @@ export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps
   };
 
   const displayLines = lines.slice(-maxLines);
-  const levelStyles = isDark ? levelStylesDark : levelStylesLight;
+  const levelColors = isDark ? levelColorsDark : levelColorsLight;
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const panelBackground = isDark ? 'rgba(255,255,255,0.03)' : '#ffffff';
   const logBackground = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(55,53,47,0.03)';
-  const pageText = isDark ? 'rgba(255,255,255,0.72)' : 'rgba(55,53,47,0.72)';
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
 
@@ -71,16 +69,19 @@ export function CrawlLog({ lines, maxLines = 200, isDark = true }: CrawlLogProps
           <p className="text-sm italic" style={{ color: tertiaryText }}>Waiting for output...</p>
         ) : (
           <div className="space-y-1">
-            {displayLines.map((entry, index) => (
-              <div
-                key={`${entry.timestamp}-${index}`}
-                className="rounded-md px-2 py-1 font-mono text-[11px] leading-relaxed"
-                style={{ background: isDark ? 'rgba(255,255,255,0.025)' : panelBackground, color: levelStyles[entry.level] ?? levelStyles.info }}
-              >
-                <span style={{ color: tertiaryText }}>[{entry.timestamp}]</span>{' '}
-                <span style={{ color: levelStyles[entry.level] ?? pageText }}>{entry.message}</span>
-              </div>
-            ))}
+            {displayLines.map((entry, index) => {
+              const lc = levelColors[entry.level] ?? levelColors.info;
+              return (
+                <div
+                  key={`${entry.timestamp}-${index}`}
+                  className="rounded-md px-2 py-1 font-mono text-[11px] leading-relaxed"
+                  style={{ background: lc.bg, color: lc.color }}
+                >
+                  <span style={{ color: tertiaryText }}>[{entry.timestamp}]</span>{' '}
+                  {entry.message}
+                </div>
+              );
+            })}
           </div>
         )}
         <div ref={bottomRef} />

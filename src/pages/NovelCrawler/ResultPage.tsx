@@ -153,26 +153,41 @@ export function ResultPage({ themeMode }: ResultPageProps) {
   const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.08)';
   const strongSurface = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
   const strongSurfaceText = isDark ? '#111111' : '#ffffff';
-  const statusToneMap: Record<string, { text: string; dot: string }> = {
+  const statusToneMap: Record<string, { text: string; dot: string; chipBg: string; chipBorder: string; chipColor: string }> = {
     completed: {
       text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      dot: '#22c55e',
+      chipBg: 'rgba(34,197,94,0.12)',
+      chipBorder: 'rgba(34,197,94,0.3)',
+      chipColor: '#4ade80',
     },
     failed: {
       text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
-      dot: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)',
+      dot: '#f87171',
+      chipBg: 'rgba(239,68,68,0.12)',
+      chipBorder: 'rgba(239,68,68,0.3)',
+      chipColor: '#fca5a5',
     },
     cancelled: {
       text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
-      dot: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      dot: '#fbbf24',
+      chipBg: 'rgba(245,158,11,0.12)',
+      chipBorder: 'rgba(245,158,11,0.3)',
+      chipColor: '#fcd34d',
     },
     running: {
       text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      dot: '#60a5fa',
+      chipBg: 'rgba(59,130,246,0.12)',
+      chipBorder: 'rgba(59,130,246,0.3)',
+      chipColor: '#93c5fd',
     },
     idle: {
       text: secondaryText,
       dot: tertiaryText,
+      chipBg: mutedSurface,
+      chipBorder: panelBorder,
+      chipColor: secondaryText,
     },
   };
 
@@ -226,32 +241,6 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     running: 'Running',
   };
 
-  const statusChipStyle = () => {
-    const status = result.status;
-    if (status === 'running' || status === 'completed') {
-      return {
-        background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
-        color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-        border: `1px solid ${isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)'}`,
-      };
-    }
-    if (status === 'failed' || status === 'cancelled') {
-      return {
-        background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
-        color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
-        border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.1)'}`,
-      };
-    }
-    return {
-      background: mutedSurface,
-      color: secondaryText,
-      border: `1px solid ${panelBorder}`,
-    };
-  };
-
-  const meta = result.novel_metadata;
-  const nonCombinedFiles = files.filter((file) => file.filename !== combinedFilename);
-
   const handleDownload = (filename: string) => {
     const a = document.createElement('a');
     a.href = getDownloadUrl(result.crawl_id, filename);
@@ -270,6 +259,10 @@ export function ResultPage({ themeMode }: ResultPageProps) {
     a.click();
     a.remove();
   };
+
+  const st = statusToneMap[result.status] ?? statusToneMap.idle;
+  const meta = result.novel_metadata;
+  const nonCombinedFiles = files.filter((file) => file.filename !== combinedFilename);
 
   const otherSessions = sessions.filter((session) => session.crawl_id !== crawlId);
 
@@ -297,12 +290,12 @@ export function ResultPage({ themeMode }: ResultPageProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium"
-                  style={statusChipStyle()}
+                  style={{ background: st.chipBg, border: `1px solid ${st.chipBorder}`, color: st.chipColor }}
                 >
                   {result.status === 'running' && (
                     <span
-                      className="inline-block h-2 w-2 rounded-full"
-                      style={{ background: 'currentColor', animation: 'pulse 1.5s ease-in-out infinite' }}
+                      className="inline-block h-2 w-2 rounded-full animate-pulse"
+                      style={{ background: st.chipColor }}
                     />
                   )}
                   {result.status.charAt(0).toUpperCase() + result.status.slice(1)}
@@ -469,7 +462,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
                 )}
                 <p className="text-sm" style={{ color: secondaryText }}>
                   {result.spider_name || 'Unknown site'} ·{' '}
-                  <span style={{ color: statusToneMap[result.status]?.text ?? secondaryText }}>
+                  <span style={{ color: st.chipColor }}>
                     {statusLabels[result.status] ?? result.status}
                   </span>
                   {result.chapters_crawled > 0 && (
@@ -553,9 +546,9 @@ export function ResultPage({ themeMode }: ResultPageProps) {
               <div
                 className="mt-4 rounded-xl border px-4 py-3 text-sm"
                 style={{
-                  background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
-                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
-                  color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+                  background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(220,38,38,0.06)',
+                  borderColor: isDark ? 'rgba(239,68,68,0.3)' : 'rgba(220,38,38,0.2)',
+                  color: isDark ? '#fca5a5' : '#dc2626',
                 }}
               >
                 <strong>Error:</strong> {result.error_message}
@@ -691,14 +684,14 @@ function InlineChip({
 }) {
   const styles: Record<'strong' | 'soft' | 'neutral', { background: string; color: string; border: string }> = {
     strong: {
-      background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)',
-      color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-      border: isDark ? '1px solid rgba(255,255,255,0.14)' : '1px solid rgba(17,17,17,0.12)',
+      background: isDark ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.08)',
+      color: isDark ? '#4ade80' : '#16a34a',
+      border: isDark ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(34,197,94,0.25)',
     },
     soft: {
-      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
-      color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
-      border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(17,17,17,0.1)',
+      background: isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)',
+      color: isDark ? '#fbbf24' : '#d97706',
+      border: isDark ? '1px solid rgba(245,158,11,0.3)' : '1px solid rgba(245,158,11,0.25)',
     },
     neutral: {
       background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)',

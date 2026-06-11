@@ -36,24 +36,17 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
   const target = chaptersTotal > 0 ? chaptersTotal : 'N/A';
   const duration = formatDuration(startedAt, finishedAt);
 
-  const statusDotMap: Record<string, string> = {
-    running: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-    completed: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-    failed: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)',
-    cancelled: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
-    idle: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
+  const statusColorMap: Record<string, { dot: string; text: string; dotBg?: string }> = {
+    running: { dot: '#4ade80', text: isDark ? 'rgba(255,255,255,0.92)' : '#111111', dotBg: 'rgba(74,222,128,0.15)' },
+    completed: { dot: '#22c55e', text: isDark ? 'rgba(255,255,255,0.92)' : '#111111', dotBg: 'rgba(34,197,94,0.15)' },
+    failed: { dot: '#f87171', text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)', dotBg: 'rgba(248,113,113,0.15)' },
+    cancelled: { dot: '#fbbf24', text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)', dotBg: 'rgba(251,191,36,0.15)' },
+    idle: { dot: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)', text: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' },
   };
 
-  const statusTextMap: Record<string, string> = {
-    running: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-    completed: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-    failed: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
-    cancelled: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
-    idle: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)',
-  };
-
-  const dot = statusDotMap[status] ?? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)');
-  const text = statusTextMap[status] ?? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)');
+  const dot = statusColorMap[status]?.dot ?? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)');
+  const text = statusColorMap[status]?.text ?? (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)');
+  const dotBg = statusColorMap[status]?.dotBg;
   const label = status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
@@ -77,6 +70,7 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
             <span style={{ color: text }}>{label}</span>
           </span>
         )}
+        dotBg={dotBg}
         isDark={isDark}
       />
       <StatCard
@@ -89,17 +83,18 @@ export function StatsPanel({ chaptersCrawled, chaptersTotal, status, startedAt, 
   );
 }
 
-function StatCard({ label, value, sub, isDark }: {
+function StatCard({ label, value, sub, dotBg, isDark }: {
   readonly label: string;
   readonly value: ReactNode;
   readonly sub?: string;
+  readonly dotBg?: string;
   readonly isDark: boolean;
 }) {
   return (
     <div
       className="rounded-xl border px-3.5 py-3"
       style={{
-        background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,17,17,0.04)',
+        background: dotBg ?? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,17,17,0.04)'),
         borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)',
       }}
     >

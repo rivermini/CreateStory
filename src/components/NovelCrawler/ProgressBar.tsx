@@ -13,13 +13,21 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
   const pctStr = (pct * 100).toFixed(0);
   const trackBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)';
   const trackBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const progressFill = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
-  const mutedFill = isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)';
+
+  const stateColors = {
+    running: { fill: '#3b82f6', text: '#93c5fd', muted: '#60a5fa' },
+    completed: { fill: '#22c55e', text: '#86efac', muted: '#4ade80' },
+    failed: { fill: '#ef4444', text: '#fca5a5', muted: '#f87171' },
+    cancelled: { fill: '#f59e0b', text: '#fcd34d', muted: '#fbbf24' },
+  };
+  const colorScheme = stateColors[status as keyof typeof stateColors] ?? stateColors.running;
+  const progressFill = isDark ? colorScheme.fill : colorScheme.fill;
+  const progressText = isDark ? colorScheme.text : colorScheme.text;
 
   if (status === 'completed') {
     return (
       <div className="space-y-1.5">
-        <div className="flex items-center gap-2 text-sm font-medium" style={{ color: progressFill }}>
+        <div className="flex items-center gap-2 text-sm font-medium" style={{ color: progressText }}>
           <Icon icon={appIcons.checkCircle} className="h-5 w-5" />
           Crawl complete — {chaptersCrawled} chapter(s) scraped
         </div>
@@ -33,12 +41,12 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
   if (status === 'failed') {
     return (
       <div className="space-y-1.5">
-        <div className="flex items-center gap-2 text-sm font-medium" style={{ color: mutedFill }}>
+        <div className="flex items-center gap-2 text-sm font-medium" style={{ color: progressText }}>
           <Icon icon={appIcons.error} className="h-5 w-5" />
           Crawl failed
         </div>
         <div className="h-2.5 overflow-hidden rounded-full border" style={{ background: trackBackground, borderColor: trackBorder }}>
-          <div className="h-full rounded-full" style={{ width: `${pctStr}%`, background: mutedFill }} />
+          <div className="h-full rounded-full" style={{ width: `${pctStr}%`, background: colorScheme.muted }} />
         </div>
       </div>
     );
@@ -47,12 +55,12 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
   if (status === 'cancelled') {
     return (
       <div className="space-y-1.5">
-        <div className="flex items-center gap-2 text-sm font-medium" style={{ color: mutedFill }}>
+        <div className="flex items-center gap-2 text-sm font-medium" style={{ color: progressText }}>
           <Icon icon={appIcons.stop} className="h-5 w-5" />
           Crawl cancelled — {chaptersCrawled} chapter(s) scraped
         </div>
         <div className="h-2.5 overflow-hidden rounded-full border" style={{ background: trackBackground, borderColor: trackBorder }}>
-          <div className="h-full rounded-full" style={{ width: `${pctStr}%`, background: mutedFill }} />
+          <div className="h-full rounded-full" style={{ width: `${pctStr}%`, background: colorScheme.muted }} />
         </div>
       </div>
     );
@@ -61,11 +69,11 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-sm">
-        <span style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)' }}>
+        <span style={{ color: progressText }}>
           Chapter {chaptersCrawled}
           {chaptersTotal > 0 ? ` / ${chaptersTotal}` : ''}
         </span>
-        <span style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }}>{pctStr}%</span>
+        <span style={{ color: progressText, opacity: 0.7 }}>{pctStr}%</span>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full border" style={{ background: trackBackground, borderColor: trackBorder }}>
         <div
@@ -74,11 +82,11 @@ export function ProgressBar({ chaptersCrawled, chaptersTotal, currentTitle, stat
         />
       </div>
       {currentTitle && (
-        <p className="truncate text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }}>
+        <p className="truncate text-xs" style={{ color: progressText, opacity: 0.7 }}>
           Now: <span style={{ color: progressFill }}>{currentTitle}</span>
         </p>
       )}
-      {!currentTitle && <p className="text-xs" style={{ color: progressFill }} />}
+      {!currentTitle && <p className="text-xs" style={{ color: progressText }} />}
     </div>
   );
 }

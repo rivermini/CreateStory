@@ -44,6 +44,7 @@ const NAV_ICONS = {
     '/drive-sync/history': 'syncHistory',
     '/drive-sync/content-update': 'contentUpdate',
     '/drive-sync/cover-update': 'image',
+    '/drive-sync/metadata-update': 'info',
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
     '/supported-sites': 'supportedSites',
@@ -62,6 +63,7 @@ const NAV_ITEMS_AUDIO: NavItem[] = [
 const NAV_ITEMS_BEDREADS: NavItem[] = [
     { to: '/drive-sync', label: 'Drive Sync', iconKey: NAV_ICONS['/drive-sync'] },
     { to: '/drive-sync/cover-update', label: 'Cover Update', iconKey: NAV_ICONS['/drive-sync/cover-update'] },
+    { to: '/drive-sync/metadata-update', label: 'Metadata Update', iconKey: NAV_ICONS['/drive-sync/metadata-update'] },
     { to: '/drive-sync/content-update', label: 'Content Update', iconKey: NAV_ICONS['/drive-sync/content-update'] },
     { to: '/drive-sync/history', label: 'Sync History', iconKey: NAV_ICONS['/drive-sync/history'] },
 ];

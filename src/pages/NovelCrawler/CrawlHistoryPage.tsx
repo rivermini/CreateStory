@@ -60,30 +60,40 @@ function SessionCard({
   selectedSurface,
   navigate,
 }: SessionCardProps) {
-  const statusToneMap: Record<string, { dot: string; text: string }> = {
+  const statusToneMap: Record<string, { dot: string; text: string; badgeBg: string; badgeColor: string }> = {
     completed: {
-      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      dot: '#22c55e',
       text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      badgeBg: 'rgba(34,197,94,0.12)',
+      badgeColor: '#4ade80',
     },
     failed: {
-      dot: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)',
+      dot: '#f87171',
       text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      badgeBg: 'rgba(239,68,68,0.12)',
+      badgeColor: '#fca5a5',
     },
     cancelled: {
-      dot: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      dot: '#fbbf24',
       text: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)',
+      badgeBg: 'rgba(245,158,11,0.12)',
+      badgeColor: '#fcd34d',
     },
     running: {
-      dot: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      dot: '#60a5fa',
       text: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
+      badgeBg: 'rgba(59,130,246,0.12)',
+      badgeColor: '#93c5fd',
     },
     idle: {
       dot: tertiaryText,
       text: secondaryText,
+      badgeBg: mutedSurface,
+      badgeColor: secondaryText,
     },
   };
 
-  const tone = statusToneMap[session.status] ?? { dot: tertiaryText, text: secondaryText };
+  const tone = statusToneMap[session.status] ?? { dot: tertiaryText, text: secondaryText, badgeBg: mutedSurface, badgeColor: secondaryText };
   const label = session.status.charAt(0).toUpperCase() + session.status.slice(1);
   const hasCombined = !!(session.combined_file || session.combined_txt_file);
   const hasFiles = session.chapters_crawled > 0;
@@ -131,7 +141,7 @@ function SessionCard({
               <div className="h-2.5 w-2.5 rounded-full" style={{ background: tone.dot }} />
               <span
                 className="rounded-md px-2 py-0.5 text-[11px] font-medium"
-                style={{ background: mutedSurface, color: secondaryText }}
+                style={{ background: tone.badgeBg, color: tone.badgeColor }}
               >
                 {label}
               </span>
@@ -195,7 +205,7 @@ function SessionCard({
                 <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: mutedSurface }}>
                   <div
                     className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${progress}%`, background: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}
+                    style={{ width: `${progress}%`, background: '#3b82f6' }}
                   />
                 </div>
               </div>
@@ -275,7 +285,7 @@ function SessionCard({
                 handleRetry();
               }}
               className="rounded-md px-3 py-2 text-sm transition-colors"
-              style={{ background: isDark ? 'rgba(255,255,255,0.92)' : '#111111', color: isDark ? '#111111' : '#ffffff' }}
+              style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', color: isDark ? '#93c5fd' : '#2563eb' }}
               title="Retry this crawl with the same URL"
             >
               Retry crawl
@@ -461,11 +471,11 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
   const selectedSurface = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)';
   const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.08)';
 
-  const statusOptions: Array<{ value: typeof filter; label: string }> = [
+  const statusOptions: Array<{ value: typeof filter; label: string; color?: string; bg?: string }> = [
     { value: 'all', label: `All (${filteredCounts.all})` },
-    { value: 'running', label: `Running (${filteredCounts.running})` },
-    { value: 'completed', label: `Completed (${filteredCounts.completed})` },
-    { value: 'failed', label: `Failed (${filteredCounts.failed})` },
+    { value: 'running', label: `Running (${filteredCounts.running})`, color: '#93c5fd', bg: 'rgba(59,130,246,0.12)' },
+    { value: 'completed', label: `Completed (${filteredCounts.completed})`, color: '#4ade80', bg: 'rgba(34,197,94,0.12)' },
+    { value: 'failed', label: `Failed (${filteredCounts.failed})`, color: '#fca5a5', bg: 'rgba(239,68,68,0.12)' },
   ];
 
   const timeRangeOptions: Array<{ value: typeof timeRange; label: string }> = [
@@ -606,7 +616,11 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
                   }}
                   disabled={downloadingAllCombined || !hasCombinedFiles}
                   className="rounded-md border px-3 py-2 text-sm transition-colors disabled:opacity-50"
-                  style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                  style={{
+                    borderColor: panelBorder,
+                    background: hasCombinedFiles ? 'rgba(34,197,94,0.08)' : mutedSurface,
+                    color: hasCombinedFiles ? '#4ade80' : secondaryText,
+                  }}
                 >
                   {downloadingAllCombined ? 'Zipping…' : 'All combined'}
                 </button>
@@ -620,8 +634,8 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
                   onClick={() => setFilter(option.value)}
                   className="rounded-md px-3 py-1.5 text-sm transition-colors"
                   style={{
-                    background: filter === option.value ? activeSurface : mutedSurface,
-                    color: filter === option.value ? pageText : secondaryText,
+                    background: filter === option.value ? (option.bg ?? activeSurface) : mutedSurface,
+                    color: filter === option.value ? (option.color ?? pageText) : secondaryText,
                     border: `1px solid ${filter === option.value ? panelBorder : 'transparent'}`,
                   }}
                 >
@@ -678,19 +692,19 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
                   >
                     {allVisibleSelected ? 'Unselect visible' : 'Select visible'}
                   </button>
-                  <button
-                    onClick={handleDeleteClick}
-                    disabled={selectedCrawlIds.size === 0 || isDeleting}
-                    className="rounded-md px-3 py-2 text-sm transition-opacity"
-                    style={{
-                      background: mutedSurface,
-                      color: secondaryText,
-                      border: `1px solid ${panelBorder}`,
-                      opacity: selectedCrawlIds.size === 0 || isDeleting ? 0.5 : 1,
-                    }}
-                  >
-                    {isDeleting ? 'Deleting…' : `Delete (${selectedCrawlIds.size})`}
-                  </button>
+              <button
+                onClick={handleDeleteClick}
+                disabled={selectedCrawlIds.size === 0 || isDeleting}
+                className="rounded-md px-3 py-2 text-sm transition-opacity"
+                style={{
+                  background: selectedCrawlIds.size > 0 ? 'rgba(239,68,68,0.12)' : mutedSurface,
+                  color: selectedCrawlIds.size > 0 ? '#f87171' : secondaryText,
+                  border: `1px solid ${selectedCrawlIds.size > 0 ? 'rgba(239,68,68,0.3)' : panelBorder}`,
+                  opacity: selectedCrawlIds.size === 0 || isDeleting ? 0.5 : 1,
+                }}
+              >
+                {isDeleting ? 'Deleting…' : `Delete (${selectedCrawlIds.size})`}
+              </button>
                   <button
                     onClick={toggleDeleteMode}
                     className="rounded-md border px-3 py-2 text-sm"
@@ -707,7 +721,7 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
                 <button
                   onClick={toggleDeleteMode}
                   className="rounded-md border px-3 py-2 text-sm transition-colors"
-                  style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
+                  style={{ borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#f87171' }}
                 >
                   Delete mode
                 </button>

@@ -666,6 +666,67 @@ export interface CoverUpdateUploadResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Drive Sync — Metadata Update
+// ---------------------------------------------------------------------------
+
+export interface MetadataFieldDifference {
+  field: 'category' | 'free_chapters_count' | 'push' | 'synopsis' | 'tags';
+  file_name?: string | null;
+  folder_value: unknown;
+  server_value: unknown;
+}
+
+export interface MetadataFieldDetail {
+  field: MetadataFieldDifference['field'];
+  file_name?: string | null;
+  folder_value: unknown;
+  server_value: unknown;
+  is_different: boolean;
+}
+
+export interface MetadataStoryValues {
+  main_category: string | null;
+  sub_categories: string[];
+  free_chapters_count: number;
+  push_title: string | null;
+  push_content: string | null;
+  synopsis: string | null;
+  tags: string[];
+}
+
+export interface MetadataFolderValues {
+  main_category: string | null;
+  sub_category: string | null;
+  free_chapters_count: number | null;
+  push_title: string | null;
+  push_content: string | null;
+  synopsis: string | null;
+  tags: string[];
+}
+
+export interface MetadataUpdateEntry {
+  story_id: string | null;
+  story_title: string;
+  folder_id: string;
+  folder_name: string;
+  server: MetadataStoryValues;
+  folder_values: MetadataFolderValues;
+  differences: MetadataFieldDifference[];
+  status: 'can_update' | 'all_match' | 'no_server_match';
+}
+
+export interface MetadataCheckAllResponse {
+  can_update: MetadataUpdateEntry[];
+  all_match: MetadataUpdateEntry[];
+  no_server_match: MetadataUpdateEntry[];
+}
+
+export interface MetadataUpdateResponse {
+  success: boolean;
+  message: string;
+}
+
+// ---------------------------------------------------------------------------
 // TTS — Kokoro
 // ---------------------------------------------------------------------------
 
