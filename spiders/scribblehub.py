@@ -58,10 +58,10 @@ _UC_START_LOCK_FILE = Path(tempfile.gettempdir()) / "scribblehub_uc_start.lock"
 class ScribbleHubSpider(BaseSpider):
     name = "scribblehub"
     config_name = "scribblehub"
-    download_delay = 1.5
+    download_delay = 0.35
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 1.5,
+        "DOWNLOAD_DELAY": 0.35,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
     }
 
@@ -95,8 +95,10 @@ class ScribbleHubSpider(BaseSpider):
             raise ValueError(f"Could not extract ScribbleHub story ID from URL: {self._start_url}")
 
         self.novel_slug = self._story_slug_from_url(self._start_url)
+        self.download_delay = self._configured_download_delay()
         self._chapters_crawled = 0
         self._seen_urls: set[str] = set()
+        self._html_cache: dict[str, str] = {}
         self._browser: _ScribbleHubBrowser | None = None
         self._session = requests.Session()
         self._session.headers.update(self._headers())
@@ -180,6 +182,16 @@ class ScribbleHubSpider(BaseSpider):
             "Upgrade-Insecure-Requests": "1",
         }
 
+    def _configured_download_delay(self) -> float:
+        raw = os.getenv("SCRIBBLEHUB_DOWNLOAD_DELAY")
+        if raw is None:
+            return self.download_delay
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            self.logger.warning("Invalid SCRIBBLEHUB_DOWNLOAD_DELAY '%s' - using %.2fs.", raw, self.download_delay)
+            return self.download_delay
+
     def _env_flag(self, name: str) -> bool | None:
         value = os.environ.get(name)
         if value is None:
@@ -188,9 +200,13 @@ class ScribbleHubSpider(BaseSpider):
 
     def _fetch_page_html(self, url: str, timeout: int = 30) -> str:
         url = self._normalize_url(url, keep_query=True)
+        cached = self._html_cache.get(url)
+        if cached is not None:
+            return cached
         try:
             response = self._session.get(url, timeout=timeout)
             if response.status_code == 200 and not self._is_cloudflare_challenge(response.text):
+                self._html_cache[url] = response.text
                 return response.text
             self.logger.info(
                 "[scribblehub] Requests fetch returned HTTP %s/challenge for %s; retrying with browser.",
@@ -212,6 +228,7 @@ class ScribbleHubSpider(BaseSpider):
                 "[scribblehub] Cloudflare challenge did not clear. "
                 "Open ScribbleHub once in the crawler browser profile and retry."
             )
+        self._html_cache[url] = html
         return html
 
     def _select_chapters_from_story(
@@ -235,6 +252,26 @@ class ScribbleHubSpider(BaseSpider):
 
         if self._is_chapter_url(start_url):
             start_chapter_id = self._chapter_id_from_url(start_url)
+            direct_number, direct_title = self._chapter_title_from_direct_url(start_url)
+            if direct_number:
+                if self.limit <= 1:
+                    return [{
+                        "chapter_number": direct_number,
+                        "title": direct_title or f"Chapter {direct_number}",
+                        "url": start_url,
+                        "chapter_id": start_chapter_id or "",
+                    }]
+
+                target_ordinals = set(range(direct_number, direct_number + self.limit))
+                links = self._collect_chapter_links(
+                    story_soup=story_soup,
+                    story_url=story_url,
+                    target_ordinals=target_ordinals,
+                    fetch_all=False,
+                )
+                if links:
+                    return [link for link in links if int(link["chapter_number"]) in target_ordinals][:self.limit]
+
             links = self._collect_chapter_links(
                 story_soup=story_soup,
                 story_url=story_url,

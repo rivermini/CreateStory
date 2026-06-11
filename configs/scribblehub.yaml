@@ -11,7 +11,7 @@ domains:
 
 story_url_pattern: "^https?://(?:www\\.)?scribblehub\\.com/(?:series/\\d+/[^/]+|read/\\d+-[^/]+/chapter/\\d+)/?"
 
-rate_limit: 1.5
+rate_limit: 0.35
 
 selectors:
   novel_title: ".fic_title"
@@ -27,6 +27,6 @@ promo_patterns:
   - "Login to Post Comment"
 
 spider_settings:
-  DOWNLOAD_DELAY: 1.5
+  DOWNLOAD_DELAY: 0.35
   AUTOTHROTTLE_ENABLED: true
   USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"

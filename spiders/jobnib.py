@@ -7,6 +7,7 @@ Supports:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ import shutil
 import string
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.parse
 from pathlib import Path
@@ -48,11 +50,11 @@ _JOBNIB_USER_AGENT = (
 class JobnibSpider(BaseSpider):
     name = "jobnib"
     config_name = "jobnib"
-    download_delay = 1.0
+    download_delay = 0.0
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 1.0,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
+        "DOWNLOAD_DELAY": 0.0,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 8,
     }
 
     def __init__(self, *args, novel: str = "", limit: int = 1, chapter_range: str = "", **kwargs):
@@ -76,6 +78,10 @@ class JobnibSpider(BaseSpider):
             raise ValueError("Spider argument 'novel' is required (a full Jobnib story or chapter URL).")
 
         cfg = load_site_config(self.config_name)
+        self._config = cfg
+        self._submit_delay = self._float_setting(os.getenv("JOBNIB_DELAY"), cfg.get("rate_limit"), 0.0)
+        self.download_delay = self._submit_delay
+        self._concurrency = self._resolve_concurrency(cfg)
         self.selector_config: SelectorConfig = self.build_selector_config(cfg)
         self._promo_patterns = build_promo_patterns(cfg.get("promo_patterns", []))
         self.novel_slug = self._story_slug_from_url(self.start_urls[0])
@@ -84,6 +90,8 @@ class JobnibSpider(BaseSpider):
         self._chapters_crawled = 0
         self._seen_urls: set[str] = set()
         self._browser: _JobnibBrowser | None = None
+        self._seen_lock = threading.Lock()
+        self._browser_lock = threading.Lock()
 
     async def start(self):
         start_url = self._normalize_url(self.start_urls[0])
@@ -115,21 +123,79 @@ class JobnibSpider(BaseSpider):
         self.limit = len(selected)
         self.logger.info("[jobnib/story=%s] found %d selected chapter(s).", self.novel_slug, len(selected))
 
-        for index, chapter_ref in enumerate(selected):
-            if index > 0:
-                time.sleep(self.download_delay)
-            chapter = self._crawl_chapter(chapter_ref, include_metadata=index == 0)
-            if chapter is None:
-                continue
-            self._chapters_crawled += 1
-            self.logger.info(
-                "[%d/%d] Crawled chapter %d: %s",
-                self._chapters_crawled,
-                self.limit,
-                chapter.chapter_number,
-                chapter.title or "(untitled)",
-            )
-            yield chapter
+        workers = min(self._concurrency, len(selected))
+        if workers <= 1:
+            for index, chapter_ref in enumerate(selected):
+                if index > 0 and self._submit_delay > 0:
+                    time.sleep(self._submit_delay)
+                chapter = self._crawl_chapter(chapter_ref, include_metadata=index == 0)
+                if chapter is None:
+                    continue
+                self._log_crawled_chapter(chapter)
+                yield chapter
+            return
+
+        self.logger.info(
+            "[jobnib] Crawling with %d worker(s), submit delay %.2fs.",
+            workers,
+            self._submit_delay,
+        )
+        executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="jobnib")
+        futures = {}
+        try:
+            for index, chapter_ref in enumerate(selected):
+                if index > 0 and self._submit_delay > 0:
+                    time.sleep(self._submit_delay)
+                future = executor.submit(self._crawl_chapter, chapter_ref, index == 0)
+                futures[future] = chapter_ref
+
+            for future in as_completed(futures):
+                chapter_ref = futures[future]
+                try:
+                    chapter = future.result()
+                except CloseSpider:
+                    for pending in futures:
+                        pending.cancel()
+                    raise
+                except Exception as exc:
+                    for pending in futures:
+                        pending.cancel()
+                    raise CloseSpider(
+                        f"[jobnib] Failed while crawling chapter {chapter_ref.get('chapter_number')}: {exc}"
+                    ) from exc
+
+                if chapter is None:
+                    continue
+                self._log_crawled_chapter(chapter)
+                yield chapter
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    def _float_setting(self, raw: Any, fallback: Any, default: float) -> float:
+        value = raw if raw is not None else fallback
+        if value is None:
+            return default
+        try:
+            return max(0.0, float(value))
+        except (TypeError, ValueError):
+            return default
+
+    def _resolve_concurrency(self, config: dict) -> int:
+        raw = os.getenv("JOBNIB_CONCURRENCY", config.get("concurrency", 6))
+        try:
+            return max(1, min(16, int(raw)))
+        except (TypeError, ValueError):
+            return 6
+
+    def _log_crawled_chapter(self, chapter: Chapter) -> None:
+        self._chapters_crawled += 1
+        self.logger.info(
+            "[%d/%d] Crawled chapter %d: %s",
+            self._chapters_crawled,
+            self.limit,
+            chapter.chapter_number,
+            chapter.title or "(untitled)",
+        )
 
     def build_selector_config(self, config: dict) -> SelectorConfig:
         selectors = config.get("selectors", {})
@@ -180,9 +246,10 @@ class JobnibSpider(BaseSpider):
 
     def _crawl_chapter(self, chapter_ref: dict[str, Any], include_metadata: bool) -> Chapter | None:
         chapter_url = self._normalize_url(chapter_ref["url"])
-        if chapter_url in self._seen_urls:
-            return None
-        self._seen_urls.add(chapter_url)
+        with self._seen_lock:
+            if chapter_url in self._seen_urls:
+                return None
+            self._seen_urls.add(chapter_url)
 
         chapter_number = int(chapter_ref["chapter_number"])
         html = self._fetch_page_html(chapter_url)
@@ -239,7 +306,8 @@ class JobnibSpider(BaseSpider):
             self.logger.info("[jobnib] AJAX unlock returned %s content; falling back to browser.", status)
         except Exception as exc:
             self.logger.info("[jobnib] AJAX unlock failed for %s: %s; falling back to browser.", chapter_url, exc)
-        return self._get_browser().unlock_chapter(chapter_url, timeout=90)
+        with self._browser_lock:
+            return self._get_browser().unlock_chapter(chapter_url, timeout=90)
 
     def _fetch_chapter_segments_with_requests(self, chapter_url: str, shell_html: str) -> str:
         import requests

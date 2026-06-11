@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import urllib.parse
 from typing import Optional
@@ -93,6 +94,16 @@ def _scribblehub_slug_from_url(url: str) -> Optional[str]:
     if match:
         return match.group(2)
     return None
+
+
+def _title_from_slug(slug: str | None) -> Optional[str]:
+    if not slug:
+        return None
+    return re.sub(r"[-_]+", " ", slug).strip().title() or None
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _fetch_scribblehub_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata]]:
@@ -331,7 +342,11 @@ class SiteService:
             scribblehub_slug = _scribblehub_slug_from_url(url)
             if scribblehub_slug:
                 slug = scribblehub_slug
-            story_title, novel_meta = _fetch_scribblehub_metadata(url)
+            story_title = _title_from_slug(slug)
+            if _env_flag("SCRIBBLEHUB_DETECT_METADATA"):
+                fetched_title, novel_meta = _fetch_scribblehub_metadata(url)
+                if fetched_title:
+                    story_title = fetched_title
 
         return SiteDetectResponse(
             site=SiteInfoResponse(

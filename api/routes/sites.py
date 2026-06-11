@@ -447,22 +447,38 @@ def _fetch_scribblehub_chapters(story_url: str, timeout: int = 75) -> tuple[list
 
         if spider._is_chapter_url(normalized_url):
             start_chapter_id = spider._chapter_id_from_url(normalized_url)
-            links = spider._collect_chapter_links(
-                story_soup=soup,
-                story_url=series_url,
-                target_chapter_id=start_chapter_id,
-                fetch_all=True,
-            )
-            start_ordinal = spider._ordinal_for_chapter_id(links, start_chapter_id)
-            if start_ordinal is None:
-                _, direct_title = spider._chapter_title_from_direct_url(normalized_url)
-                links = [{
-                    "chapter_number": 1,
-                    "title": direct_title or "Chapter 1",
-                    "url": normalized_url,
-                }]
+            direct_number, direct_title = spider._chapter_title_from_direct_url(normalized_url)
+            if direct_number:
+                end_ordinal = min(total_count or direct_number + 49, direct_number + 49)
+                target_ordinals = set(range(direct_number, end_ordinal + 1))
+                links = spider._collect_chapter_links(
+                    story_soup=soup,
+                    story_url=series_url,
+                    target_ordinals=target_ordinals,
+                    fetch_all=False,
+                )
+                if not links:
+                    links = [{
+                        "chapter_number": direct_number,
+                        "title": direct_title or f"Chapter {direct_number}",
+                        "url": normalized_url,
+                    }]
             else:
-                links = [link for link in links if int(link["chapter_number"]) >= start_ordinal]
+                links = spider._collect_chapter_links(
+                    story_soup=soup,
+                    story_url=series_url,
+                    target_chapter_id=start_chapter_id,
+                    fetch_all=True,
+                )
+                start_ordinal = spider._ordinal_for_chapter_id(links, start_chapter_id)
+                if start_ordinal is None:
+                    links = [{
+                        "chapter_number": 1,
+                        "title": direct_title or "Chapter 1",
+                        "url": normalized_url,
+                    }]
+                else:
+                    links = [link for link in links if int(link["chapter_number"]) >= start_ordinal]
         else:
             max_entries = min(total_count or 50, 50)
             links = spider._collect_chapter_links(
