@@ -16,6 +16,8 @@ load_dotenv(_project_root / ".env")
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+APP_TITLE = "AutoAudio API"
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -38,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AutoAudio API",
+    title=APP_TITLE,
     description=(
         "Auto-audio orchestration microservice. "
         "Discovers stories with missing audio and auto-generates TTS via BedReadVoices, "
@@ -61,13 +63,13 @@ app.include_router(auto_audio.router)
 
 @app.get("/", tags=["Health"])
 def root() -> dict:
-    return {"status": "ok", "service": "AutoAudio API", "version": "1.0.0"}
+    return {"status": "ok", "service": APP_TITLE, "version": "1.0.0"}
 
 
 @app.get("/api", tags=["Health"])
 def api_info() -> dict:
     return {
-        "title": "AutoAudio API",
+        "title": APP_TITLE,
         "version": "1.0.0",
         "features": ["auto-audio-orchestration"],
         "docs_url": "/docs",
