@@ -240,15 +240,6 @@ class CoverUpdateMixin:
                 no_cover1.append(entry)
                 continue
 
-            if history_status == "no_cover1_file":
-                entry = {
-                    **entry_base,
-                    "status": "no_cover1_file",
-                    "last_updated": history.get("last_updated") if history else None,
-                }
-                no_cover1.append(entry)
-                continue
-
             if server_story is None:
                 entry = {**entry_base, "status": "no_server_match", "last_updated": history.get("last_updated") if history else None}
                 no_server_match.append(entry)
