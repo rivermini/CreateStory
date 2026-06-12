@@ -67,9 +67,13 @@ export function MetadataUpdateTabContent({
     if (bulkUpdating || availableUpdateEntries.length === 0) return;
     setBulkUpdating(true);
     try {
-      await Promise.allSettled(
-        availableUpdateEntries.map((entry) => onUpdateMetadata(entry.folder_id, entry.story_id!, entry.differences)),
-      );
+      const batchSize = 20;
+      for (let i = 0; i < availableUpdateEntries.length; i += batchSize) {
+        const batch = availableUpdateEntries.slice(i, i + batchSize);
+        await Promise.allSettled(
+          batch.map((entry) => onUpdateMetadata(entry.folder_id, entry.story_id!, entry.differences)),
+        );
+      }
     } finally {
       setBulkUpdating(false);
     }
@@ -493,10 +497,10 @@ function formatDetailValue(field: string, value: unknown): string {
   }
 
   if (field === 'push' && typeof value === 'object') {
-    const push = value as { push_title?: string | null; push_content?: string | null };
+    const push = value as { title?: string | null; content?: string | null };
     const rows = [
-      push.push_title ? `Title: ${push.push_title}` : null,
-      push.push_content ? `Content: ${push.push_content}` : null,
+      push.title ? `Title: ${push.title}` : null,
+      push.content ? `Content: ${push.content}` : null,
     ].filter(Boolean);
     return rows.join('\n') || '-';
   }
