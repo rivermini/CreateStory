@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Optional
 
@@ -99,6 +100,21 @@ def _name_to_category_id(name: str | None) -> str | None:
     if not name:
         return None
     return _CATEGORY_NAME_TO_ID.get(name.strip().lower())
+
+
+def _extract_missing_tags(error_message: str) -> list[str]:
+    """Extract unknown tag names from a main-BE 'Tags do not exist: …' JSON error response."""
+    try:
+        body = json.loads(error_message)
+        msg = body.get("message", "")
+    except Exception:
+        msg = error_message
+
+    tag_part = str(msg).split("Tags do not exist:", 1)
+    if len(tag_part) < 2:
+        return []
+    raw = tag_part[1].strip().strip('"}').strip()
+    return [t.strip() for t in raw.split(",") if t.strip()]
 
 
 def _build_put_payload(differences: list[dict]) -> dict:
@@ -230,6 +246,7 @@ async def update_metadata(folder_id: str, story_id: str, body: MetadataUpdateReq
     PUT story metadata fields to the main BE.
     The body contains the differences to apply; this endpoint resolves them into a
     single PUT request to /api/v1/story/{story_id}.
+    If the main BE rejects unknown tags, those tags are stripped and the request is retried.
     """
     service = get_drive_sync_service()
     config = service.get_config()
@@ -262,10 +279,29 @@ async def update_metadata(folder_id: str, story_id: str, body: MetadataUpdateReq
             if resp.status_code in (200, 201):
                 logger.info("Metadata update success for story %s: %s", story_id, list(payload.keys()))
                 return MetadataUpdateResponse(success=True, message=f"Metadata updated: {', '.join(payload.keys())}.")
-            else:
-                detail = resp.text[:300]
-                logger.warning("Metadata update failed for %s HTTP %d: %s", story_id, resp.status_code, detail)
-                return MetadataUpdateResponse(success=False, message=f"HTTP {resp.status_code}: {detail}")
+
+            if resp.status_code == 400:
+                error_body = resp.text[:500]
+                if "Tags do not exist:" in error_body or "tags do not exist" in error_body.lower():
+                    missing = _extract_missing_tags(error_body)
+                    logger.info("Tags not found on main BE for story %s: %s — retrying without tags.", story_id, missing)
+
+                    if "tags" not in payload:
+                        return MetadataUpdateResponse(success=False, message=f"HTTP 400: {error_body}")
+
+                    payload = {k: v for k, v in payload.items() if k != "tags"}
+                    resp = client.put(url, content=service._json_body(payload), headers=headers)
+                    if resp.status_code in (200, 201):
+                        logger.info("Metadata update (tags-fallback) success for story %s.", story_id)
+                        return MetadataUpdateResponse(
+                            success=True,
+                            message=f"Metadata updated (tags skipped: {', '.join(missing)}): {', '.join(payload.keys())}.",
+                        )
+                    return MetadataUpdateResponse(success=False, message=f"HTTP {resp.status_code}: {resp.text[:300]}")
+
+            detail = resp.text[:300]
+            logger.warning("Metadata update failed for %s HTTP %d: %s", story_id, resp.status_code, detail)
+            return MetadataUpdateResponse(success=False, message=f"HTTP {resp.status_code}: {detail}")
     except httpx.HTTPStatusError as exc:
         logger.warning("Metadata update HTTP error for %s: %s", story_id, exc)
         return MetadataUpdateResponse(success=False, message=f"HTTP error: {exc.response.status_code}")

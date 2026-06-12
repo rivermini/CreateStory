@@ -933,3 +933,76 @@ async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUp
         return ContentUpdateChapterResponse(success=False, message=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Chapter update failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Batch content update models
+# ---------------------------------------------------------------------------
+
+class BatchChapterUpdateResult(BaseModel):
+    chapter_number: int
+    success: bool
+    message: str
+
+
+class BatchFolderResult(BaseModel):
+    folder_name: str
+    found: bool
+    story: Optional[ContentUpdateStoryRef] = None
+    folder: Optional[ContentUpdateFolderRef] = None
+    chapters: list[ContentUpdateChapterStatus] = []
+    summary: ContentUpdateSummary
+    message: str
+    update_results: list[BatchChapterUpdateResult] = []
+    stopped_at: Optional[int] = None
+    stop_reason: Optional[str] = None
+
+
+class BatchContentUpdateRequest(BaseModel):
+    folder_names: list[str]
+
+
+class BatchContentUpdateResponse(BaseModel):
+    results: list[BatchFolderResult]
+
+
+@router.post("/content-update/batch-inspect", response_model=BatchContentUpdateResponse, tags=["Drive Sync"])
+async def batch_inspect_content_folders(body: BatchContentUpdateRequest) -> BatchContentUpdateResponse:
+    """Inspect multiple Drive folders for content update without making changes."""
+    service = get_drive_sync_service()
+    config = service.get_config()
+    if config is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    folder_names = [name.strip() for name in body.folder_names if name.strip()]
+    if not folder_names:
+        raise HTTPException(status_code=400, detail="No folder names provided.")
+
+    try:
+        results = await asyncio.to_thread(service.batch_inspect_folders, folder_names)
+        return BatchContentUpdateResponse(**results)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Batch inspect failed: {exc}")
+
+
+@router.post("/content-update/batch-update", response_model=BatchContentUpdateResponse, tags=["Drive Sync"])
+async def batch_update_content_folders(body: BatchContentUpdateRequest) -> BatchContentUpdateResponse:
+    """Update all ready chapters for multiple Drive folders in batch."""
+    service = get_drive_sync_service()
+    config = service.get_config()
+    if config is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    folder_names = [name.strip() for name in body.folder_names if name.strip()]
+    if not folder_names:
+        raise HTTPException(status_code=400, detail="No folder names provided.")
+
+    try:
+        results = await asyncio.to_thread(service.batch_update_folders_content, folder_names)
+        return BatchContentUpdateResponse(**results)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Batch update failed: {exc}")

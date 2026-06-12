@@ -737,6 +737,164 @@ class MainBEClientMixin:
             pass
         return drive_chapter
 
+    def batch_inspect_folders(self, folder_names: list[str]) -> dict:
+        """Inspect multiple folders without updating — return per-folder scan results."""
+        results: list[dict] = []
+        for folder_name in folder_names:
+            result = self.inspect_drive_folder_for_content_update(folder_name)
+            results.append({
+                "folder_name": folder_name,
+                "found": result.get("found", False),
+                "story": result.get("story"),
+                "folder": result.get("folder"),
+                "chapters": result.get("chapters", []),
+                "summary": result.get("summary", {
+                    "total": 0, "same": 0, "different": 0,
+                    "missingDrive": 0, "driveOnly": 0, "errors": 0,
+                }),
+                "message": result.get("message", ""),
+                "update_results": [],
+                "stopped_at": None,
+                "stop_reason": None,
+            })
+        return {"results": results}
+
+    def _process_single_folder_content_update(self, folder_name: str) -> dict:
+        """Process one folder: inspect, update ready chapters, record job. Called concurrently."""
+        from api.models.drive_sync import JobKind
+
+        inspect_result = self.inspect_drive_folder_for_content_update(folder_name)
+
+        if not inspect_result.get("found") or not inspect_result.get("story") or not inspect_result.get("folder"):
+            return {
+                "folder_name": folder_name,
+                "found": inspect_result.get("found", False),
+                "story": inspect_result.get("story"),
+                "folder": inspect_result.get("folder"),
+                "chapters": inspect_result.get("chapters", []),
+                "summary": inspect_result.get("summary", {
+                    "total": 0, "same": 0, "different": 0,
+                    "missingDrive": 0, "driveOnly": 0, "errors": 0,
+                }),
+                "message": inspect_result.get("message", "Folder or server story not found."),
+                "update_results": [],
+                "stopped_at": None,
+                "stop_reason": "Folder or server story not found.",
+            }
+
+        story = inspect_result["story"]
+        folder = inspect_result["folder"]
+        chapters = inspect_result.get("chapters", [])
+        ready_chapters = [ch for ch in chapters if ch.get("status") == "ready"]
+        ready_chapters.sort(key=lambda ch: ch.get("chapterNumber", 0))
+
+        update_results: list[dict] = []
+        stopped_at: Optional[int] = None
+        stop_reason: Optional[str] = None
+
+        for chapter in ready_chapters:
+            chapter_number = chapter.get("chapterNumber")
+            if chapter_number is None:
+                continue
+
+            try:
+                drive_chapter = self.get_drive_extended_chapter(folder["id"], chapter_number)
+                if drive_chapter is None:
+                    raise RuntimeError(f"Chapter {chapter_number} not found in chapters-extended.")
+                self.put_server_chapter_content(
+                    story["id"],
+                    chapter_number,
+                    drive_chapter.get("title") or "",
+                    drive_chapter.get("content") or "",
+                    drive_chapter.get("plainContent") or "",
+                )
+                update_results.append({
+                    "chapter_number": chapter_number,
+                    "success": True,
+                    "message": f"Chapter {chapter_number} updated.",
+                })
+            except RuntimeError as exc:
+                exc_msg = str(exc)
+                not_found = "404" in exc_msg or "not found" in exc_msg.lower()
+                if not_found:
+                    stop_reason = exc_msg
+                    stopped_at = chapter_number
+                    update_results.append({
+                        "chapter_number": chapter_number,
+                        "success": False,
+                        "message": exc_msg,
+                    })
+                    break
+                else:
+                    update_results.append({
+                        "chapter_number": chapter_number,
+                        "success": False,
+                        "message": exc_msg,
+                    })
+
+        try:
+            drive_service = self._build_drive_service()
+            folder_info = self._retry_drive_call(
+                lambda: drive_service.files().get(fileId=folder["id"], fields="id, name").execute()
+            )
+            folder_name_for_log = folder_info.get("name") or folder_name
+        except Exception:
+            folder_name_for_log = folder_name
+
+        try:
+            self.record_completed_job(
+                kind=JobKind.CHAPTER_CONTENT_UPDATE,
+                folder_id=folder["id"],
+                folder_name=folder_name_for_log,
+                display_name=f"{story.get('title', folder_name)} - Batch content update",
+                result_message=f"Batch update for folder '{folder_name}': "
+                    f"{sum(1 for r in update_results if r['success'])} succeeded, "
+                    f"{sum(1 for r in update_results if not r['success'])} failed.",
+                logs=[{
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "level": "info",
+                    "message": f"Folder: {folder_name}",
+                }, {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "level": "info",
+                    "message": f"Server story: {story.get('title', story['id'])}",
+                }, {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "level": "info",
+                    "message": f"Chapters updated: {sum(1 for r in update_results if r['success'])}/{len(update_results)}",
+                }],
+                chapters_added=sum(1 for r in update_results if r["success"]),
+                chapters_skipped=sum(1 for r in update_results if not r["success"]),
+                main_be_api_base_url=self._config.main_be_api_base_url if self._config else None,
+            )
+        except Exception:
+            pass
+
+        return {
+            "folder_name": folder_name,
+            "found": True,
+            "story": inspect_result.get("story"),
+            "folder": inspect_result.get("folder"),
+            "chapters": inspect_result.get("chapters", []),
+            "summary": inspect_result.get("summary", {
+                "total": 0, "same": 0, "different": 0,
+                "missingDrive": 0, "driveOnly": 0, "errors": 0,
+            }),
+            "message": "Batch update complete." if not stop_reason else f"Stopped at chapter {stopped_at}: {stop_reason}",
+            "update_results": update_results,
+            "stopped_at": stopped_at,
+            "stop_reason": stop_reason,
+        }
+
+    def batch_update_folders_content(self, folder_names: list[str]) -> dict:
+        """Inspect multiple folders and update all ready chapters in each, stopping on 404. Runs concurrently."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(self._process_single_folder_content_update, folder_names))
+
+        return {"results": results}
+
     @staticmethod
     def _format_response_error(resp: httpx.Response) -> str:
         """Build a short, readable API error without hiding validation details."""
