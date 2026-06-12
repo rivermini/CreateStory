@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
+  batchInspectFolders,
+  batchUpdateFolders,
   inspectContentUpdateFolder,
   updateContentChapter,
+  type BatchChapterUpdateResult,
+  type BatchFolderResult,
   type ContentUpdateChapterStatus,
   type ContentUpdateScanResponse,
   type ContentUpdateStoryRef,
@@ -42,6 +46,11 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
   const [updatingChapters, setUpdatingChapters] = useState<Set<number>>(new Set());
   const [updateResults, setUpdateResults] = useState<Map<number, ChapterResult>>(new Map());
 
+  const [multiScanData, setMultiScanData] = useState<BatchFolderResult[]>([]);
+  const [selectedMultiFolder, setSelectedMultiFolder] = useState<string | null>(null);
+  const [multiUpdateResults, setMultiUpdateResults] = useState<Map<string, BatchChapterUpdateResult[]>>(new Map());
+  const [isBatchUpdating, setIsBatchUpdating] = useState(false);
+
   const pageBackground = isDark
     ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
     : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
@@ -53,29 +62,75 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
   const searchBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
+  const parsedFolders = useMemo(() => {
+    return keyword.split(';').map((f) => f.trim()).filter(Boolean);
+  }, [keyword]);
+
+  const isMultiFolder = parsedFolders.length > 1;
+  const matchedFolders = useMemo(
+    () => multiScanData.filter((f) => f.found && f.story && f.folder),
+    [multiScanData],
+  );
+
   const handleSearch = async (event?: React.SubmitEvent) => {
     event?.preventDefault();
     const query = keyword.trim();
     if (!query) return;
+
     setChecking(true);
     setSearchError('');
     setSelectedStory(null);
     setScanData(null);
     setScanError('');
     setUpdateResults(new Map());
+    setMultiScanData([]);
+    setSelectedMultiFolder(null);
+    setMultiUpdateResults(new Map());
+
     try {
-      const result = await inspectContentUpdateFolder(query);
-      setScanData(result);
-      setSelectedStory(result.story);
-      if (result.found && result.story && result.folder) {
-        showToast('Folder and server story found.', 'success', 2000, 'top-center');
+      if (isMultiFolder) {
+        const result = await batchInspectFolders(parsedFolders);
+        setMultiScanData(result.results);
+        const matchedCount = result.results.filter((f) => f.found && f.story && f.folder).length;
+        if (matchedCount > 0) {
+          showToast(`${matchedCount} of ${result.results.length} folders matched.`, 'success', 2000, 'top-center');
+        } else {
+          setSearchError('None of the folders matched a server story.');
+        }
       } else {
-        setSearchError(result.message || 'Folder or server story was not found.');
+        const result = await inspectContentUpdateFolder(query);
+        setScanData(result);
+        setSelectedStory(result.story);
+        if (result.found && result.story && result.folder) {
+          showToast('Folder and server story found.', 'success', 2000, 'top-center');
+        } else {
+          setSearchError(result.message || 'Folder or server story was not found.');
+        }
       }
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Failed to check folder.');
+      setSearchError(err instanceof Error ? err.message : 'Failed to check folder(s).');
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleBatchUpdate = async () => {
+    if (matchedFolders.length === 0) return;
+    setIsBatchUpdating(true);
+    setMultiUpdateResults(new Map());
+    try {
+      const result = await batchUpdateFolders(matchedFolders.map((f) => f.folder_name));
+      const resultsMap = new Map<string, BatchChapterUpdateResult[]>();
+      for (const folderResult of result.results) {
+        resultsMap.set(folderResult.folder_name, folderResult.update_results);
+      }
+      setMultiUpdateResults(resultsMap);
+      const successCount = result.results.filter((f) => f.update_results.some((r) => r.success)).length;
+      showToast(`Batch update done: ${successCount}/${result.results.length} folders had updates.`, 'success', 3000, 'top-center');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Batch update failed.', 'error', 3000, 'top-center');
+    } finally {
+      setIsBatchUpdating(false);
     }
   };
 
@@ -127,7 +182,8 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
 
   const canSearch = Boolean(config && !configInvalid && !tokenInvalid && !checking && keyword.trim());
   const updateableChapters = useMemo(() => scanData?.chapters.filter((ch) => ch.status === 'ready') ?? [], [scanData]);
-  const hasScan = Boolean(scanData);
+  const hasSingleScan = Boolean(scanData);
+  const hasMultiScan = multiScanData.length > 0;
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
@@ -146,10 +202,10 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                   Chapter content update
                 </h1>
                 <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
-                  Paste a Drive folder name, verify its server story, then push chapter files one at a time.
+                  Paste Drive folder name(s) separated by <code>;</code>, verify matches, then push chapter files.
                 </p>
               </div>
-              {selectedStory && (
+              {selectedStory && !hasMultiScan && (
                 <div
                   className="min-w-0 rounded-xl border px-4 py-3"
                   style={{ background: mutedSurface, borderColor: panelBorder }}
@@ -224,7 +280,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                         value={keyword}
                         onChange={(event) => setKeyword(event.target.value)}
                         className="w-full rounded-xl border py-3 pl-9 pr-4 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500"
-                        placeholder="Exact Drive folder name"
+                        placeholder={isMultiFolder ? "Folder A; Folder B; Folder C" : "Exact Drive folder name"}
                         disabled={checking}
                         style={{ background: searchBg, borderColor: panelBorder, color: pageText }}
                       />
@@ -248,7 +304,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                       ) : (
                         <>
                           <Icon icon={appIcons.search} className="h-4 w-4" />
-                          Check Folder
+                          {isMultiFolder ? `Check ${parsedFolders.length} Folders` : 'Check Folder'}
                         </>
                       )}
                     </button>
@@ -278,7 +334,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                     />
                   </div>
                   <p className="text-sm" style={{ color: secondaryText }}>
-                    Checking folder and loading chapter files...
+                    {isMultiFolder ? `Checking ${parsedFolders.length} folders...` : 'Checking folder and loading chapter files...'}
                   </p>
                 </div>
               )}
@@ -296,83 +352,493 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                 </div>
               )}
 
-              {hasScan && scanData && !checking && (
-                <section
-                  className="overflow-hidden rounded-2xl border"
-                  style={{ background: panelBackground, borderColor: panelBorder }}
-                >
-                  <div className="border-b px-4 py-4 sm:px-5" style={{ borderColor: panelBorder }}>
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <h2 className="truncate text-lg font-semibold" style={{ color: pageText }}>
-                            {scanData.story?.title ?? 'Server story not found'}
-                          </h2>
-                          {scanData.folder && (
-                            <span
-                              className="rounded-md border px-2 py-0.5 text-xs font-medium"
-                              style={{
-                                background: 'rgba(245,158,11,0.12)',
-                                borderColor: 'rgba(245,158,11,0.2)',
-                                color: '#f59e0b',
-                              }}
-                            >
-                              Folder matched
-                            </span>
-                          )}
-                          {scanData.story && (
-                            <span
-                              className="rounded-md border px-2 py-0.5 text-xs font-medium"
-                              style={{
-                                background: 'rgba(99,102,241,0.1)',
-                                borderColor: 'rgba(99,102,241,0.2)',
-                                color: '#818cf8',
-                              }}
-                            >
-                              Story matched
-                            </span>
-                          )}
-                        </div>
-                        <p className="truncate font-mono text-xs" style={{ color: secondaryText }}>
-                          {scanData.folder?.name ?? 'No matching EXTENDED_ folder'}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
-                        <StatBox label="Files" value={scanData.summary.total} color="#f59e0b" isDark={isDark} />
-                        <StatBox
-                          label="Ready"
-                          value={updateableChapters.length}
-                          color="#10b981"
-                          isDark={isDark}
-                        />
-                        <StatBox label="Errors" value={scanData.summary.errors} color="#f87171" isDark={isDark} />
-                      </div>
-                    </div>
-                  </div>
+              {hasSingleScan && scanData && !checking && !hasMultiScan && (
+                <SingleFolderPanel
+                  scanData={scanData}
+                  updateableChapters={updateableChapters}
+                  isDark={isDark}
+                  updateResults={updateResults}
+                  updatingChapters={updatingChapters}
+                  onConfirmUpdate={handleConfirmUpdate}
+                  panelBackground={panelBackground}
+                  panelBorder={panelBorder}
+                  pageText={pageText}
+                  secondaryText={secondaryText}
+                  tertiaryText={tertiaryText}
+                  mutedSurface={mutedSurface}
+                />
+              )}
 
-                  <div className="max-h-[50vh] min-h-[200px] space-y-2 overflow-y-auto p-4 sm:max-h-[calc(100vh-430px)] sm:min-h-[340px]">
-                    {scanData.chapters.length === 0 ? (
-                      <EmptyPanel isDark={isDark} />
-                    ) : (
-                      scanData.chapters.map((chapter) => (
-                        <ChapterRow
-                          key={chapter.chapterNumber}
-                          chapter={chapter}
-                          isDark={isDark}
-                          result={updateResults.get(chapter.chapterNumber)}
-                          isUpdating={updatingChapters.has(chapter.chapterNumber)}
-                          canUpdate={Boolean(scanData.folder && scanData.story && chapter.status === 'ready')}
-                          onConfirm={() => handleConfirmUpdate(chapter)}
-                        />
-                      ))
-                    )}
-                  </div>
-                </section>
+              {hasMultiScan && !checking && (
+                <MultiFolderPanel
+                  folders={multiScanData}
+                  matchedCount={matchedFolders.length}
+                  selectedFolder={selectedMultiFolder}
+                  multiUpdateResults={multiUpdateResults}
+                  isBatchUpdating={isBatchUpdating}
+                  isDark={isDark}
+                  panelBackground={panelBackground}
+                  panelBorder={panelBorder}
+                  pageText={pageText}
+                  secondaryText={secondaryText}
+                  tertiaryText={tertiaryText}
+                  mutedSurface={mutedSurface}
+                  onSelectFolder={(name) => setSelectedMultiFolder((prev) => (prev === name ? null : name))}
+                  onBatchUpdate={handleBatchUpdate}
+                  onConfirmUpdate={handleConfirmUpdate}
+                />
               )}
             </div>
           )}
         </main>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Single-folder panel
+// ---------------------------------------------------------------------------
+
+function SingleFolderPanel(props: {
+  scanData: ContentUpdateScanResponse;
+  updateableChapters: ContentUpdateChapterStatus[];
+  isDark: boolean;
+  updateResults: Map<number, ChapterResult>;
+  updatingChapters: Set<number>;
+  onConfirmUpdate: (chapter: ContentUpdateChapterStatus) => void;
+  panelBackground: string;
+  panelBorder: string;
+  pageText: string;
+  secondaryText: string;
+  tertiaryText: string;
+  mutedSurface: string;
+}) {
+  const {
+    scanData,
+    updateableChapters,
+    isDark,
+    updateResults,
+    updatingChapters,
+    onConfirmUpdate,
+    panelBackground,
+    panelBorder,
+    pageText,
+    secondaryText,
+    tertiaryText,
+    mutedSurface,
+  } = props;
+
+  return (
+    <section
+      className="overflow-hidden rounded-2xl border"
+      style={{ background: panelBackground, borderColor: panelBorder }}
+    >
+      <div className="border-b px-4 py-4 sm:px-5" style={{ borderColor: panelBorder }}>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-lg font-semibold" style={{ color: pageText }}>
+                {scanData.story?.title ?? 'Server story not found'}
+              </h2>
+              {scanData.folder && (
+                <span
+                  className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                  style={{ background: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.2)', color: '#f59e0b' }}
+                >
+                  Folder matched
+                </span>
+              )}
+              {scanData.story && (
+                <span
+                  className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                  style={{ background: 'rgba(99,102,241,0.1)', borderColor: 'rgba(99,102,241,0.2)', color: '#818cf8' }}
+                >
+                  Story matched
+                </span>
+              )}
+            </div>
+            <p className="truncate font-mono text-xs" style={{ color: secondaryText }}>
+              {scanData.folder?.name ?? 'No matching EXTENDED_ folder'}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+            <StatBox label="Files" value={scanData.summary.total} color="#f59e0b" isDark={isDark} />
+            <StatBox label="Ready" value={updateableChapters.length} color="#10b981" isDark={isDark} />
+            <StatBox label="Errors" value={scanData.summary.errors} color="#f87171" isDark={isDark} />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-h-[50vh] min-h-[200px] space-y-2 overflow-y-auto p-4 sm:max-h-[calc(100vh-430px)] sm:min-h-[340px]">
+        {scanData.chapters.length === 0 ? (
+          <EmptyPanel isDark={isDark} />
+        ) : (
+          scanData.chapters.map((chapter) => (
+            <ChapterRow
+              key={chapter.chapterNumber}
+              chapter={chapter}
+              isDark={isDark}
+              result={updateResults.get(chapter.chapterNumber)}
+              isUpdating={updatingChapters.has(chapter.chapterNumber)}
+              canUpdate={Boolean(scanData.folder && scanData.story && chapter.status === 'ready')}
+              onConfirm={onConfirmUpdate}
+              panelBorder={panelBorder}
+              pageText={pageText}
+              secondaryText={secondaryText}
+              tertiaryText={tertiaryText}
+              mutedSurface={mutedSurface}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Multi-folder panel
+// ---------------------------------------------------------------------------
+
+function MultiFolderPanel(props: {
+  folders: BatchFolderResult[];
+  matchedCount: number;
+  selectedFolder: string | null;
+  multiUpdateResults: Map<string, BatchChapterUpdateResult[]>;
+  isBatchUpdating: boolean;
+  isDark: boolean;
+  panelBackground: string;
+  panelBorder: string;
+  pageText: string;
+  secondaryText: string;
+  tertiaryText: string;
+  mutedSurface: string;
+  onSelectFolder: (name: string) => void;
+  onBatchUpdate: () => void;
+  onConfirmUpdate: (chapter: ContentUpdateChapterStatus) => void;
+}) {
+  const {
+    folders,
+    matchedCount,
+    selectedFolder,
+    multiUpdateResults,
+    isBatchUpdating,
+    isDark,
+    panelBackground,
+    panelBorder,
+    pageText,
+    secondaryText,
+    tertiaryText,
+    mutedSurface,
+    onSelectFolder,
+    onBatchUpdate,
+    onConfirmUpdate,
+  } = props;
+
+  return (
+    <section
+      className="overflow-hidden rounded-2xl border"
+      style={{ background: panelBackground, borderColor: panelBorder }}
+    >
+      <div className="flex flex-col gap-3 border-b px-4 py-4 sm:px-5 sm:flex-row sm:items-center" style={{ borderColor: panelBorder }}>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold" style={{ color: pageText }}>
+            {folders.length} folders scanned
+          </h2>
+          <p className="text-xs" style={{ color: secondaryText }}>
+            {matchedCount} matched a server story
+          </p>
+        </div>
+        {matchedCount > 0 && (
+          <button
+            onClick={onBatchUpdate}
+            disabled={isBatchUpdating}
+            className="inline-flex items-center justify-center gap-2 rounded-md border px-5 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed"
+            style={
+              !isBatchUpdating
+                ? { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderColor: 'transparent', color: '#ffffff' }
+                : { background: mutedSurface, borderColor: panelBorder, color: secondaryText, opacity: 0.65 }
+            }
+          >
+            {isBatchUpdating ? (
+              <>
+                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                Updating...
+              </>
+            ) : (
+              <>
+                <Icon icon={appIcons.trends} className="h-4 w-4" />
+                Update All ({matchedCount} folders)
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div className="max-h-[calc(100vh-420px)] min-h-[200px] space-y-2 overflow-y-auto p-4">
+        {folders.map((folder) => {
+          const isSelected = folder.folder_name === selectedFolder;
+          const folderResults = multiUpdateResults.get(folder.folder_name);
+          const isUpdatingFolder = isBatchUpdating;
+          const successCount = folderResults ? folderResults.filter((r) => r.success).length : 0;
+          const failedCount = folderResults ? folderResults.filter((r) => !r.success).length : 0;
+          const readyChapters = folder.chapters.filter((ch) => ch.status === 'ready');
+
+          return (
+            <div key={folder.folder_name} className="space-y-2">
+              <div
+                className="overflow-hidden rounded-xl border p-4 cursor-pointer transition-colors"
+                style={{
+                  background: mutedSurface,
+                  borderColor: isSelected ? '#f59e0b' : panelBorder,
+                }}
+                onClick={() => onSelectFolder(folder.folder_name)}
+              >
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Icon
+                      icon={isSelected ? appIcons.chevronDown : appIcons.chevronRight}
+                      className="h-4 w-4 shrink-0"
+                      style={{ color: tertiaryText }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="truncate font-mono text-sm font-semibold" style={{ color: pageText }}>
+                          {folder.folder_name}
+                        </span>
+                        {folder.found && folder.story && folder.folder ? (
+                          <span
+                            className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                            style={{ background: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.2)', color: '#10b981' }}
+                          >
+                            Matched
+                          </span>
+                        ) : (
+                          <span
+                            className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                            style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.2)', color: '#f87171' }}
+                          >
+                            Not Found
+                          </span>
+                        )}
+                        {folderResults && (
+                          <span
+                            className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                            style={{
+                              background: failedCount > 0 ? 'rgba(245,158,11,0.12)' : 'rgba(16,185,129,0.12)',
+                              borderColor: failedCount > 0 ? 'rgba(245,158,11,0.2)' : 'rgba(16,185,129,0.2)',
+                              color: failedCount > 0 ? '#f59e0b' : '#10b981',
+                            }}
+                          >
+                            {successCount} ok, {failedCount} failed
+                          </span>
+                        )}
+                        {folder.stopped_at && (
+                          <span
+                            className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                            style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.2)', color: '#f87171' }}
+                          >
+                            Stopped at Ch. {folder.stopped_at}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: secondaryText }}>
+                        {folder.story && (
+                          <span className="truncate max-w-xs">{folder.story.title}</span>
+                        )}
+                        {!folder.found && (
+                          <span className="truncate italic">{folder.message}</span>
+                        )}
+                        {folder.found && (
+                          <>
+                            <span>{readyChapters.length} ready chapters</span>
+                            {folder.stop_reason && (
+                              <span className="truncate italic max-w-xs" style={{ color: '#f87171' }}>
+                                {folder.stop_reason}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-start lg:self-center">
+                    {isUpdatingFolder && folder.found && (
+                      <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" style={{ color: secondaryText }} />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {isSelected && folder.found && folder.story && folder.folder && (
+                <div className="ml-4 space-y-2 border-l-2 border-amber-500/30 pl-4">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wider" style={{ color: secondaryText }}>
+                      Chapters
+                    </span>
+                    <span className="text-xs" style={{ color: tertiaryText }}>
+                      {readyChapters.length} ready
+                    </span>
+                  </div>
+                  {readyChapters.length === 0 ? (
+                    <EmptyPanel isDark={isDark} />
+                  ) : (
+                    readyChapters.map((chapter) => (
+                      <ChapterRow
+                        key={chapter.chapterNumber}
+                        chapter={chapter}
+                        isDark={isDark}
+                        result={folderResults?.find((r) => r.chapter_number === chapter.chapterNumber)}
+                        isUpdating={false}
+                        canUpdate={false}
+                        onConfirm={onConfirmUpdate}
+                        panelBorder={panelBorder}
+                        pageText={pageText}
+                        secondaryText={secondaryText}
+                        tertiaryText={tertiaryText}
+                        mutedSurface={mutedSurface}
+                        compact
+                      />
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared components
+// ---------------------------------------------------------------------------
+
+function ChapterRow(props: Readonly<{
+  chapter: ContentUpdateChapterStatus;
+  isDark: boolean;
+  result?: BatchChapterUpdateResult | ChapterResult;
+  isUpdating: boolean;
+  canUpdate: boolean;
+  onConfirm: (chapter: ContentUpdateChapterStatus) => void;
+  panelBorder: string;
+  pageText: string;
+  secondaryText: string;
+  tertiaryText: string;
+  mutedSurface: string;
+  compact?: boolean;
+}>) {
+  const { chapter, isDark, result, isUpdating, canUpdate, onConfirm, panelBorder, pageText, secondaryText, tertiaryText, mutedSurface, compact } = props;
+  const status = getChapterStatus(chapter.status, isDark);
+  const rowBorder = chapter.status === 'ready' ? 'rgba(245,158,11,0.28)' : panelBorder;
+
+  return (
+    <div
+      className="overflow-hidden rounded-xl border p-3 sm:p-4"
+      style={{ background: mutedSurface, borderColor: rowBorder }}
+    >
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span
+              className="rounded-lg px-2 py-1 font-mono text-xs"
+              style={{ background: mutedSurface, color: secondaryText }}
+            >
+              Ch. {chapter.chapterNumber}
+            </span>
+            <h3 className="truncate text-sm font-semibold" style={{ color: pageText }}>
+              {chapter.title || chapter.fileName || 'Untitled'}
+            </h3>
+            <span
+              className="rounded-md border px-2 py-0.5 text-xs font-medium"
+              style={{ background: `${status.color}14`, borderColor: `${status.color}40`, color: status.color }}
+            >
+              {status.label}
+            </span>
+          </div>
+          {!compact && (
+            <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: tertiaryText }}>
+              {chapter.fileName && (
+                <span className="max-w-md truncate font-mono">{chapter.fileName}</span>
+              )}
+              {chapter.serverLength > 0 && (
+                <span>Server text: {chapter.serverLength.toLocaleString()} chars</span>
+              )}
+              <span>Drive text: {chapter.driveLength.toLocaleString()} chars</span>
+            </div>
+          )}
+          {result && (
+            <p
+              className="mt-1 text-xs"
+              style={{ color: result.success ? '#34d399' : '#f87171' }}
+            >
+              {result.message}
+            </p>
+          )}
+        </div>
+        {canUpdate && (
+          <div className="flex items-center gap-2 self-start lg:self-center">
+            <button
+              onClick={() => onConfirm(chapter)}
+              disabled={!canUpdate || isUpdating}
+              className="inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
+              style={
+                canUpdate && !isUpdating
+                  ? { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderColor: 'transparent', color: '#ffffff' }
+                  : { background: mutedSurface, borderColor: panelBorder, color: secondaryText, opacity: 0.65 }
+              }
+            >
+              {isUpdating ? (
+                <>
+                  <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Icon icon={appIcons.trends} className="h-4 w-4" />
+                  Update
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatBox(props: Readonly<{
+  label: string;
+  value: number;
+  color: string;
+  isDark: boolean;
+}>) {
+  const { label, value, color, isDark } = props;
+  return (
+    <div
+      className="min-w-24 rounded-xl border px-3 py-2"
+      style={{ background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)' }}
+    >
+      <div className="text-lg font-bold" style={{ color }}>
+        {value}
+      </div>
+      <div className="text-[11px]" style={{ color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(55,53,47,0.42)' }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function EmptyPanel(props: Readonly<{ isDark: boolean }>) {
+  const { isDark } = props;
+  return (
+    <div
+      className="flex h-full min-h-[200px] flex-col items-center justify-center text-center"
+      style={{ color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(55,53,47,0.42)' }}
+    >
+      <Icon icon={appIcons.check} className="mb-2 h-9 w-9" />
+      <p className="text-sm">No chapters to show.</p>
     </div>
   );
 }
@@ -397,141 +863,13 @@ function markChapterUpdated(
         ? {
             ...ch,
             ...(updatedChapter ?? null),
-            status: 'updated',
+            status: 'updated' as const,
             message: 'Updated from Drive.',
             serverLength: updatedChapter?.serverLength ?? ch.driveLength,
           }
         : ch,
     ),
   };
-}
-
-function ChapterRow(props: Readonly<{
-  chapter: ContentUpdateChapterStatus;
-  isDark: boolean;
-  result?: ChapterResult;
-  isUpdating: boolean;
-  canUpdate: boolean;
-  onConfirm: () => void;
-}>) {
-  const { chapter, isDark, result, isUpdating, canUpdate, onConfirm } = props;
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const status = getChapterStatus(chapter.status, isDark);
-
-  const rowBorder = chapter.status === 'ready' ? 'rgba(245,158,11,0.28)' : panelBorder;
-
-  return (
-    <div
-      className="overflow-hidden rounded-xl border p-4"
-      style={{
-        background: mutedSurface,
-        borderColor: rowBorder,
-      }}
-    >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span
-              className="rounded-lg px-2 py-1 font-mono text-xs"
-              style={{ background: mutedSurface, color: secondaryText }}
-            >
-              Ch. {chapter.chapterNumber}
-            </span>
-            <h3 className="truncate text-sm font-semibold" style={{ color: pageText }}>
-              {chapter.title || chapter.fileName || 'Untitled'}
-            </h3>
-            <span
-              className="rounded-md border px-2 py-0.5 text-xs font-medium"
-              style={{
-                background: `${status.color}14`,
-                borderColor: `${status.color}40`,
-                color: status.color,
-              }}
-            >
-              {status.label}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: tertiaryText }}>
-            {chapter.fileName && (
-              <span className="max-w-md truncate font-mono">{chapter.fileName}</span>
-            )}
-            {chapter.serverLength > 0 && (
-              <span>Server text: {chapter.serverLength.toLocaleString()} chars</span>
-            )}
-            <span>Drive text: {chapter.driveLength.toLocaleString()} chars</span>
-          </div>
-          {(chapter.message || result) && (
-            <p
-              className="mt-1.5 text-xs"
-              style={{ color: result ? (result.success ? '#34d399' : '#f87171') : tertiaryText }}
-            >
-              {result?.message ?? chapter.message}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 self-start lg:self-center">
-          <button
-            onClick={onConfirm}
-            disabled={!canUpdate || isUpdating}
-            className="inline-flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
-            style={
-              canUpdate && !isUpdating
-                ? { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderColor: 'transparent', color: '#ffffff' }
-                : { background: mutedSurface, borderColor: panelBorder, color: secondaryText, opacity: 0.65 }
-            }
-          >
-            {isUpdating ? (
-              <>
-                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
-                Updating...
-              </>
-            ) : (
-              <>
-                <Icon icon={appIcons.trends} className="h-4 w-4" />
-                Update
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatBox(props: Readonly<{
-  label: string;
-  value: number;
-  color: string;
-  isDark: boolean;
-}>) {
-  const { label, value, color, isDark } = props;
-  return (
-    <div className="min-w-24 rounded-xl border px-3 py-2" style={{ background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)' }}>
-      <div className="text-lg font-bold" style={{ color }}>
-        {value}
-      </div>
-      <div className="text-[11px]" style={{ color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(55,53,47,0.42)' }}>
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function EmptyPanel(props: Readonly<{ isDark: boolean }>) {
-  const { isDark } = props;
-  return (
-    <div
-      className="flex h-full min-h-[260px] flex-col items-center justify-center text-center"
-      style={{ color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(55,53,47,0.42)' }}
-    >
-      <Icon icon={appIcons.check} className="mb-2 h-9 w-9" />
-      <p className="text-sm">No chapters to show.</p>
-    </div>
-  );
 }
 
 function getChapterStatus(status: ContentUpdateChapterStatus['status'], isDark: boolean) {

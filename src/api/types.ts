@@ -575,6 +575,29 @@ export interface ContentUpdateChapterResponse {
   chapter?: ContentUpdateChapterStatus | null;
 }
 
+export interface BatchChapterUpdateResult {
+  chapter_number: number;
+  success: boolean;
+  message: string;
+}
+
+export interface BatchFolderResult {
+  folder_name: string;
+  found: boolean;
+  story: ContentUpdateStoryRef | null;
+  folder: ContentUpdateFolderRef | null;
+  chapters: ContentUpdateChapterStatus[];
+  summary: ContentUpdateSummary;
+  message: string;
+  update_results: BatchChapterUpdateResult[];
+  stopped_at: number | null;
+  stop_reason: string | null;
+}
+
+export interface BatchContentUpdateResponse {
+  results: BatchFolderResult[];
+}
+
 // ---------------------------------------------------------------------------
 // Drive Sync — Job system
 // ---------------------------------------------------------------------------
