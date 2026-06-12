@@ -91,6 +91,7 @@ _CATEGORY_MAP: dict[str, tuple[str, str | None]] = {
     ),
     "lgbtq": ("8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf", None),
     "lgbt": ("8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf", None),
+    "lgbtq+": ("8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf", None),
 }
 
 # -------------------------------------------------------------------------

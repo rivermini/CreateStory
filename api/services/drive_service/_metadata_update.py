@@ -192,7 +192,7 @@ _CATEGORY_ID_TO_NAME: dict[str, str] = {
     "2d2614d9-2b25-4d1f-bb0a-fb333193de19": "Werewolf",
     "17c9779b-7107-4b24-a020-df735e1dd6cb": "Romance",
     "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11": "Billionaire",
-    "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf": "LGBTQ",
+    "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf": "LGBTQ+",
 }
 
 
