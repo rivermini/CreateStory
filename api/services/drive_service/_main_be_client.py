@@ -1419,6 +1419,36 @@ class MainBEClientMixin:
             self._append_log("error", f"Cover upload exception: {exc}")
         return None
 
+    def _upload_banner_image(self, story_id: str, image_bytes: bytes, filename: str = "banner1.jpg") -> Optional[str]:
+        """POST banner image to main BE /api/v1/story/{id}/upload-banner. Returns the banner URL on success."""
+        if self._config is None:
+            return None
+        url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}/upload-banner"
+        headers = {
+            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
+            "x-user-id": self._config.main_be_user_id,
+        }
+        try:
+            with self._main_be_client(timeout=60.0) as client:
+                resp = client.post(
+                    url,
+                    files={"image": (filename, image_bytes, "image/jpeg")},
+                    headers=headers,
+                )
+                if resp.status_code in (200, 201):
+                    data = resp.json()
+                    banner_url = data.get("data", {}).get("bannerImageUrl")
+                    if banner_url:
+                        self._append_log("info", f"Banner image uploaded: {banner_url}")
+                        return banner_url
+                    else:
+                        self._append_log("warning", "Banner upload returned success but no bannerImageUrl in response")
+                else:
+                    self._append_log("error", f"Banner upload failed {resp.status_code}: {resp.text[:200]}")
+        except Exception as exc:
+            self._append_log("error", f"Banner upload exception: {exc}")
+        return None
+
     def get_stories_needing_update(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> dict:
         """
         Fetch stories needing update from the main BE dashboard API.

@@ -98,6 +98,7 @@ from api.services.drive_service._parsers import ParsersMixin
 from api.services.drive_service._main_be_client import MainBEClientMixin
 from api.services.drive_service._history_jobs import HistoryJobsMixin
 from api.services.drive_service._cover_update import CoverUpdateMixin
+from api.services.drive_service._banner_update import BannerUpdateMixin
 from api.services.drive_service._metadata_update import MetadataUpdateMixin
 
 
@@ -108,6 +109,7 @@ class DriveSyncService(
     MainBEClientMixin,
     HistoryJobsMixin,
     CoverUpdateMixin,
+    BannerUpdateMixin,
     MetadataUpdateMixin,
 ):
     """Unified Drive sync service — all mix-ins composed into one class."""

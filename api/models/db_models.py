@@ -99,3 +99,22 @@ class CoverUpdateHistoryRecord(Base):
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class BannerUpdateHistoryRecord(Base):
+    __tablename__ = "banner_update_histories"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    folder_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    folder_name: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    story_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    story_title: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    banner_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    finished_at: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    banner_file_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
