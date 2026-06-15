@@ -55,6 +55,7 @@ import {
   faArrowTrendUp,
   faXmark,
   faImage,
+  faFlag,
 } from '@fortawesome/free-solid-svg-icons';
 import { faCirclePause, faCirclePlay } from '@fortawesome/free-regular-svg-icons';
 import { faGoogleDrive } from '@fortawesome/free-brands-svg-icons';
@@ -134,6 +135,7 @@ export const appIcons = {
   eye: faEye,
   eyeSlash: faEyeSlash,
   image: faImage,
+  flag: faFlag,
 } as const satisfies Record<string, IconDefinition>;
 
 interface IconProps extends Omit<FontAwesomeIconProps, 'icon'> {

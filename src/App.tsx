@@ -20,6 +20,7 @@ const DriveSyncPage = lazy(() => import('./pages/BedReadDriveSync/DriveSyncPage'
 const DriveSyncHistoryPage = lazy(() => import('./pages/BedReadDriveSync/DriveSyncHistoryPage').then(m => ({ default: m.DriveSyncHistoryPage })));
 const ChapterContentUpdatePage = lazy(() => import('./pages/BedReadDriveSync/ChapterContentUpdatePage').then(m => ({ default: m.ChapterContentUpdatePage })));
 const CoverUpdatePage = lazy(() => import('./pages/BedReadDriveSync/CoverUpdatePage').then(m => ({ default: m.CoverUpdatePage })));
+const CheckBannerUpdatePage = lazy(() => import('./pages/BedReadDriveSync/CheckBannerUpdatePage').then(m => ({ default: m.CheckBannerUpdatePage })));
 const MetadataUpdatePage = lazy(() => import('./pages/BedReadDriveSync/MetadataUpdatePage').then(m => ({ default: m.MetadataUpdatePage })));
 const AutoAudioPage = lazy(() => import('./pages/AutoAudio/AutoAudioPage').then(m => ({ default: m.AutoAudioPage })));
 const AutoAudioHistoryPage = lazy(() => import('./pages/AutoAudio/AutoAudioHistoryPage').then(m => ({ default: m.AutoAudioHistoryPage })));
@@ -198,6 +199,7 @@ function Shell({
               <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode}  />} />
               <Route path="/drive-sync/content-update" element={<ChapterContentUpdatePage themeMode={themeMode}  />} />
               <Route path="/drive-sync/cover-update" element={<CoverUpdatePage themeMode={themeMode}  />} />
+              <Route path="/drive-sync/banner-update" element={<CheckBannerUpdatePage themeMode={themeMode}  />} />
               <Route path="/drive-sync/metadata-update" element={<MetadataUpdatePage themeMode={themeMode} />} />
               <Route path="/drive-sync/history" element={<DriveSyncHistoryPage themeMode={themeMode}  />} />
               <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode}  />} />

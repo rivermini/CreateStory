@@ -6,7 +6,7 @@ import type {
 } from '../types';
 
 export async function checkCoverUpdateAll(): Promise<CheckAllResponse> {
-  return apiFetch<CheckAllResponse>('/api/drive-sync/cover-update/check-all', { timeout: 120000 });
+  return apiFetch<CheckAllResponse>('/api/drive-sync/cover-update/check-all', { timeout: 300000 });
 }
 
 export async function checkCoverUpdateUpdated(): Promise<CheckUpdatedResponse> {
