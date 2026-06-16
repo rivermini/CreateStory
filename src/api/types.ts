@@ -751,6 +751,71 @@ export interface MetadataUpdateResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Drive Sync — Title Update
+// ---------------------------------------------------------------------------
+
+export type TitleChapterStatus = 'matched' | 'can_update_title' | 'missing_drive' | 'drive_only' | 'error';
+export type TitleFolderStatus = 'can_update' | 'all_match' | 'no_server_match' | 'empty_chapters';
+
+export interface TitleChapterEntry {
+  chapter_number: number;
+  file_name: string | null;
+  drive_title: string;
+  server_title: string | null;
+  status: TitleChapterStatus;
+  message: string | null;
+}
+
+export interface TitleFolderEntry {
+  story_id: string | null;
+  story_title: string;
+  folder_id: string;
+  folder_name: string;
+  folder_status: TitleFolderStatus;
+  matched_count: number;
+  can_update_count: number;
+  missing_drive_count: number;
+  drive_only_count: number;
+  error_count: number;
+  chapters: TitleChapterEntry[];
+}
+
+export interface CheckAllTitleResponse {
+  can_update: TitleFolderEntry[];
+  all_match: TitleFolderEntry[];
+  no_server_match: TitleFolderEntry[];
+  empty_chapters: TitleFolderEntry[];
+}
+
+export interface TitleUpdateChapterResponse {
+  success: boolean;
+  message: string;
+  chapter?: TitleChapterEntry | null;
+}
+
+export interface TitleUpdateChapterResult {
+  chapter_number: number;
+  success: boolean;
+  message: string;
+}
+
+export interface TitleFolderUpdateResult {
+  folder_id: string;
+  folder_name: string;
+  story_id: string | null;
+  story_title: string;
+  update_results: TitleUpdateChapterResult[];
+  stopped_at: number | null;
+  stop_reason: string | null;
+  success_count: number;
+  failed_count: number;
+}
+
+export interface BatchTitleUpdateResponse {
+  results: TitleFolderUpdateResult[];
+}
+
+// ---------------------------------------------------------------------------
 // TTS — Kokoro
 // ---------------------------------------------------------------------------
 

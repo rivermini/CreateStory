@@ -46,6 +46,7 @@ const NAV_ICONS = {
     '/drive-sync/cover-update': 'image',
     '/drive-sync/banner-update': 'flag',
     '/drive-sync/metadata-update': 'info',
+    '/drive-sync/title-update': 'edit',
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
     '/supported-sites': 'supportedSites',
@@ -67,6 +68,7 @@ const NAV_ITEMS_BEDREADS: NavItem[] = [
     { to: '/drive-sync/banner-update', label: 'Banner Update', iconKey: NAV_ICONS['/drive-sync/banner-update'] },
     { to: '/drive-sync/metadata-update', label: 'Metadata Update', iconKey: NAV_ICONS['/drive-sync/metadata-update'] },
     { to: '/drive-sync/content-update', label: 'Content Update', iconKey: NAV_ICONS['/drive-sync/content-update'] },
+    { to: '/drive-sync/title-update', label: 'Title Update', iconKey: NAV_ICONS['/drive-sync/title-update'] },
     { to: '/drive-sync/history', label: 'Sync History', iconKey: NAV_ICONS['/drive-sync/history'] },
 ];
 

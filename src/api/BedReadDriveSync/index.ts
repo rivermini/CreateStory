@@ -3,4 +3,5 @@ export * from './coverUpdate';
 export * from './bannerUpdate';
 export * from './contentUpdate';
 export * from './metadataUpdate';
+export * from './titleUpdate';
 export * from '../types';
