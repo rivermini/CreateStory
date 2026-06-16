@@ -383,11 +383,26 @@ class MainBEClientMixin:
         return self._story_ref_from_api(data)
 
     def get_server_chapter_numbers(self, story_id: str, max_chapter: int = 0) -> list[int]:
-        """Fetch chapter numbers for a server story."""
+        """Fetch chapter numbers for a server story.
+
+        Backward-compat shim — internally delegates to get_server_chapter_data.
+        """
+        data = self.get_server_chapter_data(story_id, max_chapter=max_chapter)
+        return data["numbers"]
+
+    def get_server_chapter_data(
+        self, story_id: str, max_chapter: int = 0
+    ) -> dict[str, Any]:
+        """Fetch all chapter numbers and titles for a story in a single request.
+
+        Returns {"numbers": [int...], "titles": {chapter_number: title}}.
+        1 BE call serves both consumers, eliminating duplicate requests.
+        """
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
         url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter"
         numbers: list[int] = []
+        titles: dict[int, str] = {}
         with self._main_be_client(timeout=600.0) as client:
             resp = client.get(url, headers=self._main_be_headers())
             if resp.status_code == 401:
@@ -396,23 +411,40 @@ class MainBEClientMixin:
                 raise RuntimeError(f"Chapter list failed HTTP {resp.status_code}: {resp.text[:200]}")
             items = self._extract_api_items(resp.json())
         for item in items:
-            raw = item
-            if isinstance(item, dict):
-                raw = (
-                    item.get("index")
-                    or item.get("chapterNumber")
-                    or item.get("chapter_number")
-                    or item.get("number")
-                )
+            if not isinstance(item, dict):
+                continue
+            raw_num = (
+                item.get("index")
+                or item.get("chapterNumber")
+                or item.get("chapter_number")
+                or item.get("number")
+            )
             try:
-                n = int(raw)
+                n = int(raw_num)
             except Exception:
                 continue
-            if n > 0:
-                numbers.append(n)
+            if n <= 0:
+                continue
+            numbers.append(n)
+            title = item.get("title", "")
+            if title:
+                titles[n] = str(title)
         if not numbers and max_chapter > 0:
             numbers = list(range(1, max_chapter + 1))
-        return sorted(set(numbers))
+        return {"numbers": sorted(set(numbers)), "titles": titles}
+
+    def get_server_chapter_titles(self, story_id: str) -> dict[int, str]:
+        """Fetch all chapter titles for a story in a single request.
+
+        Backward-compat shim — internally delegates to get_server_chapter_data.
+        """
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        try:
+            data = self.get_server_chapter_data(story_id)
+            return data["titles"]
+        except Exception:
+            return {}
 
     def get_server_chapter_detail(self, story_id: str, chapter_number: int) -> dict:
         """Fetch one chapter detail from the configured main BE."""
@@ -447,6 +479,23 @@ class MainBEClientMixin:
                 raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
             if resp.status_code not in (200, 201):
                 raise RuntimeError(f"Chapter {chapter_number} update failed HTTP {resp.status_code}: {resp.text[:300]}")
+        return True
+
+    def patch_server_chapter_title(self, story_id: str, chapter_number: int, title: str) -> bool:
+        """PUT only the title (and index) for one chapter on the configured main BE."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}/chapter/{chapter_number}"
+        payload = {
+            "index": chapter_number,
+            "title": title,
+        }
+        with self._main_be_client(timeout=600.0) as client:
+            resp = client.put(url, content=self._json_body(payload), headers=self._main_be_headers(include_content_type=True))
+            if resp.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"Chapter {chapter_number} title update failed HTTP {resp.status_code}: {resp.text[:300]}")
         return True
 
     def find_extended_drive_folder_for_story(self, title: str) -> Optional[dict]:
