@@ -147,6 +147,10 @@ _DRIVE_CALL_SEMAPHORE = threading.BoundedSemaphore(_DRIVE_CALL_CONCURRENCY)
 # safely with the rest of the query clause.
 _DRIVE_QUERY_BATCH_SIZE = _positive_int_from_env("DRIVE_SYNC_QUERY_BATCH_SIZE", 25)
 
+# TTL for in-memory caches (seconds)
+_SUBFOLDER_CACHE_TTL = 900      # 15 min — title → chapters-extended subfolder-id
+_MD_FILES_CACHE_TTL = 600       # 10 min — subfolder-id → .md file list
+
 # -------------------------------------------------------------------------
 # Misc
 # -------------------------------------------------------------------------

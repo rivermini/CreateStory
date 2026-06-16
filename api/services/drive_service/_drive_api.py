@@ -25,8 +25,10 @@ from api.services.drive_service._paths import (
     _DRIVE_CALL_RETRIES,
     _DRIVE_CALL_SEMAPHORE,
     _DRIVE_QUERY_BATCH_SIZE,
+    _MD_FILES_CACHE_TTL,
     _RE_STATUS_PREFIX,
     _SHARED_CREDENTIALS_DIR,
+    _SUBFOLDER_CACHE_TTL,
 )
 
 _DRIVE_SCOPES = ("https://www.googleapis.com/auth/drive",)
@@ -56,6 +58,11 @@ class DriveAPIMixin:
         self._server_cache: Optional[tuple[float, list[dict]]] = None
         self._tls = threading.local()
         self._build_lock = threading.Lock()
+        # TTL caches for title-update scans
+        # {f"{subfolder_name}:{parent_id}": (expires_at, file_dict)}
+        self._subfolder_cache: dict[str, tuple[float, Optional[dict]]] = {}
+        # {folder_id: (expires_at, [file_dict, ...])}
+        self._md_files_cache: dict[str, tuple[float, list[dict]]] = {}
 
     def _build_drive_service(self) -> Any:
         """
@@ -333,15 +340,37 @@ class DriveAPIMixin:
         into batches of `_DRIVE_QUERY_BATCH_SIZE` to keep the query string short.
         Returns a dict: {parent_id: subfolder_file_dict} for parents that have
         a matching subfolder. Missing parents are simply absent from the result.
+
+        Results are cached in-memory with a TTL to avoid redundant Drive calls.
         """
         result: dict[str, dict] = {}
         if not parent_ids:
             return result
 
-        # Build batches of parents
+        now = time.time()
+        cache_prefix = subfolder_name
+        # Split into cache hits and misses
+        uncached_ids: list[str] = []
+        for pid in parent_ids:
+            key = f"{cache_prefix}:{pid}"
+            entry = self._subfolder_cache.get(key)
+            if entry is not None:
+                expires_at, subfolder = entry
+                if now < expires_at:
+                    if subfolder is not None:
+                        result[pid] = subfolder
+                else:
+                    uncached_ids.append(pid)
+            else:
+                uncached_ids.append(pid)
+
+        if not uncached_ids:
+            return result
+
+        # Build batches of parents (only uncached)
         batch_size = _DRIVE_QUERY_BATCH_SIZE
-        for start in range(0, len(parent_ids), batch_size):
-            batch = parent_ids[start : start + batch_size]
+        for start in range(0, len(uncached_ids), batch_size):
+            batch = uncached_ids[start : start + batch_size]
             # Drive `parents in (id1, id2, ...)` — each ID wrapped in single quotes
             # with backslashes for any single quotes inside (rare for Drive IDs).
             parents_clause = " or ".join(
@@ -364,14 +393,23 @@ class DriveAPIMixin:
                         pageToken=_pt,
                     ).execute()
                 response = self._retry_drive_call(_call)
+                found_in_batch: set[str] = set()
                 for f in response.get("files", []):
                     for parent in f.get("parents", []):
-                        if parent in batch and parent not in result:
+                        if parent in batch and parent not in found_in_batch:
                             result[parent] = f
-                            break
+                            found_in_batch.add(parent)
+                            key = f"{cache_prefix}:{parent}"
+                            self._subfolder_cache[key] = (now + _SUBFOLDER_CACHE_TTL, f)
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     break
+            # Cache miss markers for parents that had no subfolder
+            for pid in batch:
+                if pid not in found_in_batch:
+                    key = f"{cache_prefix}:{pid}"
+                    if key not in self._subfolder_cache:
+                        self._subfolder_cache[key] = (now + _SUBFOLDER_CACHE_TTL, None)
         return result
 
     def _batch_list_md_files_in_folders(
@@ -386,13 +424,32 @@ class DriveAPIMixin:
         is known to work) — mimeType + trashed filters first, parents clause
         in parentheses last. The `.md` suffix filter is applied in Python to
         avoid Drive's unreliable `contains` operator.
+
+        Results are cached in-memory with a TTL to avoid redundant Drive calls.
         """
         result: dict[str, list[dict]] = {}
         if not folder_ids:
             return result
+
+        now = time.time()
+        uncached_ids: list[str] = []
+        for fid in folder_ids:
+            entry = self._md_files_cache.get(fid)
+            if entry is not None:
+                expires_at, files = entry
+                if now < expires_at:
+                    result[fid] = files
+                else:
+                    uncached_ids.append(fid)
+            else:
+                uncached_ids.append(fid)
+
+        if not uncached_ids:
+            return result
+
         batch_size = _DRIVE_QUERY_BATCH_SIZE
-        for start in range(0, len(folder_ids), batch_size):
-            batch = folder_ids[start : start + batch_size]
+        for start in range(0, len(uncached_ids), batch_size):
+            batch = uncached_ids[start : start + batch_size]
             parents_clause = " or ".join(
                 f"'{fid}' in parents" for fid in batch
             )
@@ -408,6 +465,7 @@ class DriveAPIMixin:
                         pageToken=_pt,
                     ).execute()
                 response = self._retry_drive_call(_call)
+                found_in_batch: set[str] = set()
                 for f in response.get("files", []):
                     # Skip folders — only process files.
                     if f.get("mimeType") == "application/vnd.google-apps.folder":
@@ -418,10 +476,19 @@ class DriveAPIMixin:
                     for parent in f.get("parents", []):
                         if parent in batch:
                             result.setdefault(parent, []).append(f)
+                            found_in_batch.add(parent)
                             break
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     break
+            # Cache empty list for folders with no .md files
+            for fid in batch:
+                if fid not in found_in_batch:
+                    self._md_files_cache[fid] = (now + _MD_FILES_CACHE_TTL, [])
+        # Cache results for found folders
+        for fid, files in result.items():
+            if fid in uncached_ids:
+                self._md_files_cache[fid] = (now + _MD_FILES_CACHE_TTL, files)
         return result
 
     def _check_chapter_duplicates(self, drive_service: Any, folder_id: str) -> tuple[bool, list[int]]:
