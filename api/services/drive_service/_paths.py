@@ -142,6 +142,10 @@ _CHECK_BATCH_PAGE_SIZE = _positive_int_from_env("DRIVE_SYNC_CHECK_BATCH_PAGE_SIZ
 _MAIN_BE_MAX_KEEPALIVE_CONNECTIONS = _positive_int_from_env("DRIVE_SYNC_MAIN_BE_KEEPALIVE_CONNECTIONS", 20)
 _MAIN_BE_MAX_CONNECTIONS = _positive_int_from_env("DRIVE_SYNC_MAIN_BE_MAX_CONNECTIONS", 40)
 _DRIVE_CALL_SEMAPHORE = threading.BoundedSemaphore(_DRIVE_CALL_CONCURRENCY)
+# Max parent IDs per Drive `parents in (...)` query clause. The Drive `q`
+# parameter has a 2048-character limit. With 60-char parent IDs, ~25 fits
+# safely with the rest of the query clause.
+_DRIVE_QUERY_BATCH_SIZE = _positive_int_from_env("DRIVE_SYNC_QUERY_BATCH_SIZE", 25)
 
 # -------------------------------------------------------------------------
 # Misc

@@ -13,18 +13,22 @@ Two-tier design for the check-all / detail flow:
     comparison for a single folder.
 
 Performance optimizations:
+  - Batched Drive lookups: a handful of Drive `files().list()` queries (chunks
+    of ~25 parents per query, kept well under the 2048-char Drive query limit)
+    cover all folders, instead of 2 calls per folder. For 444 folders this
+    drops Drive traffic from ~888 calls to ~40 calls.
   - Single BE call per story: get_server_chapter_data() returns both chapter
-    numbers and titles in one request, eliminating the prior duplicate call.
-  - Parallel folder processing: ThreadPoolExecutor(8 workers), each thread gets
-    its own Drive service via _build_drive_service() (already per-thread via
-    self._tls) and the BE HTTP client (also per-thread via self._main_be_tls).
-  - Result caching: summary check_all caches the response for 30s, so repeated
-    calls during that window are instant.
+    numbers and titles in one request.
+  - Parallel BE-call processing: ThreadPoolExecutor(16 workers), each with its
+    own per-thread BE HTTP client (self._main_be_tls). Drive calls are no
+    longer in the hot path, so worker count can be tuned to the BE server.
+  - Result caching: summary check_all caches the response for 30s.
 """
 
 from __future__ import annotations
 
 import html
+import logging
 import re
 import threading
 import time
@@ -35,13 +39,16 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     pass
 
+logger = logging.getLogger(__name__)
+
 
 _TITLE_UPDATE_FOLDER_PREFIXES = {"DONE", "EXTENDED"}
 
-# Workers for parallel folder scanning during check_all
-# Bounded to be safe with the Drive semaphore (_DRIVE_CALL_CONCURRENCY=6) and
-# the BE HTTP client (each thread has its own connection pool).
-_FOLDER_CHECK_WORKERS = 8
+# Workers for parallel folder processing in check_all.
+# Drive lookups are now batched up front (see _check_one_folder_summary docstring),
+# so workers only issue BE chapter-list calls. 16 strikes a balance between
+# throughput and BE server load.
+_FOLDER_CHECK_WORKERS = 16
 
 # Result cache TTL (seconds). Repeat calls within this window are served from cache.
 _CHECK_ALL_CACHE_TTL = 30.0
@@ -318,13 +325,25 @@ class TitleUpdateMixin:
         self,
         folder: dict,
         server_by_title: dict[str, dict],
+        drive_chapter_files_by_folder: dict[int, dict[int, str]],
+        allow_per_folder_fallback: bool = False,
     ) -> tuple[dict, str]:
         """Count-only check: returns (entry, bucket_key) with empty `chapters`.
 
         Faster than _check_one_folder for the check-all endpoint:
           - No per-chapter dict allocation (skips building TitleChapterEntry lists)
-          - Skips `_classify_chapter_titles` which builds a list of 50+ dicts per folder
-        Same Drive + BE calls; counts are still accurate for the update button.
+          - No per-folder Drive API calls — uses pre-fetched maps built once
+            via `_batch_find_subfolders_by_name` + `_batch_list_md_files_in_folders`.
+
+        Args:
+          folder: the Drive folder dict.
+          server_by_title: {normalized_title: server_story_dict}.
+          drive_chapter_files_by_folder: {folder_id: {chapter_number: drive_title}}.
+            This is the pre-fetched mapping; the absence of a folder_id means
+            the folder has no chapters-extended subfolder or no .md files.
+          allow_per_folder_fallback: when True (and the folder_id is missing
+            from the pre-fetched map), do per-folder Drive lookups. Used as a
+            slow-path fallback when the batched lookup failed globally.
         """
         display_name = folder.get("display_name", "") or folder.get("name", "")
         story = server_by_title.get(self._normalize_story_title(display_name))
@@ -336,24 +355,30 @@ class TitleUpdateMixin:
             entry["chapters"] = []
             return (entry, "no_server_match")
 
-        drive_service = self._build_drive_service()
-        file_dicts = self._list_chapters_extended_filenames(drive_service, folder["id"])
-        if not file_dicts:
+        drive_title_by_chapter = drive_chapter_files_by_folder.get(folder["id"])
+        if not drive_title_by_chapter and allow_per_folder_fallback:
+            try:
+                drive_service = self._build_drive_service()
+                file_dicts = self._list_chapters_extended_filenames(
+                    drive_service, folder["id"]
+                )
+                if file_dicts:
+                    drive_title_by_chapter = {}
+                    for f in file_dicts:
+                        name = f.get("name", "")
+                        idx = self._extract_chapter_index(name)
+                        if idx is None:
+                            continue
+                        drive_title_by_chapter[idx] = _chapter_title_from_filename(name)
+            except Exception:
+                drive_title_by_chapter = None
+
+        if not drive_title_by_chapter:
             entry = self._build_title_update_entry(
                 folder, story, None, folder_status="empty_chapters"
             )
             entry["chapters"] = []
             return (entry, "empty_chapters")
-
-        # Build a lightweight {chapter_number: drive_title} map (no file_name, no
-        # full info dict). This is enough for the comparison loop below.
-        drive_title_by_chapter: dict[int, str] = {}
-        for f in file_dicts:
-            name = f.get("name", "")
-            idx = self._extract_chapter_index(name)
-            if idx is None:
-                continue
-            drive_title_by_chapter[idx] = _chapter_title_from_filename(name)
 
         story_id = story["id"]
 
@@ -372,12 +397,12 @@ class TitleUpdateMixin:
             return (entry, "empty_chapters")
 
         # Count-only loop — no per-chapter dict allocation.
+        server_set = set(server_numbers)
         matched = 0
         can_update = 0
         missing_drive = 0
-        drive_only = len([n for n in drive_title_by_chapter if n not in set(server_numbers)])
+        drive_only = 0
 
-        server_set = set(server_numbers)
         for chapter_number in server_numbers:
             drive_title = drive_title_by_chapter.get(chapter_number)
             if drive_title is None:
@@ -391,6 +416,10 @@ class TitleUpdateMixin:
                 matched += 1
             else:
                 can_update += 1
+
+        for n in drive_title_by_chapter:
+            if n not in server_set:
+                drive_only += 1
 
         classification = {
             "chapters": [],
@@ -441,10 +470,11 @@ class TitleUpdateMixin:
         a specific folder, call get_title_update_detail_for_folder(folder_id).
 
         Performance:
-          - Single BE call per story (chapter numbers + titles together)
-          - Parallel folder processing (8 workers, each with own Drive service)
-          - Count-only loop (no per-chapter dict allocation)
-          - 30s result cache (subsequent calls within window are instant)
+          - Batched Drive queries: ~40 queries total (not 2 per folder) to get
+            all chapters-extended subfolders and their .md files.
+          - Bumped parallelism (16 workers) for the BE chapter list calls.
+          - Count-only loop (no per-chapter dict allocation).
+          - 30s result cache (subsequent calls within window are instant).
 
         Returns a dict with four buckets: can_update, all_match, no_server_match,
         empty_chapters. Each entry's `chapters` field is always [].
@@ -467,6 +497,48 @@ class TitleUpdateMixin:
             if s.get("title")
         }
 
+        # ------------------------------------------------------------------
+        # Batched Drive lookups: ~40 queries total instead of 2 per folder.
+        #   Step A: find all `chapters-extended` subfolders for every story folder.
+        #   Step B: list all .md files inside every chapters-extended subfolder.
+        # If the batched query fails (e.g. Drive rejects the query, transient
+        # HttpError), we fall back to per-folder lookups so the endpoint still
+        # returns a result instead of 500-ing.
+        # ------------------------------------------------------------------
+        drive_chapter_files_by_folder: dict[str, dict[int, str]] = {}
+        batched_lookup_ok = True
+        try:
+            drive_service = self._build_drive_service()
+            folder_ids = [f["id"] for f in title_update_folders]
+            subfolder_by_parent = self._batch_find_subfolders_by_name(
+                drive_service, folder_ids, "chapters-extended"
+            )
+            subfolder_ids = [f["id"] for f in subfolder_by_parent.values() if f]
+            md_files_by_subfolder = self._batch_list_md_files_in_folders(
+                drive_service, subfolder_ids
+            )
+
+            for folder in title_update_folders:
+                sub = subfolder_by_parent.get(folder["id"])
+                if sub is None:
+                    continue
+                md_files = md_files_by_subfolder.get(sub["id"], [])
+                titles: dict[int, str] = {}
+                for f in md_files:
+                    name = f.get("name", "")
+                    idx = self._extract_chapter_index(name)
+                    if idx is None:
+                        continue
+                    titles[idx] = _chapter_title_from_filename(name)
+                if titles:
+                    drive_chapter_files_by_folder[folder["id"]] = titles
+        except Exception as exc:
+            logger.exception(
+                "Batched Drive lookup failed, falling back to per-folder: %s", exc
+            )
+            drive_chapter_files_by_folder = {}
+            batched_lookup_ok = False
+
         can_update: list[dict] = []
         all_match: list[dict] = []
         no_server_match: list[dict] = []
@@ -478,6 +550,8 @@ class TitleUpdateMixin:
                     self._check_one_folder_summary,
                     folder,
                     server_by_title,
+                    drive_chapter_files_by_folder,
+                    not batched_lookup_ok,
                 ): folder
                 for folder in title_update_folders
             }

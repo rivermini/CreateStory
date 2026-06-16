@@ -24,6 +24,7 @@ from api.services.drive_service._paths import (
     _DRIVE_CALL_CONCURRENCY,
     _DRIVE_CALL_RETRIES,
     _DRIVE_CALL_SEMAPHORE,
+    _DRIVE_QUERY_BATCH_SIZE,
     _RE_STATUS_PREFIX,
     _SHARED_CREDENTIALS_DIR,
 )
@@ -322,6 +323,106 @@ class DriveAPIMixin:
             if not page_token:
                 break
         return results
+
+    def _batch_find_subfolders_by_name(
+        self, drive_service: Any, parent_ids: list[str], subfolder_name: str
+    ) -> dict[str, dict]:
+        """Find subfolders by name across many parents in batched Drive queries.
+
+        Drive query supports `parents in (id1, id2, ...)` syntax. We chunk parents
+        into batches of `_DRIVE_QUERY_BATCH_SIZE` to keep the query string short.
+        Returns a dict: {parent_id: subfolder_file_dict} for parents that have
+        a matching subfolder. Missing parents are simply absent from the result.
+        """
+        result: dict[str, dict] = {}
+        if not parent_ids:
+            return result
+
+        # Build batches of parents
+        batch_size = _DRIVE_QUERY_BATCH_SIZE
+        for start in range(0, len(parent_ids), batch_size):
+            batch = parent_ids[start : start + batch_size]
+            # Drive `parents in (id1, id2, ...)` — each ID wrapped in single quotes
+            # with backslashes for any single quotes inside (rare for Drive IDs).
+            parents_clause = " or ".join(
+                f"'{pid}' in parents" for pid in batch
+            )
+            name_escaped = subfolder_name.replace("'", "\\'")
+            query = (
+                f"mimeType='application/vnd.google-apps.folder' "
+                f"and name='{name_escaped}' and trashed=false and "
+                f"({parents_clause})"
+            )
+            page_token: Optional[str] = None
+            while True:
+                _pt = page_token
+                def _call(_q: str = query, _pt=page_token) -> dict:
+                    return drive_service.files().list(
+                        q=_q,
+                        fields="files(id, name, parents),nextPageToken",
+                        pageSize=500,
+                        pageToken=_pt,
+                    ).execute()
+                response = self._retry_drive_call(_call)
+                for f in response.get("files", []):
+                    for parent in f.get("parents", []):
+                        if parent in batch and parent not in result:
+                            result[parent] = f
+                            break
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
+        return result
+
+    def _batch_list_md_files_in_folders(
+        self, drive_service: Any, folder_ids: list[str]
+    ) -> dict[str, list[dict]]:
+        """List .md files inside many folders in batched Drive queries.
+
+        Returns a dict: {folder_id: [file_dict, ...]} for folders that have
+        any non-trashed .md files. Folders with no .md files are absent.
+
+        Mirrors the query pattern of `_batch_find_subfolders_by_name` (which
+        is known to work) — mimeType + trashed filters first, parents clause
+        in parentheses last. The `.md` suffix filter is applied in Python to
+        avoid Drive's unreliable `contains` operator.
+        """
+        result: dict[str, list[dict]] = {}
+        if not folder_ids:
+            return result
+        batch_size = _DRIVE_QUERY_BATCH_SIZE
+        for start in range(0, len(folder_ids), batch_size):
+            batch = folder_ids[start : start + batch_size]
+            parents_clause = " or ".join(
+                f"'{fid}' in parents" for fid in batch
+            )
+            query = f"trashed=false and ({parents_clause})"
+            page_token: Optional[str] = None
+            while True:
+                _pt = page_token
+                def _call(_q: str = query, _pt=page_token) -> dict:
+                    return drive_service.files().list(
+                        q=_q,
+                        fields="files(id, name, mimeType, parents),nextPageToken",
+                        pageSize=500,
+                        pageToken=_pt,
+                    ).execute()
+                response = self._retry_drive_call(_call)
+                for f in response.get("files", []):
+                    # Skip folders — only process files.
+                    if f.get("mimeType") == "application/vnd.google-apps.folder":
+                        continue
+                    name = f.get("name", "") or ""
+                    if not name.lower().endswith(".md"):
+                        continue
+                    for parent in f.get("parents", []):
+                        if parent in batch:
+                            result.setdefault(parent, []).append(f)
+                            break
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
+        return result
 
     def _check_chapter_duplicates(self, drive_service: Any, folder_id: str) -> tuple[bool, list[int]]:
         """Scan a folder for .md files whose chapter numbers have duplicates."""
