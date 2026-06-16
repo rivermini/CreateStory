@@ -675,6 +675,7 @@ export interface CheckAllResponse {
   can_update: CoverUpdateEntry[];
   updated: CoverUpdateEntry[];
   no_cover1_file: CoverUpdateEntry[];
+  no_banner1_file?: CoverUpdateEntry[];
   no_server_match: CoverUpdateEntry[];
 }
 
