@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -31,7 +32,44 @@ async def lifespan(app: FastAPI):
         get_bedread_service()
     except Exception as exc:
         logger.warning("BedRead job metadata initialization skipped: %s", exc)
+
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if "libopus" not in result.stdout.lower() and "libopus" not in result.stderr.lower():
+            logger.warning(
+                "FFmpeg does not appear to support libopus. "
+                "Opus audio uploads may fail. Install ffmpeg with libopus: "
+                "pip install imageio-ffmpeg  (or system ffmpeg with libopus)"
+            )
+        else:
+            logger.info("FFmpeg libopus support confirmed at startup.")
+    except FileNotFoundError:
+        logger.warning(
+            "FFmpeg not found in PATH. "
+            "Audio upload with Opus compression will not be available. "
+            "Install ffmpeg: pip install imageio-ffmpeg"
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("FFmpeg version check timed out.")
+    except Exception as exc:
+        logger.warning("FFmpeg version check failed: %s", exc)
+
     yield
+    logger.info("BedReadVoices shutdown: closing HTTP clients...")
+    try:
+        from api.services.bedread_service import get_bedread_service
+        from services.orchestrator import get_auto_audio_service
+        get_bedread_service()
+        get_auto_audio_service().close()
+    except Exception as exc:
+        logger.warning("BedReadVoices shutdown: error closing clients: %s", exc)
+    logger.info("BedReadVoices shutdown: done.")
 
 
 app = FastAPI(
@@ -45,10 +83,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -76,6 +115,10 @@ def api_info() -> dict:
 
 @app.post("/api/dev/reset-state", tags=["Development"])
 def reset_runtime_state() -> dict:
+    """Reset runtime state. Only available when DEV_MODE=true."""
+    if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
     from api.services.bedread_service import get_bedread_service
     from api.services.tts_service import get_tts_service
 

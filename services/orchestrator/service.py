@@ -381,6 +381,11 @@ class AutoAudioService:
         """Remove a session from history. Returns True if deleted, False if not found."""
         return self._session_mgr.delete_session(session_id)
 
+    def close(self) -> None:
+        """Close all HTTP clients held by this service."""
+        self._api.close()
+        self._br.close()
+
 
 _auto_audio_service: Optional[AutoAudioService] = None
 

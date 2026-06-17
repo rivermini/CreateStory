@@ -621,18 +621,31 @@ class TTSService:
         if concurrency == self.CONCURRENCY:
             return
 
-        old = self.CONCURRENCY
-        self.CONCURRENCY = concurrency
-        self._target_workers = concurrency
+        with self._lock:
+            # Drop dead thread references so subsequent scale-ups don't reuse
+            # their worker IDs (the new thread's id is len(self._workers)).
+            self._workers = [t for t in self._workers if t.is_alive()]
 
-        if concurrency > old:
-            for i in range(old, concurrency):
-                t = Thread(target=self._worker_loop, args=(i,), daemon=True)
-                t.start()
-                self._workers.append(t)
-            logger.info("Scaled TTSService workers from %d to %d.", old, concurrency)
-        else:
-            logger.info("TTSService concurrency set to %d (extra workers will exit when idle).", concurrency)
+            old = self.CONCURRENCY
+            self.CONCURRENCY = concurrency
+            self._target_workers = concurrency
+
+            if concurrency > old:
+                for i in range(len(self._workers), concurrency):
+                    t = Thread(target=self._worker_loop, args=(i,), daemon=True)
+                    t.start()
+                    self._workers.append(t)
+                logger.info("Scaled TTSService workers from %d to %d.", old, concurrency)
+            else:
+                # Actively stop excess workers and clean up their references immediately.
+                # Workers exit via the _target_workers check in _worker_loop; joining them
+                # here ensures the thread objects are dropped from _workers without waiting
+                # for the next set_concurrency() call.
+                excess = len(self._workers) - concurrency
+                for i in range(len(self._workers) - 1, len(self._workers) - excess - 1, -1):
+                    self._workers[i].join(timeout=2.0)
+                self._workers = [t for t in self._workers if t.is_alive()]
+                logger.info("Scaled TTSService workers down from %d to %d.", old, concurrency)
 
     def set_auto_concurrency(self) -> None:
         self.set_concurrency(_default_concurrency(ignore_env=True))

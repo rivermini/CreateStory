@@ -21,6 +21,13 @@ class BedReadClient:
 
     def __init__(self) -> None:
         self._bedread_url = _get_bedreadvoices_url()
+        self._client = httpx.Client(
+            timeout=300.0,
+            limits=httpx.Limits(max_connections=30, max_keepalive_connections=0),
+        )
+
+    def close(self) -> None:
+        self._client.close()
 
     def start_batch(
         self,
@@ -58,20 +65,18 @@ class BedReadClient:
 
     def delete_batch_job(self, batch_id: str) -> None:
         url = f"{self._bedread_url}/api/bedread/jobs/{batch_id}"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.delete(url)
-            if resp.status_code == 404:
-                return
-            resp.raise_for_status()
+        resp = self._client.delete(url)
+        if resp.status_code == 404:
+            return
+        resp.raise_for_status()
 
     def download_chapter(self, batch_id: str, chapter_num: int) -> Optional[Path]:
         url = f"{self._bedread_url}/api/bedread/jobs/{batch_id}/download?chapter={chapter_num}"
         try:
-            with httpx.Client(timeout=300.0) as client:
-                resp = client.get(url)
-                if resp.status_code == 404:
-                    return None
-                resp.raise_for_status()
+            resp = self._client.get(url)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
             tmp_dir = Path(tempfile.gettempdir()) / f"bedread_auto_{batch_id}"
             tmp_dir.mkdir(parents=True, exist_ok=True)
             out_path = tmp_dir / f"chapter_{chapter_num}.wav"
@@ -90,24 +95,21 @@ class BedReadClient:
     def delete_batch_output(self, batch_id: str) -> bool:
         url = f"{self._bedread_url}/api/bedread/jobs/{batch_id}/output"
         try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.delete(url)
-                return resp.status_code == 200
+            resp = self._client.delete(url)
+            return resp.status_code == 200
         except Exception:
             return False
 
     def _post(self, path: str, json_data: dict) -> dict:
         url = f"{self._bedread_url}{path}"
-        with httpx.Client(timeout=300.0) as client:
-            resp = client.post(url, json=json_data)
-            resp.raise_for_status()
-            return resp.json()
+        resp = self._client.post(url, json=json_data)
+        resp.raise_for_status()
+        return resp.json()
 
     def _get(self, path: str) -> Optional[dict]:
         url = f"{self._bedread_url}{path}"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(url)
-            if resp.status_code == 404:
-                return None
-            resp.raise_for_status()
-            return resp.json()
+        resp = self._client.get(url)
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()

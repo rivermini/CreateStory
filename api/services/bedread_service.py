@@ -53,8 +53,8 @@ def _get_external_api_config() -> tuple[str, dict]:
                     if token:
                         headers["Authorization"] = f"Bearer {token}"
                     return api_base.rstrip("/"), headers
-    except Exception:
-        pass
+                except Exception:
+                    pass
 
     # Fallback: use env vars (for backward compatibility in dev environments)
     api_base = os.environ.get("EXTERNAL_API_BASE_URL", "").strip()
@@ -803,7 +803,8 @@ class BedReadService:
                                             c.progress_pct = tts_job.get("progress_pct", 0)
                             all_done = False
                 except Exception:
-                    pass
+                    logger.exception("Poll cycle error for batch %s", batch_id)
+                    all_done = False
 
                 batch_finished = False
                 with self._lock:
@@ -890,14 +891,24 @@ class BedReadService:
             if self._active_batch_id == batch_id:
                 self._active_batch_id = None
 
+            assigned_job_ids = set()
             for ch in batch.chapters:
                 if ch.job_id:
                     self.tts_service.cancel_job(ch.job_id)
+                    assigned_job_ids.add(ch.job_id)
 
-        should_restart_poll = False
-        with self._lock:
+            if batch.output_dir:
+                for tts_job in self.tts_service.list_jobs():
+                    if (
+                        tts_job.get("status") == "queued"
+                        and tts_job.get("job_id") not in assigned_job_ids
+                        and tts_job.get("output_dir", "").startswith(str(batch.output_dir))
+                    ):
+                        self.tts_service.cancel_job(tts_job["job_id"])
+
             no_active_batch = self._active_batch_id is None
 
+        should_restart_poll = False
         if no_active_batch:
             self._process_next_in_queue()
             with self._lock:
@@ -1016,6 +1027,21 @@ class BedReadService:
 
         zip_buffer.seek(0)
         return zip_buffer
+
+    def build_batch_zip_on_disk(self, batch_id: str) -> Optional[Path]:
+        """Build the batch zip on disk and return its path.
+
+        Used by the download route so we can serve the result via
+        ``FileResponse`` (zero-copy OS sendfile) instead of loading the
+        entire archive into memory first. Returns ``None`` if the batch
+        has no completed chapters to bundle.
+        """
+        with self._lock:
+            batch = self._batch_jobs.get(batch_id)
+            if batch is None:
+                return None
+            snapshot = batch
+        return self._generate_zip(snapshot)
 
 
 _bedread_service: Optional[BedReadService] = None

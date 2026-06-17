@@ -27,9 +27,8 @@ class BedReadJobRepository:
 
     def save_jobs(self, entries: list[dict]) -> None:
         with self.session_factory() as db:
-            db.execute(delete(BedReadAudioJobRecord))
             for entry in entries:
-                db.add(self._dict_to_row(entry))
+                db.merge(self._dict_to_row(entry))
             db.commit()
 
     def import_existing_file(self, jobs_file: Path) -> None:

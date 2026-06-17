@@ -14,36 +14,39 @@ class ExternalAPIClient:
     """HTTP client for the external main-BE API (story/audio data)."""
 
     def __init__(self) -> None:
-        pass
+        self._client = httpx.Client(
+            timeout=60.0,
+            limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
+        )
+
+    def close(self) -> None:
+        self._client.close()
 
     def get(self, path: str, params: Optional[dict] = None) -> list | dict:
         api_base, headers = _get_external_api_config()
         url = f"{api_base}{path}"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(url, headers=headers, params=params or {})
-            resp.raise_for_status()
-            return resp.json()
+        resp = self._client.get(url, headers=headers, params=params or {})
+        resp.raise_for_status()
+        return resp.json()
 
     def post(self, path: str, json_data: Optional[dict] = None) -> dict:
         api_base, headers = _get_external_api_config()
         url = f"{api_base}{path}"
-        with httpx.Client(timeout=60.0) as client:
-            resp = client.post(url, headers=headers, json=json_data or {})
-            resp.raise_for_status()
-            raw = resp.json()
-            if isinstance(raw, dict) and "data" in raw:
-                return raw["data"]
-            return raw
+        resp = self._client.post(url, headers=headers, json=json_data or {})
+        resp.raise_for_status()
+        raw = resp.json()
+        if isinstance(raw, dict) and "data" in raw:
+            return raw["data"]
+        return raw
 
     def put(self, url: str, data: bytes, content_type: str = "audio/wav",
             extra_headers: Optional[dict] = None) -> httpx.Response:
         headers = {"Content-Type": content_type}
         if extra_headers:
             headers.update(extra_headers)
-        with httpx.Client(timeout=120.0) as client:
-            resp = client.put(url, content=data, headers=headers)
-            resp.raise_for_status()
-            return resp
+        resp = self._client.put(url, content=data, headers=headers)
+        resp.raise_for_status()
+        return resp
 
     def put_with_retry(self, url: str, data: bytes, content_type: str = "audio/wav",
                        extra_headers: Optional[dict] = None, max_retries: int = 3) -> httpx.Response:
@@ -53,10 +56,9 @@ class ExternalAPIClient:
         last_exc: Exception | None = None
         for attempt in range(max_retries):
             try:
-                with httpx.Client(timeout=120.0) as client:
-                    resp = client.put(url, content=data, headers=headers)
-                    resp.raise_for_status()
-                    return resp
+                resp = self._client.put(url, content=data, headers=headers)
+                resp.raise_for_status()
+                return resp
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 503 and attempt < max_retries - 1:
                     last_exc = exc
@@ -82,25 +84,24 @@ class ExternalAPIClient:
         from .config import _get_external_api_config as _cfg
         api_base, headers = _cfg()
         url = f"{api_base}/api/v1/dashboard/stories-needing-update"
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.get(url, headers=headers)
-            resp.raise_for_status()
-            raw = resp.json()
-            if isinstance(raw, dict):
-                data = raw.get("data", {})
-                if isinstance(data, dict):
-                    items = data.get("data", [])
-                    if isinstance(items, list):
-                        return items
-                    items = data.get("items", [])
-                    if isinstance(items, list):
-                        return items
-                    return []
-                elif isinstance(data, list):
-                    return data
-            if isinstance(raw, list):
-                return raw
-            return []
+        resp = self._client.get(url, headers=headers, timeout=30.0)
+        resp.raise_for_status()
+        raw = resp.json()
+        if isinstance(raw, dict):
+            data = raw.get("data", {})
+            if isinstance(data, dict):
+                items = data.get("data", [])
+                if isinstance(items, list):
+                    return items
+                items = data.get("items", [])
+                if isinstance(items, list):
+                    return items
+                return []
+            elif isinstance(data, list):
+                return data
+        if isinstance(raw, list):
+            return raw
+        return []
 
     def fetch_all_stories(self) -> list[dict]:
         all_stories: list[dict] = []

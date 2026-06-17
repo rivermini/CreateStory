@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,6 +42,9 @@ class BedReadAudioJobRecord(Base):
 
 class GeneratedAudioFileRecord(Base):
     __tablename__ = "generated_audio_files"
+    __table_args__ = (
+        Index("ix_generated_audio_files_status_updated", "status", "updated_at"),
+    )
 
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     status: Mapped[str] = mapped_column(String(64), nullable=False, default="queued", index=True)

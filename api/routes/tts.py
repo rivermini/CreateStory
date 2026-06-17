@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from io import BytesIO
+from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.services.tts_service import (
@@ -236,13 +236,11 @@ def stream_audio(job_id: str) -> StreamingResponse:
     fmt = job.get("format", "wav")
     mime_type = "audio/wav" if fmt == "wav" else "audio/mpeg"
 
-    buf = BytesIO(output_path.read_bytes())
-    return StreamingResponse(
-        iter([buf.getvalue()]),
+    return FileResponse(
+        output_path,
         media_type=mime_type,
+        filename=output_path.name,
         headers={
-            "Content-Disposition": _content_disposition(output_path.name),
-            "Content-Length": str(output_path.stat().st_size),
             "Cache-Control": "no-cache, no-transform",
             "X-Accel-Buffering": "no",
         },
@@ -261,8 +259,24 @@ class PreviewRequest(BaseModel):
     speed: float = Field(default=0.69, ge=0.5, le=2.0)
 
 
-@router.post("/preview")
-def preview_voice(request: PreviewRequest) -> StreamingResponse:
+class PreviewAcceptedResponse(BaseModel):
+    job_id: str
+    status: str
+    status_url: str
+    audio_url: Optional[str] = None
+    message: str = "Preview job queued. Poll status_url for progress."
+
+
+@router.post("/preview", response_model=PreviewAcceptedResponse, status_code=202)
+def preview_voice(request: PreviewRequest) -> PreviewAcceptedResponse:
+    """Queue a preview TTS job and return immediately with a status URL.
+
+    The client should poll `status_url` until `status == "completed"`, then
+    fetch `audio_url` (the same path as `GET /api/tts/jobs/{id}/audio`) to
+    download the WAV. This is non-blocking: the worker thread is released
+    as soon as the job is queued, so multiple concurrent preview requests
+    do not serialize on a single async sleep loop.
+    """
     service = get_tts_service()
 
     supported_langs = {l["code"] for l in service.get_languages()}
@@ -282,29 +296,9 @@ def preview_voice(request: PreviewRequest) -> StreamingResponse:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    import time
-    for _ in range(120):
-        time.sleep(1)
-        job = service.get_job(job_id)
-        if job is None:
-            raise HTTPException(status_code=500, detail="Job disappeared.")
-        if job["status"] == "completed":
-            output_path = service.get_output_path(job_id)
-            if output_path and output_path.exists():
-                buf = BytesIO(output_path.read_bytes())
-                return StreamingResponse(
-                    iter([buf.getvalue()]),
-                    media_type="audio/wav",
-                    headers={
-                        "Content-Disposition": 'attachment; filename="preview.wav"',
-                        "Content-Length": str(output_path.stat().st_size),
-                    },
-                )
-            raise HTTPException(status_code=500, detail="Audio file not found after completion.")
-        if job["status"] in ("failed", "cancelled"):
-            raise HTTPException(
-                status_code=422,
-                detail=f"Preview generation failed: {job.get('error', 'Unknown')}",
-            )
-
-    raise HTTPException(status_code=504, detail="Preview generation timed out.")
+    return PreviewAcceptedResponse(
+        job_id=job_id,
+        status="queued",
+        status_url=f"/api/tts/jobs/{job_id}",
+        audio_url=f"/api/tts/jobs/{job_id}/audio",
+    )

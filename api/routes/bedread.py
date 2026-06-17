@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-from io import BytesIO
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from api.services.bedread_service import get_bedread_service
@@ -25,12 +23,6 @@ _CACHE_TTL_SECONDS = 300
 def _zip_filename(story_title: str) -> str:
     safe = "".join(c if (ord(c) < 128 and c.isalnum()) else "_" for c in story_title)
     return (safe.strip() or "voices") + "_Voices.zip"
-
-
-def _content_disposition(filename: str) -> str:
-    ascii_name = "".join(c if ord(c) < 128 else "_" for c in filename)
-    encoded = quote(filename, safe="")
-    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}"
 
 
 class BatchGenerateRequest(BaseModel):
@@ -121,8 +113,8 @@ def search_stories(
     categories: Optional[list[str]] = Query(default=None),
     status: Optional[str] = Query(default="all", description="Filter by status: all, ongoing, completed."),
     sort: Optional[str] = Query(default="release_date", description="Sort: release_date, title, chapter_count, popular."),
-    minchapters: Optional[int] = Query(default=None, description="Minimum chapter count."),
-    publishedWithin: Optional[int] = Query(default=None, description="Published within N days."),
+    min_chapters: Optional[int] = Query(default=None, alias="minChapters", description="Minimum chapter count."),
+    published_within: Optional[int] = Query(default=None, alias="publishedWithin", description="Published within N days."),
     page: int = Query(default=1, ge=1, description="Page number."),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page."),
 ) -> StorySearchResponse:
@@ -134,8 +126,8 @@ def search_stories(
             categories=categories,
             status=status,
             sort=sort,
-            min_chapters=minchapters,
-            published_within=publishedWithin,
+            min_chapters=min_chapters,
+            published_within=published_within,
             page=page,
             limit=limit,
         )
@@ -319,7 +311,7 @@ def remove_batch(batch_id: str) -> dict:
 def download_chapter(
     batch_id: str,
     chapter: int = Query(..., description="Chapter number to download."),
-) -> StreamingResponse:
+) -> FileResponse:
     """Stream a single chapter's audio file."""
     service = get_bedread_service()
 
@@ -334,13 +326,11 @@ def download_chapter(
     fmt = job.get("format", "wav")
     mime_type = "audio/wav" if fmt == "wav" else "audio/mpeg"
 
-    buf = BytesIO(file_path.read_bytes())
-    return StreamingResponse(
-        iter([buf.getvalue()]),
+    return FileResponse(
+        file_path,
         media_type=mime_type,
+        filename=file_path.name,
         headers={
-            "Content-Disposition": _content_disposition(file_path.name),
-            "Content-Length": str(file_path.stat().st_size),
             "Cache-Control": "no-cache, no-transform",
             "X-Accel-Buffering": "no",
         },
@@ -348,7 +338,7 @@ def download_chapter(
 
 
 @router.get("/jobs/{batch_id}/zip")
-def download_batch_zip(batch_id: str) -> StreamingResponse:
+def download_batch_zip(batch_id: str) -> FileResponse:
     """Stream a ZIP file containing all completed chapter audio files."""
     service = get_bedread_service()
 
@@ -360,14 +350,13 @@ def download_batch_zip(batch_id: str) -> StreamingResponse:
     if zip_path:
         zip_path_obj = Path(zip_path)
         if zip_path_obj.exists():
-            zip_bytes = zip_path_obj.read_bytes()
             filename = _zip_filename(job.get("story_title", "voices"))
-            return StreamingResponse(
-                iter([zip_bytes]),
+            return FileResponse(
+                zip_path_obj,
                 media_type="application/zip",
+                filename=filename,
                 headers={
-                    "Content-Disposition": _content_disposition(filename),
-                    "Content-Length": str(len(zip_bytes)),
+                    "Cache-Control": "no-cache, no-transform",
                 },
             )
 
@@ -379,29 +368,27 @@ def download_batch_zip(batch_id: str) -> StreamingResponse:
         expected_zip_name = f"{safe_title}_{voice_name}.zip"
         existing_zip = output_dir / expected_zip_name
         if existing_zip.exists():
-            zip_bytes = existing_zip.read_bytes()
             filename = _zip_filename(job.get("story_title", "story"))
-            return StreamingResponse(
-                iter([zip_bytes]),
+            return FileResponse(
+                existing_zip,
                 media_type="application/zip",
+                filename=filename,
                 headers={
-                    "Content-Disposition": _content_disposition(filename),
-                    "Content-Length": str(len(zip_bytes)),
+                    "Cache-Control": "no-cache, no-transform",
                 },
             )
 
-    zip_buffer = service.get_batch_zip(batch_id)
-    if zip_buffer is None:
+    zip_path = service.build_batch_zip_on_disk(batch_id)
+    if zip_path is None or not zip_path.exists():
         raise HTTPException(status_code=404, detail="No completed chapters available for zip.")
 
     filename = _zip_filename(job.get("story_title", "voices"))
 
-    return StreamingResponse(
-        iter([zip_buffer.getvalue()]),
+    return FileResponse(
+        zip_path,
         media_type="application/zip",
+        filename=filename,
         headers={
-            "Content-Disposition": _content_disposition(filename),
-            "Content-Length": str(len(zip_buffer.getvalue())),
             "Cache-Control": "no-cache, no-transform",
         },
     )
