@@ -5,8 +5,10 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import sys
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -197,6 +199,7 @@ class CrawlProgress:
             status=self.status,
             error_message=self.error_message or None,
             source_url=self.source_url or None,
+            started_at=self.started_at,
         )
 
 
@@ -207,6 +210,7 @@ class CrawlService:
         self._lock = Lock()
         self._project_root = Path(__file__).parent.parent.parent.resolve()
         self._index_file = self._project_root / "api" / "data" / "crawl_sessions.json"
+        self._last_persist_at: float = 0.0
         init_db()
         self._repo = CrawlSessionRepository()
         self._output_repo = CrawlOutputRepository()
@@ -354,6 +358,9 @@ class CrawlService:
                 return
 
         try:
+            creationflags = 0
+            if sys.platform == "win32":
+                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined,assignment]
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -361,6 +368,8 @@ class CrawlService:
                 cwd=cwd,
                 env=env,
                 bufsize=1,
+                start_new_session=True,
+                creationflags=creationflags,
             )
             progress.add_log(f"[PID] {process.pid}", "debug")
 
@@ -373,11 +382,32 @@ class CrawlService:
 
                 if cancel:
                     progress.add_log("[CANCEL] Terminating subprocess...", "warning")
-                    process.terminate()
+                    if sys.platform == "win32":
+                        # On Windows: Ctrl+C/Break events work with process groups created
+                        # via CREATE_NEW_PROCESS_GROUP. We only send them to the direct child
+                        # process since os.killpg does not exist.
+                        try:
+                            os.kill(process.pid, signal.CTRL_C_EVENT)
+                        except (ProcessLookupError, OSError):
+                            pass
+                    else:
+                        try:
+                            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                        except (ProcessLookupError, OSError):
+                            pass
                     try:
                         process.wait(timeout=5)
                     except subprocess.TimeoutExpired:
-                        process.kill()
+                        if sys.platform == "win32":
+                            try:
+                                os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+                            except (ProcessLookupError, OSError):
+                                pass
+                        else:
+                            try:
+                                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                            except (ProcessLookupError, OSError):
+                                pass
                     with self._lock:
                         progress.status = "cancelled"
                         progress.finished_at = self._now()
@@ -388,8 +418,9 @@ class CrawlService:
                 if line.strip():
                     saw_output = True
                 self._parse_line(crawl_id, line)
-                if line.strip():
+                if line.strip() and time.time() - self._last_persist_at > 5:
                     self._persist_index()
+                    self._last_persist_at = time.time()
 
             try:
                 process.wait(timeout=5)
@@ -696,6 +727,11 @@ class CrawlService:
             self._output_repo.delete_for_crawls(crawl_ids)
         except Exception as exc:
             logger.warning("Failed to delete crawl output metadata: %s", exc)
+
+        try:
+            self._repo.delete_for_sessions(crawl_ids)
+        except Exception as exc:
+            logger.warning("Failed to delete crawl session records: %s", exc)
 
         self._persist_index()
         return deleted_count

@@ -58,6 +58,7 @@ async def crawl_event_generator(crawl_id: str) -> AsyncGenerator[dict, None]:
                 "current_title": progress.current_title,
                 "status": current_status,
                 "source_url": progress.source_url or None,
+                "started_at": progress.started_at,
             }
             if current_status == "failed" and progress.error_message:
                 payload["error_message"] = progress.error_message
@@ -70,6 +71,7 @@ async def crawl_event_generator(crawl_id: str) -> AsyncGenerator[dict, None]:
                 "chapters_crawled": progress.chapters_crawled,
                 "chapters_total": progress.chapters_total,
                 "source_url": progress.source_url or None,
+                "started_at": progress.started_at,
             }
             if current_status == "failed":
                 payload["error_message"] = progress.error_message

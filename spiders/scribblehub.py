@@ -7,7 +7,9 @@ Supports:
 
 from __future__ import annotations
 
+import atexit
 import asyncio
+import fcntl
 import json
 import logging
 import os
@@ -31,6 +33,11 @@ from models.chapter import Chapter
 from spiders.base_spider import BaseSpider, SelectorConfig
 from utils.cleaner import build_promo_patterns, clean_chapter_content
 from utils.proxy import get_proxy_url, requests_proxies
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None  # type: ignore[assignment]  # msvcrt is Windows-only; the cookie lock falls back to fcntl
 
 
 logger = logging.getLogger(__name__)
@@ -848,6 +855,7 @@ class _ScribbleHubBrowser:
         )
         self._cookie_file = cookie_file
         self._persist_cookies = True
+        atexit.register(self.close)
 
     def fetch_page(self, url: str, timeout: int = 75) -> str:
         with _BROWSER_START_LOCK:
@@ -1123,8 +1131,23 @@ class _ScribbleHubBrowser:
             return
         try:
             cookies = self._driver.get_cookies()
-            if cookies:
-                self._cookie_file.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+            if not cookies:
+                return
+            cookie_path = self._cookie_file
+            with open(cookie_path, "r+") as f:
+                try:
+                    if os.name == "nt" and msvcrt is not None:
+                        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                    else:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                    f.seek(0)
+                    json.dump(cookies, f, indent=2)
+                    f.truncate()
+                finally:
+                    if os.name == "nt" and msvcrt is not None:
+                        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except Exception as exc:
             self.logger.debug("[scribblehub] Could not save cookies: %s", exc)
 

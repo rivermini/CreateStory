@@ -1,6 +1,7 @@
 """FastAPI application entry point for the NovelCrawler microservice."""
 
 import logging
+import os
 import signal
 import sys
 from contextlib import asynccontextmanager
@@ -61,10 +62,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -103,6 +105,10 @@ def api_info() -> dict:
 
 @app.post("/api/dev/reset-state", tags=["Development"])
 def reset_runtime_state() -> dict:
+    """Reset runtime state. Only available when DEV_MODE=true."""
+    if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
     from api.services.crawler_service import get_crawl_service
 
     get_crawl_service().reset_runtime_state()

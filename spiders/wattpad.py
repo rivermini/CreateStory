@@ -9,6 +9,7 @@ Supports:
 import asyncio
 import logging
 import re
+import threading
 import time
 import urllib.parse
 from pathlib import Path
@@ -115,12 +116,18 @@ class WattpadSpider(BaseSpider):
 
         self._chapters_crawled: int = 0
         self._seen_urls: set[str] = set()
+        self._seen_lock = threading.Lock()
         self._is_chapter_url_mode: bool = False
 
         self._story_data: Optional[dict] = None
         self._is_paywalled: bool = False
         self._skipped_locked: int = 0
         self._saved_chapters: int = 0
+        self._session = requests.Session()
+        self._session.headers.update(self._WATTPAD_HEADERS)
+        proxies = requests_proxies("wattpad")
+        if proxies:
+            self._session.proxies.update(proxies)
 
     async def start(self):
         url = self.start_urls[0]
@@ -210,18 +217,12 @@ class WattpadSpider(BaseSpider):
     def _collect_all_parts(self, story_id: str) -> tuple[list[dict], dict]:
         import json as _json
 
-        session = requests.Session()
-        session.headers.update(self._WATTPAD_HEADERS)
-        proxies = requests_proxies("wattpad")
-        if proxies:
-            session.proxies.update(proxies)
-
         try:
             cookie_file = Path(__file__).parent.parent / "handlers" / "selenium_cookies.json"
             if cookie_file.exists():
                 raw = _json.loads(cookie_file.read_text())
                 for c in raw:
-                    session.cookies.set(
+                    self._session.cookies.set(
                         c["name"], c["value"],
                         domain=c.get("domain", ".wattpad.com"),
                         path=c.get("path", "/"),
@@ -233,7 +234,7 @@ class WattpadSpider(BaseSpider):
         api_url = f"{_WATTPAD_API_BASE}/{story_id}?fields={_WATTPAD_API_FIELDS}"
         self.logger.info("[wattpad/story=%s] Fetching full chapter list from API ...", story_id)
 
-        resp = session.get(api_url, timeout=_WATTPAD_API_TIMEOUT)
+        resp = self._session.get(api_url, timeout=_WATTPAD_API_TIMEOUT)
         if resp.status_code != 200:
             self.logger.error("[wattpad/story=%s] API returned HTTP %d.", story_id, resp.status_code)
             return [], {}
@@ -497,9 +498,10 @@ class WattpadSpider(BaseSpider):
             return
 
         url_normalized = self._normalize_url(response.url)
-        if url_normalized in self._seen_urls:
-            return
-        self._seen_urls.add(url_normalized)
+        with self._seen_lock:
+            if url_normalized in self._seen_urls:
+                return
+            self._seen_urls.add(url_normalized)
 
         if self._is_chapter_locked(response):
             part_data = response.meta.get("part_data", {})
@@ -550,7 +552,11 @@ class WattpadSpider(BaseSpider):
             next_chapter_url = self._extract_next_chapter_url(response)
             if next_chapter_url:
                 next_url = response.urljoin(next_chapter_url)
-                if next_url not in self._seen_urls:
+                with self._seen_lock:
+                    already_seen = next_url in self._seen_urls
+                    if not already_seen:
+                        self._seen_urls.add(next_url)
+                if not already_seen:
                     next_chapter_id = self._story_id_from_url(next_url)
                     yield scrapy.Request(
                         next_url,
@@ -752,6 +758,8 @@ class WattpadSpider(BaseSpider):
         if self._skipped_locked > 0 and self._skipped_locked == total:
             self.logger.warning("  All %d chapters were locked. This story may be fully paywalled.", total)
         self.logger.info("=" * 45)
+        if self._session:
+            self._session.close()
         self.logger.info("")
 
 

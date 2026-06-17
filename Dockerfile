@@ -52,6 +52,13 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . .
 
+RUN adduser --disabled-password --gecos "" appuser && \
+    chown -R appuser:appuser /app
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD python -c "import httpx; httpx.get('http://localhost:8002/').raise_for_status()"
+
+USER appuser
+
 EXPOSE 8002
 
 CMD ["python", "main.py"]

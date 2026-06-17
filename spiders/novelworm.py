@@ -9,8 +9,10 @@ Supports:
 import asyncio
 import logging
 import re
+import threading
 import time
 import urllib.parse
+from pathlib import Path
 from typing import Generator
 
 import scrapy
@@ -86,6 +88,7 @@ class NovelWormSpider(BaseSpider):
 
         self._chapters_crawled: int = 0
         self._seen_urls: set[str] = set()
+        self._seen_lock = threading.Lock()
         self._is_story_url_mode: bool = False
         self._story_title: str = ""
         self._story_author: str = ""
@@ -211,9 +214,10 @@ class NovelWormSpider(BaseSpider):
     ) -> Chapter | None:
         ref = chapter_data.ref
         url_normalized = self._normalize_url(ref.url)
-        if url_normalized in self._seen_urls:
-            return None
-        self._seen_urls.add(url_normalized)
+        with self._seen_lock:
+            if url_normalized in self._seen_urls:
+                return None
+            self._seen_urls.add(url_normalized)
 
         content = self._api_client.chapter_html_to_text(
             chapter_data.content_html,
@@ -558,9 +562,10 @@ class NovelWormSpider(BaseSpider):
             return
 
         url_normalized = self._normalize_url(response.url)
-        if url_normalized in self._seen_urls:
-            return
-        self._seen_urls.add(url_normalized)
+        with self._seen_lock:
+            if url_normalized in self._seen_urls:
+                return
+            self._seen_urls.add(url_normalized)
 
         novel_title = self._extract_novel_title(response)
         chapter_title = self._extract_chapter_title(response)
@@ -612,7 +617,11 @@ class NovelWormSpider(BaseSpider):
             next_chapter_url = self._extract_next_chapter_url(response)
             if next_chapter_url:
                 next_url = response.urljoin(next_chapter_url)
-                if next_url not in self._seen_urls:
+                with self._seen_lock:
+                    already_seen = next_url in self._seen_urls
+                    if not already_seen:
+                        self._seen_urls.add(next_url)
+                if not already_seen:
                     yield scrapy.Request(
                         next_url,
                         callback=self._parse_chapter_page,

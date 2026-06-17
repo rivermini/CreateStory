@@ -7,7 +7,9 @@ Supports:
 
 from __future__ import annotations
 
+import atexit
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import fcntl
 import json
 import logging
 import os
@@ -22,6 +24,11 @@ import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Generator, Optional
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None  # type: ignore[assignment]  # msvcrt is Windows-only; the cookie lock falls back to fcntl
 
 import scrapy
 from bs4 import BeautifulSoup, Tag
@@ -776,6 +783,7 @@ class _JobnibBrowser:
         self._profile_dir = Path(os.getenv("JOBNIB_CHROME_PROFILE", Path(tempfile.gettempdir()) / "jobnib_crawler_profile"))
         self._cookie_file = Path(__file__).parent.parent / "handlers" / "selenium_cookies_jobnib_com.json"
         self._persist_cookies = True
+        atexit.register(self.close)
 
     def fetch_page(self, url: str, timeout: int = 60) -> str:
         driver = self._driver_or_start()
@@ -1111,8 +1119,23 @@ class _JobnibBrowser:
             return
         try:
             cookies = self._driver.get_cookies()
-            if cookies:
-                self._cookie_file.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
+            if not cookies:
+                return
+            cookie_path = self._cookie_file
+            with open(cookie_path, "r+") as f:
+                try:
+                    if os.name == "nt" and msvcrt is not None:
+                        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                    else:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                    f.seek(0)
+                    json.dump(cookies, f, indent=2)
+                    f.truncate()
+                finally:
+                    if os.name == "nt" and msvcrt is not None:
+                        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except Exception as exc:
             self.logger.debug("[jobnib] Could not save cookies: %s", exc)
 

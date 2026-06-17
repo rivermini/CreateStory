@@ -7,13 +7,13 @@ Supports:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
+import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Generator, Optional
 
 import requests
 import scrapy
@@ -100,28 +100,58 @@ class InkittSpider(BaseSpider):
         self._cookies_loaded = False
         self._saved_cookie_count = self._load_saved_cookies()
 
-    async def start(self):
+    def start_requests(self) -> Generator[scrapy.Request, None, None]:
+        """Yield a Scrapy Request for the start URL to begin crawling.
+
+        Follows Scrapy's contract: this method must yield Request (or Item) objects,
+        not arbitrary data. The story page is fetched via requests.Session (for
+        Cloudflare cookie handling) and parsed by _parse_story_page, which in turn
+        yields chapter requests.
+        """
         start_url = self.start_urls[0]
+        if not start_url:
+            return
+
         story_id = self._extract_story_id(start_url)
         if not story_id:
-            raise RuntimeError(f"[inkitt] Could not extract story ID from {start_url}")
+            self.logger.warning("[inkitt] Could not extract story ID from %s", start_url)
+            return
 
-        start_html = self._fetch_html(start_url)
-        start_soup = BeautifulSoup(start_html, "html.parser")
-        metadata = self._extract_novel_metadata(start_soup, story_id, start_url)
-        chapter_links = self._collect_chapter_links(start_soup, story_id, start_url)
+        yield scrapy.Request(
+            start_url,
+            callback=self._parse_story_page,
+            errback=self._handle_error,
+            meta={"story_id": story_id, "start_url": start_url},
+        )
+
+    def _parse_story_page(self, response: scrapy.http.Response) -> Generator[scrapy.Request | Chapter, None, None]:
+        """Parse the Inkitt story page: extract metadata and chapter links, then
+        yield a Request for each chapter.
+
+        Fetches the page using requests.Session to preserve Cloudflare cookies,
+        then parses with BeautifulSoup. Each chapter is yielded as a Scrapy
+        Request (via _parse_chapter_page) so the spider can be run with
+        ``scrapy crawl inkitt``.
+        """
+        story_id = response.meta.get("story_id")
+        start_url = response.meta.get("start_url", response.url)
+
+        html = self._fetch_html(start_url)
+        soup = BeautifulSoup(html, "html.parser")
+        metadata = self._extract_novel_metadata(soup, story_id, start_url)
+        chapter_links = self._collect_chapter_links(soup, story_id, start_url)
 
         if not chapter_links:
             chapter_number = self._extract_chapter_number(start_url) or 1
             chapter_links = [{
                 "chapter_number": chapter_number,
-                "title": self._extract_chapter_title(start_soup) or f"Chapter {chapter_number}",
+                "title": self._extract_chapter_title(soup) or f"Chapter {chapter_number}",
                 "url": start_url,
             }]
 
         selected = self._select_chapters(chapter_links, start_url)
         self.logger.info(
-            "[inkitt/story=%s] found %d chapter links, target=selected (%d)",
+            "[inkitt/story=%s] found %d chapter links, target=%d",
             story_id,
             len(chapter_links),
             len(selected),
@@ -133,32 +163,65 @@ class InkittSpider(BaseSpider):
 
         for idx, link in enumerate(selected):
             if idx > 0:
-                await asyncio.sleep(self.download_delay)
+                time.sleep(self.download_delay)
 
             chapter_url = link["url"]
-            html = start_html if self._same_url(chapter_url, start_url) else self._fetch_html(chapter_url)
-            soup = BeautifulSoup(html, "html.parser")
-            chapter = self._build_chapter_item(
-                soup=soup,
-                story_id=story_id,
-                chapter_url=chapter_url,
-                chapter_number=link["chapter_number"],
-                fallback_title=link.get("title", ""),
-                metadata=metadata if idx == 0 else None,
+            meta = {
+                "story_id": story_id,
+                "chapter_number": link["chapter_number"],
+                "fallback_title": link.get("title", ""),
+                "is_first_chapter": idx == 0,
+                "metadata": metadata if idx == 0 else None,
+                "start_html": html if self._same_url(chapter_url, start_url) else None,
+            }
+            yield scrapy.Request(
+                chapter_url,
+                callback=self._parse_chapter_page,
+                errback=self._handle_error,
+                meta=meta,
             )
-            if not chapter:
-                continue
 
-            self._chapters_crawled += 1
-            self._saved_chapters += 1
-            self.logger.info(
-                "[%s/%d] Crawled chapter %d: %s",
-                self.novel_slug,
-                self.limit,
-                chapter.chapter_number,
-                chapter.title or "(untitled)",
-            )
-            yield chapter
+    def _parse_chapter_page(self, response: scrapy.http.Response) -> Generator[Chapter, None, None]:
+        """Parse a single Inkitt chapter page and yield a Chapter item.
+
+        Uses the cached start_html for the first chapter (avoids a redundant
+        request), or fetches the page via requests.Session for Cloudflare
+        cookie handling.
+        """
+        story_id = response.meta.get("story_id", "")
+        chapter_number = response.meta.get("chapter_number", 0)
+        fallback_title = response.meta.get("fallback_title", "")
+        metadata = response.meta.get("metadata")
+        start_html = response.meta.get("start_html")
+
+        if start_html and self._same_url(chapter_url, response.url):
+            html = start_html
+        else:
+            html = self._fetch_html(response.url)
+
+        soup = BeautifulSoup(html, "html.parser")
+        chapter = self._build_chapter_item(
+            soup=soup,
+            story_id=story_id,
+            chapter_url=response.url,
+            chapter_number=chapter_number,
+            fallback_title=fallback_title,
+            metadata=metadata,
+        )
+
+        if not chapter:
+            return
+
+        self._chapters_crawled += 1
+        self._saved_chapters += 1
+        self.logger.info(
+            "[%s/%d] Crawled chapter %d: %s",
+            self.novel_slug,
+            self.limit,
+            chapter.chapter_number,
+            chapter.title or "(untitled)",
+        )
+        yield chapter
 
     def build_selector_config(self, config: dict) -> SelectorConfig:
         selectors = config.get("selectors", {})
@@ -513,8 +576,9 @@ class InkittSpider(BaseSpider):
             right.path.rstrip("/"),
         )
 
-    def parse_chapter(self, response: scrapy.http.Response, chapter_index: int):
-        raise NotImplementedError("InkittSpider parses pages through direct HTTP requests.")
+    def parse_chapter(self, response: scrapy.http.Response, chapter_index: int = 0):
+        """Not used by InkittSpider — parsing is handled by _parse_chapter_page."""
+        return
 
     def closed(self, reason: str) -> None:
         self.logger.info("")

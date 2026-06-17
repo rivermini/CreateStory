@@ -22,9 +22,8 @@ class CrawlSessionRepository:
 
     def save_sessions(self, entries: list[dict]) -> None:
         with self.session_factory() as db:
-            db.execute(delete(CrawlSessionRecord))
             for entry in entries:
-                db.add(self._dict_to_row(entry))
+                db.merge(self._dict_to_row(entry))
             db.commit()
 
     def import_existing_file(self, index_file: Path) -> None:
@@ -75,6 +74,13 @@ class CrawlSessionRepository:
         })
         return data
 
+    def delete_for_sessions(self, crawl_ids: list[str]) -> None:
+        if not crawl_ids:
+            return
+        with self.session_factory() as db:
+            db.execute(delete(CrawlSessionRecord).where(CrawlSessionRecord.crawl_id.in_(crawl_ids)))
+            db.commit()
+
 
 class CrawlOutputRepository:
     def __init__(self, session_factory=SessionLocal) -> None:
@@ -92,6 +98,13 @@ class CrawlOutputRepository:
             return
         with self.session_factory() as db:
             db.execute(delete(CrawlOutputFileRecord).where(CrawlOutputFileRecord.crawl_id.in_(crawl_ids)))
+            db.commit()
+
+    def delete_for_sessions(self, crawl_ids: list[str]) -> None:
+        if not crawl_ids:
+            return
+        with self.session_factory() as db:
+            db.execute(delete(CrawlSessionRecord).where(CrawlSessionRecord.crawl_id.in_(crawl_ids)))
             db.commit()
 
     def scan_output_dir(self, crawl_id: str, output_dir: Path, ext: str = "md") -> list[dict]:
