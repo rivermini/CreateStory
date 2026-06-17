@@ -2,31 +2,34 @@
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from .utils import _ds_url
 
 router = APIRouter(tags=["Drive Sync"])
 
 
-def _ds_url() -> str:
-    """Return BedReadDriveSync base URL, checking env vars and SERVICE_URLS JSON."""
-    override = os.environ.get("SERVICE_URLS_BedReadDriveSync")
-    if override:
-        return override.rstrip("/")
-    urls_raw = os.environ.get("SERVICE_URLS", "{}")
-    try:
-        import json
-        service_urls = json.loads(urls_raw)
-        if isinstance(service_urls, dict):
-            url = service_urls.get("BedReadDriveSync")
-            if url:
-                return str(url).rstrip("/")
-    except Exception:
-        pass
-    return "http://localhost:8003"
+class UpdateChapterCountRequest(BaseModel):
+    folder_id: str = Field(..., description="Drive folder ID")
+    chapter_count: int = Field(..., ge=0, description="Current chapter count")
+
+
+class BatchInspectRequest(BaseModel):
+    folder_ids: list[str] = Field(
+        default_factory=list,
+        description="List of folder IDs to inspect.",
+    )
+
+
+class BatchUpdateRequest(BaseModel):
+    folder_ids: list[str] = Field(
+        default_factory=list,
+        description="List of folder IDs to update.",
+    )
 
 
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
@@ -82,8 +85,8 @@ async def check_updatable_reader_finished_debug() -> JSONResponse:
 
 
 @router.post("/update-chapter-count")
-async def update_chapter_count(body: dict) -> JSONResponse:
-    return await _proxy_post("/api/drive-sync/update-chapter-count", json_body=body)
+async def update_chapter_count(body: UpdateChapterCountRequest) -> JSONResponse:
+    return await _proxy_post("/api/drive-sync/update-chapter-count", json_body=body.model_dump())
 
 
 @router.post("/update-chapters/{folder_id}")
@@ -112,10 +115,10 @@ async def update_content_chapter(body: dict) -> JSONResponse:
 
 
 @router.post("/content-update/batch-inspect")
-async def batch_inspect_content_folders(body: dict) -> JSONResponse:
-    return await _proxy_post("/api/drive-sync/content-update/batch-inspect", json_body=body)
+async def batch_inspect_content_folders(body: BatchInspectRequest) -> JSONResponse:
+    return await _proxy_post("/api/drive-sync/content-update/batch-inspect", json_body=body.model_dump())
 
 
 @router.post("/content-update/batch-update")
-async def batch_update_content_folders(body: dict) -> JSONResponse:
-    return await _proxy_post("/api/drive-sync/content-update/batch-update", json_body=body)
+async def batch_update_content_folders(body: BatchUpdateRequest) -> JSONResponse:
+    return await _proxy_post("/api/drive-sync/content-update/batch-update", json_body=body.model_dump())

@@ -23,9 +23,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.bootstrap import ensure_bootstrap_admin
 from api.db import SessionLocal, init_db
 from api.migration import import_existing_shared_state
+from api.middleware import (
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+    close_shared_http_client,
+    init_shared_http_client,
+)
 from api.routes import admin, auth, auto_audio, bedread, crawl, dev, results, settings, sites, drive_sync, tts
+from api.routes.auth import _limiter
 from api.routes.drive_sync.config import _DRIVE_SYNC_CONFIG_EXAMPLE
 from api.routes.settings import _SETTINGS_EXAMPLE
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 
 # CORS allowlist — comma-separated origins, defaulting to localhost dev ports.
@@ -40,6 +49,8 @@ _ALLOWED_ORIGINS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _logger.info("FastAPIServer startup: initialising shared HTTP client...")
+    init_shared_http_client()
     _logger.info("FastAPIServer startup: initializing database...")
     init_db()
     with SessionLocal() as db:
@@ -49,12 +60,15 @@ async def lifespan(app: FastAPI):
     _logger.info("FastAPIServer startup: warming caches...")
     from services.orchestrator.auto_audio_service import get_auto_audio_service
     try:
-        _ = get_auto_audio_service().get_history()
+        await get_auto_audio_service().get_history()
         _logger.info("FastAPIServer startup: auto_audio history cache warmed.")
     except Exception as exc:
         _logger.warning("FastAPIServer startup: failed to warm auto_audio cache: %s", exc)
     _logger.info("FastAPIServer startup: done.")
     yield
+    _logger.info("FastAPIServer shutdown: closing shared HTTP client...")
+    await close_shared_http_client()
+    _logger.info("FastAPIServer shutdown: done.")
 
 
 app = FastAPI(
@@ -69,6 +83,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
@@ -76,6 +93,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(auth.router)
 app.include_router(admin.router)

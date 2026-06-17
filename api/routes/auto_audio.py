@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 
@@ -12,6 +10,8 @@ from api.models.auto_audio import (
     AutoAudioHistoryEntry,
     AutoAudioPauseResponse,
     AutoAudioSessionResponse,
+    DeleteSessionsBatchRequest,
+    DeleteSessionsBatchResponse,
     StartSessionRequest,
     StartSessionResponse,
 )
@@ -21,11 +21,11 @@ router = APIRouter(prefix="/api/auto-audio", tags=["Auto Audio"], dependencies=[
 
 
 @router.post("/start", response_model=StartSessionResponse)
-def start_session(request: StartSessionRequest) -> StartSessionResponse:
+async def start_session(request: StartSessionRequest) -> StartSessionResponse:
     """Start a new auto audio session. Only one session can run at a time."""
     service = get_auto_audio_service()
     try:
-        session_id = service.start_session(
+        session_id = await service.start_session(
             phase=request.phase,
             test_mode=request.test_mode,
             voice=request.voice,
@@ -37,14 +37,14 @@ def start_session(request: StartSessionRequest) -> StartSessionResponse:
 
 
 @router.get("/status", response_model=AutoAudioSessionResponse | None)
-def get_status(
+async def get_status(
     log_limit: int | None = Query(default=None, ge=0, le=500),
     result_limit: int | None = Query(default=None, ge=0, le=500),
     compact: bool = Query(default=False),
 ) -> AutoAudioSessionResponse | None:
     """Return the current active session state, or the most recent completed session if none is running."""
     service = get_auto_audio_service()
-    data = service.get_status(
+    data = await service.get_status(
         log_limit=log_limit,
         result_limit=result_limit,
         compact=compact,
@@ -55,46 +55,45 @@ def get_status(
 
 
 @router.post("/stop")
-def stop_session() -> dict:
+async def stop_session() -> dict:
     """Signal the active session to stop gracefully."""
     service = get_auto_audio_service()
     try:
-        service.stop_session()
-    except Exception as exc:
+        await service.stop_session()
+    except Exception:
         raise HTTPException(status_code=404, detail="No active session to stop.")
     return {"message": "Stop signal sent."}
 
 
 @router.post("/pause", response_model=AutoAudioPauseResponse)
-def pause_session() -> AutoAudioPauseResponse:
+async def pause_session() -> AutoAudioPauseResponse:
     """Pause the active auto-audio session."""
     service = get_auto_audio_service()
     try:
-        data = service.pause_session()
+        data = await service.pause_session()
     except Exception as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return AutoAudioPauseResponse(**data)
 
 
 @router.post("/resume", response_model=AutoAudioPauseResponse)
-def resume_session() -> AutoAudioPauseResponse:
+async def resume_session() -> AutoAudioPauseResponse:
     """Resume a paused auto-audio session."""
     service = get_auto_audio_service()
     try:
-        data = service.resume_session()
+        data = await service.resume_session()
     except Exception as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     return AutoAudioPauseResponse(**data)
 
 
 @router.get("/history", response_model=list[AutoAudioHistoryEntry])
-def get_history() -> list[AutoAudioHistoryEntry]:
+async def get_history() -> list[AutoAudioHistoryEntry]:
     """Return all past auto audio sessions."""
     service = get_auto_audio_service()
-    sessions = service.get_history()
-    entries = []
-    for s in sessions:
-        entries.append(AutoAudioHistoryEntry(
+    sessions = await service.get_history()
+    return [
+        AutoAudioHistoryEntry(
             session_id=s.get("session_id", ""),
             phase=s.get("phase", "phase1"),
             test_mode=s.get("test_mode", False),
@@ -107,34 +106,34 @@ def get_history() -> list[AutoAudioHistoryEntry]:
             error=s.get("error", ""),
             total_stories=s.get("total_stories", 0),
             total_chapters=s.get("total_chapters", 0),
-        ))
-    return entries
+        )
+        for s in sessions
+    ]
 
 
 @router.get("/history/{session_id}", response_model=AutoAudioSessionResponse)
-def get_session(session_id: str) -> AutoAudioSessionResponse:
+async def get_session(session_id: str) -> AutoAudioSessionResponse:
     """Return full detail of a specific session."""
     service = get_auto_audio_service()
-    session_data = service.get_session(session_id)
+    session_data = await service.get_session(session_id)
     if session_data is None:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
     return AutoAudioSessionResponse(**session_data)
 
 
-@router.post("/history/batch-delete")
-def delete_sessions_batch(request: dict) -> dict:
+@router.post("/history/batch-delete", response_model=DeleteSessionsBatchResponse)
+async def delete_sessions_batch(request: DeleteSessionsBatchRequest) -> DeleteSessionsBatchResponse:
     """Delete multiple sessions from history in a single operation."""
     service = get_auto_audio_service()
-    session_ids = request.get("session_ids", [])
-    deleted = service.delete_sessions_batch(session_ids)
-    return {"deleted": deleted, "requested": len(session_ids)}
+    deleted = await service.delete_sessions_batch(request.session_ids)
+    return DeleteSessionsBatchResponse(deleted=deleted, requested=len(request.session_ids))
 
 
 @router.delete("/history/{session_id}")
-def delete_session(session_id: str) -> dict:
+async def delete_session(session_id: str) -> dict:
     """Delete a session from history."""
     service = get_auto_audio_service()
-    deleted = service.delete_session(session_id)
+    deleted = await service.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
     return {"deleted": True, "session_id": session_id}

@@ -49,6 +49,18 @@ class AutoAudioSessionResponse(BaseModel):
     is_paused: bool = False
 
 
+class DeleteSessionsBatchRequest(BaseModel):
+    session_ids: list[str] = Field(
+        default_factory=list,
+        description="List of session IDs to delete.",
+    )
+
+
+class DeleteSessionsBatchResponse(BaseModel):
+    deleted: int
+    requested: int
+
+
 class AutoAudioHistoryEntry(BaseModel):
     session_id: str
     phase: str

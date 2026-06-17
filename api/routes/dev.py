@@ -160,7 +160,10 @@ async def clear_backend_data(
     db: Annotated[Session, Depends(get_db)],
     _admin=Depends(require_admin),
 ) -> ClearBackendDataResponse:
-    """Clear development runtime state while preserving admin/user accounts."""
+    """Clear development runtime state while preserving admin/user accounts.
+    Only available when DEV_MODE=true."""
+    if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
+        raise HTTPException(status_code=404, detail="Not found")
     if req.confirmation != CONFIRMATION_TEXT:
         raise HTTPException(status_code=400, detail=f"confirmation must be {CONFIRMATION_TEXT!r}.")
 

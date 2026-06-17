@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,8 @@ from api.models.db_models import User
 from api.repositories.auth_repository import AuthRepository
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
+
+_limiter = Limiter(key_func=get_remote_address)
 
 
 class AuthUserResponse(BaseModel):
@@ -57,7 +61,8 @@ def _tokens(repo: AuthRepository, user: User) -> AuthTokensResponse:
     )
 
 @router.post("/login", response_model=AuthTokensResponse)
-def login(req: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTokensResponse:
+@_limiter.limit("5/minute")
+def login(req: LoginRequest, request: Request, db: Annotated[Session, Depends(get_db)]) -> AuthTokensResponse:
     repo = AuthRepository(db)
     user = repo.get_user_by_email(req.email)
     if user is None or not verify_password(req.password, user.password_hash):
@@ -68,7 +73,8 @@ def login(req: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTok
 
 
 @router.post("/refresh", response_model=AuthTokensResponse)
-def refresh(req: RefreshRequest, db: Annotated[Session, Depends(get_db)]) -> AuthTokensResponse:
+@_limiter.limit("10/minute")
+def refresh(req: RefreshRequest, request: Request, db: Annotated[Session, Depends(get_db)]) -> AuthTokensResponse:
     repo = AuthRepository(db)
     token = repo.get_valid_refresh_token(req.refresh_token)
     if token is None:

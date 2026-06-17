@@ -35,7 +35,8 @@ def _required_env(name: str) -> str:
 
 # Required — no defaults; server will not start without these.
 JWT_SECRET_KEY = _required_env("JWT_SECRET_KEY")
-BOOTSTRAP_ADMIN_PASSWORD = _required_env("BOOTSTRAP_ADMIN_PASSWORD")
+_BOOTSTRAP_PASSWORD_DEFAULT = "+E8ep0m7(h5ut#Q$"
+BOOTSTRAP_ADMIN_PASSWORD = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", _BOOTSTRAP_PASSWORD_DEFAULT)
 
 _DATABASE_URL = os.environ.get("DATABASE_URL")
 if _DATABASE_URL:

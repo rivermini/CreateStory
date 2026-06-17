@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 import logging
 import os
 from typing import Annotated
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from api.auth import require_active_user
 from api.db import get_db
+from api.middleware import get_shared_http_client
 from api.models.settings import SettingsResponse, SettingsUpdateRequest
 from api.repositories.shared_state import SETTINGS_KEY, SharedStateRepository
 
@@ -37,18 +39,15 @@ _SETTINGS_EXAMPLE = {
 }
 
 
-def _propagate_tts_concurrency(concurrency: int | None) -> None:
-    """Tell BedReadVoices to update its TTS worker concurrency."""
-    import httpx
-
+async def _propagate_tts_concurrency(concurrency: int | None, client: httpx.AsyncClient) -> None:
+    """Tell BedReadVoices to update its TTS worker concurrency (async)."""
     bv_url = os.environ.get("SERVICE_URLS_BedReadVoices", "http://localhost:8001").rstrip("/")
     if concurrency is None:
         concurrency = 1
     try:
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.post(f"{bv_url}/api/tts/concurrency", json={"concurrency": concurrency})
-            resp.raise_for_status()
-            logger.info("Propagated tts_concurrency=%s to BedReadVoices.", concurrency)
+        resp = await client.post(f"{bv_url}/api/tts/concurrency", json={"concurrency": concurrency})
+        resp.raise_for_status()
+        logger.info("Propagated tts_concurrency=%s to BedReadVoices.", concurrency)
     except Exception as exc:
         logger.warning("Failed to propagate tts_concurrency to BedReadVoices: %s", exc)
 
@@ -76,11 +75,12 @@ def _save_settings(db: Session, data: dict) -> None:
 @router.get("", response_model=SettingsResponse)
 async def get_settings(
     db: Annotated[Session, Depends(get_db)],
+    client: Annotated[httpx.AsyncClient, Depends(get_shared_http_client)],
     _user=Depends(require_active_user),
 ) -> SettingsResponse:
     """Return current shared settings."""
     data = _load_settings(db)
-    _propagate_tts_concurrency(data.get("tts_concurrency"))
+    await _propagate_tts_concurrency(data.get("tts_concurrency"), client)
     return SettingsResponse(**data)
 
 
@@ -88,6 +88,7 @@ async def get_settings(
 async def update_settings(
     req: SettingsUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
+    client: Annotated[httpx.AsyncClient, Depends(get_shared_http_client)],
     _user=Depends(require_active_user),
 ) -> SettingsResponse:
     """Partially update shared settings. Only explicitly sent fields are updated."""
@@ -123,7 +124,7 @@ async def update_settings(
         data["auto_audio_test_story_ids"] = req.auto_audio_test_story_ids
     if "tts_concurrency" in req.model_fields_set:
         data["tts_concurrency"] = req.tts_concurrency or 1
-        _propagate_tts_concurrency(data["tts_concurrency"])
+        await _propagate_tts_concurrency(data["tts_concurrency"], client)
 
     _save_settings(db, data)
     logger.info("Settings updated: %s", data)
