@@ -6,8 +6,8 @@ import type {
   BinarySearchTotalResponse,
 } from '../types';
 
-export async function detectSite(url: string): Promise<SiteDetectResponse> {
-  return apiFetch<SiteDetectResponse>(`/api/sites/detect?url=${encodeURIComponent(url)}`, { timeout: 90000 });
+export async function detectSite(url: string, options?: { signal?: AbortSignal }): Promise<SiteDetectResponse> {
+  return apiFetch<SiteDetectResponse>(`/api/sites/detect?url=${encodeURIComponent(url)}`, { timeout: 90000, signal: options?.signal });
 }
 
 export async function listSites(): Promise<SiteInfoResponse[]> {

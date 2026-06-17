@@ -176,6 +176,9 @@ function ToastItem({ toast }: Readonly<{ toast: Readonly<Toast> }>) {
 
   return (
     <div
+      role="alert"
+      aria-live="polite"
+      aria-atomic="true"
       className={`pointer-events-auto flex min-w-[18rem] max-w-md items-center gap-3 rounded-xl border px-4 py-3 shadow-lg transition-all duration-300 ease-out ${animationClass}`}
       style={{
         background,

@@ -1,4 +1,4 @@
-import { apiFetch, withAccessToken, BASE_URL } from '../client';
+import { apiFetch, BASE_URL } from '../client';
 import type {
   BedReadStory,
   BedReadStorySearchParams,
@@ -72,9 +72,9 @@ export async function removeBatchJob(batchId: string): Promise<{ batch_id: strin
 }
 
 export function getChapterAudioUrl(batchId: string, chapterNum: number): string {
-  return withAccessToken(`${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/download?chapter=${chapterNum}`);
+  return `${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/download?chapter=${chapterNum}`;
 }
 
 export function getBatchZipUrl(batchId: string): string {
-  return withAccessToken(`${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/zip`);
+  return `${BASE_URL}/api/bedread/jobs/${encodeURIComponent(batchId)}/zip`;
 }

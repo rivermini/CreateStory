@@ -29,10 +29,15 @@ export async function getDriveSyncConfig(): Promise<DriveSyncConfig | null> {
 }
 
 export async function initDriveSyncConfig(req: InitDriveSyncRequest): Promise<DriveSyncConfig> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (req.main_be_bearer_token) {
+    headers['X-Auth-Token'] = req.main_be_bearer_token;
+  }
+  const { main_be_bearer_token: _omit, ...body } = req;
   return apiFetch<DriveSyncConfig>('/api/drive-sync/config', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
+    headers,
+    body: JSON.stringify(body),
   });
 }
 

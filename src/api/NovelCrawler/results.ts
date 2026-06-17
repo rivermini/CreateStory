@@ -1,4 +1,4 @@
-import { apiFetch, withAccessToken, BASE_URL } from '../client';
+import { apiFetch, BASE_URL } from '../client';
 import type {
   CrawlResult,
   FilePreview,
@@ -23,23 +23,23 @@ export async function getFileContent(crawlId: string, filename: string): Promise
 }
 
 export function getDownloadUrl(crawlId: string, filename: string): string {
-  return withAccessToken(`${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`);
+  return `${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`;
 }
 
 export function getDownloadAllUrl(crawlId: string): string {
-  return withAccessToken(`${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download-all`);
+  return `${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download-all`;
 }
 
 export function getDownloadAllSessionsUrl(): string {
-  return withAccessToken(`${BASE_URL}/api/results/download-all`);
+  return `${BASE_URL}/api/results/download-all`;
 }
 
 export function getDownloadCombinedUrl(crawlId: string, filename: string): string {
-  return withAccessToken(`${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`);
+  return `${BASE_URL}/api/results/${encodeURIComponent(crawlId)}/download?filename=${encodeURIComponent(filename)}`;
 }
 
 export function getDownloadAllCombinedUrl(): string {
-  return withAccessToken(`${BASE_URL}/api/results/download-combined-all`);
+  return `${BASE_URL}/api/results/download-combined-all`;
 }
 
 export async function listAllResults(): Promise<CrawlSessionSummary[]> {

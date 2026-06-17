@@ -53,7 +53,7 @@ export function CrawlPage({ themeMode }: CrawlPageProps) {
   const chaptersCrawled = progress?.chapters_crawled ?? 0;
   const chaptersTotal = progress?.chapters_total ?? 0;
   const currentTitle = progress?.current_title ?? '';
-  const startedAt = null;
+  const startedAt = progress?.started_at ?? null;
   const finishedAt = status === 'completed' || status === 'failed' || status === 'cancelled'
     ? new Date().toLocaleTimeString()
     : null;

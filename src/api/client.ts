@@ -84,15 +84,15 @@ async function requestWithAuth(path: string, fetchOptions: RequestInit, signal: 
 }
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}, allowRetry = true): Promise<T> {
-  const { timeout = 10000, ...fetchOptions } = options;
+  const { timeout = 10000, signal, ...fetchOptions } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    let res = await requestWithAuth(path, fetchOptions, controller.signal);
+    let res = await requestWithAuth(path, fetchOptions, signal ?? controller.signal);
 
     if (res.status === 401 && allowRetry && await refreshAccessToken()) {
-      res = await requestWithAuth(path, fetchOptions, controller.signal);
+      res = await requestWithAuth(path, fetchOptions, signal ?? controller.signal);
     }
 
     if (!res.ok) {
@@ -115,14 +115,34 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}, allo
   }
 }
 
-function withAccessToken(url: string): string {
+/**
+ * Downloads a file from a URL that requires Authorization: Bearer header.
+ * Uses fetch + Blob to avoid exposing the token in the URL.
+ */
+export async function downloadWithAuth(url: string, filename: string): Promise<void> {
   const token = getStoredAccessToken();
-  if (!token) return url;
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}access_token=${encodeURIComponent(token)}`;
+  if (!token) throw new Error('Not authenticated');
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body.detail ?? message;
+    } catch { /* ignore */ }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
 }
-
-export { withAccessToken };
 
 /** Format a raw number for display: 21369584 -> "21.4M", 511542 -> "511.5K", 59 -> "59" */
 export function formatNumber(n: number): string {

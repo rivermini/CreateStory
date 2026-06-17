@@ -7,8 +7,12 @@ import {
     updateSettings,
     updateInkittCookies,
     getStoredAuthUser,
+    getDriveSyncConfig,
+    initDriveSyncConfig,
+    checkCredentialsExists,
     type SettingsResponse,
 } from '../../../api';
+import { DriveConfig, type ConfigFormData } from '../../../components/Shared/DriveConfig';
 import type { ThemeMode } from '../../../types/theme';
 
 type SettingsCategory = 'profile' | 'appearance' | 'crawler' | 'audio' | 'inkitt' | 'driveSync' | 'danger';
@@ -70,6 +74,19 @@ export function MobileSettingsPage({
     const authUser = getStoredAuthUser();
     const isAdmin = authUser?.role === 'admin';
 
+    // Drive Sync config state
+    const [isInitialSetup, setIsInitialSetup] = useState(false);
+    const [configForm, setConfigForm] = useState<ConfigFormData>({
+        folder_id: '',
+        service_account_json_name: 'google-service-account.json',
+        main_be_api_base_url: '',
+        main_be_bearer_token: '',
+        main_be_user_id: '',
+    });
+    const [savingConfig, setSavingConfig] = useState(false);
+    const [savingConfigError, setSavingConfigError] = useState('');
+    const [credentialFileExists, setCredentialFileExists] = useState(true);
+
     const bg = isDark ? '#0f0f0f' : '#f8f8f7';
     const cardBg = isDark ? '#1c1c1c' : '#ffffff';
     const cardBorder = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
@@ -110,6 +127,54 @@ export function MobileSettingsPage({
         document.body.style.overflow = 'hidden';
         return () => { document.body.style.overflow = ''; };
     }, []);
+
+    // Load Drive Sync config
+    useEffect(() => {
+        async function loadDriveConfig() {
+            try {
+                const cfg = await getDriveSyncConfig();
+                const exists = await checkCredentialsExists('google-service-account.json');
+                setCredentialFileExists(exists);
+                setConfigForm({
+                    folder_id: cfg?.folder_id || '',
+                    service_account_json_name: cfg?.service_account_json_name || 'google-service-account.json',
+                    main_be_api_base_url: cfg?.main_be_api_base_url || '',
+                    main_be_bearer_token: cfg?.main_be_bearer_token || '',
+                    main_be_user_id: cfg?.main_be_user_id || '',
+                });
+                setIsInitialSetup(!cfg?.folder_id);
+            } catch {
+                // silently ignore
+            }
+        }
+        loadDriveConfig();
+    }, []);
+
+    const handleConfigFormChange = (data: Partial<ConfigFormData>) => {
+        setConfigForm(prev => ({ ...prev, ...data }));
+    };
+
+    const handleSaveConfig = async () => {
+        setSavingConfig(true);
+        setSavingConfigError('');
+        try {
+            await initDriveSyncConfig({
+                folder_id: configForm.folder_id,
+                service_account_json_path: configForm.service_account_json_name,
+                main_be_api_base_url: configForm.main_be_api_base_url,
+                main_be_user_id: configForm.main_be_user_id,
+                main_be_bearer_token: configForm.main_be_bearer_token || undefined,
+            });
+            setIsInitialSetup(false);
+            showToast('Drive Sync configuration saved.', 'success', 2000, 'top-center');
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to save Drive Sync config.';
+            setSavingConfigError(msg);
+            showToast(msg, 'error', 3000, 'top-center');
+        } finally {
+            setSavingConfig(false);
+        }
+    };
 
     const handleSave = async () => {
         setSaveState('saving');
@@ -374,9 +439,19 @@ export function MobileSettingsPage({
                 );
             case 'driveSync':
                 return (
-                    <div className={`${sectionCard}`} style={{ background: cardBg, borderColor: cardBorder }}>
-                        <p className={`text-sm font-semibold mb-0.5`} style={{ color: textPrimary }}>Drive Sync</p>
-                        <p className="text-xs" style={{ color: textSecondary }}>Configure Google Drive sync and backend API connection. Open this page on a larger screen to access full Drive Sync settings.</p>
+                    <div className="space-y-4">
+                        <DriveConfig
+                            embedded
+                            configForm={configForm}
+                            onFormChange={handleConfigFormChange}
+                            onSave={handleSaveConfig}
+                            savingConfig={savingConfig}
+                            savingConfigError={savingConfigError}
+                            isInitialSetup={isInitialSetup}
+                            themeMode={themeMode}
+                            credentialFileExists={credentialFileExists}
+                            onCredentialUploadSuccess={() => setCredentialFileExists(true)}
+                        />
                     </div>
                 );
             case 'danger':

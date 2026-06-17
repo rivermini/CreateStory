@@ -1,4 +1,4 @@
-import { apiFetch, withAccessToken, BASE_URL } from '../client';
+import { apiFetch, BASE_URL } from '../client';
 import type {
   TTSVoice,
   TTSLanguage,
@@ -36,7 +36,7 @@ export async function cancelTTSJob(jobId: string): Promise<{ job_id: string; sta
 }
 
 export function getTTSAudioUrl(jobId: string): string {
-  return withAccessToken(`${BASE_URL}/api/tts/jobs/${encodeURIComponent(jobId)}/audio`);
+  return `${BASE_URL}/api/tts/jobs/${encodeURIComponent(jobId)}/audio`;
 }
 
 export async function getTTSQueue(): Promise<{

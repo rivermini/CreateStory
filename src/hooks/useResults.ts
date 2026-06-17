@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { CrawlResult } from '../api';
 import { getCrawlResult, getCombinedResult, getDownloadUrl } from '../api';
+import { downloadWithAuth } from '../api/client';
 
 export interface UseResultsResult {
   result: CrawlResult | null;
@@ -35,13 +36,7 @@ export function useResults(): UseResultsResult {
   }, []);
 
   const downloadFile = useCallback((crawlId: string, filename: string) => {
-    const url = getDownloadUrl(crawlId, filename);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    void downloadWithAuth(getDownloadUrl(crawlId, filename), filename);
   }, []);
 
   return { result, isLoading, error, fetchResult, downloadFile };

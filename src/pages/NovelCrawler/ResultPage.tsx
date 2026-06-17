@@ -9,6 +9,7 @@ import {
   listAllResults,
   type CrawlSessionSummary,
 } from '../../api';
+import { downloadWithAuth } from '../../api/client';
 import { FilePreview } from '../../components/NovelCrawler/FilePreview';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
@@ -242,22 +243,12 @@ export function ResultPage({ themeMode }: ResultPageProps) {
   };
 
   const handleDownload = (filename: string) => {
-    const a = document.createElement('a');
-    a.href = getDownloadUrl(result.crawl_id, filename);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    void downloadWithAuth(getDownloadUrl(result.crawl_id, filename), filename);
   };
 
   const handleDownloadCombined = () => {
     if (!combinedFilename) return;
-    const a = document.createElement('a');
-    a.href = getDownloadCombinedUrl(result.crawl_id, combinedFilename);
-    a.download = combinedFilename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    void downloadWithAuth(getDownloadCombinedUrl(result.crawl_id, combinedFilename), combinedFilename);
   };
 
   const st = statusToneMap[result.status] ?? statusToneMap.idle;
@@ -488,11 +479,7 @@ export function ResultPage({ themeMode }: ResultPageProps) {
               {files.length > 0 && (
                 <button
                   onClick={() => {
-                    const a = document.createElement('a');
-                    a.href = getDownloadAllUrl(result.crawl_id);
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
+                    void downloadWithAuth(getDownloadAllUrl(result.crawl_id), '');
                   }}
                   className="rounded-md px-4 py-2 text-sm font-medium"
                   style={{ background: strongSurface, color: strongSurfaceText }}
@@ -614,29 +601,6 @@ export function ResultPage({ themeMode }: ResultPageProps) {
             </section>
           ) : null}
 
-          <section
-            className="rounded-xl border px-4 py-4 sm:px-5"
-            style={{ background: panelBackground, borderColor: panelBorder }}
-          >
-            <div className="space-y-2">
-              <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
-                Phase 2
-              </div>
-              <h2 className="text-lg font-semibold" style={{ color: pageText }}>
-                Send to Company Backend
-              </h2>
-              <p className="text-sm leading-6" style={{ color: secondaryText }}>
-                This feature will POST crawled chapter content to the company NestJS/Java backend. It will be enabled once the API endpoint details are confirmed.
-              </p>
-            </div>
-            <button
-              disabled
-              className="mt-4 rounded-md px-4 py-2 text-sm font-medium"
-              style={{ background: mutedSurface, color: secondaryText, opacity: 0.7, cursor: 'not-allowed', border: `1px solid ${panelBorder}` }}
-            >
-              Send to Company BE (Phase 2)
-            </button>
-          </section>
         </main>
       </div>
 

@@ -80,10 +80,6 @@ export function LoginPage({ onAuthenticated }: Readonly<LoginPageProps>) {
               </div>
             )}
 
-            <div>
-              
-            </div>
-
             <button
               type="submit"
               disabled={busy}

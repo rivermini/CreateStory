@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from '../AppIcon';
 import { Icon, appIcons } from '../Icon';
+import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import type { ThemeMode } from '../../../types/theme';
+import { navActive, NAV_SECTIONS } from '../../../utils/navigation';
 
 interface MobileSidebarProps {
     themeMode: ThemeMode;
@@ -11,27 +13,7 @@ interface MobileSidebarProps {
     onClose: () => void;
 }
 
-function navActive(locationPath: string, expect: string) {
-    if (expect === '/results/all') {
-        return locationPath.startsWith('/results');
-    }
-    if (expect === '/') return locationPath === '/';
-    if (expect === '/bedread' && locationPath.startsWith('/bedread/')) return false;
-    if (expect === '/drive-sync' && locationPath.startsWith('/drive-sync/')) return false;
-    if (expect === '/auto-audio' && locationPath.startsWith('/auto-audio/')) return false;
-    return locationPath === expect || locationPath.startsWith(expect + '/') || locationPath.startsWith(expect + '?');
-}
-
-interface NavItem {
-    to: string;
-    label: string;
-    iconKey: keyof typeof appIcons;
-}
-
-interface NavSection {
-    label: string;
-    items: NavItem[];
-}
+type NavItem = { to: string; label: string; iconKey: string };
 
 const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/': 'add',
@@ -44,46 +26,11 @@ const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/drive-sync/cover-update': 'image',
     '/drive-sync/banner-update': 'flag',
     '/drive-sync/metadata-update': 'info',
+    '/drive-sync/title-update': 'edit',
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
     '/supported-sites': 'supportedSites',
 };
-
-const NAV_ITEMS_CRAWL: NavItem[] = [
-    { to: '/', label: 'New Crawl', iconKey: NAV_ICONS_MOBILE['/'] },
-    { to: '/results/all', label: 'Crawl History', iconKey: NAV_ICONS_MOBILE['/results/all'] },
-];
-
-const NAV_ITEMS_AUDIO: NavItem[] = [
-    { to: '/bedread', label: 'BedReads', iconKey: NAV_ICONS_MOBILE['/bedread'] },
-    { to: '/bedread/jobs', label: 'Audio Jobs', iconKey: NAV_ICONS_MOBILE['/bedread/jobs'] },
-];
-
-const NAV_ITEMS_BEDREADS: NavItem[] = [
-    { to: '/drive-sync', label: 'Drive Sync', iconKey: NAV_ICONS_MOBILE['/drive-sync'] },
-    { to: '/drive-sync/cover-update', label: 'Cover Update', iconKey: NAV_ICONS_MOBILE['/drive-sync/cover-update'] },
-    { to: '/drive-sync/banner-update', label: 'Banner Update', iconKey: NAV_ICONS_MOBILE['/drive-sync/banner-update'] },
-    { to: '/drive-sync/metadata-update', label: 'Metadata Update', iconKey: NAV_ICONS_MOBILE['/drive-sync/metadata-update'] },
-    { to: '/drive-sync/content-update', label: 'Content Update', iconKey: NAV_ICONS_MOBILE['/drive-sync/content-update'] },
-    { to: '/drive-sync/history', label: 'Sync History', iconKey: NAV_ICONS_MOBILE['/drive-sync/history'] },
-];
-
-const NAV_ITEMS_AUTO_AUDIO: NavItem[] = [
-    { to: '/auto-audio', label: 'Auto Audio', iconKey: NAV_ICONS_MOBILE['/auto-audio'] },
-    { to: '/auto-audio/history', label: 'Auto History', iconKey: NAV_ICONS_MOBILE['/auto-audio/history'] },
-];
-
-const NAV_ITEMS_SYSTEM: NavItem[] = [
-    { to: '/supported-sites', label: 'Supported Sites', iconKey: NAV_ICONS_MOBILE['/supported-sites'] },
-];
-
-const NAV_SECTIONS: NavSection[] = [
-    { label: 'Novel Crawler', items: NAV_ITEMS_CRAWL },
-    { label: 'Audio', items: NAV_ITEMS_AUDIO },
-    { label: 'DriveSync', items: NAV_ITEMS_BEDREADS },
-    { label: 'Auto Audio', items: NAV_ITEMS_AUTO_AUDIO },
-    { label: 'System', items: NAV_ITEMS_SYSTEM },
-];
 
 export function MobileSidebar({
     themeMode,
@@ -110,6 +57,7 @@ export function MobileSidebar({
         const hovered = hoveredItem === item.to;
         const background = active ? activeBackground : hovered ? hoverBackground : 'transparent';
         const color = active ? headerText : hovered ? itemText : itemMuted;
+        const iconKey = NAV_ICONS_MOBILE[item.iconKey] ?? 'add';
 
         return (
             <Link
@@ -129,7 +77,7 @@ export function MobileSidebar({
                     className="flex h-5 w-5 items-center justify-center flex-shrink-0 transition-colors duration-150"
                     style={{ color }}
                 >
-                    <Icon icon={appIcons[item.iconKey]} className="w-4 h-4" />
+                    <Icon icon={iconKey as unknown as IconDefinition} className="w-4 h-4" />
                 </span>
                 <span
                     className="min-w-0 flex-1 truncate text-sm font-medium transition-colors duration-150"

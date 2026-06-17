@@ -8,6 +8,7 @@ import {
   removeBatchJob,
   type BatchJob,
 } from '../../api/BedReadVoices';
+import { downloadWithAuth } from '../../api/client';
 import { DatePicker } from '../../components/Shared/DatePicker';
 
 interface BedReadJobsPageProps {
@@ -524,21 +525,11 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
   };
 
   const handleDownloadChapter = (batchId: string, chapterNum: number) => {
-    const a = document.createElement('a');
-    a.href = getChapterAudioUrl(batchId, chapterNum);
-    a.download = `chapter_${chapterNum}.wav`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    void downloadWithAuth(getChapterAudioUrl(batchId, chapterNum), `chapter_${chapterNum}.wav`);
   };
 
   const handleDownloadZip = (batchId: string) => {
-    const a = document.createElement('a');
-    a.href = getBatchZipUrl(batchId);
-    a.download = `bedread_${batchId}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    void downloadWithAuth(getBatchZipUrl(batchId), `bedread_${batchId}.zip`);
   };
 
   const runningJob = filtered.find((j) => j.status === 'running');

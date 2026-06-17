@@ -5,34 +5,13 @@ import { AppIcon } from './AppIcon';
 import { AccountMenu } from './AccountMenu';
 import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../../types/theme';
+import { navActive, NAV_SECTIONS } from '../../utils/navigation';
 
 interface SidebarProps {
     themeMode: ThemeMode;
     onOpenSettings: () => void;
     authUser: AuthUser;
     onLogout: () => void;
-}
-
-function navActive(locationPath: string, expect: string) {
-    if (expect === '/results/all') {
-        return locationPath.startsWith('/results');
-    }
-    if (expect === '/') return locationPath === '/';
-    if (expect === '/bedread' && locationPath.startsWith('/bedread/')) return false;
-    if (expect === '/drive-sync' && locationPath.startsWith('/drive-sync/')) return false;
-    if (expect === '/auto-audio' && locationPath.startsWith('/auto-audio/')) return false;
-    return locationPath === expect || locationPath.startsWith(expect + '/') || locationPath.startsWith(expect + '?');
-}
-
-interface NavItem {
-    to: string;
-    label: string;
-    iconKey: (typeof NAV_ICONS)[keyof typeof NAV_ICONS];
-}
-
-interface NavSection {
-    label: string;
-    items: NavItem[];
 }
 
 const NAV_ICONS = {
@@ -51,43 +30,6 @@ const NAV_ICONS = {
     '/auto-audio/history': 'syncHistory',
     '/supported-sites': 'supportedSites',
 } as const;
-
-const NAV_ITEMS_CRAWL: NavItem[] = [
-    { to: '/', label: 'New Crawl', iconKey: NAV_ICONS['/'] },
-    { to: '/results/all', label: 'Crawl History', iconKey: NAV_ICONS['/results/all'] },
-];
-
-const NAV_ITEMS_AUDIO: NavItem[] = [
-    { to: '/bedread', label: 'BedReads', iconKey: NAV_ICONS['/bedread'] },
-    { to: '/bedread/jobs', label: 'Audio Jobs', iconKey: NAV_ICONS['/bedread/jobs'] },
-];
-
-const NAV_ITEMS_BEDREADS: NavItem[] = [
-    { to: '/drive-sync', label: 'Drive Sync', iconKey: NAV_ICONS['/drive-sync'] },
-    { to: '/drive-sync/cover-update', label: 'Cover Update', iconKey: NAV_ICONS['/drive-sync/cover-update'] },
-    { to: '/drive-sync/banner-update', label: 'Banner Update', iconKey: NAV_ICONS['/drive-sync/banner-update'] },
-    { to: '/drive-sync/metadata-update', label: 'Metadata Update', iconKey: NAV_ICONS['/drive-sync/metadata-update'] },
-    { to: '/drive-sync/content-update', label: 'Content Update', iconKey: NAV_ICONS['/drive-sync/content-update'] },
-    { to: '/drive-sync/title-update', label: 'Title Update', iconKey: NAV_ICONS['/drive-sync/title-update'] },
-    { to: '/drive-sync/history', label: 'Sync History', iconKey: NAV_ICONS['/drive-sync/history'] },
-];
-
-const NAV_ITEMS_AUTO_AUDIO: NavItem[] = [
-    { to: '/auto-audio', label: 'Auto Audio', iconKey: NAV_ICONS['/auto-audio'] },
-    { to: '/auto-audio/history', label: 'Auto History', iconKey: NAV_ICONS['/auto-audio/history'] },
-];
-
-const NAV_ITEMS_SYSTEM: NavItem[] = [
-    { to: '/supported-sites', label: 'Supported Sites', iconKey: NAV_ICONS['/supported-sites'] },
-];
-
-const NAV_SECTIONS: NavSection[] = [
-    { label: 'Novel Crawler', items: NAV_ITEMS_CRAWL },
-    { label: 'Audio', items: NAV_ITEMS_AUDIO },
-    { label: 'DriveSync', items: NAV_ITEMS_BEDREADS },
-    { label: 'Auto Audio', items: NAV_ITEMS_AUTO_AUDIO },
-    { label: 'System', items: NAV_ITEMS_SYSTEM },
-];
 
 export function Sidebar({
     themeMode,
@@ -110,11 +52,13 @@ export function Sidebar({
     const hoverBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)';
     const activeBackground = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
 
-    const makeNavItem = (item: NavItem) => {
+    const makeNavItem = (item: { to: string; label: string; iconKey: string }) => {
         const active = navActive(location.pathname, item.to);
         const hovered = hoveredItem === item.to;
         const background = active ? activeBackground : hovered ? hoverBackground : 'transparent';
         const color = active ? headerText : hovered ? itemText : itemMuted;
+        const iconKey = item.iconKey as keyof typeof NAV_ICONS;
+        const resolvedIcon = NAV_ICONS[iconKey] as keyof typeof appIcons;
 
         return (
             <Link
@@ -133,7 +77,7 @@ export function Sidebar({
                     className="flex h-5 w-5 items-center justify-center flex-shrink-0 transition-colors duration-150"
                     style={{ color }}
                 >
-                    <Icon icon={appIcons[item.iconKey as keyof typeof appIcons]} className="w-4 h-4" />
+                    <Icon icon={appIcons[resolvedIcon]} className="w-4 h-4" />
                 </span>
 
                 <span

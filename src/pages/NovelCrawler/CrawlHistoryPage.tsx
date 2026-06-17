@@ -8,6 +8,7 @@ import {
   getDownloadAllCombinedUrl,
   type CrawlSessionSummary,
 } from '../../api';
+import { downloadWithAuth } from '../../api/client';
 import { DatePicker } from '../../components/Shared/DatePicker';
 import type { ThemeMode } from '../../types/theme';
 
@@ -105,12 +106,7 @@ function SessionCard({
   const handleDownloadCombined = () => {
     const filename = session.combined_txt_file || session.combined_file || '';
     if (!filename) return;
-    const a = document.createElement('a');
-    a.href = getDownloadCombinedUrl(session.crawl_id, filename);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    void downloadWithAuth(getDownloadCombinedUrl(session.crawl_id, filename), filename);
   };
 
   const isRetryable = session.status === 'failed' || session.status === 'cancelled';
@@ -231,12 +227,7 @@ function SessionCard({
             <button
               onClick={(event) => {
                 event.stopPropagation();
-                const a = document.createElement('a');
-                a.href = getDownloadAllUrl(session.crawl_id);
-                a.download = '';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
+                void downloadWithAuth(getDownloadAllUrl(session.crawl_id), '');
               }}
               className="rounded-md border px-3 py-2 text-sm transition-colors"
               style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
@@ -607,11 +598,7 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
                 <button
                   onClick={() => {
                     setDownloadingAllCombined(true);
-                    const a = document.createElement('a');
-                    a.href = getDownloadAllCombinedUrl();
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
+                    void downloadWithAuth(getDownloadAllCombinedUrl(), '');
                     setTimeout(() => setDownloadingAllCombined(false), 2000);
                   }}
                   disabled={downloadingAllCombined || !hasCombinedFiles}

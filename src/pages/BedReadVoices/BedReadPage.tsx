@@ -18,6 +18,7 @@ import {
   type TTSVoice,
 } from '../../api/BedReadVoices';
 import { getDriveSyncConfig } from '../../api/BedReadDriveSync';
+import { downloadWithAuth, getStoredAccessToken } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 
@@ -408,27 +409,32 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
 
   const handleDownloadChapter = (chapterNumber: number) => {
     if (!batchId) return;
-    const anchor = document.createElement('a');
-    anchor.href = getChapterAudioUrl(batchId, chapterNumber);
-    anchor.download = `chapter_${chapterNumber}.${format}`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    void downloadWithAuth(getChapterAudioUrl(batchId, chapterNumber), `chapter_${chapterNumber}.${format}`);
   };
 
   const handleDownloadZip = () => {
     if (!batchId) return;
-    const anchor = document.createElement('a');
-    anchor.href = getBatchZipUrl(batchId);
-    anchor.download = `bedread_${batchId}.zip`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    void downloadWithAuth(getBatchZipUrl(batchId), `bedread_${batchId}.zip`);
   };
 
   const handleListenChapter = (chapterNumber: number) => {
     if (!batchId) return;
-    globalThis.open(getChapterAudioUrl(batchId, chapterNumber), '_blank');
+    const url = getChapterAudioUrl(batchId, chapterNumber);
+    void (async () => {
+      try {
+        const token = getStoredAccessToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        globalThis.open(objectUrl, '_blank');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to play audio';
+        void globalThis.alert(`Playback error: ${msg}`);
+      }
+    })();
   };
 
   const hasAnyCompleted = batchJob?.chapters.some((chapter) => chapter.status === 'completed') ?? false;
@@ -475,7 +481,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
             isConfigLoading={configLoading}
             isConfigValid={configInvalid ? false : configLoading ? undefined : Boolean(mainBeApiUrl && bedReadUserId)}
             onConfigure={() => {
-              globalThis.location.href = '/settings/drive-sync';
+              navigate('/');
             }}
           />
 

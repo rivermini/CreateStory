@@ -5,6 +5,7 @@ import faviconDarkUrl from './assets/favicon-dark.svg';
 import { Sidebar } from './components/Shared/Sidebar';
 import { MobileSidebar } from './components/Shared/Mobile/MobileSidebar';
 import { ToastContainer } from './components/Shared/Toast';
+import { ErrorBoundary } from './components/Shared/ErrorBoundary';
 import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api';
 import { Icon, appIcons } from './components/Shared/Icon';
 import { type ThemeMode } from './types/theme';
@@ -43,6 +44,10 @@ function readThemeCookie(): ThemeMode | null {
 function writeThemeCookie(mode: ThemeMode) {
   const maxAge = 60 * 60 * 24 * 365;
   document.cookie = `${THEME_COOKIE}=${encodeURIComponent(mode)}; path=/; max-age=${maxAge}; samesite=lax`;
+}
+
+function usePrefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
 function App() {
@@ -92,31 +97,33 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
-      {authChecked === false ? (
-        <AuthLoading themeMode={themeMode} />
-      ) : authUser ? (
-        <Shell
-          themeMode={themeMode}
-          onThemeChange={handleThemeChange}
-          authUser={authUser}
-          onLogout={handleLogout}
-        />
-      ) : (
-        <Suspense fallback={<AuthLoading themeMode={loginThemeMode} />}>
-          <LoginPage
-            themeMode={loginThemeMode}
+    <ErrorBoundary>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        {authChecked === false ? (
+          <AuthLoading themeMode={themeMode} />
+        ) : authUser ? (
+          <Shell
+            themeMode={themeMode}
             onThemeChange={handleThemeChange}
-            onAuthenticated={(user) => setAuthUser(user)}
+            authUser={authUser}
+            onLogout={handleLogout}
           />
-        </Suspense>
-      )}
-    </BrowserRouter>
+        ) : (
+          <Suspense fallback={<AuthLoading themeMode={loginThemeMode} />}>
+            <LoginPage
+              themeMode={loginThemeMode}
+              onThemeChange={handleThemeChange}
+              onAuthenticated={(user) => setAuthUser(user)}
+            />
+          </Suspense>
+        )}
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
@@ -135,6 +142,7 @@ function Shell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const location = useLocation();
   const isDashboard = location.pathname.startsWith('/dashboard');
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   const handleOpenSettings = useCallback(() => {
     setSettingsOpen(true);
@@ -147,6 +155,14 @@ function Shell({
 
   return (
     <>
+      {/* Skip to main content link for keyboard accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:rounded-lg focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
       {!isDashboard && (
         <Sidebar
           themeMode={themeMode}
@@ -183,8 +199,8 @@ function Shell({
       </header>
       )}
 
-      <div className={`min-h-screen transition-colors duration-300 ${themeMode === 'dark' ? 'bg-[#050505]' : 'bg-white'}`}>
-        <div className={`${isDashboard ? 'pt-0 pl-0' : 'pt-14 lg:pt-0 pl-0 lg:pl-[248px]'} min-h-screen transition-all duration-300`}>
+      <div className={`min-h-screen ${prefersReducedMotion ? '' : 'transition-colors duration-300'} ${themeMode === 'dark' ? 'bg-[#050505]' : 'bg-white'}`}>
+        <div id="main-content" className={`${isDashboard ? 'pt-0 pl-0' : 'pt-14 lg:pt-0 pl-0 lg:pl-[248px]'} min-h-screen ${prefersReducedMotion ? '' : 'transition-all duration-300'}`}>
           <Suspense fallback={
             <div className={`flex h-screen items-center justify-center ${themeMode === 'dark' ? 'bg-[#050505] text-white/45' : 'bg-white text-black/30'}`}>
               Loading...

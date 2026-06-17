@@ -138,6 +138,7 @@ export interface ProgressUpdate {
   status: string;
   error_message?: string;
   source_url?: string | null;
+  started_at?: string | null;
 }
 
 export type LogLevel = 'info' | 'error' | 'warning' | 'debug';
