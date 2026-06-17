@@ -1,6 +1,7 @@
 """FastAPIServer — API Gateway entry point."""
 
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -25,6 +26,16 @@ from api.migration import import_existing_shared_state
 from api.routes import admin, auth, auto_audio, bedread, crawl, dev, results, settings, sites, drive_sync, tts
 from api.routes.drive_sync.config import _DRIVE_SYNC_CONFIG_EXAMPLE
 from api.routes.settings import _SETTINGS_EXAMPLE
+
+
+# CORS allowlist — comma-separated origins, defaulting to localhost dev ports.
+_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000"
+    ).split(",")
+    if origin.strip()
+]
 
 
 @asynccontextmanager
@@ -60,7 +71,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
