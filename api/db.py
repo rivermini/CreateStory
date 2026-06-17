@@ -17,7 +17,13 @@ _FASTAPI_ENV = _PROJECT_ROOT.parent / "FastAPIServer" / ".env"
 if _FASTAPI_ENV.exists():
     load_dotenv(_FASTAPI_ENV, override=False)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/create_story")
+_DATABASE_URL = os.getenv("DATABASE_URL")
+if not _DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is required. "
+        "Copy .env.example to .env and set it before starting the service."
+    )
+DATABASE_URL: str = _DATABASE_URL
 
 
 class Base(DeclarativeBase):

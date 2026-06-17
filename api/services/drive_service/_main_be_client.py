@@ -23,6 +23,27 @@ from api.services.drive_service._paths import (
 
 logger = logging.getLogger(__name__)
 
+# Compiled regex to redact Authorization headers and similar secrets from log messages.
+# Matches "Bearer <anything>" and "Basic <anything>" patterns to prevent accidental
+# secret exposure in job logs stored in the database.
+_REDACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # (pattern, replacement) — replacement uses \1 for the first capture group
+    (re.compile(r'\b(Bearer|Token|token) ["\x27]?([A-Za-z0-9_.\-=]+)["\x27]?', re.IGNORECASE), r'\1 ***'),
+    # Authorization: <value> — no capture groups, replace the full match
+    (re.compile(r'\bAuthorization\b["\s]*:["\s]*[A-Za-z0-9_.\-=]+', re.IGNORECASE), r'[REDACTED]'),
+]
+
+
+def _redact_sensitive(message: str) -> str:
+    """Redact bearer tokens, auth headers, and similar secrets from a log message.
+
+    This prevents accidental exposure of credentials in job logs stored in PostgreSQL.
+    """
+    result = message
+    for pattern, replacement in _REDACT_PATTERNS:
+        result = pattern.sub(replacement, result)
+    return result
+
 
 class MainBEClientMixin:
     """
@@ -67,18 +88,24 @@ class MainBEClientMixin:
     def _main_be_client(self, timeout: float = 600.0) -> Iterator[httpx.Client]:
         yield self._get_main_be_client(timeout)
 
+    def close_http_clients(self) -> None:
+        """Close any open thread-local main-BE HTTP clients."""
+        client = getattr(self._main_be_tls, "client", None)
+        if client is not None and not client.is_closed:
+            client.close()
+
     def _append_log(self, level: str, message: str, story_name: Optional[str] = None, job_id: Optional[str] = None) -> None:
         from api.models.drive_sync import DriveSyncLogEntry
 
         entry = DriveSyncLogEntry(
             timestamp=datetime.now(timezone.utc).isoformat(),
             level=level,
-            message=message,
+            message=_redact_sensitive(message),
             story_name=story_name,
         )
         self._current_log.append(entry)
         if job_id is not None:
-            self.append_job_log(job_id, level, message)
+            self.append_job_log(job_id, level, _redact_sensitive(message))
 
     def _post_story(
         self,
@@ -98,11 +125,7 @@ class MainBEClientMixin:
         if self._config is None:
             return None
         url = f"{self._config.main_be_api_base_url}/api/v1/story/"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers(include_content_type=True)
         payload = {
             "title": title,
             "synopsis": synopsis or "",
@@ -169,10 +192,7 @@ class MainBEClientMixin:
             self._append_log("error", "main_be_bearer_token is not set", title)
             return None
         target = title.strip().lower()
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         page = 1
         try:
             while True:
@@ -212,6 +232,8 @@ class MainBEClientMixin:
         headers = {
             "Authorization": f"Bearer {self._config.main_be_bearer_token}",
             "x-user-id": self._config.main_be_user_id or "",
+            "x-platform": "android",
+            "User-Agent": "BedReadDriveSync/1.0",
         }
         if include_content_type:
             headers["Content-Type"] = "application/json"
@@ -974,11 +996,7 @@ class MainBEClientMixin:
         if self._config is None:
             return (False, "Backend client not configured") if return_error else False
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}/chapter"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers(include_content_type=True)
         payload = {"index": index, "title": title, "content": content}
 
         def _attempt(attempt_num: int) -> tuple[bool, str, bool]:
@@ -1035,10 +1053,7 @@ class MainBEClientMixin:
         if self._config is None:
             return 0
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}"
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         try:
             with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers)
@@ -1084,10 +1099,7 @@ class MainBEClientMixin:
         if self._config is None:
             return set()
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}/chapter"
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         try:
             with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers)
@@ -1108,10 +1120,7 @@ class MainBEClientMixin:
         if self._config is None:
             return 0
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}"
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         try:
             with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers)
@@ -1134,10 +1143,7 @@ class MainBEClientMixin:
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
 
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         all_stories: list[dict] = []
         page = 1
         try:
@@ -1178,11 +1184,7 @@ class MainBEClientMixin:
         if self._config is None:
             return False
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers(include_content_type=True)
         payload = {"maxChapter": max_chapter}
         try:
             with self._main_be_client(timeout=600.0) as client:
@@ -1203,11 +1205,7 @@ class MainBEClientMixin:
         if self._config is None:
             return (False, "Backend client not configured")
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers(include_content_type=True)
         payload: dict[str, Any] = {}
         if max_chapter is not None:
             payload["maxChapter"] = max_chapter
@@ -1443,10 +1441,7 @@ class MainBEClientMixin:
         if self._config is None:
             return None
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}/upload-cover"
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         try:
             with self._main_be_client(timeout=60.0) as client:
                 resp = client.post(
@@ -1473,10 +1468,7 @@ class MainBEClientMixin:
         if self._config is None:
             return None
         url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}/upload-banner"
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         try:
             with self._main_be_client(timeout=60.0) as client:
                 resp = client.post(
@@ -1506,10 +1498,7 @@ class MainBEClientMixin:
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
 
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         params: dict[str, str] = {}
         if start_date:
             params["startDate"] = start_date
@@ -1551,13 +1540,16 @@ class MainBEClientMixin:
         if not self._config.main_be_api_base_url:
             return (False, 0, "Main BE API base URL is not set.")
         url = f"{self._config.main_be_api_base_url}/api/v1/story"
-        headers = {
-            "Authorization": f"Bearer {self._config.main_be_bearer_token}",
-            "x-user-id": self._config.main_be_user_id,
-        }
+        headers = self._main_be_headers()
         try:
             with self._main_be_client(timeout=600.0) as client:
                 resp = client.get(url, headers=headers, params={"page": 1, "limit": 1})
+                logger.info(
+                    "validate_token upstream %s -> %s | headers=%s | body=%s",
+                    url, resp.status_code,
+                    {k: v for k, v in headers.items() if k.lower() != "authorization"},
+                    resp.text[:300],
+                )
                 if resp.status_code == 401:
                     return (False, resp.status_code, "Unauthorized: Invalid or expired bearer token.")
                 if resp.status_code in (200, 201):

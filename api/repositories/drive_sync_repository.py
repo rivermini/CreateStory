@@ -182,9 +182,8 @@ class DriveSyncRepository:
 
     def save_history(self, entries: list["HistoryEntry"]) -> None:
         with self.session_factory() as db:
-            db.execute(delete(DriveSyncHistoryRecord))
             for entry in entries:
-                db.add(self._history_entry_to_row(entry))
+                db.merge(self._history_entry_to_row(entry))
             db.commit()
 
     def load_jobs(self) -> list[dict]:

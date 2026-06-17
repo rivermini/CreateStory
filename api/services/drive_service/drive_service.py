@@ -141,8 +141,25 @@ def init_drive_sync_config(
     main_category_id: str = "154971fe-7da7-41c4-91ee-b2a9613d6fa0",
     main_be_bearer_token: Optional[str] = None,
 ) -> DriveSyncConfig:
-    """Initialize (or update) the drive sync config in PostgreSQL."""
+    """Initialize (or update) the drive sync config in PostgreSQL.
+
+    If ``main_be_bearer_token`` is not supplied, the existing token (in-memory
+    or persisted) is preserved rather than overwritten with ``None``.
+    """
     global _service_instance
+    existing_token: Optional[str] = None
+    if _service_instance is not None and getattr(_service_instance, "_config", None) is not None:
+        existing_token = _service_instance._config.main_be_bearer_token
+    elif _service_instance is not None:
+        try:
+            raw = _service_instance._repo.load_drive_config()
+            if isinstance(raw, dict):
+                existing_token = raw.get("main_be_bearer_token")
+        except Exception:
+            existing_token = None
+
+    resolved_token = main_be_bearer_token if main_be_bearer_token else existing_token
+
     config = DriveSyncConfig(
         folder_id=folder_id,
         service_account_json_path=service_account_json_path,
@@ -150,7 +167,7 @@ def init_drive_sync_config(
         main_be_api_base_url=main_be_api_base_url,
         main_be_user_id=main_be_user_id,
         main_category_id=main_category_id,
-        main_be_bearer_token=main_be_bearer_token,
+        main_be_bearer_token=resolved_token,
     )
     DriveSyncRepository().save_drive_config(config.model_dump(mode="json"))
     if _service_instance is not None:

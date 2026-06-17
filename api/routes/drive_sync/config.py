@@ -1,7 +1,7 @@
 """Config and status endpoints for drive sync."""
 
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
@@ -26,12 +26,6 @@ class InitDriveSyncRequest(BaseModel):
     main_be_api_base_url: str
     main_be_user_id: Optional[str] = None
     main_category_id: str = "154971fe-7da7-41c4-91ee-b2a9613d6fa0"
-    main_be_bearer_token: Optional[str] = None
-
-
-class DriveSyncTokenResponse(BaseModel):
-    """API response for GET /api/drive-sync/config/token."""
-    token: Optional[str]
 
 
 class DriveSyncUrlResponse(BaseModel):
@@ -40,14 +34,16 @@ class DriveSyncUrlResponse(BaseModel):
 
 
 # GET /api/drive-sync/config/token
-@router.get("/config/token", response_model=DriveSyncTokenResponse, tags=["Drive Sync"])
-async def get_main_be_token() -> DriveSyncTokenResponse:
-    """Returns the stored Main BE bearer token, or null if not set."""
-    service = get_drive_sync_service()
-    cfg = service.get_config()
-    if cfg is None:
-        return DriveSyncTokenResponse(token=None)
-    return DriveSyncTokenResponse(token=cfg.main_be_bearer_token)
+@router.get("/config/token", status_code=410, tags=["Drive Sync"])
+async def get_main_be_token():
+    """DEPRECATED (410 Gone). Bearer tokens are now set via POST /config with the
+    X-Auth-Token request header, and stored server-side. They can no longer be
+    read back through the API."""
+    raise HTTPException(
+        status_code=410,
+        detail="The /config/token endpoint is removed. Set the token via POST /config "
+               "using the X-Auth-Token header. The token cannot be retrieved after being set.",
+    )
 
 
 # GET /api/drive-sync/status
@@ -82,15 +78,23 @@ async def get_sync_config() -> Optional[DriveSyncConfigResponse]:
 
 # POST /api/drive-sync/config
 @router.post("/config", response_model=DriveSyncConfigResponse, tags=["Drive Sync"])
-async def create_or_update_sync_config(body: InitDriveSyncRequest) -> DriveSyncConfigResponse:
-    """Initialize or update the Google Drive sync configuration."""
+async def create_or_update_sync_config(
+    body: InitDriveSyncRequest,
+    x_auth_token: Optional[str] = Header(None, alias="X-Auth-Token"),
+) -> DriveSyncConfigResponse:
+    """Initialize or update the Google Drive sync configuration.
+
+    The bearer token for the main BE API is accepted via the ``X-Auth-Token``
+    request header only. It is never accepted in the request body and never
+    returned in any API response.
+    """
     cfg = init_drive_sync_config(
         folder_id=body.folder_id,
         service_account_json_path=body.service_account_json_path,
         main_be_api_base_url=body.main_be_api_base_url,
         main_be_user_id=body.main_be_user_id,
         main_category_id=body.main_category_id,
-        main_be_bearer_token=body.main_be_bearer_token,
+        main_be_bearer_token=x_auth_token,
     )
     import logging
     logger = logging.getLogger(__name__)
@@ -108,7 +112,10 @@ async def create_or_update_sync_config(body: InitDriveSyncRequest) -> DriveSyncC
 # PUT /api/drive-sync/config
 @router.put("/config", response_model=DriveSyncConfigResponse, tags=["Drive Sync"])
 async def update_sync_config(body) -> DriveSyncConfigResponse:
-    """Partially update the drive sync configuration."""
+    """Partially update the drive sync configuration.
+
+    Note: to update the bearer token, use POST /config with the X-Auth-Token header.
+    """
     from api.models.drive_sync import DriveSyncUpdateRequest
     service = get_drive_sync_service()
     if service.get_config() is None:
@@ -117,6 +124,8 @@ async def update_sync_config(body) -> DriveSyncConfigResponse:
             detail="Drive sync not configured. POST /api/drive-sync/config first.",
         )
     kwargs = {k: v for k, v in body.model_dump().items() if v is not None}
+    # Token cannot be updated via PUT body — must use POST /config with X-Auth-Token header.
+    kwargs.pop("main_be_bearer_token", None)
     updated = service.update_config(**kwargs)
     return DriveSyncConfigResponse(
         folder_id=updated.folder_id,

@@ -1,6 +1,7 @@
 """FastAPI application entry point for BedReadDriveSync."""
 
 import logging
+import os
 import sys
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -31,6 +32,14 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("BedReadDriveSync startup: database ready.")
     yield
+    logger.info("BedReadDriveSync shutdown: closing HTTP clients...")
+    try:
+        from api.services.drive_service import get_drive_sync_service
+        svc = get_drive_sync_service()
+        svc.close_http_clients()
+    except Exception as exc:
+        logger.warning("BedReadDriveSync shutdown: error closing clients: %s", exc)
+    logger.info("BedReadDriveSync shutdown: done.")
 
 app = FastAPI(
     title="BedReadDriveSync",
@@ -39,9 +48,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_allow_origins = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173,http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in _allow_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,6 +78,10 @@ def api_info() -> dict:
 
 @app.post("/api/dev/reset-state", tags=["Development"])
 def reset_runtime_state() -> dict:
+    """Reset runtime state. Only available when DEV_MODE=true."""
+    if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
     from api.services.drive_service import get_drive_sync_service
 
     get_drive_sync_service().reset_runtime_state()

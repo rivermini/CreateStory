@@ -15,7 +15,7 @@ class DriveSyncConfig(BaseModel):
     main_be_user_id: Optional[str] = None
     enabled: bool = True
     main_category_id: str = "154971fe-7da7-41c4-91ee-b2a9613d6fa0"
-    main_be_bearer_token: Optional[str] = None
+    main_be_bearer_token: Optional[str] = None  # set only via X-Auth-Token header; never returned in responses
 
 
 class DriveSyncLogEntry(BaseModel):
@@ -70,11 +70,14 @@ class DriveSyncTriggerResponse(BaseModel):
 
 
 class DriveSyncUpdateRequest(BaseModel):
-    """Request body for PUT /api/drive-sync/config."""
+    """Request body for PUT /api/drive-sync/config.
+
+    Note: bearer tokens must be set via POST /config with the X-Auth-Token header,
+    not in the request body. This model does not accept ``main_be_bearer_token``.
+    """
 
     enabled: Optional[bool] = None
     main_category_id: Optional[str] = None
-    main_be_bearer_token: Optional[str] = None
     main_be_user_id: Optional[str] = None
     main_be_api_base_url: Optional[str] = None
 
