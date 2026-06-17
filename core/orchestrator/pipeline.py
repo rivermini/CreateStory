@@ -466,11 +466,16 @@ class StoryPipeline:
             6,
             f"Downloaded chapter {chapter_index}: {local_path.stat().st_size} bytes",
         )
-        ok = self._upload.upload_audio(
-            session, story.story_id, chapter_id, local_path, voice,
-        )
-        if ok:
+        try:
+            ok = self._upload.upload_audio(
+                session, story.story_id, chapter_id, local_path, voice,
+            )
+        finally:
+            # Always clean up the per-chapter downloaded audio file, even when
+            # upload_audio raises. The temp dir cleanup happens in
+            # _finish_batch_upload once the whole batch is done.
             self._upload.delete_local_audio_files(session, local_path)
+        if ok:
             return True, ""
         return False, f"Chapter {chapter_index}: upload failed"
 
@@ -498,6 +503,7 @@ class StoryPipeline:
         for state in states:
             try:
                 self._br.delete_batch_job(state.batch_id)
+                self._br.delete_batch_output(state.batch_id)
             except Exception:
                 pass
 

@@ -18,6 +18,9 @@ class ExternalAPIClient:
             limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
         )
 
+    def close(self) -> None:
+        self._client.close()
+
     def _request(
         self,
         method: str,

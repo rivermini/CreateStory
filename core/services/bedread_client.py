@@ -29,6 +29,9 @@ class BedReadClient:
             limits=httpx.Limits(max_connections=30, max_keepalive_connections=0),
         )
 
+    def close(self) -> None:
+        self._client.close()
+
     def start_batch(
         self,
         story: StoryMissingAudio,

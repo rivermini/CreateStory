@@ -1,0 +1,7 @@
+# Alembic migration configuration for AutoAudio
+
+# To initialize migrations for this service:
+#   1. Ensure DATABASE_URL is set in your environment
+#   2. Run: alembic revision --autogenerate -m "Initial migration"
+#   3. Review and edit the generated migration file
+#   4. Apply migrations: alembic upgrade head

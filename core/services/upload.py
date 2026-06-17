@@ -32,6 +32,9 @@ class UploadManager:
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
 
+    def close(self) -> None:
+        self._client.close()
+
     def upload_audio(
         self,
         session: AutoAudioSession,
@@ -198,7 +201,21 @@ class UploadManager:
                 "-ac", "1",
                 str(output_path),
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            except subprocess.TimeoutExpired:
+                session.add_log(
+                    6,
+                    "FFmpeg timed out after 300s — uploading original audio as-is",
+                    level="warning",
+                )
+                return _CompressedAudio(
+                    data=audio_bytes,
+                    name=audio_path.name,
+                    original=original_size,
+                    compressed=original_size,
+                    size=original_size,
+                )
             if result.returncode != 0:
                 session.add_log(6, f"FFmpeg error: {result.stderr[:200]}", level="warning")
                 return _CompressedAudio(

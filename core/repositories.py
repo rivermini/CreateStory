@@ -65,10 +65,9 @@ class AutoAudioRepository:
 
     def save_sessions(self, sessions: list[dict]) -> None:
         with self.session_factory() as db:
-            db.execute(delete(AutoAudioSessionRecord))
             for data in sessions:
                 if data.get("session_id"):
-                    db.add(self._dict_to_row(data))
+                    db.merge(self._dict_to_row(data))
             db.commit()
 
     def delete_session(self, session_id: str) -> bool:
