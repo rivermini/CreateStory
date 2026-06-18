@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   server: {
+    allowedHosts: ['createstory.online', 'www.createstory.online'],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

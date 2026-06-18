@@ -19,6 +19,7 @@ export interface BannerUpdateTabsProps {
   onCheckUpdated: () => void;
   onUploadBanner: (folderId: string, storyId: string) => Promise<void>;
   themeMode: ThemeMode;
+  bannerFilename?: string;
 }
 
 export function BannerUpdateTabs({
@@ -34,6 +35,7 @@ export function BannerUpdateTabs({
   onCheckUpdated,
   onUploadBanner,
   themeMode,
+  bannerFilename = 'banner1.jpg',
 }: Readonly<BannerUpdateTabsProps>) {
   const isDark = themeMode === 'dark';
   const [activeTab, setActiveTab] = useState<BannerUpdateTab>('check-all');
@@ -194,6 +196,7 @@ export function BannerUpdateTabs({
             onCheck={onCheckAll}
             onUploadBanner={onUploadBanner}
             themeMode={themeMode}
+            bannerFilename={bannerFilename}
           />
         )}
         {activeTab === 'check-updated-banner' && (

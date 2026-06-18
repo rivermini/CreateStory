@@ -28,6 +28,7 @@ interface CheckAllTabProps {
   onCheck: () => void;
   onUploadBanner: (folderId: string, storyId: string) => Promise<void>;
   themeMode: ThemeMode;
+  bannerFilename?: string;
 }
 
 export function CheckAllTab({
@@ -39,6 +40,7 @@ export function CheckAllTab({
   onCheck,
   onUploadBanner,
   themeMode,
+  bannerFilename = 'banner1.jpg',
 }: Readonly<CheckAllTabProps>) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
@@ -301,7 +303,7 @@ export function CheckAllTab({
             ))}
           </div>
         )}
-        {data && filterSection === 'no_banner' && filteredNoBanner.length === 0 && <EmptySection isDark={isDark} message="No folders missing banner1.jpg." />}
+        {data && filterSection === 'no_banner' && filteredNoBanner.length === 0 && <EmptySection isDark={isDark} message={`No folders missing ${bannerFilename}.`} />}
 
         {data && filterSection === 'no_match' && filteredNoMatch.length > 0 && (
           <div className="space-y-2">
