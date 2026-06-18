@@ -265,7 +265,7 @@ class CoverUpdateMixin:
                 entry = {**entry_base, "status": "updated", "last_updated": history.get("last_updated")}
                 updated.append(entry)
             else:
-                saved = self._record_cover_update(
+                self._record_cover_update(
                     story_id=server_story.get("id"),
                     story_title=display_name,
                     folder_id=folder_id,
@@ -273,7 +273,7 @@ class CoverUpdateMixin:
                     status="never_updated",
                     cover_file_name=cover1.get("name"),
                 )
-                entry = {**entry_base, "status": "never_updated", "last_updated": _iso(saved.get("last_updated"))}
+                entry = {**entry_base, "status": "can_update", "last_updated": None}
                 can_update.append(entry)
 
         return {
