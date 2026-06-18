@@ -33,6 +33,8 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
 
   const [bannerNumber, setBannerNumber] = useState('1');
   const [savedBannerNumber, setSavedBannerNumber] = useState('1');
+  const [bannerExtension, setBannerExtension] = useState<'jpg' | 'png'>('jpg');
+  const [savedBannerExtension, setSavedBannerExtension] = useState<'jpg' | 'png'>('jpg');
   const [bannerEdited, setBannerEdited] = useState(false);
 
   const handleBannerNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,14 +43,20 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
     setBannerEdited(raw !== savedBannerNumber);
   };
 
-  const handleSaveBannerFilename = () => {
-    setSavedBannerNumber(bannerNumber);
-    setBannerEdited(false);
-    showToast(`Banner filename saved: banner${bannerNumber}.jpg`, 'success', 2000, 'top-center');
+  const handleBannerExtensionChange = (ext: 'jpg' | 'png') => {
+    setBannerExtension(ext);
+    setBannerEdited(ext !== savedBannerExtension || bannerNumber !== savedBannerNumber);
   };
 
-  const savedBannerFilename = `banner${savedBannerNumber}.jpg`;
-  const bannerFilenameBase = savedBannerFilename.replace(/\.[^/.]+$/, '');
+  const handleSaveBannerFilename = () => {
+    setSavedBannerNumber(bannerNumber);
+    setSavedBannerExtension(bannerExtension);
+    setBannerEdited(false);
+    showToast(`Banner filename saved: banner${bannerNumber}.${bannerExtension}`, 'success', 2000, 'top-center');
+  };
+
+  const savedBannerFilename = `banner${savedBannerNumber}.${savedBannerExtension}`;
+  const bannerFilenameBase = `banner${savedBannerNumber}`;
   const isBannerEdited = bannerEdited;
   const [checkAllData, setCheckAllData] = useState<CheckAllResponse | null>(null);
   const [checkAllLoading, setCheckAllLoading] = useState(false);
@@ -176,7 +184,30 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
                     color: pageText 
                   }}
                 />
-                <span className="text-sm font-mono" style={{ color: tertiaryText }}>.jpg</span>
+                <div className="flex items-center rounded-md border overflow-hidden" style={{ borderColor: bannerExtension !== savedBannerExtension ? '#f59e0b' : panelBorder }}>
+                  <button
+                    type="button"
+                    onClick={() => handleBannerExtensionChange('jpg')}
+                    className="px-2.5 py-1.5 text-xs font-mono font-medium transition-colors"
+                    style={{
+                      background: bannerExtension === 'jpg' ? (isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.12)') : 'transparent',
+                      color: bannerExtension === 'jpg' ? (isDark ? '#93c5fd' : '#2563eb') : tertiaryText,
+                    }}
+                  >
+                    .jpg
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBannerExtensionChange('png')}
+                    className="px-2.5 py-1.5 text-xs font-mono font-medium transition-colors"
+                    style={{
+                      background: bannerExtension === 'png' ? (isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.12)') : 'transparent',
+                      color: bannerExtension === 'png' ? (isDark ? '#93c5fd' : '#2563eb') : tertiaryText,
+                    }}
+                  >
+                    .png
+                  </button>
+                </div>
                 {isBannerEdited ? (
                   <button
                     onClick={handleSaveBannerFilename}

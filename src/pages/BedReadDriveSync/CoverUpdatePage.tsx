@@ -37,6 +37,8 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
 
   const [coverNumber, setCoverNumber] = useState('1');
   const [savedCoverNumber, setSavedCoverNumber] = useState('1');
+  const [coverExtension, setCoverExtension] = useState<'jpg' | 'png'>('jpg');
+  const [savedCoverExtension, setSavedCoverExtension] = useState<'jpg' | 'png'>('jpg');
   const [coverEdited, setCoverEdited] = useState(false);
 
   const handleCoverNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,14 +47,20 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
     setCoverEdited(raw !== savedCoverNumber);
   };
 
-  const handleSaveCoverFilename = () => {
-    setSavedCoverNumber(coverNumber);
-    setCoverEdited(false);
-    showToast(`Cover filename saved: cover${coverNumber}.jpg`, 'success', 2000, 'top-center');
+  const handleCoverExtensionChange = (ext: 'jpg' | 'png') => {
+    setCoverExtension(ext);
+    setCoverEdited(ext !== savedCoverExtension || coverNumber !== savedCoverNumber);
   };
 
-  const savedCoverFilename = `cover${savedCoverNumber}.jpg`;
-  const coverFilenameBase = savedCoverFilename.replace(/\.[^/.]+$/, '');
+  const handleSaveCoverFilename = () => {
+    setSavedCoverNumber(coverNumber);
+    setSavedCoverExtension(coverExtension);
+    setCoverEdited(false);
+    showToast(`Cover filename saved: cover${coverNumber}.${coverExtension}`, 'success', 2000, 'top-center');
+  };
+
+  const savedCoverFilename = `cover${savedCoverNumber}.${savedCoverExtension}`;
+  const coverFilenameBase = `cover${savedCoverNumber}`;
 
   const [checkUpdatedData, setCheckUpdatedData] = useState<CheckUpdatedResponse | null>(null);
   const [checkUpdatedLoading, setCheckUpdatedLoading] = useState(false);
@@ -179,7 +187,30 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
                     color: pageText 
                   }}
                 />
-                <span className="text-sm font-mono" style={{ color: tertiaryText }}>.jpg</span>
+                <div className="flex items-center rounded-md border overflow-hidden" style={{ borderColor: coverExtension !== savedCoverExtension ? '#f59e0b' : panelBorder }}>
+                  <button
+                    type="button"
+                    onClick={() => handleCoverExtensionChange('jpg')}
+                    className="px-2.5 py-1.5 text-xs font-mono font-medium transition-colors"
+                    style={{
+                      background: coverExtension === 'jpg' ? (isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.12)') : 'transparent',
+                      color: coverExtension === 'jpg' ? (isDark ? '#93c5fd' : '#2563eb') : tertiaryText,
+                    }}
+                  >
+                    .jpg
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCoverExtensionChange('png')}
+                    className="px-2.5 py-1.5 text-xs font-mono font-medium transition-colors"
+                    style={{
+                      background: coverExtension === 'png' ? (isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.12)') : 'transparent',
+                      color: coverExtension === 'png' ? (isDark ? '#93c5fd' : '#2563eb') : tertiaryText,
+                    }}
+                  >
+                    .png
+                  </button>
+                </div>
                 {coverEdited ? (
                   <button
                     onClick={handleSaveCoverFilename}
