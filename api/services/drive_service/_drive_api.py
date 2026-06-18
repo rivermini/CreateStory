@@ -974,11 +974,11 @@ class DriveAPIMixin:
         return (has_free, has_tags)
 
     def _batch_find_cover1_files(
-        self, drive_service: Any, folder_ids: list[str]
+        self, drive_service: Any, folder_ids: list[str], cover_filename: str = "cover1.jpg"
     ) -> dict[str, Optional[dict]]:
         """
-        Batch-search for cover1.jpg (case-insensitive) across Drive folders.
-        Uses the same chunked OR query pattern as the other batch checks.
+        Batch-search for the configured cover file across Drive folders.
+        Uses exact name matching (case-sensitive).
         """
         result: dict[str, Optional[dict]] = {fid: None for fid in folder_ids}
         if not folder_ids:
@@ -989,7 +989,7 @@ class DriveAPIMixin:
             parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
             query = (
                 f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
-                "and trashed=false"
+                f"and trashed=false and name='{cover_filename}'"
             )
             page_token = None
 
@@ -1010,12 +1010,12 @@ class DriveAPIMixin:
                     break
 
                 for file_info in response.get("files", []):
-                    if file_info.get("name", "").lower() != "cover1.jpg":
-                        continue
-                    for parent in file_info.get("parents", []):
-                        if parent in result and result[parent] is None:
-                            result[parent] = file_info
-                            break
+                    # Exact case-sensitive match
+                    if file_info.get("name") == cover_filename:
+                        for parent in file_info.get("parents", []):
+                            if parent in result and result[parent] is None:
+                                result[parent] = file_info
+                                break
 
                 page_token = response.get("nextPageToken")
                 if not page_token:

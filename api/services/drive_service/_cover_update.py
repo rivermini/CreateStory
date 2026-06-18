@@ -18,11 +18,19 @@ def _is_cover_update_folder(folder: dict) -> bool:
 def _normalize_cover_status(status: Optional[str]) -> str:
     if status in {"no_cover_file", "no_cover1_file"}:
         return "no_cover1_file"
+    if status == "never_updated":
+        return "never_updated"
     return status or "unknown"
 
 
 def _cover_history_id(folder_id: str, status: str) -> str:
-    suffix = "no_cover_file" if _normalize_cover_status(status) == "no_cover1_file" else status
+    normalized = _normalize_cover_status(status)
+    if normalized == "no_cover1_file":
+        suffix = "no_cover_file"
+    elif normalized == "never_updated":
+        suffix = "never_updated"
+    else:
+        suffix = normalized
     return f"cover-{folder_id}-{suffix}"
 
 
@@ -45,16 +53,16 @@ class CoverUpdateMixin:
       - check_extended_folders_for_cover
     """
 
-    def _find_cover1_file(self, drive_service: Any, folder_id: str) -> Optional[dict]:
+    def _find_cover1_file(self, drive_service: Any, folder_id: str, cover_filename: str = "cover1.jpg") -> Optional[dict]:
         """
-        Search a story folder for 'cover1.jpg' (case-insensitive).
+        Search a story folder for the configured cover file (case-sensitive).
         Returns the file dict or None.
         """
         page_token = None
         while True:
             def _call() -> dict:
                 return drive_service.files().list(
-                    q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false",
+                    q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false and name='{cover_filename}'",
                     fields="files(id, name),nextPageToken",
                     pageSize=100,
                     pageToken=page_token,
@@ -66,16 +74,17 @@ class CoverUpdateMixin:
                 break
             files = response.get("files", [])
             for f in files:
-                if f.get("name", "").lower() == "cover1.jpg":
+                # Exact case-sensitive match
+                if f.get("name") == cover_filename:
                     return f
             page_token = response.get("nextPageToken")
             if not page_token:
                 break
         return None
 
-    def _upload_story_cover_from_folder(self, story_id: str, folder_id: str) -> tuple[bool, Optional[str]]:
+    def _upload_story_cover_from_folder(self, story_id: str, folder_id: str, cover_filename: str = "cover1.jpg") -> tuple[bool, Optional[str]]:
         """
-        Download cover1.jpg from Drive and POST it to main BE /api/v1/story/{id}/upload-cover.
+        Download the configured cover file from Drive and POST it to main BE /api/v1/story/{id}/upload-cover.
         Returns (success, cover_url_or_error_message).
         """
         from api.services.drive_service._drive_api import DriveAPIMixin
@@ -85,14 +94,14 @@ class CoverUpdateMixin:
         except Exception as exc:
             return False, f"Failed to authenticate with Google Drive: {exc}"
 
-        cover_file = self._find_cover1_file(drive_service, folder_id)
+        cover_file = self._find_cover1_file(drive_service, folder_id, cover_filename)
         if cover_file is None:
-            return False, "cover1.jpg not found in Drive folder"
+            return False, f"{cover_filename} not found in Drive folder"
 
         try:
             cover_bytes = DriveAPIMixin._download_cover_image_bytes(self, drive_service, cover_file["id"])
         except Exception as exc:
-            return False, f"Failed to download cover1.jpg from Drive: {exc}"
+            return False, f"Failed to download {cover_filename} from Drive: {exc}"
 
         try:
             cover_url = self._upload_cover_image(story_id, cover_bytes, cover_file["name"])
@@ -117,6 +126,12 @@ class CoverUpdateMixin:
         """Persist a cover update record to the DB. Returns the saved record dict."""
         now = datetime.now(timezone.utc)
         normalized_status = _normalize_cover_status(status)
+        # When transitioning to a definitive state (updated/error), drop the
+        # placeholder "never_updated" row so the folder only shows one history.
+        if normalized_status in {"updated", "error"}:
+            self._repo.delete_cover_update_history(
+                _cover_history_id(folder_id, "never_updated")
+            )
         entry = {
             "id": _cover_history_id(folder_id, normalized_status),
             "story_id": story_id or "",
@@ -151,7 +166,7 @@ class CoverUpdateMixin:
         for history in self._repo.load_cover_update_histories():
             folder_id = history.get("folder_id")
             status = _normalize_cover_status(history.get("status"))
-            if folder_id not in cover_update_folders_by_id or status not in {"updated", "no_cover1_file"}:
+            if folder_id not in cover_update_folders_by_id or status not in {"updated", "no_cover1_file", "never_updated"}:
                 continue
             if folder_id in latest_by_folder_id:
                 continue
@@ -169,9 +184,9 @@ class CoverUpdateMixin:
         """Backward-compatible alias for older route code."""
         return self.get_cover_update_histories_for_cover_update_folders()
 
-    def check_extended_folders_for_cover(self) -> dict:
+    def check_extended_folders_for_cover(self, cover_filename: str = "cover1.jpg") -> dict:
         """
-        Scan all DONE_/EXTENDED_ folders, check for cover1.jpg, cross-reference
+        Scan all DONE_/EXTENDED_ folders, check for configured cover file, cross-reference
         against cover_update_histories and server stories.
         Returns categorized results.
         """
@@ -199,6 +214,7 @@ class CoverUpdateMixin:
         cover_files_by_folder_id = self._batch_find_cover1_files(
             drive_service,
             [folder["id"] for folder in cover_update_folders],
+            cover_filename,
         )
 
         can_update: list[dict] = []
@@ -249,7 +265,15 @@ class CoverUpdateMixin:
                 entry = {**entry_base, "status": "updated", "last_updated": history.get("last_updated")}
                 updated.append(entry)
             else:
-                entry = {**entry_base, "status": "can_update", "last_updated": None}
+                saved = self._record_cover_update(
+                    story_id=server_story.get("id"),
+                    story_title=display_name,
+                    folder_id=folder_id,
+                    folder_name=folder_name,
+                    status="never_updated",
+                    cover_file_name=cover1.get("name"),
+                )
+                entry = {**entry_base, "status": "never_updated", "last_updated": _iso(saved.get("last_updated"))}
                 can_update.append(entry)
 
         return {

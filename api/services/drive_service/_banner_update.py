@@ -33,11 +33,19 @@ def _is_banner_update_folder(folder: dict) -> bool:
 def _normalize_banner_status(status: Optional[str]) -> str:
     if status in {"no_banner_file", "no_banner1_file"}:
         return "no_banner1_file"
+    if status == "never_updated":
+        return "never_updated"
     return status or "unknown"
 
 
 def _banner_history_id(folder_id: str, status: str) -> str:
-    suffix = "no_banner_file" if _normalize_banner_status(status) == "no_banner1_file" else status
+    normalized = _normalize_banner_status(status)
+    if normalized == "no_banner1_file":
+        suffix = "no_banner_file"
+    elif normalized == "never_updated":
+        suffix = "never_updated"
+    else:
+        suffix = normalized
     return f"banner-{folder_id}-{suffix}"
 
 
@@ -133,6 +141,12 @@ class BannerUpdateMixin:
         """Persist a banner update record to the DB. Returns the saved record dict."""
         now = datetime.now(timezone.utc)
         normalized_status = _normalize_banner_status(status)
+        # When transitioning to a definitive state (updated/error), drop the
+        # placeholder "never_updated" row so the folder only shows one history.
+        if normalized_status in {"updated", "error"}:
+            self._repo.delete_banner_update_history(
+                _banner_history_id(folder_id, "never_updated")
+            )
         entry = {
             "id": _banner_history_id(folder_id, normalized_status),
             "story_id": story_id or "",
@@ -167,7 +181,7 @@ class BannerUpdateMixin:
         for history in self._repo.load_banner_update_histories():
             folder_id = history.get("folder_id")
             status = _normalize_banner_status(history.get("status"))
-            if folder_id not in banner_update_folders_by_id or status not in {"updated", "no_banner1_file"}:
+            if folder_id not in banner_update_folders_by_id or status not in {"updated", "no_banner1_file", "never_updated"}:
                 continue
             if folder_id in latest_by_folder_id:
                 continue
@@ -264,7 +278,15 @@ class BannerUpdateMixin:
                 entry = {**entry_base, "status": "updated", "last_updated": history.get("last_updated")}
                 updated.append(entry)
             else:
-                entry = {**entry_base, "status": "can_update", "last_updated": None}
+                saved = self._record_banner_update(
+                    story_id=server_story.get("id"),
+                    story_title=display_name,
+                    folder_id=folder_id,
+                    folder_name=folder_name,
+                    status="never_updated",
+                    banner_file_name=banner1.get("name"),
+                )
+                entry = {**entry_base, "status": "never_updated", "last_updated": _iso(saved.get("last_updated"))}
                 can_update.append(entry)
 
         return {

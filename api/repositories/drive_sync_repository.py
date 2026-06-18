@@ -353,6 +353,13 @@ class DriveSyncRepository:
             )
             db.commit()
 
+    def delete_cover_update_history(self, history_id: str) -> None:
+        with self.session_factory() as db:
+            db.execute(
+                delete(CoverUpdateHistoryRecord).where(CoverUpdateHistoryRecord.id == history_id)
+            )
+            db.commit()
+
     def load_cover_update_histories(self) -> list[dict]:
         with self.session_factory() as db:
             rows = db.scalars(
@@ -419,6 +426,13 @@ class DriveSyncRepository:
                 select(BannerUpdateHistoryRecord).order_by(BannerUpdateHistoryRecord.last_updated.desc())
             ).all()
             return [self._banner_history_row_to_dict(row) for row in rows]
+
+    def delete_banner_update_history(self, history_id: str) -> None:
+        with self.session_factory() as db:
+            db.execute(
+                delete(BannerUpdateHistoryRecord).where(BannerUpdateHistoryRecord.id == history_id)
+            )
+            db.commit()
 
     def get_banner_update_by_folder_id(self, folder_id: str) -> dict | None:
         with self.session_factory() as db:

@@ -43,13 +43,13 @@ router = APIRouter(prefix="/cover-update", tags=["Drive Sync"])
 
 
 @router.get("/check-all", response_model=CheckAllResponse, tags=["Drive Sync"])
-async def check_all() -> CheckAllResponse:
+async def check_all(cover_filename: str = "cover1.jpg") -> CheckAllResponse:
     """
     Scan all DONE_/EXTENDED_ folders and return cover-update status for each.
-    - can_update: folder has cover1.jpg, story exists on server, no prior update record
-    - updated: folder has cover1.jpg, story exists, prior update record found
-    - no_cover1_file: folder has no cover1.jpg
-    - no_server_match: folder has cover1.jpg but no matching story on server
+    - can_update: folder has cover file, story exists on server, no prior update record
+    - updated: folder has cover file, story exists, prior update record found
+    - no_cover1_file: folder has no cover file
+    - no_server_match: folder has cover file but no matching story on server
     """
     import asyncio
 
@@ -58,7 +58,7 @@ async def check_all() -> CheckAllResponse:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
-        result = await asyncio.to_thread(service.check_extended_folders_for_cover)
+        result = await asyncio.to_thread(service.check_extended_folders_for_cover, cover_filename)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -114,9 +114,9 @@ async def check_updated() -> CheckUpdatedResponse:
 
 
 @router.post("/upload/{folder_id}/{story_id}", response_model=UploadCoverResponse, tags=["Drive Sync"])
-async def upload_cover(folder_id: str, story_id: str) -> UploadCoverResponse:
+async def upload_cover(folder_id: str, story_id: str, cover_filename: str = "cover1.jpg") -> UploadCoverResponse:
     """
-    Download cover1.jpg from the given Drive folder and POST it to the main BE.
+    Download the configured cover file from the given Drive folder and POST it to the main BE.
     Records the result in cover_update_histories.
     """
     import asyncio
@@ -144,7 +144,7 @@ async def upload_cover(folder_id: str, story_id: str) -> UploadCoverResponse:
     story_title = folder_info.get("display_name", "")
 
     def _do_upload():
-        success, result = service._upload_story_cover_from_folder(story_id, folder_id)
+        success, result = service._upload_story_cover_from_folder(story_id, folder_id, cover_filename)
         return success, result
 
     try:
@@ -159,7 +159,7 @@ async def upload_cover(folder_id: str, story_id: str) -> UploadCoverResponse:
             folder_id=folder_id,
             folder_name=folder_name,
             status="updated",
-            cover_file_name="cover1.jpg",
+            cover_file_name=cover_filename,
             cover_url=result,
         )
         return UploadCoverResponse(success=True, message="Cover uploaded successfully.", cover_url=result)
@@ -170,7 +170,7 @@ async def upload_cover(folder_id: str, story_id: str) -> UploadCoverResponse:
             folder_id=folder_id,
             folder_name=folder_name,
             status="error",
-            cover_file_name="cover1.jpg",
+            cover_file_name=cover_filename,
             error=result or "Upload failed.",
         )
         return UploadCoverResponse(success=False, message=result or "Upload failed.", cover_url=None)
