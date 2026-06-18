@@ -81,6 +81,9 @@ app = FastAPI(
     ),
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if os.environ.get("ENABLE_DOCS", "false").lower() in ("true", "1", "yes") else None,
+    redoc_url="/redoc" if os.environ.get("ENABLE_DOCS", "false").lower() in ("true", "1", "yes") else None,
+    openapi_url="/openapi.json" if os.environ.get("ENABLE_DOCS", "false").lower() in ("true", "1", "yes") else None,
 )
 
 app.state.limiter = _limiter

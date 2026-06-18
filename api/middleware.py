@@ -132,6 +132,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     _CSP_DEV = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none'"
     _CSP_PROD = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
 
+    # Paths that serve Swagger UI / ReDoc and need to load assets from CDNs.
+    _DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
+
     async def dispatch(self, request: Request, call_next) -> Response:
         response: Response = await call_next(request)
         is_prod = os.environ.get("ENVIRONMENT", "development").lower() in ("production", "prod")
@@ -139,7 +142,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = self._CSP_PROD if is_prod else self._CSP_DEV
+        if not any(request.url.path.startswith(p) for p in self._DOCS_PATHS):
+            response.headers["Content-Security-Policy"] = self._CSP_PROD if is_prod else self._CSP_DEV
         return response
 
 
