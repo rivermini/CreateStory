@@ -28,6 +28,7 @@ interface CheckAllTabProps {
   onCheck: () => void;
   onUploadCover: (folderId: string, storyId: string) => Promise<void>;
   themeMode: ThemeMode;
+  coverFilename?: string;
 }
 
 export function CheckAllTab({
@@ -39,6 +40,7 @@ export function CheckAllTab({
   onCheck,
   onUploadCover,
   themeMode,
+  coverFilename = 'cover1.jpg',
 }: Readonly<CheckAllTabProps>) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
@@ -173,7 +175,7 @@ export function CheckAllTab({
           <FilterChip label="All" count={canUpdateCount + updatedCount + noCoverCount + noMatchCount} active={filterSection === 'all'} onClick={() => setFilterSection('all')} isDark={isDark} />
           <FilterChip label="Can Update" count={canUpdateCount} active={filterSection === 'can_update'} onClick={() => setFilterSection('can_update')} variant="green" isDark={isDark} />
           <FilterChip label="Updated" count={updatedCount} active={filterSection === 'updated'} onClick={() => setFilterSection('updated')} variant="amber" isDark={isDark} />
-          <FilterChip label="No Cover1" count={noCoverCount} active={filterSection === 'no_cover'} onClick={() => setFilterSection('no_cover')} variant="red" isDark={isDark} />
+          <FilterChip label={`No ${coverFilename}`} count={noCoverCount} active={filterSection === 'no_cover'} onClick={() => setFilterSection('no_cover')} variant="red" isDark={isDark} />
           <FilterChip label="No Match" count={noMatchCount} active={filterSection === 'no_match'} onClick={() => setFilterSection('no_match')} isDark={isDark} />
         </div>
       )}
@@ -199,7 +201,7 @@ export function CheckAllTab({
           {noCoverCount > 0 && (
             <div className="flex items-center gap-1.5" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
-              {noCoverCount} no cover1
+              {noCoverCount} no {coverFilename}
             </div>
           )}
           {noMatchCount > 0 && (
@@ -238,7 +240,7 @@ export function CheckAllTab({
                 <SectionHeader label={`Can Update (${filteredCanUpdate.length})`} color="#34d399" icon={<Icon icon={appIcons.check} className="h-4 w-4" style={{ color: isDark ? '#34d399' : '#059669' }} />} />
                 <div className="space-y-2">
                   {filteredCanUpdate.map((entry) => (
-                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} />
+                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} coverFilename={coverFilename} />
                   ))}
                 </div>
               </div>
@@ -248,17 +250,17 @@ export function CheckAllTab({
                 <SectionHeader label={`Updated (${filteredUpdated.length})`} color="#f59e0b" icon={<Icon icon={appIcons.check} className="h-4 w-4" style={{ color: '#f59e0b' }} />} />
                 <div className="space-y-2">
                   {filteredUpdated.map((entry) => (
-                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} />
+                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} coverFilename={coverFilename} />
                   ))}
                 </div>
               </div>
             )}
             {filteredNoCover.length > 0 && (
               <div className="mb-4">
-                <SectionHeader label={`No Cover1 File (${filteredNoCover.length})`} color="#f87171" icon={<Icon icon={appIcons.close} className="h-4 w-4" style={{ color: '#f87171' }} />} />
+                <SectionHeader label={`No ${coverFilename} File (${filteredNoCover.length})`} color="#f87171" icon={<Icon icon={appIcons.close} className="h-4 w-4" style={{ color: '#f87171' }} />} />
                 <div className="space-y-2">
                   {filteredNoCover.map((entry) => (
-                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} />
+                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} coverFilename={coverFilename} />
                   ))}
                 </div>
               </div>
@@ -268,7 +270,7 @@ export function CheckAllTab({
                 <SectionHeader label={`No Server Match (${filteredNoMatch.length})`} color="#818cf8" icon={<Icon icon={appIcons.folder} className="h-4 w-4" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />} />
                 <div className="space-y-2">
                   {filteredNoMatch.map((entry) => (
-                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} />
+                    <CoverEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadCover} isDark={isDark} coverFilename={coverFilename} />
                   ))}
                 </div>
               </div>
@@ -351,12 +353,14 @@ function CoverEntryCard({
   isUploading,
   onUpload,
   isDark,
+  coverFilename = 'cover1',
 }: {
   readonly entry: CoverUpdateEntry;
   readonly result?: { success: boolean; message: string };
   readonly isUploading: boolean;
   readonly onUpload: (folderId: string, storyId: string) => Promise<void>;
   readonly isDark: boolean;
+  readonly coverFilename?: string;
 }) {
   const isUpdated = entry.status === 'updated';
   const isNoCover = entry.status === 'no_cover1_file';
@@ -382,7 +386,7 @@ function CoverEntryCard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <StatusChip status={entry.status} isDark={isDark} />
+            <StatusChip status={entry.status} isDark={isDark} coverFilename={coverFilename} />
             <h4 className="truncate text-sm font-medium" style={{ color: pageText }}>{entry.story_title || entry.folder_name}</h4>
           </div>
           <p className="mb-1 font-mono text-xs" style={{ color: secondaryText }}>{entry.folder_name}</p>
@@ -421,7 +425,7 @@ function CoverEntryCard({
           ) : isNoCover ? (
             <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)', borderColor: isDark ? 'rgba(239,68,68,0.24)' : 'rgba(239,68,68,0.2)', color: isDark ? '#f87171' : '#dc2626' }}>
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
-              No Cover1
+              No {coverFilename}
             </span>
           ) : isNoMatch ? (
             <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(99,102,241,0.14)' : 'rgba(99,102,241,0.08)', borderColor: isDark ? 'rgba(99,102,241,0.24)' : 'rgba(99,102,241,0.2)', color: isDark ? '#818cf8' : '#4f46e5' }}>
@@ -435,11 +439,12 @@ function CoverEntryCard({
   );
 }
 
-function StatusChip({ status, isDark }: { readonly status: string; readonly isDark: boolean }) {
+function StatusChip({ status, isDark, coverFilename = 'cover1' }: { readonly status: string; readonly isDark: boolean; readonly coverFilename?: string }) {
+  const noCoverLabel = `NO ${coverFilename.toUpperCase()}`;
   const variants: Record<string, { bg: string; text: string; label: string }> = {
     can_update: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'CAN UPDATE' },
     updated: { bg: 'rgba(251,191,36,0.15)', text: isDark ? '#fbbf24' : '#d97706', label: 'UPDATED' },
-    no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NO COVER1' },
+    no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noCoverLabel },
     no_server_match: { bg: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.06)', text: isDark ? '#818cf8' : '#4f46e5', label: 'NO MATCH' },
     error: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'ERROR' },
   };

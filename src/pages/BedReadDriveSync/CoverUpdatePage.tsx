@@ -35,6 +35,25 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
   const [checkAllLoading, setCheckAllLoading] = useState(false);
   const [checkAllError, setCheckAllError] = useState('');
 
+  const [coverNumber, setCoverNumber] = useState('1');
+  const [savedCoverNumber, setSavedCoverNumber] = useState('1');
+  const [coverEdited, setCoverEdited] = useState(false);
+
+  const handleCoverNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '');
+    setCoverNumber(raw || '1');
+    setCoverEdited(raw !== savedCoverNumber);
+  };
+
+  const handleSaveCoverFilename = () => {
+    setSavedCoverNumber(coverNumber);
+    setCoverEdited(false);
+    showToast(`Cover filename saved: cover${coverNumber}.jpg`, 'success', 2000, 'top-center');
+  };
+
+  const savedCoverFilename = `cover${savedCoverNumber}.jpg`;
+  const coverFilenameBase = savedCoverFilename.replace(/\.[^/.]+$/, '');
+
   const [checkUpdatedData, setCheckUpdatedData] = useState<CheckUpdatedResponse | null>(null);
   const [checkUpdatedLoading, setCheckUpdatedLoading] = useState(false);
   const [checkUpdatedError, setCheckUpdatedError] = useState('');
@@ -65,7 +84,7 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
     setCheckAllError('');
     resetUploadUiState();
     try {
-      const data = await checkCoverUpdateAll();
+      const data = await checkCoverUpdateAll(savedCoverFilename);
       setCheckAllData(data);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to check cover updates.';
@@ -98,7 +117,7 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
     setUploadingIds((prev) => new Set(prev).add(folderId));
 
     try {
-      const result = await uploadCoverUpdate(folderId, storyId);
+      const result = await uploadCoverUpdate(folderId, storyId, savedCoverFilename);
       if (resultVersion === uploadResultVersionRef.current) {
         setUploadResults((prev) => new Map(prev).set(folderId, { success: result.success, message: result.message }));
       }
@@ -131,16 +150,52 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
             className="rounded-2xl border px-5 py-5 sm:px-6"
             style={{ background: panelBackground, borderColor: panelBorder }}
           >
-            <div className="space-y-2">
-              <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
-                Sync
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex-1 space-y-2 min-w-[200px]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
+                  Sync
+                </div>
+                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
+                  Cover update
+                </h1>
+                <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
+                  Update story covers from Drive `DONE_` and `EXTENDED_` folders.
+                </p>
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
-                Cover update
-              </h1>
-              <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
-                Update story covers from Drive `DONE_` and `EXTENDED_` folders.
-              </p>
+              <div className="flex items-center gap-2">
+                <label className="text-sm" style={{ color: tertiaryText }}>Cover:</label>
+                <span className="text-sm font-mono" style={{ color: tertiaryText }}>cover</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={coverNumber}
+                  onChange={handleCoverNumberChange}
+                  placeholder="1"
+                  className="w-16 rounded-md border px-3 py-1.5 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  style={{ 
+                    background: isDark ? '#232323' : '#fff', 
+                    borderColor: coverEdited ? '#f59e0b' : panelBorder, 
+                    color: pageText 
+                  }}
+                />
+                <span className="text-sm font-mono" style={{ color: tertiaryText }}>.jpg</span>
+                {coverEdited ? (
+                  <button
+                    onClick={handleSaveCoverFilename}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                    style={{ background: '#f59e0b', borderColor: '#f59e0b', color: '#fff' }}
+                  >
+                    <Icon icon={appIcons.save} className="h-4 w-4" />
+                    Save
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium" style={{ background: 'rgba(52,211,153,0.15)', borderColor: 'rgba(52,211,153,0.3)', color: isDark ? '#34d399' : '#059669' }}>
+                    <Icon icon={appIcons.check} className="h-4 w-4" />
+                    Saved
+                  </span>
+                )}
+              </div>
             </div>
           </section>
 
@@ -220,6 +275,7 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
               onCheckUpdated={handleCheckUpdated}
               onUploadCover={handleUploadCover}
               themeMode={themeMode}
+              coverFilename={coverFilenameBase}
             />
           )}
         </main>

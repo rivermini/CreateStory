@@ -19,6 +19,7 @@ export interface CoverUpdateTabsProps {
   onCheckUpdated: () => void;
   onUploadCover: (folderId: string, storyId: string) => Promise<void>;
   themeMode: ThemeMode;
+  coverFilename?: string;
 }
 
 export function CoverUpdateTabs({
@@ -34,6 +35,7 @@ export function CoverUpdateTabs({
   onCheckUpdated,
   onUploadCover,
   themeMode,
+  coverFilename = 'cover1',
 }: Readonly<CoverUpdateTabsProps>) {
   const isDark = themeMode === 'dark';
   const [activeTab, setActiveTab] = useState<CoverUpdateTab>('check-all');
@@ -194,6 +196,7 @@ export function CoverUpdateTabs({
             onCheck={onCheckAll}
             onUploadCover={onUploadCover}
             themeMode={themeMode}
+            coverFilename={coverFilename}
           />
         )}
         {activeTab === 'check-updated' && (
@@ -206,6 +209,7 @@ export function CoverUpdateTabs({
             onCheck={onCheckUpdated}
             onUploadCover={onUploadCover}
             themeMode={themeMode}
+            coverFilename={coverFilename}
           />
         )}
       </div>

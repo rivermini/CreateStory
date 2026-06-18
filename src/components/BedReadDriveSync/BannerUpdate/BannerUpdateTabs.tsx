@@ -35,7 +35,7 @@ export function BannerUpdateTabs({
   onCheckUpdated,
   onUploadBanner,
   themeMode,
-  bannerFilename = 'banner1.jpg',
+  bannerFilename = 'banner1',
 }: Readonly<BannerUpdateTabsProps>) {
   const isDark = themeMode === 'dark';
   const [activeTab, setActiveTab] = useState<BannerUpdateTab>('check-all');
@@ -209,6 +209,7 @@ export function BannerUpdateTabs({
             onCheck={onCheckUpdated}
             onUploadBanner={onUploadBanner}
             themeMode={themeMode}
+            bannerFilename={bannerFilename}
           />
         )}
       </div>

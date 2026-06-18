@@ -28,6 +28,7 @@ interface CheckUpdatedBannerTabProps {
   onCheck: () => void;
   onUploadBanner: (folderId: string, storyId: string) => Promise<void>;
   themeMode: ThemeMode;
+  bannerFilename?: string;
 }
 
 export function CheckUpdatedBannerTab({
@@ -39,10 +40,11 @@ export function CheckUpdatedBannerTab({
   onCheck,
   onUploadBanner,
   themeMode,
+  bannerFilename = 'banner1',
 }: Readonly<CheckUpdatedBannerTabProps>) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
-  const [filterSection, setFilterSection] = useState<'all' | 'updated' | 'no_banner'>('all');
+  const [filterSection, setFilterSection] = useState<'all' | 'updated' | 'no_banner' | 'never_updated'>('all');
   const [bulkUploading, setBulkUploading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,9 +61,11 @@ export function CheckUpdatedBannerTab({
   const filteredEntries = filter(allEntries);
   const filteredUpdated = filteredEntries.filter((entry) => entry.status === 'updated');
   const filteredNoBanner = filteredEntries.filter((entry) => entry.status === 'no_banner1_file' || entry.status === 'no_cover1_file');
+  const filteredNeverUpdated = filteredEntries.filter((entry) => entry.status === 'never_updated');
 
   const updatedCount = filteredUpdated.length;
   const noBannerCount = filteredNoBanner.length;
+  const neverUpdatedCount = filteredNeverUpdated.length;
   const availableUpdateEntries = filteredUpdated.filter((entry) => entry.story_id && !uploadingIds.has(entry.folder_id));
 
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
@@ -170,7 +174,8 @@ export function CheckUpdatedBannerTab({
         <div className="flex items-center gap-1 border-b px-4 py-2" style={{ background: mutedSurface, borderColor: panelBorder }}>
           <FilterChip label="All" count={filteredEntries.length} active={filterSection === 'all'} onClick={() => setFilterSection('all')} isDark={isDark} />
           <FilterChip label="Updated" count={updatedCount} active={filterSection === 'updated'} onClick={() => setFilterSection('updated')} variant="green" isDark={isDark} />
-          <FilterChip label="No Banner1" count={noBannerCount} active={filterSection === 'no_banner'} onClick={() => setFilterSection('no_banner')} variant="red" isDark={isDark} />
+          <FilterChip label="Never updated" count={neverUpdatedCount} active={filterSection === 'never_updated'} onClick={() => setFilterSection('never_updated')} variant="amber" isDark={isDark} />
+          <FilterChip label={`No ${bannerFilename}`} count={noBannerCount} active={filterSection === 'no_banner'} onClick={() => setFilterSection('no_banner')} variant="red" isDark={isDark} />
         </div>
       )}
 
@@ -186,10 +191,16 @@ export function CheckUpdatedBannerTab({
               {updatedCount} updated
             </div>
           )}
+          {neverUpdatedCount > 0 && (
+            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#fcd34d' : '#b45309' }}>
+              <Icon icon={appIcons.folder} className="h-3.5 w-3.5" />
+              {neverUpdatedCount} never updated
+            </div>
+          )}
           {noBannerCount > 0 && (
             <div className="flex items-center gap-1.5" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
-              {noBannerCount} no banner1
+              {noBannerCount} no {bannerFilename}
             </div>
           )}
         </div>
@@ -214,7 +225,7 @@ export function CheckUpdatedBannerTab({
         {data && filterSection === 'all' && filteredEntries.length > 0 && (
           <div className="space-y-2">
             {filteredEntries.map((entry) => (
-              <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} />
+              <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
             ))}
           </div>
         )}
@@ -223,20 +234,29 @@ export function CheckUpdatedBannerTab({
         {data && filterSection === 'updated' && filteredUpdated.length > 0 && (
           <div className="space-y-2">
             {filteredUpdated.map((entry) => (
-              <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} />
+              <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
             ))}
           </div>
         )}
         {data && filterSection === 'updated' && filteredUpdated.length === 0 && <EmptySection isDark={isDark} message="No updated banner records found." />}
 
-        {data && filterSection === 'no_banner' && filteredNoBanner.length > 0 && (
+        {data && filterSection === 'never_updated' && filteredNeverUpdated.length > 0 && (
           <div className="space-y-2">
-            {filteredNoBanner.map((entry) => (
-              <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} />
+            {filteredNeverUpdated.map((entry) => (
+              <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
             ))}
           </div>
         )}
-        {data && filterSection === 'no_banner' && filteredNoBanner.length === 0 && <EmptySection isDark={isDark} message="No no-banner1 records found." />}
+        {data && filterSection === 'never_updated' && filteredNeverUpdated.length === 0 && <EmptySection isDark={isDark} message="No never-updated banner records found." />}
+
+        {data && filterSection === 'no_banner' && filteredNoBanner.length > 0 && (
+          <div className="space-y-2">
+            {filteredNoBanner.map((entry) => (
+              <HistoryEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
+            ))}
+          </div>
+        )}
+        {data && filterSection === 'no_banner' && filteredNoBanner.length === 0 && <EmptySection isDark={isDark} message={`No no-${bannerFilename} records found.`} />}
       </div>
     </div>
   );
@@ -269,15 +289,18 @@ function HistoryEntryCard({
   isUploading,
   onUpload,
   isDark,
+  bannerFilename = 'banner1',
 }: Readonly<{
   entry: CoverUpdateEntry;
   result?: { success: boolean; message: string };
   isUploading: boolean;
   onUpload: (folderId: string, storyId: string) => Promise<void>;
   isDark: boolean;
+  bannerFilename?: string;
 }>) {
   const isUpdated = entry.status === 'updated';
   const isNoBanner = entry.status === 'no_banner1_file' || entry.status === 'no_cover1_file';
+  const isNeverUpdated = entry.status === 'never_updated';
   const canUpload = isUpdated && Boolean(entry.story_id) && !isUploading;
   const isSuccess = result?.success;
   const isFailed = result ? !result.success : false;
@@ -294,7 +317,7 @@ function HistoryEntryCard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <HistoryStatusChip status={entry.status} isDark={isDark} />
+            <HistoryStatusChip status={entry.status} isDark={isDark} bannerFilename={bannerFilename} />
             <h4 className="truncate text-sm font-medium" style={{ color: pageText }}>{entry.story_title || entry.folder_name}</h4>
           </div>
           <p className="mb-1 font-mono text-xs" style={{ color: secondaryText }}>{entry.folder_name}</p>
@@ -328,7 +351,12 @@ function HistoryEntryCard({
           ) : isNoBanner ? (
             <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)', borderColor: isDark ? 'rgba(239,68,68,0.24)' : 'rgba(239,68,68,0.2)', color: isDark ? '#f87171' : '#dc2626' }}>
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
-              No Banner1
+              No {bannerFilename}
+            </span>
+          ) : isNeverUpdated ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(251,191,36,0.14)' : 'rgba(251,191,36,0.08)', borderColor: isDark ? 'rgba(251,191,36,0.24)' : 'rgba(251,191,36,0.2)', color: isDark ? '#fcd34d' : '#b45309' }}>
+              <Icon icon={appIcons.folder} className="h-3.5 w-3.5" />
+              Never Updated
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}>
@@ -342,11 +370,13 @@ function HistoryEntryCard({
   );
 }
 
-function HistoryStatusChip({ status, isDark }: Readonly<{ status: string; isDark: boolean }>) {
+function HistoryStatusChip({ status, isDark, bannerFilename = 'banner1' }: Readonly<{ status: string; isDark: boolean; bannerFilename?: string }>) {
+  const noBannerLabel = `NO ${bannerFilename.toUpperCase()}`;
   const variants: Record<string, { bg: string; text: string; label: string }> = {
     updated: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'UPDATED' },
-    no_banner1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NO BANNER1' },
-    no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NO BANNER1' },
+    no_banner1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noBannerLabel },
+    no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noBannerLabel },
+    never_updated: { bg: isDark ? 'rgba(251,191,36,0.15)' : 'rgba(251,191,36,0.08)', text: isDark ? '#fcd34d' : '#b45309', label: 'NEVER UPDATED' },
     error: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'ERROR' },
   };
 

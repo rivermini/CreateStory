@@ -40,7 +40,7 @@ export function CheckAllTab({
   onCheck,
   onUploadBanner,
   themeMode,
-  bannerFilename = 'banner1.jpg',
+  bannerFilename = 'banner1',
 }: Readonly<CheckAllTabProps>) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
@@ -175,7 +175,7 @@ export function CheckAllTab({
           <FilterChip label="All" count={canUpdateCount + updatedCount + noBannerCount + noMatchCount} active={filterSection === 'all'} onClick={() => setFilterSection('all')} isDark={isDark} />
           <FilterChip label="Can Update" count={canUpdateCount} active={filterSection === 'can_update'} onClick={() => setFilterSection('can_update')} variant="green" isDark={isDark} />
           <FilterChip label="Updated" count={updatedCount} active={filterSection === 'updated'} onClick={() => setFilterSection('updated')} variant="amber" isDark={isDark} />
-          <FilterChip label="No Banner1" count={noBannerCount} active={filterSection === 'no_banner'} onClick={() => setFilterSection('no_banner')} variant="red" isDark={isDark} />
+          <FilterChip label={`No ${bannerFilename}`} count={noBannerCount} active={filterSection === 'no_banner'} onClick={() => setFilterSection('no_banner')} variant="red" isDark={isDark} />
           <FilterChip label="No Match" count={noMatchCount} active={filterSection === 'no_match'} onClick={() => setFilterSection('no_match')} isDark={isDark} />
         </div>
       )}
@@ -201,7 +201,7 @@ export function CheckAllTab({
           {noBannerCount > 0 && (
             <div className="flex items-center gap-1.5" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
-              {noBannerCount} no banner1
+              {noBannerCount} no {bannerFilename}
             </div>
           )}
           {noMatchCount > 0 && (
@@ -240,7 +240,7 @@ export function CheckAllTab({
                 <SectionHeader label={`Can Update (${filteredCanUpdate.length})`} color="#34d399" icon={<Icon icon={appIcons.check} className="h-4 w-4" style={{ color: isDark ? '#34d399' : '#059669' }} />} />
                 <div className="space-y-2">
                   {filteredCanUpdate.map((entry) => (
-                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} />
+                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
                   ))}
                 </div>
               </div>
@@ -250,17 +250,17 @@ export function CheckAllTab({
                 <SectionHeader label={`Updated (${filteredUpdated.length})`} color="#f59e0b" icon={<Icon icon={appIcons.check} className="h-4 w-4" style={{ color: '#f59e0b' }} />} />
                 <div className="space-y-2">
                   {filteredUpdated.map((entry) => (
-                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} />
+                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
                   ))}
                 </div>
               </div>
             )}
             {filteredNoBanner.length > 0 && (
               <div className="mb-4">
-                <SectionHeader label={`No Banner1 File (${filteredNoBanner.length})`} color="#f87171" icon={<Icon icon={appIcons.close} className="h-4 w-4" style={{ color: '#f87171' }} />} />
+                <SectionHeader label={`No ${bannerFilename} File (${filteredNoBanner.length})`} color="#f87171" icon={<Icon icon={appIcons.close} className="h-4 w-4" style={{ color: '#f87171' }} />} />
                 <div className="space-y-2">
                   {filteredNoBanner.map((entry) => (
-                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} />
+                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
                   ))}
                 </div>
               </div>
@@ -270,7 +270,7 @@ export function CheckAllTab({
                 <SectionHeader label={`No Server Match (${filteredNoMatch.length})`} color="#818cf8" icon={<Icon icon={appIcons.folder} className="h-4 w-4" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />} />
                 <div className="space-y-2">
                   {filteredNoMatch.map((entry) => (
-                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} />
+                    <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
                   ))}
                 </div>
               </div>
@@ -353,12 +353,14 @@ function BannerEntryCard({
   isUploading,
   onUpload,
   isDark,
+  bannerFilename = 'banner1',
 }: {
   readonly entry: CoverUpdateEntry;
   readonly result?: { success: boolean; message: string };
   readonly isUploading: boolean;
   readonly onUpload: (folderId: string, storyId: string) => Promise<void>;
   readonly isDark: boolean;
+  readonly bannerFilename?: string;
 }) {
   const isUpdated = entry.status === 'updated';
   const isNoBanner = entry.status === 'no_banner1_file' || entry.status === 'no_cover1_file';
@@ -384,7 +386,7 @@ function BannerEntryCard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <StatusChip status={entry.status} isDark={isDark} />
+            <StatusChip status={entry.status} isDark={isDark} bannerFilename={bannerFilename} />
             <h4 className="truncate text-sm font-medium" style={{ color: pageText }}>{entry.story_title || entry.folder_name}</h4>
           </div>
           <p className="mb-1 font-mono text-xs" style={{ color: secondaryText }}>{entry.folder_name}</p>
@@ -423,7 +425,7 @@ function BannerEntryCard({
           ) : isNoBanner ? (
             <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)', borderColor: isDark ? 'rgba(239,68,68,0.24)' : 'rgba(239,68,68,0.2)', color: isDark ? '#f87171' : '#dc2626' }}>
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
-              No Banner1
+              No {bannerFilename}
             </span>
           ) : isNoMatch ? (
             <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(99,102,241,0.14)' : 'rgba(99,102,241,0.08)', borderColor: isDark ? 'rgba(99,102,241,0.24)' : 'rgba(99,102,241,0.2)', color: isDark ? '#818cf8' : '#4f46e5' }}>
@@ -437,12 +439,13 @@ function BannerEntryCard({
   );
 }
 
-function StatusChip({ status, isDark }: { readonly status: string; readonly isDark: boolean }) {
+function StatusChip({ status, isDark, bannerFilename = 'banner1' }: { readonly status: string; readonly isDark: boolean; readonly bannerFilename?: string }) {
+  const noBannerLabel = `NO ${bannerFilename.toUpperCase()}`;
   const variants: Record<string, { bg: string; text: string; label: string }> = {
     can_update: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'CAN UPDATE' },
     updated: { bg: 'rgba(251,191,36,0.15)', text: isDark ? '#fbbf24' : '#d97706', label: 'UPDATED' },
-    no_banner1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NO BANNER1' },
-    no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NO BANNER1' },
+    no_banner1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noBannerLabel },
+    no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noBannerLabel },
     no_server_match: { bg: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.06)', text: isDark ? '#818cf8' : '#4f46e5', label: 'NO MATCH' },
     error: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'ERROR' },
   };

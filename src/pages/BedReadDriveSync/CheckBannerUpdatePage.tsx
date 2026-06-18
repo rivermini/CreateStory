@@ -48,6 +48,7 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
   };
 
   const savedBannerFilename = `banner${savedBannerNumber}.jpg`;
+  const bannerFilenameBase = savedBannerFilename.replace(/\.[^/.]+$/, '');
   const isBannerEdited = bannerEdited;
   const [checkAllData, setCheckAllData] = useState<CheckAllResponse | null>(null);
   const [checkAllLoading, setCheckAllLoading] = useState(false);
@@ -271,7 +272,7 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
               onCheckUpdated={handleCheckUpdated}
               onUploadBanner={handleUploadBanner}
               themeMode={themeMode}
-              bannerFilename={savedBannerFilename}
+              bannerFilename={bannerFilenameBase}
             />
           )}
         </main>
