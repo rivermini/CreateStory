@@ -978,49 +978,66 @@ class DriveAPIMixin:
     ) -> dict[str, Optional[dict]]:
         """
         Batch-search for the configured cover file across Drive folders.
-        Uses exact name matching (case-sensitive).
+        When cover_filename has no extension, both .jpg and .png are tried.
+        Returns the first exact (case-sensitive) match per folder.
         """
+        from api.services.drive_service._cover_update import _cover_search_variants
+
         result: dict[str, Optional[dict]] = {fid: None for fid in folder_ids}
         if not folder_ids:
+            return result
+
+        candidates = _cover_search_variants(cover_filename)
+        if not candidates:
             return result
 
         for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
             chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
             parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
-            query = (
-                f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
-                f"and trashed=false and name='{cover_filename}'"
-            )
-            page_token = None
+            for candidate in candidates:
+                query = (
+                    f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
+                    f"and trashed=false and name='{candidate}'"
+                )
 
-            while True:
-                _pt = page_token
+                page_token = None
+                chunk_found_count = 0
 
-                def _call() -> dict:
-                    return drive_service.files().list(
-                        q=query,
-                        fields="files(id, name, parents),nextPageToken",
-                        pageSize=_CHECK_BATCH_PAGE_SIZE,
-                        pageToken=_pt,
-                    ).execute()
+                while True:
+                    _pt = page_token
 
-                try:
-                    response = self._retry_drive_call(_call)
-                except (ssl.SSLError, TimeoutError):
-                    break
+                    def _call() -> dict:
+                        return drive_service.files().list(
+                            q=query,
+                            fields="files(id, name, parents),nextPageToken",
+                            pageSize=_CHECK_BATCH_PAGE_SIZE,
+                            pageToken=_pt,
+                        ).execute()
 
-                for file_info in response.get("files", []):
-                    # Exact case-sensitive match
-                    if file_info.get("name") == cover_filename:
-                        for parent in file_info.get("parents", []):
-                            if parent in result and result[parent] is None:
-                                result[parent] = file_info
-                                break
+                    try:
+                        response = self._retry_drive_call(_call)
+                    except (ssl.SSLError, TimeoutError):
+                        break
 
-                page_token = response.get("nextPageToken")
-                if not page_token:
-                    break
+                    for file_info in response.get("files", []):
+                        if file_info.get("name") == candidate:
+                            for parent in file_info.get("parents", []):
+                                if parent in result and result[parent] is None:
+                                    result[parent] = file_info
+                                    chunk_found_count += 1
+                                    break
 
+                    page_token = response.get("nextPageToken")
+                    if not page_token:
+                        break
+
+                logger.info(
+                    f"[COVER_SEARCH] Chunk {chunk_start // _CHECK_BATCH_CHUNK_SIZE + 1} "
+                    f"({candidate}): found {chunk_found_count} files"
+                )
+
+        total_found = sum(1 for v in result.values() if v is not None)
+        logger.info(f"[COVER_SEARCH] Total: searched {len(folder_ids)} folders, found {total_found}")
         return result
 
     def _batch_find_banner1_files(
@@ -1028,62 +1045,71 @@ class DriveAPIMixin:
     ) -> dict[str, Optional[dict]]:
         """
         Batch-search for the configured banner file across Drive folders.
-        Uses exact name matching (case-sensitive).
+        When banner_filename has no extension, both .jpg and .png are tried.
+        Returns the first exact (case-sensitive) match per folder.
         """
+        from api.services.drive_service._banner_update import _banner_search_variants
+
         result: dict[str, Optional[dict]] = {fid: None for fid in folder_ids}
         if not folder_ids:
+            return result
+
+        candidates = _banner_search_variants(banner_filename)
+        if not candidates:
             return result
 
         for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
             chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
             parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
-            # Use exact name match (case-sensitive) to find the specific banner file
-            query = (
-                f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
-                f"and trashed=false and name='{banner_filename}'"
-            )
-            logger.info(f"[BANNER_SEARCH] Query: {query}")
+            for candidate in candidates:
+                query = (
+                    f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
+                    f"and trashed=false and name='{candidate}'"
+                )
+                logger.info(f"[BANNER_SEARCH] Query: {query}")
 
-            page_token = None
-            chunk_found_count = 0
+                page_token = None
+                chunk_found_count = 0
 
-            while True:
-                _pt = page_token
+                while True:
+                    _pt = page_token
 
-                def _call() -> dict:
-                    return drive_service.files().list(
-                        q=query,
-                        fields="files(id, name, parents),nextPageToken",
-                        pageSize=_CHECK_BATCH_PAGE_SIZE,
-                        pageToken=_pt,
-                    ).execute()
+                    def _call() -> dict:
+                        return drive_service.files().list(
+                            q=query,
+                            fields="files(id, name, parents),nextPageToken",
+                            pageSize=_CHECK_BATCH_PAGE_SIZE,
+                            pageToken=_pt,
+                        ).execute()
 
-                try:
-                    response = self._retry_drive_call(_call)
-                except (ssl.SSLError, TimeoutError):
-                    break
+                    try:
+                        response = self._retry_drive_call(_call)
+                    except (ssl.SSLError, TimeoutError):
+                        break
 
-                files = response.get("files", [])
-                if files:
-                    logger.info(f"[BANNER_SEARCH] Found {len(files)} files: {[f.get('name') for f in files]}")
+                    files = response.get("files", [])
+                    if files:
+                        logger.info(f"[BANNER_SEARCH] Found {len(files)} files: {[f.get('name') for f in files]}")
 
-                for file_info in response.get("files", []):
-                    # Exact case-sensitive match
-                    if file_info.get("name") == banner_filename:
-                        for parent in file_info.get("parents", []):
-                            if parent in result and result[parent] is None:
-                                result[parent] = file_info
-                                chunk_found_count += 1
-                                break
+                    for file_info in files:
+                        if file_info.get("name") == candidate:
+                            for parent in file_info.get("parents", []):
+                                if parent in result and result[parent] is None:
+                                    result[parent] = file_info
+                                    chunk_found_count += 1
+                                    break
 
-                page_token = response.get("nextPageToken")
-                if not page_token:
-                    break
+                    page_token = response.get("nextPageToken")
+                    if not page_token:
+                        break
 
-            logger.info(f"[BANNER_SEARCH] Chunk {chunk_start // _CHECK_BATCH_CHUNK_SIZE + 1}: found {chunk_found_count} files")
+                logger.info(
+                    f"[BANNER_SEARCH] Chunk {chunk_start // _CHECK_BATCH_CHUNK_SIZE + 1} "
+                    f"({candidate}): found {chunk_found_count} files"
+                )
 
         total_found = sum(1 for v in result.values() if v is not None)
-        logger.info(f"[BANNER_SEARCH] Total: searched {len(folder_ids)} folders, found {total_found} with '{banner_filename}'")
+        logger.info(f"[BANNER_SEARCH] Total: searched {len(folder_ids)} folders, found {total_found}")
         return result
 
 

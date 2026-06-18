@@ -1436,7 +1436,7 @@ class MainBEClientMixin:
 
         return (chapters_added, chapters_skipped, 1)
 
-    def _upload_cover_image(self, story_id: str, image_bytes: bytes, filename: str = "cover.jpg") -> Optional[str]:
+    def _upload_cover_image(self, story_id: str, image_bytes: bytes, filename: str = "cover.jpg", content_type: str = "image/jpeg") -> Optional[str]:
         """POST cover image to main BE /api/v1/story/{id}/upload-cover. Returns the cover URL on success."""
         if self._config is None:
             return None
@@ -1446,7 +1446,7 @@ class MainBEClientMixin:
             with self._main_be_client(timeout=60.0) as client:
                 resp = client.post(
                     url,
-                    files={"image": (filename, image_bytes, "image/jpeg")},
+                    files={"image": (filename, image_bytes, content_type)},
                     headers=headers,
                 )
                 if resp.status_code in (200, 201):
@@ -1463,7 +1463,7 @@ class MainBEClientMixin:
             self._append_log("error", f"Cover upload exception: {exc}")
         return None
 
-    def _upload_banner_image(self, story_id: str, image_bytes: bytes, filename: str = "banner1.jpg") -> Optional[str]:
+    def _upload_banner_image(self, story_id: str, image_bytes: bytes, filename: str = "banner1.jpg", content_type: str = "image/jpeg") -> Optional[str]:
         """POST banner image to main BE /api/v1/story/{id}/upload-banner. Returns the banner URL on success."""
         if self._config is None:
             return None
@@ -1473,7 +1473,7 @@ class MainBEClientMixin:
             with self._main_be_client(timeout=60.0) as client:
                 resp = client.post(
                     url,
-                    files={"image": (filename, image_bytes, "image/jpeg")},
+                    files={"image": (filename, image_bytes, content_type)},
                     headers=headers,
                 )
                 if resp.status_code in (200, 201):

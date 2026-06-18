@@ -2,13 +2,69 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from api.models.drive_sync import DriveSyncConfig
 
+logger = logging.getLogger(__name__)
+
 _COVER_UPDATE_FOLDER_PREFIXES = {"DONE", "EXTENDED"}
+
+_COVER_ALLOWED_EXTENSIONS = (".jpg", ".jpeg", ".png")
+_DEFAULT_COVER_EXTENSION = ".jpg"
+
+
+def _split_base_ext(filename: str) -> tuple[str, str]:
+    """Split a filename into (base, ext). `cover1.jpg` -> ('cover1', '.jpg'); `cover1` -> ('cover1', '')."""
+    name = (filename or "").strip()
+    if not name:
+        return "", ""
+    if "." in name:
+        base, ext = name.rsplit(".", 1)
+        return base, f".{ext.lower()}"
+    return name, ""
+
+
+def _cover_search_variants(filename: str) -> list[str]:
+    """Return candidate filenames on Drive for the given user input.
+
+    - 'cover1'      -> ['cover1.jpg', 'cover1.png']
+    - 'cover1.jpg'  -> ['cover1.jpg']
+    - 'cover1.png'  -> ['cover1.png']
+    - 'cover1.webp' -> ['cover1.webp']  (unrecognized ext is preserved)
+    """
+    base, ext = _split_base_ext(filename)
+    if not base:
+        return []
+    if ext in {e for e in _COVER_ALLOWED_EXTENSIONS}:
+        return [f"{base}{ext}"]
+    if ext:
+        return [f"{base}{ext}"]
+    return [f"{base}{_DEFAULT_COVER_EXTENSION}", f"{base}.png"]
+
+
+def _normalize_cover_filename(filename: str) -> str:
+    """Ensure cover filename has a supported image extension (.jpg/.jpeg/.png)."""
+    if not filename:
+        return f"cover1{_DEFAULT_COVER_EXTENSION}"
+    name = filename.strip()
+    base, ext = _split_base_ext(name)
+    if not base:
+        return f"cover1{_DEFAULT_COVER_EXTENSION}"
+    if ext in {e for e in _COVER_ALLOWED_EXTENSIONS}:
+        return f"{base}{ext}"
+    return f"{base}{_DEFAULT_COVER_EXTENSION}"
+
+
+def _cover_content_type(filename: str) -> str:
+    """Return the MIME type to use when uploading a cover file."""
+    _, ext = _split_base_ext(filename)
+    if ext == ".png":
+        return "image/png"
+    return "image/jpeg"
 
 
 def _is_cover_update_folder(folder: dict) -> bool:
@@ -55,31 +111,32 @@ class CoverUpdateMixin:
 
     def _find_cover1_file(self, drive_service: Any, folder_id: str, cover_filename: str = "cover1.jpg") -> Optional[dict]:
         """
-        Search a story folder for the configured cover file (case-sensitive).
+        Search a story folder for the configured cover file.
+        When cover_filename has no extension, both .jpg and .png are tried.
         Returns the file dict or None.
         """
-        page_token = None
-        while True:
+        variants = _cover_search_variants(cover_filename)
+        if not variants:
+            return None
+
+        from api.services.drive_service._drive_api import DriveAPIMixin
+
+        for candidate in variants:
             def _call() -> dict:
                 return drive_service.files().list(
-                    q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false and name='{cover_filename}'",
+                    q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false and name='{candidate}'",
                     fields="files(id, name),nextPageToken",
                     pageSize=100,
-                    pageToken=page_token,
                 ).execute()
+
             try:
-                from api.services.drive_service._drive_api import DriveAPIMixin
                 response = DriveAPIMixin._retry_drive_call(self, _call)
             except Exception:
-                break
-            files = response.get("files", [])
-            for f in files:
-                # Exact case-sensitive match
-                if f.get("name") == cover_filename:
+                continue
+
+            for f in response.get("files", []):
+                if f.get("name") == candidate:
                     return f
-            page_token = response.get("nextPageToken")
-            if not page_token:
-                break
         return None
 
     def _upload_story_cover_from_folder(self, story_id: str, folder_id: str, cover_filename: str = "cover1.jpg") -> tuple[bool, Optional[str]]:
@@ -88,6 +145,8 @@ class CoverUpdateMixin:
         Returns (success, cover_url_or_error_message).
         """
         from api.services.drive_service._drive_api import DriveAPIMixin
+
+        cover_filename = _normalize_cover_filename(cover_filename)
 
         try:
             drive_service = self._build_drive_service()
@@ -104,7 +163,12 @@ class CoverUpdateMixin:
             return False, f"Failed to download {cover_filename} from Drive: {exc}"
 
         try:
-            cover_url = self._upload_cover_image(story_id, cover_bytes, cover_file["name"])
+            cover_url = self._upload_cover_image(
+                story_id,
+                cover_bytes,
+                cover_file["name"],
+                _cover_content_type(cover_file["name"]),
+            )
         except Exception as exc:
             return False, f"Failed to upload cover to main BE: {exc}"
 
@@ -193,6 +257,8 @@ class CoverUpdateMixin:
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
 
+        cover_filename = _normalize_cover_filename(cover_filename)
+
         drive_folders_raw, _ = self.list_drive_folders(limit=10000, offset=0)
         cover_update_folders = [f for f in drive_folders_raw if _is_cover_update_folder(f)]
 
@@ -217,10 +283,23 @@ class CoverUpdateMixin:
             cover_filename,
         )
 
+        total_found = sum(1 for v in cover_files_by_folder_id.values() if v is not None)
+        scan_msg = (
+            f"[CHECK_ALL] cover-update scanned {len(cover_update_folders)} folders, "
+            f"found {total_found} with any variant of {cover_filename!r} "
+            f"(variants tried: {_cover_search_variants(cover_filename)})"
+        )
+        logger.info(scan_msg)
+        print(scan_msg, flush=True)
+
         can_update: list[dict] = []
         updated: list[dict] = []
         no_cover1: list[dict] = []
         no_server_match: list[dict] = []
+
+        hits_logged = 0
+        misses_logged = 0
+        MAX_PER_FOLDER_LOGS = 3
 
         for folder in cover_update_folders:
             folder_id = folder["id"]
@@ -243,6 +322,14 @@ class CoverUpdateMixin:
             }
 
             if cover1 is None:
+                if misses_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][MISS] cover-update folder={folder_name!r} "
+                        f"title={display_name!r} status=no_cover1_file "
+                        f"searched_for={cover_filename!r} (variants={_cover_search_variants(cover_filename)})",
+                        flush=True,
+                    )
+                    misses_logged += 1
                 saved = self._record_cover_update(
                     story_id=server_story.get("id") if server_story else None,
                     story_title=display_name,
@@ -250,21 +337,45 @@ class CoverUpdateMixin:
                     folder_name=folder_name,
                     status="no_cover1_file",
                     cover_file_name=None,
-                    error="No cover1 file",
+                    error=f"No {cover_filename} file",
                 )
                 entry = {**entry_base, "status": "no_cover1_file", "last_updated": _iso(saved.get("last_updated"))}
                 no_cover1.append(entry)
                 continue
 
             if server_story is None:
+                if hits_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][HIT] cover-update folder={folder_name!r} "
+                        f"title={display_name!r} status=no_server_match "
+                        f"cover_file={cover1.get('name')!r}",
+                        flush=True,
+                    )
+                    hits_logged += 1
                 entry = {**entry_base, "status": "no_server_match", "last_updated": history.get("last_updated") if history else None}
                 no_server_match.append(entry)
                 continue
 
             if history_status == "updated":
+                if hits_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][HIT] cover-update folder={folder_name!r} "
+                        f"title={display_name!r} status=updated "
+                        f"cover_file={cover1.get('name')!r}",
+                        flush=True,
+                    )
+                    hits_logged += 1
                 entry = {**entry_base, "status": "updated", "last_updated": history.get("last_updated")}
                 updated.append(entry)
             else:
+                if hits_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][HIT] cover-update folder={folder_name!r} "
+                        f"title={display_name!r} status=can_update "
+                        f"cover_file={cover1.get('name')!r}",
+                        flush=True,
+                    )
+                    hits_logged += 1
                 self._record_cover_update(
                     story_id=server_story.get("id"),
                     story_title=display_name,

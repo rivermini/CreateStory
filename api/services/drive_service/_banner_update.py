@@ -1,29 +1,75 @@
 """BannerUpdateMixin — banner update logic for DriveSyncService.
 
-Mirror of CoverUpdateMixin that finds banner1.jpg in Drive `DONE_/EXTENDED_`
+Mirror of CoverUpdateMixin that finds banner1.{jpg,png} in Drive `DONE_/EXTENDED_`
 folders, uploads it to main BE at /api/v1/story/{id}/upload-banner, and records
 results in the banner_update_histories table.
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from api.models.drive_sync import DriveSyncConfig
 
+logger = logging.getLogger(__name__)
+
 _BANNER_UPDATE_FOLDER_PREFIXES = {"DONE", "EXTENDED"}
+
+_BANNER_ALLOWED_EXTENSIONS = (".jpg", ".jpeg", ".png")
+_DEFAULT_BANNER_EXTENSION = ".jpg"
+
+
+def _split_base_ext(filename: str) -> tuple[str, str]:
+    """Split a filename into (base, ext). `cover1.jpg` -> ('cover1', '.jpg'); `cover1` -> ('cover1', '')."""
+    name = (filename or "").strip()
+    if not name:
+        return "", ""
+    if "." in name:
+        base, ext = name.rsplit(".", 1)
+        return base, f".{ext.lower()}"
+    return name, ""
+
+
+def _banner_search_variants(filename: str) -> list[str]:
+    """Return the candidate filenames to try on Drive for the given user input.
+
+    - 'cover1'      -> ['cover1.jpg', 'cover1.png']
+    - 'cover1.jpg'  -> ['cover1.jpg']
+    - 'cover1.png'  -> ['cover1.png']
+    - 'cover1.webp' -> ['cover1.webp']  (unrecognized ext is preserved)
+    """
+    base, ext = _split_base_ext(filename)
+    if not base:
+        return []
+    if ext in {e for e in _BANNER_ALLOWED_EXTENSIONS}:
+        return [f"{base}{ext}"]
+    if ext:
+        return [f"{base}{ext}"]
+    return [f"{base}{_DEFAULT_BANNER_EXTENSION}", f"{base}.png"]
 
 
 def _normalize_banner_filename(filename: str) -> str:
-    """Ensure banner filename has .jpg extension."""
+    """Ensure banner filename has a supported image extension (.jpg/.jpeg/.png)."""
     if not filename:
-        return "banner1.jpg"
+        return f"banner1{_DEFAULT_BANNER_EXTENSION}"
     name = filename.strip()
-    if not name.lower().endswith(".jpg"):
-        name = f"{name}.jpg"
-    return name
+    base, ext = _split_base_ext(name)
+    if not base:
+        return f"banner1{_DEFAULT_BANNER_EXTENSION}"
+    if ext in {e for e in _BANNER_ALLOWED_EXTENSIONS}:
+        return f"{base}{ext}"
+    return f"{base}{_DEFAULT_BANNER_EXTENSION}"
+
+
+def _banner_content_type(filename: str) -> str:
+    """Return the MIME type to use when uploading a banner file."""
+    _, ext = _split_base_ext(filename)
+    if ext == ".png":
+        return "image/png"
+    return "image/jpeg"
 
 
 def _is_banner_update_folder(folder: dict) -> bool:
@@ -71,28 +117,31 @@ class BannerUpdateMixin:
     def _find_banner1_file(self, drive_service: Any, folder_id: str, banner_filename: str = "banner1.jpg") -> Optional[dict]:
         """
         Search a story folder for the configured banner file.
-        Uses exact case-sensitive name matching.
+        When the user input has no extension, both .jpg and .png are tried.
         Returns the file dict or None.
         """
-
-        def _call() -> dict:
-            return drive_service.files().list(
-                q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false and name='{banner_filename}'",
-                fields="files(id, name),nextPageToken",
-                pageSize=100,
-            ).execute()
-
-        try:
-            from api.services.drive_service._drive_api import DriveAPIMixin
-            response = DriveAPIMixin._retry_drive_call(self, _call)
-        except Exception:
+        variants = _banner_search_variants(banner_filename)
+        if not variants:
             return None
 
-        files = response.get("files", [])
-        for f in files:
-            # Exact case-sensitive match
-            if f.get("name") == banner_filename:
-                return f
+        from api.services.drive_service._drive_api import DriveAPIMixin
+
+        for candidate in variants:
+            def _call() -> dict:
+                return drive_service.files().list(
+                    q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false and name='{candidate}'",
+                    fields="files(id, name),nextPageToken",
+                    pageSize=100,
+                ).execute()
+
+            try:
+                response = DriveAPIMixin._retry_drive_call(self, _call)
+            except Exception:
+                continue
+
+            for f in response.get("files", []):
+                if f.get("name") == candidate:
+                    return f
         return None
 
     def _upload_story_banner_from_folder(self, story_id: str, folder_id: str, banner_filename: str = "banner1.jpg") -> tuple[bool, Optional[str]]:
@@ -119,7 +168,12 @@ class BannerUpdateMixin:
             return False, f"Failed to download {banner_filename} from Drive: {exc}"
 
         try:
-            banner_url = self._upload_banner_image(story_id, banner_bytes, banner_file["name"])
+            banner_url = self._upload_banner_image(
+                story_id,
+                banner_bytes,
+                banner_file["name"],
+                _banner_content_type(banner_file["name"]),
+            )
         except Exception as exc:
             return False, f"Failed to upload banner to main BE: {exc}"
 
@@ -230,10 +284,23 @@ class BannerUpdateMixin:
             banner_filename,
         )
 
+        total_found = sum(1 for v in banner_files_by_folder_id.values() if v is not None)
+        scan_msg = (
+            f"[CHECK_ALL] banner-update scanned {len(banner_update_folders)} folders, "
+            f"found {total_found} with any variant of {banner_filename!r} "
+            f"(variants tried: {_banner_search_variants(banner_filename)})"
+        )
+        logger.info(scan_msg)
+        print(scan_msg, flush=True)
+
         can_update: list[dict] = []
         updated: list[dict] = []
         no_banner1: list[dict] = []
         no_server_match: list[dict] = []
+
+        hits_logged = 0
+        misses_logged = 0
+        MAX_PER_FOLDER_LOGS = 3
 
         for folder in banner_update_folders:
             folder_id = folder["id"]
@@ -256,6 +323,14 @@ class BannerUpdateMixin:
             }
 
             if banner1 is None:
+                if misses_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][MISS] banner-update folder={folder_name!r} "
+                        f"title={display_name!r} status=no_banner1_file "
+                        f"searched_for={banner_filename!r} (variants={_banner_search_variants(banner_filename)})",
+                        flush=True,
+                    )
+                    misses_logged += 1
                 saved = self._record_banner_update(
                     story_id=server_story.get("id") if server_story else None,
                     story_title=display_name,
@@ -270,14 +345,38 @@ class BannerUpdateMixin:
                 continue
 
             if server_story is None:
+                if hits_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][HIT] banner-update folder={folder_name!r} "
+                        f"title={display_name!r} status=no_server_match "
+                        f"banner_file={banner1.get('name')!r}",
+                        flush=True,
+                    )
+                    hits_logged += 1
                 entry = {**entry_base, "status": "no_server_match", "last_updated": history.get("last_updated") if history else None}
                 no_server_match.append(entry)
                 continue
 
             if history_status == "updated":
+                if hits_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][HIT] banner-update folder={folder_name!r} "
+                        f"title={display_name!r} status=updated "
+                        f"banner_file={banner1.get('name')!r}",
+                        flush=True,
+                    )
+                    hits_logged += 1
                 entry = {**entry_base, "status": "updated", "last_updated": history.get("last_updated")}
                 updated.append(entry)
             else:
+                if hits_logged < MAX_PER_FOLDER_LOGS:
+                    print(
+                        f"[CHECK_ALL][HIT] banner-update folder={folder_name!r} "
+                        f"title={display_name!r} status=can_update "
+                        f"banner_file={banner1.get('name')!r}",
+                        flush=True,
+                    )
+                    hits_logged += 1
                 self._record_banner_update(
                     story_id=server_story.get("id"),
                     story_title=display_name,

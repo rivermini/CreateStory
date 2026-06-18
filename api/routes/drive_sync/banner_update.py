@@ -52,6 +52,11 @@ async def check_all(banner_filename: str = "banner1.jpg") -> CheckAllResponse:
     - no_server_match: folder has banner file but no matching story on server
     """
     import asyncio
+    import sys
+
+    msg = f"[CHECK_ALL] banner-update received banner_filename={banner_filename!r}"
+    logger.info(msg)
+    print(msg, flush=True)
 
     service = get_drive_sync_service()
     if service.get_config() is None:
@@ -63,6 +68,17 @@ async def check_all(banner_filename: str = "banner1.jpg") -> CheckAllResponse:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Banner check failed: {exc}")
+
+    summary = (
+        f"[CHECK_ALL] banner-update done: banner_filename={banner_filename!r} "
+        f"can_update={len(result.get('can_update', []))} "
+        f"updated={len(result.get('updated', []))} "
+        f"no_banner1_file={len(result.get('no_banner1_file', []))} "
+        f"no_server_match={len(result.get('no_server_match', []))}"
+    )
+    logger.info(summary)
+    print(summary, flush=True)
+    sys.stdout.flush()
 
     def make_entry(d: dict) -> BannerUpdateStatus:
         return BannerUpdateStatus(

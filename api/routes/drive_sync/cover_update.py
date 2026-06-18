@@ -52,6 +52,11 @@ async def check_all(cover_filename: str = "cover1.jpg") -> CheckAllResponse:
     - no_server_match: folder has cover file but no matching story on server
     """
     import asyncio
+    import sys
+
+    msg = f"[CHECK_ALL] cover-update received cover_filename={cover_filename!r}"
+    logger.info(msg)
+    print(msg, flush=True)
 
     service = get_drive_sync_service()
     if service.get_config() is None:
@@ -63,6 +68,17 @@ async def check_all(cover_filename: str = "cover1.jpg") -> CheckAllResponse:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Cover check failed: {exc}")
+
+    summary = (
+        f"[CHECK_ALL] cover-update done: cover_filename={cover_filename!r} "
+        f"can_update={len(result.get('can_update', []))} "
+        f"updated={len(result.get('updated', []))} "
+        f"no_cover1_file={len(result.get('no_cover1_file', []))} "
+        f"no_server_match={len(result.get('no_server_match', []))}"
+    )
+    logger.info(summary)
+    print(summary, flush=True)
+    sys.stdout.flush()
 
     def make_entry(d: dict) -> CoverUpdateStatus:
         return CoverUpdateStatus(
