@@ -19,16 +19,16 @@ class UpdateChapterCountRequest(BaseModel):
 
 
 class BatchInspectRequest(BaseModel):
-    folder_ids: list[str] = Field(
+    folder_names: list[str] = Field(
         default_factory=list,
-        description="List of folder IDs to inspect.",
+        description="List of folder names to inspect.",
     )
 
 
 class BatchUpdateRequest(BaseModel):
-    folder_ids: list[str] = Field(
+    folder_names: list[str] = Field(
         default_factory=list,
-        description="List of folder IDs to update.",
+        description="List of folder names to update.",
     )
 
 
