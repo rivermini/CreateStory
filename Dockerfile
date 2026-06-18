@@ -12,11 +12,17 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 RUN adduser --disabled-password --gecos "" appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    mkdir -p /app/output && \
+    chown -R appuser:appuser /app/output
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD python -c "import httpx; httpx.get('http://localhost:8004/').raise_for_status()"
 
 USER appuser
+ENTRYPOINT ["/docker-entrypoint.sh"]
 
 EXPOSE 8004
 
