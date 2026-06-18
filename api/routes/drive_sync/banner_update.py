@@ -47,12 +47,12 @@ async def _proxy_get(path: str, params: dict | None = None, timeout: float = 60.
         return JSONResponse(status_code=502, content={"detail": f"Upstream request failed: {exc}"})
 
 
-async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
+async def _proxy_post(path: str, json_body: dict | None = None, params: dict | None = None) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=json_body or {})
+            resp = await client.post(url, json=json_body or {}, params=params or {})
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError:
@@ -67,8 +67,8 @@ async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
 
 
 @router.get("/check-all")
-async def check_all() -> JSONResponse:
-    return await _proxy_get("/api/drive-sync/banner-update/check-all", timeout=120.0)
+async def check_all(banner_filename: str = "banner1.jpg") -> JSONResponse:
+    return await _proxy_get("/api/drive-sync/banner-update/check-all", params={"banner_filename": banner_filename}, timeout=120.0)
 
 
 @router.get("/check-updated")
@@ -77,5 +77,8 @@ async def check_updated() -> JSONResponse:
 
 
 @router.post("/upload/{folder_id}/{story_id}")
-async def upload_banner(folder_id: str, story_id: str) -> JSONResponse:
-    return await _proxy_post(f"/api/drive-sync/banner-update/upload/{folder_id}/{story_id}")
+async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "banner1.jpg") -> JSONResponse:
+    return await _proxy_post(
+        f"/api/drive-sync/banner-update/upload/{folder_id}/{story_id}",
+        params={"banner_filename": banner_filename}
+    )
