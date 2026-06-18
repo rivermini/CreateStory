@@ -53,8 +53,8 @@ def _get_external_api_config() -> tuple[str, dict]:
                     if token:
                         headers["Authorization"] = f"Bearer {token}"
                     return api_base.rstrip("/"), headers
-                except Exception:
-                    pass
+    except Exception:
+        pass
 
     # Fallback: use env vars (for backward compatibility in dev environments)
     api_base = os.environ.get("EXTERNAL_API_BASE_URL", "").strip()
