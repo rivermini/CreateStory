@@ -43,13 +43,13 @@ router = APIRouter(prefix="/banner-update", tags=["Drive Sync"])
 
 
 @router.get("/check-all", response_model=CheckAllResponse, tags=["Drive Sync"])
-async def check_all() -> CheckAllResponse:
+async def check_all(banner_filename: str = "banner1.jpg") -> CheckAllResponse:
     """
     Scan all DONE_/EXTENDED_ folders and return banner-update status for each.
-    - can_update: folder has banner1.jpg, story exists on server, no prior update record
-    - updated: folder has banner1.jpg, story exists, prior update record found
-    - no_banner1_file: folder has no banner1.jpg
-    - no_server_match: folder has banner1.jpg but no matching story on server
+    - can_update: folder has banner file, story exists on server, no prior update record
+    - updated: folder has banner file, story exists, prior update record found
+    - no_banner1_file: folder has no banner file
+    - no_server_match: folder has banner file but no matching story on server
     """
     import asyncio
 
@@ -58,7 +58,7 @@ async def check_all() -> CheckAllResponse:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
-        result = await asyncio.to_thread(service.check_extended_folders_for_banner)
+        result = await asyncio.to_thread(service.check_extended_folders_for_banner, banner_filename)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -117,9 +117,9 @@ async def check_updated() -> CheckUpdatedResponse:
 
 
 @router.post("/upload/{folder_id}/{story_id}", response_model=UploadBannerResponse, tags=["Drive Sync"])
-async def upload_banner(folder_id: str, story_id: str) -> UploadBannerResponse:
+async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "banner1.jpg") -> UploadBannerResponse:
     """
-    Download banner1.jpg from the given Drive folder and POST it to the main BE.
+    Download the configured banner file from the given Drive folder and POST it to the main BE.
     Records the result in banner_update_histories.
     """
     import asyncio
@@ -147,7 +147,7 @@ async def upload_banner(folder_id: str, story_id: str) -> UploadBannerResponse:
     story_title = folder_info.get("display_name", "")
 
     def _do_upload():
-        success, result = service._upload_story_banner_from_folder(story_id, folder_id)
+        success, result = service._upload_story_banner_from_folder(story_id, folder_id, banner_filename)
         return success, result
 
     try:
@@ -162,7 +162,7 @@ async def upload_banner(folder_id: str, story_id: str) -> UploadBannerResponse:
             folder_id=folder_id,
             folder_name=folder_name,
             status="updated",
-            banner_file_name="banner1.jpg",
+            banner_file_name=banner_filename,
             banner_url=result,
         )
         return UploadBannerResponse(success=True, message="Banner uploaded successfully.", banner_url=result)
@@ -173,7 +173,7 @@ async def upload_banner(folder_id: str, story_id: str) -> UploadBannerResponse:
             folder_id=folder_id,
             folder_name=folder_name,
             status="error",
-            banner_file_name="banner1.jpg",
+            banner_file_name=banner_filename,
             error=result or "Upload failed.",
         )
         return UploadBannerResponse(success=False, message=result or "Upload failed.", banner_url=None)

@@ -1024,11 +1024,11 @@ class DriveAPIMixin:
         return result
 
     def _batch_find_banner1_files(
-        self, drive_service: Any, folder_ids: list[str]
+        self, drive_service: Any, folder_ids: list[str], banner_filename: str = "banner1.jpg"
     ) -> dict[str, Optional[dict]]:
         """
-        Batch-search for banner1.jpg (case-insensitive) across Drive folders.
-        Uses the same chunked OR query pattern as the other batch checks.
+        Batch-search for the configured banner file across Drive folders.
+        Uses exact name matching (case-sensitive).
         """
         result: dict[str, Optional[dict]] = {fid: None for fid in folder_ids}
         if not folder_ids:
@@ -1037,11 +1037,15 @@ class DriveAPIMixin:
         for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
             chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
             parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            # Use exact name match (case-sensitive) to find the specific banner file
             query = (
                 f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
-                "and trashed=false"
+                f"and trashed=false and name='{banner_filename}'"
             )
+            logger.info(f"[BANNER_SEARCH] Query: {query}")
+
             page_token = None
+            chunk_found_count = 0
 
             while True:
                 _pt = page_token
@@ -1059,18 +1063,27 @@ class DriveAPIMixin:
                 except (ssl.SSLError, TimeoutError):
                     break
 
+                files = response.get("files", [])
+                if files:
+                    logger.info(f"[BANNER_SEARCH] Found {len(files)} files: {[f.get('name') for f in files]}")
+
                 for file_info in response.get("files", []):
-                    if file_info.get("name", "").lower() != "banner1.jpg":
-                        continue
-                    for parent in file_info.get("parents", []):
-                        if parent in result and result[parent] is None:
-                            result[parent] = file_info
-                            break
+                    # Exact case-sensitive match
+                    if file_info.get("name") == banner_filename:
+                        for parent in file_info.get("parents", []):
+                            if parent in result and result[parent] is None:
+                                result[parent] = file_info
+                                chunk_found_count += 1
+                                break
 
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     break
 
+            logger.info(f"[BANNER_SEARCH] Chunk {chunk_start // _CHECK_BATCH_CHUNK_SIZE + 1}: found {chunk_found_count} files")
+
+        total_found = sum(1 for v in result.values() if v is not None)
+        logger.info(f"[BANNER_SEARCH] Total: searched {len(folder_ids)} folders, found {total_found} with '{banner_filename}'")
         return result
 
 

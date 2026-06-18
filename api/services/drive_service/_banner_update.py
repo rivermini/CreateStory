@@ -16,6 +16,16 @@ if TYPE_CHECKING:
 _BANNER_UPDATE_FOLDER_PREFIXES = {"DONE", "EXTENDED"}
 
 
+def _normalize_banner_filename(filename: str) -> str:
+    """Ensure banner filename has .jpg extension."""
+    if not filename:
+        return "banner1.jpg"
+    name = filename.strip()
+    if not name.lower().endswith(".jpg"):
+        name = f"{name}.jpg"
+    return name
+
+
 def _is_banner_update_folder(folder: dict) -> bool:
     return folder.get("prefix") in _BANNER_UPDATE_FOLDER_PREFIXES
 
@@ -50,54 +60,55 @@ class BannerUpdateMixin:
       - check_extended_folders_for_banner
     """
 
-    def _find_banner1_file(self, drive_service: Any, folder_id: str) -> Optional[dict]:
+    def _find_banner1_file(self, drive_service: Any, folder_id: str, banner_filename: str = "banner1.jpg") -> Optional[dict]:
         """
-        Search a story folder for 'banner1.jpg' (case-insensitive).
+        Search a story folder for the configured banner file.
+        Uses exact case-sensitive name matching.
         Returns the file dict or None.
         """
-        page_token = None
-        while True:
-            def _call() -> dict:
-                return drive_service.files().list(
-                    q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false",
-                    fields="files(id, name),nextPageToken",
-                    pageSize=100,
-                    pageToken=page_token,
-                ).execute()
-            try:
-                from api.services.drive_service._drive_api import DriveAPIMixin
-                response = DriveAPIMixin._retry_drive_call(self, _call)
-            except Exception:
-                break
-            files = response.get("files", [])
-            for f in files:
-                if f.get("name", "").lower() == "banner1.jpg":
-                    return f
-            page_token = response.get("nextPageToken")
-            if not page_token:
-                break
+
+        def _call() -> dict:
+            return drive_service.files().list(
+                q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false and name='{banner_filename}'",
+                fields="files(id, name),nextPageToken",
+                pageSize=100,
+            ).execute()
+
+        try:
+            from api.services.drive_service._drive_api import DriveAPIMixin
+            response = DriveAPIMixin._retry_drive_call(self, _call)
+        except Exception:
+            return None
+
+        files = response.get("files", [])
+        for f in files:
+            # Exact case-sensitive match
+            if f.get("name") == banner_filename:
+                return f
         return None
 
-    def _upload_story_banner_from_folder(self, story_id: str, folder_id: str) -> tuple[bool, Optional[str]]:
+    def _upload_story_banner_from_folder(self, story_id: str, folder_id: str, banner_filename: str = "banner1.jpg") -> tuple[bool, Optional[str]]:
         """
-        Download banner1.jpg from Drive and POST it to main BE /api/v1/story/{id}/upload-banner.
+        Download the configured banner file from Drive and POST it to main BE /api/v1/story/{id}/upload-banner.
         Returns (success, banner_url_or_error_message).
         """
         from api.services.drive_service._drive_api import DriveAPIMixin
+
+        banner_filename = _normalize_banner_filename(banner_filename)
 
         try:
             drive_service = self._build_drive_service()
         except Exception as exc:
             return False, f"Failed to authenticate with Google Drive: {exc}"
 
-        banner_file = self._find_banner1_file(drive_service, folder_id)
+        banner_file = self._find_banner1_file(drive_service, folder_id, banner_filename)
         if banner_file is None:
-            return False, "banner1.jpg not found in Drive folder"
+            return False, f"{banner_filename} not found in Drive folder"
 
         try:
             banner_bytes = DriveAPIMixin._download_cover_image_bytes(self, drive_service, banner_file["id"])
         except Exception as exc:
-            return False, f"Failed to download banner1.jpg from Drive: {exc}"
+            return False, f"Failed to download {banner_filename} from Drive: {exc}"
 
         try:
             banner_url = self._upload_banner_image(story_id, banner_bytes, banner_file["name"])
@@ -170,14 +181,16 @@ class BannerUpdateMixin:
 
         return list(latest_by_folder_id.values())
 
-    def check_extended_folders_for_banner(self) -> dict:
+    def check_extended_folders_for_banner(self, banner_filename: str = "banner1.jpg") -> dict:
         """
-        Scan all DONE_/EXTENDED_ folders, check for banner1.jpg, cross-reference
+        Scan all DONE_/EXTENDED_ folders, check for configured banner file, cross-reference
         against banner_update_histories and server stories.
         Returns categorized results.
         """
         if self._config is None:
             raise RuntimeError("Drive sync config not set.")
+
+        banner_filename = _normalize_banner_filename(banner_filename)
 
         drive_folders_raw, _ = self.list_drive_folders(limit=10000, offset=0)
         banner_update_folders = [f for f in drive_folders_raw if _is_banner_update_folder(f)]
@@ -200,6 +213,7 @@ class BannerUpdateMixin:
         banner_files_by_folder_id = self._batch_find_banner1_files(
             drive_service,
             [folder["id"] for folder in banner_update_folders],
+            banner_filename,
         )
 
         can_update: list[dict] = []
@@ -235,7 +249,7 @@ class BannerUpdateMixin:
                     folder_name=folder_name,
                     status="no_banner1_file",
                     banner_file_name=None,
-                    error="No banner1 file",
+                    error=f"No {banner_filename} file",
                 )
                 entry = {**entry_base, "status": "no_banner1_file", "last_updated": _iso(saved.get("last_updated"))}
                 no_banner1.append(entry)
