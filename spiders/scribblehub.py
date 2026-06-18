@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import atexit
 import asyncio
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None  # type: ignore[assignment]  # fcntl is Unix-only; use msvcrt on Windows
 import json
 import logging
 import os
@@ -1138,7 +1141,7 @@ class _ScribbleHubBrowser:
                 try:
                     if os.name == "nt" and msvcrt is not None:
                         msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-                    else:
+                    elif fcntl is not None:
                         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                     f.seek(0)
                     json.dump(cookies, f, indent=2)
@@ -1146,7 +1149,7 @@ class _ScribbleHubBrowser:
                 finally:
                     if os.name == "nt" and msvcrt is not None:
                         msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-                    else:
+                    elif fcntl is not None:
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except Exception as exc:
             self.logger.debug("[scribblehub] Could not save cookies: %s", exc)
