@@ -94,6 +94,36 @@ async def check_inkitt_cookies(request: dict | None = Body(default=None)) -> JSO
         return JSONResponse(content=content, status_code=resp.status_code)
 
 
+@router.post("/scribblehub-cookies")
+async def update_scribblehub_cookies(request: dict = Body(...)) -> JSONResponse:
+    """Update saved ScribbleHub session cookies (cf_clearance + User-Agent) in the NovelCrawler service."""
+    import httpx
+
+    url = f"{_nc_url()}/api/crawl/scribblehub-cookies"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(url, json=request)
+        try:
+            content = resp.json()
+        except ValueError:
+            content = {"detail": resp.text or f"HTTP {resp.status_code}"}
+        return JSONResponse(content=content, status_code=resp.status_code)
+
+
+@router.post("/scribblehub-cookies/status")
+async def check_scribblehub_cookies(request: dict | None = Body(default=None)) -> JSONResponse:
+    """Check saved ScribbleHub session cookies in the NovelCrawler service."""
+    import httpx
+
+    url = f"{_nc_url()}/api/crawl/scribblehub-cookies/status"
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        resp = await client.post(url, json=request or {})
+        try:
+            content = resp.json()
+        except ValueError:
+            content = {"detail": resp.text or f"HTTP {resp.status_code}"}
+        return JSONResponse(content=content, status_code=resp.status_code)
+
+
 @router.get("/stream")
 async def crawl_stream(crawl_id: str = Query(...)) -> StreamingResponse:
     """Server-Sent Events stream for live crawl progress."""
