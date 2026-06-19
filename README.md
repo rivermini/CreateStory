@@ -83,6 +83,9 @@ The server starts on **http://localhost:8002**. API docs are at **http://localho
 | `WATTPAD_PROXY_URL` | unset | Optional Wattpad-only proxy override; kept for compatibility |
 | `FLARESOLVERR_URL` | `http://flaresolverr:8191/v1` (in Docker) | FlareSolverr endpoint used to auto-solve ScribbleHub's Cloudflare challenge. Unset it to disable auto-solving (see Supported Sites → ScribbleHub) |
 | `SCRIBBLEHUB_PROXY_URL` | unset | Optional ScribbleHub-only proxy — alternative to FlareSolverr for Docker runs (`http://host.docker.internal:8899` + `scripts/scribblehub_host_proxy.py` on the host) |
+| `SCRIBBLEHUB_DOWNLOAD_DELAY` | `0.35` | Seconds between ScribbleHub chapter requests (raise to reduce 429s) |
+| `SCRIBBLEHUB_RETRY_COOLDOWN` | `45` | Seconds before each retry round for rate-limited chapters |
+| `SCRIBBLEHUB_RETRY_ROUNDS` | `40` | Max retry rounds to recover rate-limited chapters (completeness) |
 
 ---
 
@@ -181,6 +184,25 @@ Docker) you need neither FlareSolverr nor a proxy. If you prefer not to run Flar
 crawler is in Docker, the alternative is the host proxy: run `scripts/scribblehub_host_proxy.py` on
 the host and set `SCRIBBLEHUB_PROXY_URL=http://host.docker.internal:8899` (see `extra_hosts` already
 set on `novel_crawler`).
+
+**Rate limiting & guaranteed completeness.** ScribbleHub throttles per IP with **HTTP 429** (a
+"slow down" signal — *not* a Cloudflare challenge, so it never burns a FlareSolverr solve). The
+crawler handles it so a full novel always finishes with every chapter:
+
+1. On a 429 it retries the same page with short exponential backoff (lets the bucket refill).
+2. A chapter that's *still* rate-limited is deferred — not skipped, not fatal.
+3. After the main pass, the crawler runs **retry rounds**: it waits a cooldown (so the bucket
+   refills) and re-fetches the deferred chapters, repeating until none remain. So a 711-chapter
+   novel completes even if ScribbleHub throttles partway through — it just takes longer.
+
+| Setting | Default | Notes |
+|---|---|---|
+| `SCRIBBLEHUB_DOWNLOAD_DELAY` | `0.35` | Seconds between chapter requests on the main pass. Raise it if you see lots of 429s. |
+| `SCRIBBLEHUB_RETRY_COOLDOWN` | `45` | Seconds to wait before each retry round (escalates ×1.5 on a no-progress round). |
+| `SCRIBBLEHUB_RETRY_ROUNDS` | `40` | Max retry rounds before giving up (set high for "finish no matter what"). |
+
+Tip: heavy back-to-back crawls deplete ScribbleHub's rate-limit bucket; if a run spends a long time
+in retry rounds, wait a few minutes (or raise `SCRIBBLEHUB_DOWNLOAD_DELAY`) before the next crawl.
 
 ---
 

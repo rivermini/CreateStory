@@ -61,8 +61,25 @@ _SCRIBBLEHUB_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/149.0.0.0 Safari/537.36"
 )
+# ScribbleHub rate-limits per IP with HTTP 429 (a "slow down" signal, NOT a Cloudflare
+# challenge). Per-request: a few quick backoff retries; anything still 429 is deferred to a
+# retry round (cooldown + re-attempt) so every chapter is eventually fetched.
+_MAX_RATELIMIT_RETRIES = 4
+_RATELIMIT_BASE_DELAY = 1.5
+_RATELIMIT_MAX_WAIT = 20.0
+# Retry rounds for chapters that stay rate-limited (full-novel completeness).
+_RETRY_ROUNDS_DEFAULT = 40        # high cap so a crawl effectively never gives up
+_RETRY_COOLDOWN_DEFAULT = 45.0    # seconds between rounds (lets the bucket refill)
+_RETRY_COOLDOWN_MAX = 300.0
 _BROWSER_START_LOCK = threading.Lock()
 _UC_START_LOCK_FILE = Path(tempfile.gettempdir()) / "scribblehub_uc_start.lock"
+
+
+class _RateLimited(Exception):
+    """Raised when a page can't be fetched because ScribbleHub keeps returning 429.
+
+    Non-fatal: the crawl skips that chapter and continues instead of aborting everything.
+    """
 
 
 class ScribbleHubSpider(BaseSpider):
@@ -107,6 +124,7 @@ class ScribbleHubSpider(BaseSpider):
         self.novel_slug = self._story_slug_from_url(self._start_url)
         self.download_delay = self._configured_download_delay()
         self._chapters_crawled = 0
+        self._failed_refs: list[dict[str, Any]] = []
         self._seen_urls: set[str] = set()
         self._html_cache: dict[str, str] = {}
         self._browser: _ScribbleHubBrowser | None = None
@@ -131,12 +149,17 @@ class ScribbleHubSpider(BaseSpider):
         start_url = self._normalize_url(self.start_urls[0])
         story_url = self._story_url_from_any_url(start_url)
 
-        story_html = self._fetch_page_html(story_url)
-        story_soup = BeautifulSoup(story_html, "html.parser")
-        story_title = self._extract_story_title(story_soup)
-        metadata = self._extract_story_metadata(story_soup, story_url)
-
-        selected = self._select_chapters_from_story(story_soup, story_url, start_url)
+        try:
+            story_html = self._fetch_page_html(story_url)
+            story_soup = BeautifulSoup(story_html, "html.parser")
+            story_title = self._extract_story_title(story_soup)
+            metadata = self._extract_story_metadata(story_soup, story_url)
+            selected = self._select_chapters_from_story(story_soup, story_url, start_url)
+        except _RateLimited as exc:
+            raise CloseSpider(
+                "[scribblehub] Rate-limited (429) while reading the story page / table of contents. "
+                "ScribbleHub is throttling this IP — wait a minute and retry."
+            ) from exc
         self.limit = len(selected)
         self.logger.info(
             "[scribblehub/story=%s] found %d chapter links, target=selected (%d)",
@@ -158,18 +181,58 @@ class ScribbleHubSpider(BaseSpider):
                 story_title=story_title,
                 metadata=metadata if idx == 0 else None,
             )
-            if chapter is None:
-                continue
+            if chapter is not None:
+                yield self._accept(chapter)
 
-            self._chapters_crawled += 1
-            self.logger.info(
-                "[%s/%d] Crawled chapter %d: %s",
-                self.novel_slug,
-                self.limit,
-                chapter.chapter_number,
-                chapter.title or "(untitled)",
+        # Retry rounds: re-attempt any chapter that stayed rate-limited (HTTP 429), with a
+        # cooldown between rounds to let ScribbleHub's bucket refill, until none remain. This is
+        # what makes a full-novel crawl complete "no matter what".
+        max_rounds = self._resolve_retry_rounds()
+        cooldown = self._resolve_retry_cooldown()
+        base_cooldown = cooldown
+        round_num = 0
+        while self._failed_refs and round_num < max_rounds:
+            round_num += 1
+            pending = self._failed_refs
+            self._failed_refs = []
+            self.logger.warning(
+                "[scribblehub] Retry round %d/%d: %d chapter(s) still rate-limited — cooling down %.0fs.",
+                round_num, max_rounds, len(pending), cooldown,
             )
-            yield chapter
+            await asyncio.sleep(cooldown)
+
+            before = self._chapters_crawled
+            for ridx, chapter_ref in enumerate(pending):
+                if ridx > 0:
+                    await asyncio.sleep(self.download_delay)
+                chapter = self._crawl_chapter(chapter_ref=chapter_ref, story_title=story_title, metadata=None)
+                if chapter is not None:
+                    yield self._accept(chapter)
+
+            # No progress this round → bucket still drained; wait longer next time.
+            if self._chapters_crawled == before and self._failed_refs:
+                cooldown = min(cooldown * 1.5, _RETRY_COOLDOWN_MAX)
+            else:
+                cooldown = base_cooldown
+
+        if self._failed_refs:
+            still = sorted({int(r["chapter_number"]) for r in self._failed_refs})
+            self.logger.error(
+                "[scribblehub] Gave up after %d retry rounds; %d chapter(s) still rate-limited: %s",
+                max_rounds, len(still), ", ".join(str(n) for n in still),
+            )
+
+    def _accept(self, chapter: Chapter) -> Chapter:
+        """Count + log a successfully crawled chapter before it is yielded."""
+        self._chapters_crawled += 1
+        self.logger.info(
+            "[%s/%d] Crawled chapter %d: %s",
+            self.novel_slug,
+            self.limit,
+            chapter.chapter_number,
+            chapter.title or "(untitled)",
+        )
+        return chapter
 
     def build_selector_config(self, config: dict) -> SelectorConfig:
         selectors = config.get("selectors", {})
@@ -216,26 +279,71 @@ class ScribbleHubSpider(BaseSpider):
             return None
         return value.strip().lower() in {"1", "true", "yes", "on"}
 
+    def _retry_after_seconds(self, response) -> float | None:
+        """Honour a Retry-After header on a 429 response, if present and sane."""
+        raw = response.headers.get("Retry-After")
+        if not raw:
+            return None
+        try:
+            return min(_RATELIMIT_MAX_WAIT, max(0.0, float(raw)))
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_retry_rounds(self) -> int:
+        raw = os.getenv("SCRIBBLEHUB_RETRY_ROUNDS")
+        try:
+            return max(0, int(raw)) if raw is not None else _RETRY_ROUNDS_DEFAULT
+        except (TypeError, ValueError):
+            return _RETRY_ROUNDS_DEFAULT
+
+    def _resolve_retry_cooldown(self) -> float:
+        raw = os.getenv("SCRIBBLEHUB_RETRY_COOLDOWN")
+        try:
+            return max(1.0, float(raw)) if raw is not None else _RETRY_COOLDOWN_DEFAULT
+        except (TypeError, ValueError):
+            return _RETRY_COOLDOWN_DEFAULT
+
     def _fetch_page_html(self, url: str, timeout: int = 30) -> str:
         url = self._normalize_url(url, keep_query=True)
         cached = self._html_cache.get(url)
         if cached is not None:
             return cached
 
+        # HTTP 429 = rate-limiting (NOT a Cloudflare challenge): retry the same URL with
+        # exponential backoff so the bucket refills. Never burn a FlareSolverr solve on a 429
+        # (FlareSolverr's Chrome shares this IP and would be throttled too), and never abort the
+        # whole crawl — a chapter that stays 429 is skipped via _RateLimited.
         challenged = False
-        try:
-            response = self._session.get(url, timeout=timeout)
+        for attempt in range(_MAX_RATELIMIT_RETRIES + 1):
+            try:
+                response = self._session.get(url, timeout=timeout)
+            except Exception as exc:
+                self.logger.debug("[scribblehub] Requests fetch failed for %s: %s.", url, exc)
+                break
+
             if response.status_code == 200 and not self._is_cloudflare_challenge(response.text):
                 self._html_cache[url] = response.text
                 return response.text
+
+            if response.status_code == 429:
+                if attempt >= _MAX_RATELIMIT_RETRIES:
+                    self.logger.warning("[scribblehub] Persistent 429 on %s after %d retries — skipping.", url, attempt)
+                    raise _RateLimited(url)
+                wait = self._retry_after_seconds(response)
+                if wait is None:
+                    wait = min(_RATELIMIT_BASE_DELAY * (2 ** attempt), _RATELIMIT_MAX_WAIT)
+                self.logger.info("[scribblehub] 429 (rate-limited) — backing off %.1fs (retry %d/%d).",
+                                 wait, attempt + 1, _MAX_RATELIMIT_RETRIES)
+                time.sleep(wait)
+                continue
+
             challenged = response.status_code in (403, 503) or self._is_cloudflare_challenge(response.text)
             self.logger.info(
                 "[scribblehub] Requests fetch returned HTTP %s/challenge for %s.",
                 response.status_code,
                 url,
             )
-        except Exception as exc:
-            self.logger.debug("[scribblehub] Requests fetch failed for %s: %s.", url, exc)
+            break
 
         # Self-contained Cloudflare solve via FlareSolverr (Docker service). Mints a
         # cf_clearance bound to the crawler's own egress/fingerprint, so it can then be
@@ -472,13 +580,20 @@ class ScribbleHubSpider(BaseSpider):
         metadata: Optional[dict[str, Any]],
     ) -> Chapter | None:
         chapter_url = self._normalize_url(chapter_ref["url"])
+        chapter_number = int(chapter_ref["chapter_number"])
         if chapter_url in self._seen_urls:
             return None
         self._seen_urls.add(chapter_url)
 
-        html = self._fetch_page_html(chapter_url)
+        try:
+            html = self._fetch_page_html(chapter_url)
+        except _RateLimited:
+            # Persistent 429 on this chapter — defer it to a retry round (don't lose it, don't
+            # abort). Drop it from "seen" so the retry pass can fetch it again.
+            self._seen_urls.discard(chapter_url)
+            self._failed_refs.append(chapter_ref)
+            return None
         soup = BeautifulSoup(html, "html.parser")
-        chapter_number = int(chapter_ref["chapter_number"])
         chapter_title = self._extract_chapter_title(soup) or chapter_ref.get("title") or f"Chapter {chapter_number}"
         content = self._extract_chapter_content(soup)
         cleaned_content = clean_chapter_content(content, self._promo_patterns)
@@ -911,6 +1026,14 @@ class ScribbleHubSpider(BaseSpider):
         self.logger.info("=" * 45)
         self.logger.info("  ScribbleHub crawl complete.")
         self.logger.info("  %d chapter(s) saved.", self._chapters_crawled)
+        if self._failed_refs:
+            missing = sorted({int(r["chapter_number"]) for r in self._failed_refs})
+            self.logger.warning(
+                "  %d chapter(s) still missing after all retry rounds (persistent 429): %s",
+                len(missing),
+                ", ".join(str(n) for n in missing),
+            )
+            self.logger.warning("  Re-run with -a chapter_range to fetch the remaining chapters.")
         self.logger.info("=" * 45)
         self.logger.info("")
 
