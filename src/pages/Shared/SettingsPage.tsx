@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   clearBackendData,
   updateInkittCookies,
+  updateScribblehubCookies,
+  checkScribblehubCookies,
   getSettings,
   updateSettings,
   getDriveSyncConfig,
@@ -17,7 +19,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 import { showToast } from '../../components/Shared/Toast';
 
-type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'crawler' | 'audio' | 'danger';
+type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'crawler' | 'audio' | 'danger';
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
@@ -38,6 +40,7 @@ const CATEGORY_ITEMS: CategoryItem[] = [
   { id: 'appearance', label: 'Appearance', description: 'Theme and display', icon: 'moon' },
   { id: 'driveSync', label: 'Drive Sync', description: 'Google Drive and API', icon: 'sync' },
   { id: 'inkitt', label: 'Inkitt Cookies', description: 'Crawler login cookies', icon: 'shield' },
+  { id: 'scribblehub', label: 'ScribbleHub Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
   { id: 'crawler', label: 'Crawler', description: 'Default crawl behavior', icon: 'settings' },
   { id: 'audio', label: 'Audio Pipeline', description: 'Auto Audio and TTS', icon: 'music' },
   { id: 'danger', label: 'Advanced', description: 'Cleanup actions', icon: 'delete' },
@@ -124,6 +127,12 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [inkittCookieError, setInkittCookieError] = useState('');
   const [inkittCookieMessage, setInkittCookieMessage] = useState('');
   const [inkittJsonText, setInkittJsonText] = useState('');
+  const [scribblehubCookies, setScribblehubCookies] = useState('');
+  const [scribblehubUserAgent, setScribblehubUserAgent] = useState('');
+  const [savingScribblehubCookies, setSavingScribblehubCookies] = useState(false);
+  const [checkingScribblehubCookies, setCheckingScribblehubCookies] = useState(false);
+  const [scribblehubCookieError, setScribblehubCookieError] = useState('');
+  const [scribblehubCookieMessage, setScribblehubCookieMessage] = useState('');
 
   useEffect(() => {
     getSettings()
@@ -411,6 +420,88 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     }
   };
 
+  const handleSaveScribblehubCookies = async () => {
+    const cookies = scribblehubCookies.trim();
+    const userAgent = scribblehubUserAgent.trim();
+    if (!cookies) {
+      setScribblehubCookieError('Paste your ScribbleHub cookies (at least cf_clearance) before saving.');
+      setScribblehubCookieMessage('');
+      return;
+    }
+    if (!userAgent) {
+      setScribblehubCookieError('Paste your browser User-Agent — cf_clearance only works with the matching User-Agent.');
+      setScribblehubCookieMessage('');
+      return;
+    }
+
+    setSavingScribblehubCookies(true);
+    setScribblehubCookieError('');
+    setScribblehubCookieMessage('');
+    try {
+      const result = await updateScribblehubCookies(cookies, userAgent);
+      if (!result.has_cf_clearance) {
+        setScribblehubCookieError('Saved, but no cf_clearance cookie was found — crawling will still be blocked by Cloudflare.');
+      } else {
+        const message = `Saved ${result.cookie_count} ScribbleHub cookie${result.cookie_count === 1 ? '' : 's'}.`;
+        setScribblehubCookieMessage(message);
+        showToast(message, 'success', 2200, 'top-center');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update ScribbleHub cookies.';
+      setScribblehubCookieError(message);
+      showToast('Failed to update ScribbleHub cookies.', 'error', 2500, 'top-center');
+    } finally {
+      setSavingScribblehubCookies(false);
+    }
+  };
+
+  const handleCheckScribblehubCookies = async () => {
+    setCheckingScribblehubCookies(true);
+    setScribblehubCookieError('');
+    setScribblehubCookieMessage('');
+    try {
+      const result = await checkScribblehubCookies();
+      if (result.valid) {
+        setScribblehubCookieMessage(result.message);
+        showToast('ScribbleHub cookies are working.', 'success', 2200, 'top-center');
+      } else {
+        setScribblehubCookieError(result.message);
+      }
+    } catch (err) {
+      setScribblehubCookieError(err instanceof Error ? err.message : 'Failed to test ScribbleHub cookies.');
+    } finally {
+      setCheckingScribblehubCookies(false);
+    }
+  };
+
+  const handleScribblehubJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let json = JSON.parse(text);
+      if (json && !Array.isArray(json) && (json.cookies || json.data)) json = json.cookies || json.data;
+      // Array of cookie objects (Selenium / EditThisCookie export) → keep as JSON for the backend parser.
+      if (Array.isArray(json)) {
+        setScribblehubCookies(JSON.stringify(json));
+        const uaEntry = json.find((c) => (c?.name || '').toLowerCase() === 'user-agent');
+        if (uaEntry?.value) setScribblehubUserAgent(String(uaEntry.value));
+      } else if (json && typeof json === 'object') {
+        const cf = json.cf_clearance || json.cfClearance || '';
+        if (cf) setScribblehubCookies(`cf_clearance=${cf}`);
+        const ua = json.user_agent || json.userAgent || json['User-Agent'] || '';
+        if (ua) setScribblehubUserAgent(String(ua));
+        if (!cf) setScribblehubCookies(text.trim());
+      }
+      setScribblehubCookieError('');
+      showToast('ScribbleHub cookie values loaded from file.', 'success', 2000, 'top-center');
+    } catch (err) {
+      setScribblehubCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -558,6 +649,37 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
             <p className="text-xs" style={{ color: tertiaryText }}>Copy these from Chrome DevTools under Application → Cookies for `https://www.inkitt.com`.</p>
             {inkittCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{inkittCookieMessage}</div>}
             {inkittCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{inkittCookieError}</div>}
+          </section>
+        );
+      case 'scribblehub':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="ScribbleHub Cookies" description="ScribbleHub is behind a Cloudflare challenge. Paste a browser session cookie (cf_clearance) and its matching User-Agent so the crawler can read pages directly." pageText={pageText} secondaryText={secondaryText} />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label htmlFor="settings-scribblehub-cookies" className={labelClassName}>Cookies — `cf_clearance=...`, a full Cookie header, or a JSON cookie array</label>
+                <textarea id="settings-scribblehub-cookies" value={scribblehubCookies} onChange={(e) => { setScribblehubCookies(e.target.value); setScribblehubCookieError(''); setScribblehubCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} placeholder={'cf_clearance=AbCd...'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-scribblehub-ua" className={labelClassName}>Browser User-Agent (run `navigator.userAgent` in the DevTools console)</label>
+                <textarea id="settings-scribblehub-ua" value={scribblehubUserAgent} onChange={(e) => { setScribblehubUserAgent(e.target.value); setScribblehubCookieError(''); setScribblehubCookieMessage(''); }} rows={2} className={`${fieldClassName} resize-y font-mono text-xs`} placeholder={'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/... Safari/537.36'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={handleSaveScribblehubCookies} disabled={savingScribblehubCookies || !scribblehubCookies.trim() || !scribblehubUserAgent.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingScribblehubCookies || !scribblehubCookies.trim() || !scribblehubUserAgent.trim() ? subtleSurface : primaryButton, color: savingScribblehubCookies || !scribblehubCookies.trim() || !scribblehubUserAgent.trim() ? tertiaryText : '#fff' }}>
+                {savingScribblehubCookies ? 'Saving...' : 'Save Cookies'}
+              </button>
+              <button type="button" onClick={handleCheckScribblehubCookies} disabled={checkingScribblehubCookies} className="rounded-lg border px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                {checkingScribblehubCookies ? 'Testing...' : 'Test Cookies'}
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                <span>Upload Cookies JSON</span>
+                <input type="file" accept="application/json" onChange={handleScribblehubJsonFileUpload} className="hidden" />
+              </label>
+            </div>
+            <p className="text-xs" style={{ color: tertiaryText }}>In Chrome at `https://www.scribblehub.com`: DevTools → Application → Cookies → copy `cf_clearance`. cf_clearance is tied to your IP + User-Agent, so the crawler must run on this machine and the User-Agent must match. It expires every ~30–60 min — re-paste when crawls start failing.</p>
+            {scribblehubCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{scribblehubCookieMessage}</div>}
+            {scribblehubCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{scribblehubCookieError}</div>}
           </section>
         );
       case 'crawler':

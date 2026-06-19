@@ -9,11 +9,13 @@ interface SupportedSitesPageProps {
 const SITE_FEATURES: Record<string, string[]> = {
   wattpad: ['Chapter-based crawling', 'Cover image extraction', 'Author information', 'Chapter metadata'],
   novelworm: ['Chapter-based crawling', 'Cover image extraction', 'Author information', 'Chapter metadata'],
+  novellunar: ['Chapter-based crawling', 'Cover image extraction', 'Author information', 'Genre tags', 'Fast (no browser needed)'],
 };
 
 const SITE_DESCRIPTIONS: Record<string, string> = {
   wattpad: 'A popular platform for original stories, fanfiction, and creative writing across genres.',
   novelworm: 'A reading platform with serialized fiction across multiple categories and themes.',
+  novellunar: 'A free English web-novel and light-novel reader with translated and original serialized fiction.',
 };
 
 export function SupportedSitesPage({ themeMode }: SupportedSitesPageProps) {

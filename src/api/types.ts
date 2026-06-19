@@ -131,6 +131,20 @@ export interface InkittCookieStatusResponse {
   tested_url?: string | null;
 }
 
+export interface ScribbleHubCookieUpdateResponse {
+  updated: boolean;
+  cookie_count: number;
+  has_cf_clearance: boolean;
+}
+
+export interface ScribbleHubCookieStatusResponse {
+  valid: boolean | null;
+  reason: string;
+  message: string;
+  cookie_count: number;
+  tested_url?: string | null;
+}
+
 export interface ProgressUpdate {
   chapters_crawled: number;
   chapters_total: number;

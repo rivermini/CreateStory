@@ -5,6 +5,8 @@ import type {
   CrawlCancelResponse,
   InkittCookieUpdateResponse,
   InkittCookieStatusResponse,
+  ScribbleHubCookieUpdateResponse,
+  ScribbleHubCookieStatusResponse,
   CrawlStatusWithLogs,
   ProgressUpdate,
   ActiveCrawl,
@@ -36,6 +38,26 @@ export async function updateInkittCookies(cookies: string): Promise<InkittCookie
 
 export async function checkInkittCookies(storyUrl?: string): Promise<InkittCookieStatusResponse> {
   return apiFetch<InkittCookieStatusResponse>('/api/crawl/inkitt-cookies/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ story_url: storyUrl }),
+    timeout: 45000,
+  });
+}
+
+export async function updateScribblehubCookies(
+  cookies: string,
+  userAgent?: string,
+): Promise<ScribbleHubCookieUpdateResponse> {
+  return apiFetch<ScribbleHubCookieUpdateResponse>('/api/crawl/scribblehub-cookies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies, user_agent: userAgent }),
+  });
+}
+
+export async function checkScribblehubCookies(storyUrl?: string): Promise<ScribbleHubCookieStatusResponse> {
+  return apiFetch<ScribbleHubCookieStatusResponse>('/api/crawl/scribblehub-cookies/status', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ story_url: storyUrl }),
