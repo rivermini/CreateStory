@@ -81,6 +81,8 @@ The server starts on **http://localhost:8002**. API docs are at **http://localho
 | `SERVICE_URLS_FastAPIServer` | `http://localhost:8000` | FastAPIServer base URL (for config reads) |
 | `CRAWLER_PROXY_URL` | unset | Optional HTTP/SOCKS proxy for all crawler egress traffic |
 | `WATTPAD_PROXY_URL` | unset | Optional Wattpad-only proxy override; kept for compatibility |
+| `FLARESOLVERR_URL` | `http://flaresolverr:8191/v1` (in Docker) | FlareSolverr endpoint used to auto-solve ScribbleHub's Cloudflare challenge. Unset it to disable auto-solving (see Supported Sites → ScribbleHub) |
+| `SCRIBBLEHUB_PROXY_URL` | unset | Optional ScribbleHub-only proxy — alternative to FlareSolverr for Docker runs (`http://host.docker.internal:8899` + `scripts/scribblehub_host_proxy.py` on the host) |
 
 ---
 
@@ -149,6 +151,36 @@ NovelCrawler/
 - Uses **httpx** with standard HTTP requests
 - Faster than Wattpad (no browser needed)
 - Extracts: title, author, description, chapter list, chapter content
+
+### ScribbleHub (scribblehub.com)
+
+ScribbleHub is behind a **Cloudflare managed challenge**. The spider runs **cookies-only** (no
+crawler-side headless browser): it reads pages with fast HTTP requests using a `cf_clearance`
+cookie. The cookie is obtained automatically — no manual steps.
+
+**How it works (self-contained, Docker-native).** A **FlareSolverr** service (added to
+`docker-compose.yml`) runs headless Chrome *inside the Docker network* and solves the Cloudflare
+challenge on demand. Because FlareSolverr shares the crawler's egress IP and Linux network
+fingerprint, the `cf_clearance` it mints can be replayed with plain `requests` from the crawler — so
+the first page is solved by FlareSolverr (~10–15 s) and the rest of the crawl is fast. Harvested
+cookies are saved to the `scribblehub_cookies` table and auto-refreshed whenever the challenge
+reappears (cf_clearance expires every ~30–60 min). Nothing to run on the host, nothing to paste.
+
+- Config: `FLARESOLVERR_URL=http://flaresolverr:8191/v1` (already set on `novel_crawler` in compose).
+- After pulling these changes: `docker compose up -d` (starts `flaresolverr` and recreates
+  `novel_crawler`). **Settings → ScribbleHub Cookies → Test Cookies** triggers a solve and confirms.
+
+**Why not just paste a browser cookie?** `cf_clearance` is bound to the *network fingerprint* of the
+machine that solved the challenge. A cookie grabbed from Chrome on a Windows host is rejected when
+replayed from inside the Linux container (different TCP/TLS fingerprint), even with the same IP and
+User-Agent. FlareSolverr sidesteps this by solving from inside the container itself.
+
+**Manual paste / host fallbacks (optional).** You can still paste a `cf_clearance` + User-Agent in
+the Settings panel (used as-is if valid). If you run NovelCrawler **directly on the host** (not
+Docker) you need neither FlareSolverr nor a proxy. If you prefer not to run FlareSolverr but the
+crawler is in Docker, the alternative is the host proxy: run `scripts/scribblehub_host_proxy.py` on
+the host and set `SCRIBBLEHUB_PROXY_URL=http://host.docker.internal:8899` (see `extra_hosts` already
+set on `novel_crawler`).
 
 ---
 

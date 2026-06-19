@@ -141,6 +141,34 @@ def _fetch_scribblehub_metadata(url: str) -> tuple[Optional[str], Optional[Novel
     return title, novel_meta
 
 
+def _fetch_novellunar_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata]]:
+    try:
+        from bs4 import BeautifulSoup
+        from spiders.novellunar import NovellunarSpider
+
+        spider = NovellunarSpider(novel=url, limit=1)
+        story_url = spider._normalize_url(url)
+        # If a chapter URL was passed, drop back to the story page for metadata.
+        if spider._chapter_number_from_url(story_url) is not None:
+            story_url = f"https://novellunar.com/novel/{spider.novel_slug}"
+        soup = BeautifulSoup(spider._fetch_html(story_url), "html.parser")
+        metadata = spider._extract_story_metadata(soup, story_url)
+    except Exception as exc:
+        logger.debug("[novellunar] Metadata fetch failed for %s: %s", url, exc)
+        return None, None
+
+    title = metadata.get("title")
+    novel_meta = NovelMetadata(
+        title=title,
+        author=metadata.get("author"),
+        authors=metadata.get("authors"),
+        cover_url=metadata.get("cover_url"),
+        description=metadata.get("description"),
+        tags=metadata.get("tags") or [],
+    )
+    return title, novel_meta
+
+
 def _fetch_inkitt_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata]]:
     try:
         import json
@@ -337,6 +365,9 @@ class SiteService:
 
         elif site_info.config_name == "jobnib":
             story_title = slug.replace("-", " ").title() if slug else None
+
+        elif site_info.config_name == "novellunar":
+            story_title, novel_meta = _fetch_novellunar_metadata(url)
 
         elif site_info.config_name == "scribblehub":
             scribblehub_slug = _scribblehub_slug_from_url(url)

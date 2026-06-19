@@ -42,6 +42,29 @@ class InkittCookieStatusResponse(BaseModel):
     tested_url: str | None = None
 
 
+class ScribbleHubCookieUpdateRequest(BaseModel):
+    cookies: str = Field(..., min_length=1, description="ScribbleHub cookies as Selenium JSON or a raw Cookie header (must include cf_clearance).")
+    user_agent: str | None = Field(default=None, description="The exact browser User-Agent that generated cf_clearance.")
+
+
+class ScribbleHubCookieUpdateResponse(BaseModel):
+    updated: bool
+    cookie_count: int
+    has_cf_clearance: bool
+
+
+class ScribbleHubCookieStatusRequest(BaseModel):
+    story_url: str | None = Field(default=None, description="Optional ScribbleHub story/chapter URL to test against.")
+
+
+class ScribbleHubCookieStatusResponse(BaseModel):
+    valid: bool | None
+    reason: str
+    message: str
+    cookie_count: int
+    tested_url: str | None = None
+
+
 @router.post("/start", response_model=CrawlStartResponse)
 async def start_crawl(request: CrawlRequest) -> CrawlStartResponse:
     """
@@ -100,6 +123,39 @@ async def check_inkitt_cookies(request: InkittCookieStatusRequest) -> InkittCook
         result.get("tested_url"),
     )
     return InkittCookieStatusResponse(**result)
+
+
+@router.post("/scribblehub-cookies", response_model=ScribbleHubCookieUpdateResponse)
+async def update_scribblehub_cookies(request: ScribbleHubCookieUpdateRequest) -> ScribbleHubCookieUpdateResponse:
+    """Update the saved ScribbleHub session cookies (cf_clearance + matching User-Agent)."""
+    from api.services.scribblehub_cookie_service import update_scribblehub_cookies as save_cookies
+
+    try:
+        result = save_cookies(request.cookies, request.user_agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    logger.info(
+        "Updated ScribbleHub cookies: %d cookie(s), cf_clearance=%s",
+        result["cookie_count"],
+        result["has_cf_clearance"],
+    )
+    return ScribbleHubCookieUpdateResponse(**result)
+
+
+@router.post("/scribblehub-cookies/status", response_model=ScribbleHubCookieStatusResponse)
+async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest) -> ScribbleHubCookieStatusResponse:
+    """Check whether saved ScribbleHub cookies clear the Cloudflare challenge."""
+    from api.services.scribblehub_cookie_service import check_scribblehub_cookies as run_check
+
+    result = run_check(request.story_url)
+    logger.info(
+        "Checked ScribbleHub cookies: valid=%s reason=%s tested_url=%s",
+        result["valid"],
+        result["reason"],
+        result.get("tested_url"),
+    )
+    return ScribbleHubCookieStatusResponse(**result)
 
 
 @router.post("/start-batch", response_model=list[CrawlStartResponse])

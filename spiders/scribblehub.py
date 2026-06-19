@@ -116,8 +116,16 @@ class ScribbleHubSpider(BaseSpider):
         if proxies:
             self._session.proxies.update(proxies)
         self._cookies_loaded = False
-        if self._env_flag("SCRIBBLEHUB_USE_COOKIES") is True:
-            self._load_saved_cookies()
+        # ScribbleHub is behind a Cloudflare managed challenge, so we always replay the
+        # user-provided session cookies (cf_clearance + matching User-Agent) saved in
+        # Settings. The headless-browser fallback is disabled — without valid cookies the
+        # crawl fails fast with a clear "refresh cookies" message.
+        self._saved_cookie_count = self._load_saved_cookies()
+        if self._env_flag("SCRIBBLEHUB_USE_COOKIES") is False:
+            # Explicit opt-out keeps the legacy browser path for power users.
+            self._cookies_only = False
+        else:
+            self._cookies_only = True
 
     async def start(self):
         start_url = self._normalize_url(self.start_urls[0])
@@ -213,18 +221,50 @@ class ScribbleHubSpider(BaseSpider):
         cached = self._html_cache.get(url)
         if cached is not None:
             return cached
+
+        challenged = False
         try:
             response = self._session.get(url, timeout=timeout)
             if response.status_code == 200 and not self._is_cloudflare_challenge(response.text):
                 self._html_cache[url] = response.text
                 return response.text
+            challenged = response.status_code in (403, 503) or self._is_cloudflare_challenge(response.text)
             self.logger.info(
-                "[scribblehub] Requests fetch returned HTTP %s/challenge for %s; retrying with browser.",
+                "[scribblehub] Requests fetch returned HTTP %s/challenge for %s.",
                 response.status_code,
                 url,
             )
         except Exception as exc:
-            self.logger.debug("[scribblehub] Requests fetch failed for %s: %s; retrying with browser.", url, exc)
+            self.logger.debug("[scribblehub] Requests fetch failed for %s: %s.", url, exc)
+
+        # Self-contained Cloudflare solve via FlareSolverr (Docker service). Mints a
+        # cf_clearance bound to the crawler's own egress/fingerprint, so it can then be
+        # replayed with fast requests for the rest of the crawl.
+        solved_html = self._solve_with_flaresolverr(url)
+        if solved_html is not None:
+            self._html_cache[url] = solved_html
+            return solved_html
+
+        # Cookies-only mode (default): no headless-browser fallback. Tell the user how to
+        # restore access rather than spinning up Chrome inside the crawler.
+        if getattr(self, "_cookies_only", True):
+            from api.services.flaresolverr_client import is_configured as _fs_configured
+
+            if _fs_configured():
+                raise CloseSpider(
+                    "[scribblehub] FlareSolverr could not solve the Cloudflare challenge for "
+                    f"{url}. Check that the flaresolverr service is healthy."
+                )
+            if self._saved_cookie_count == 0:
+                raise CloseSpider(
+                    "[scribblehub] No ScribbleHub cookies and no FlareSolverr configured. Set "
+                    "FLARESOLVERR_URL (recommended) or paste a cf_clearance cookie in Settings, then retry."
+                )
+            raise CloseSpider(
+                "[scribblehub] ScribbleHub returned a Cloudflare challenge"
+                + (" (HTTP 403/503)." if challenged else ".")
+                + " Set FLARESOLVERR_URL to auto-solve, or refresh the ScribbleHub cookies in Settings."
+            )
 
         self._clear_cloudflare_cookies()
         browser = self._get_browser()
@@ -725,6 +765,26 @@ class ScribbleHubSpider(BaseSpider):
 
     def _load_saved_cookies(self) -> int:
         self._cookies_loaded = True
+
+        # Prefer cookies saved through Settings (database); fall back to the legacy JSON file.
+        db_cookies, user_agent = self._load_cookies_from_db()
+        if user_agent:
+            self._session.headers["User-Agent"] = user_agent
+        if db_cookies:
+            for cookie in db_cookies:
+                self._session.cookies.set(
+                    cookie["name"],
+                    cookie["value"],
+                    domain=cookie.get("domain", ".scribblehub.com"),
+                    path=cookie.get("path", "/"),
+                )
+            self.logger.info(
+                "[scribblehub] Loaded %d cookie(s) from database%s.",
+                len(db_cookies),
+                " (with saved User-Agent)" if user_agent else "",
+            )
+            return len(db_cookies)
+
         cookie_file = self._cookie_file()
         if not cookie_file.exists():
             return 0
@@ -751,6 +811,65 @@ class ScribbleHubSpider(BaseSpider):
         if loaded:
             self.logger.info("[scribblehub] Loaded %d saved cookie(s) from %s", loaded, cookie_file.name)
         return loaded
+
+    def _load_cookies_from_db(self) -> tuple[list[dict[str, Any]], Optional[str]]:
+        try:
+            from api.services.scribblehub_cookie_service import load_scribblehub_cookies
+
+            return load_scribblehub_cookies()
+        except Exception as exc:
+            self.logger.debug("[scribblehub] Could not load cookies from database: %s", exc)
+            return [], None
+
+    def _solve_with_flaresolverr(self, url: str) -> str | None:
+        """Solve a Cloudflare challenge via FlareSolverr; apply + persist the cookies.
+
+        Returns the solved page HTML on success (so the caller can use it directly),
+        or None if FlareSolverr is not configured / failed / did not clear the challenge.
+        """
+        try:
+            from api.services.flaresolverr_client import is_configured, solve
+        except Exception:
+            return None
+        if not is_configured():
+            return None
+
+        self._fs_solves = getattr(self, "_fs_solves", 0)
+        if self._fs_solves >= 5:  # bound re-solves across a single crawl
+            return None
+
+        try:
+            result = solve(url)
+        except Exception as exc:
+            self.logger.warning("[scribblehub] FlareSolverr solve failed for %s: %s", url, exc)
+            return None
+        self._fs_solves += 1
+
+        html = result.get("html", "")
+        if self._is_cloudflare_challenge(html):
+            self.logger.warning("[scribblehub] FlareSolverr returned a page still showing a challenge.")
+            return None
+
+        cookies = result.get("cookies") or {}
+        user_agent = result.get("user_agent") or ""
+        if user_agent:
+            self._session.headers["User-Agent"] = user_agent
+        for name, value in cookies.items():
+            self._session.cookies.set(name, value, domain=".scribblehub.com", path="/")
+        self._saved_cookie_count = len(cookies) or self._saved_cookie_count
+
+        try:
+            from api.services.scribblehub_cookie_service import persist_solved_cookies
+
+            persist_solved_cookies(result.get("raw_cookies") or [], user_agent)
+        except Exception as exc:
+            self.logger.debug("[scribblehub] Could not persist FlareSolverr cookies: %s", exc)
+
+        self.logger.info(
+            "[scribblehub] Solved Cloudflare via FlareSolverr (%d cookie(s) harvested).",
+            len(cookies),
+        )
+        return html
 
     def _apply_browser_cookies(self, cookies: list[dict[str, Any]]) -> None:
         for cookie in cookies:

@@ -55,6 +55,11 @@ def is_scribblehub_chapter_url(url: str) -> bool:
     return bool(re.search(r"/read/\d+-[^/]+/chapter/\d+$", parsed_path))
 
 
+def is_novellunar_chapter_url(url: str) -> bool:
+    parsed_path = urllib.parse.urlparse(url).path.lower().rstrip("/")
+    return bool(re.search(r"/novel/[^/]+/chapter/\d+$", parsed_path))
+
+
 def is_chapter_url(url: str) -> bool:
     from urllib.parse import urlparse
 
@@ -75,6 +80,9 @@ def is_chapter_url(url: str) -> bool:
 
     if "scribblehub" in parsed.netloc:
         return is_scribblehub_chapter_url(url)
+
+    if "novellunar" in parsed.netloc:
+        return is_novellunar_chapter_url(url)
 
     return False
 
@@ -508,6 +516,59 @@ def _fetch_scribblehub_chapters(story_url: str, timeout: int = 75) -> tuple[list
     return entries, None, total_count or len(links), story_title
 
 
+def _fetch_novellunar_chapters(story_url: str, timeout: int = 30) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
+    """Build a chapter list for a Novellunar story.
+
+    Novellunar has no on-page table of contents — chapters are sequential
+    integers under /novel/<slug>/chapter/<N>. We read the story page for the
+    title, then binary-search the highest valid chapter (out-of-range chapters
+    return HTTP 200 but with no prose container) to report the total count.
+    """
+    try:
+        from spiders.novellunar import NovellunarSpider
+
+        spider = NovellunarSpider(novel=story_url, limit=50)
+        slug = spider.novel_slug
+        html = spider._fetch_html(spider._normalize_url(story_url), timeout=timeout)
+        soup = BeautifulSoup(html, "html.parser")
+        story_title = spider._extract_story_title(soup)
+    except Exception as exc:
+        logger.warning("[novellunar] Chapter list fetch failed: %s", exc)
+        return [], f"Novellunar chapter list failed: {exc}", None, None
+
+    def chapter_exists(number: int) -> bool:
+        try:
+            chapter_soup = BeautifulSoup(
+                spider._fetch_html(spider._chapter_url(slug, number), timeout=timeout),
+                "html.parser",
+            )
+            return len(spider._extract_chapter_content(chapter_soup).split()) >= 20
+        except Exception:
+            return False
+
+    if not chapter_exists(1):
+        return [], "No chapters found on this Novellunar story page", None, story_title
+
+    low, high, best = 1, 5000, 1
+    while low <= high:
+        mid = (low + high) // 2
+        if chapter_exists(mid):
+            best = mid
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    entries = [
+        ChapterEntry(
+            chapter_number=number,
+            title=f"Chapter {number}",
+            url=spider._chapter_url(slug, number),
+        )
+        for number in range(1, min(best, 50) + 1)
+    ]
+    return entries, None, best, story_title
+
+
 def _is_inkitt_blocked(html: str) -> bool:
     head = html[:10000]
     return (
@@ -649,6 +710,12 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
                 story_title = fetched_story_title
         elif site_info.config_name == "scribblehub":
             chapters, fetch_warning, total_chapter_count, fetched_story_title = _fetch_scribblehub_chapters(story_url)
+            if fetch_warning:
+                warning = fetch_warning
+            if fetched_story_title:
+                story_title = fetched_story_title
+        elif site_info.config_name == "novellunar":
+            chapters, fetch_warning, total_chapter_count, fetched_story_title = _fetch_novellunar_chapters(story_url)
             if fetch_warning:
                 warning = fetch_warning
             if fetched_story_title:
