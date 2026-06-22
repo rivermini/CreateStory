@@ -31,15 +31,15 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
     enableEditing: false,
   });
 
-  const [bannerNumber, setBannerNumber] = useState('1');
-  const [savedBannerNumber, setSavedBannerNumber] = useState('1');
+  const [bannerNumber, setBannerNumber] = useState<string>('');
+  const [savedBannerNumber, setSavedBannerNumber] = useState<string>('');
   const [bannerExtension, setBannerExtension] = useState<'jpg' | 'png'>('jpg');
   const [savedBannerExtension, setSavedBannerExtension] = useState<'jpg' | 'png'>('jpg');
   const [bannerEdited, setBannerEdited] = useState(false);
 
   const handleBannerNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '');
-    setBannerNumber(raw || '1');
+    setBannerNumber(raw);
     setBannerEdited(raw !== savedBannerNumber);
   };
 
@@ -52,11 +52,14 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
     setSavedBannerNumber(bannerNumber);
     setSavedBannerExtension(bannerExtension);
     setBannerEdited(false);
-    showToast(`Banner filename saved: banner${bannerNumber}.${bannerExtension}`, 'success', 2000, 'top-center');
+    const preview = bannerNumber ? `banner${bannerNumber}.${bannerExtension}` : `banner.${bannerExtension}`;
+    showToast(`Banner filename saved: ${preview}`, 'success', 2000, 'top-center');
   };
 
-  const savedBannerFilename = `banner${savedBannerNumber}.${savedBannerExtension}`;
-  const bannerFilenameBase = `banner${savedBannerNumber}`;
+  const savedBannerFilename = savedBannerNumber
+    ? `banner${savedBannerNumber}.${savedBannerExtension}`
+    : `banner.${savedBannerExtension}`;
+  const bannerFilenameBase = savedBannerNumber ? `banner${savedBannerNumber}` : 'banner';
   const isBannerEdited = bannerEdited;
   const [checkAllData, setCheckAllData] = useState<CheckAllResponse | null>(null);
   const [checkAllLoading, setCheckAllLoading] = useState(false);
@@ -176,7 +179,6 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
                   pattern="[0-9]*"
                   value={bannerNumber}
                   onChange={handleBannerNumberChange}
-                  placeholder="1"
                   className="w-16 rounded-md border px-3 py-1.5 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-sky-500"
                   style={{ 
                     background: isDark ? '#232323' : '#fff', 
