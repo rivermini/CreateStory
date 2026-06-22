@@ -1018,6 +1018,18 @@ class HistoryJobsMixin:
         else:
             self.append_job_log(job_id, "info", "No cover.jpg found — skipping cover upload")
 
+        if not existing_id:
+            banner_result = self.upload_banner_for_new_story(story_id, folder_id)
+            banner_filename = banner_result.get("filename")
+            if banner_filename:
+                self.append_job_log(job_id, "info", f"Banner image found in Drive: {banner_filename}")
+            if banner_result.get("uploaded"):
+                self.append_job_log(job_id, "info", f"Banner image uploaded: {banner_result['banner_url']}")
+            elif banner_result.get("error"):
+                self.append_job_log(job_id, "warning", f"Banner image upload failed: {banner_result['error']}")
+            else:
+                self.append_job_log(job_id, "info", "No banner.{jpg,jpeg,png} found in story folder — skipping banner upload")
+
         existing_indices = self._get_existing_chapter_indices(story_id)
         self.append_job_log(job_id, "info", f"Server has {len(existing_indices)} chapters")
         next_index = max(existing_indices) + 1 if existing_indices else 1

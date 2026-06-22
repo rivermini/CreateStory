@@ -181,6 +181,65 @@ class BannerUpdateMixin:
             return True, banner_url
         return False, "Banner upload returned no URL"
 
+    def upload_banner_for_new_story(self, story_id: str, folder_id: str) -> dict:
+        """
+        Look for `banner.jpg` / `banner.jpeg` / `banner.png` in the Drive folder and POST it to
+        main BE `/api/v1/story/{id}/upload-banner`. Used by the new-story upload flow.
+
+        Returns a dict with four keys:
+          - uploaded: bool       (True only if a banner file was found AND uploaded successfully)
+          - banner_url: str|None
+          - error: str|None      (set when the helper tried to upload but the call failed, or
+                                  the file was missing/download failure)
+          - filename: str|None   (the matched Drive filename, when one was found)
+        """
+        from api.services.drive_service._drive_api import DriveAPIMixin
+
+        try:
+            drive_service = self._build_drive_service()
+        except Exception as exc:
+            return {"uploaded": False, "banner_url": None, "error": f"Failed to authenticate with Google Drive: {exc}", "filename": None}
+
+        banner_file = None
+        for candidate in ("banner.jpg", "banner.jpeg", "banner.png"):
+            banner_file = self._find_banner1_file(drive_service, folder_id, candidate)
+            if banner_file is not None:
+                break
+
+        if banner_file is None:
+            return {"uploaded": False, "banner_url": None, "error": None, "filename": None}
+
+        filename = banner_file["name"]
+
+        try:
+            banner_bytes = DriveAPIMixin._download_cover_image_bytes(self, drive_service, banner_file["id"])
+        except Exception as exc:
+            return {
+                "uploaded": False,
+                "banner_url": None,
+                "error": f"Failed to download {filename} from Drive: {exc}",
+                "filename": filename,
+            }
+
+        try:
+            banner_url = self._upload_banner_image(
+                story_id,
+                banner_bytes,
+                filename,
+                _banner_content_type(filename),
+            )
+        except Exception as exc:
+            return {
+                "uploaded": False,
+                "banner_url": None,
+                "error": f"Failed to upload banner to main BE: {exc}",
+                "filename": filename,
+            }
+
+        if banner_url:
+            return {"uploaded": True, "banner_url": banner_url, "error": None, "filename": filename}
+        return {"uploaded": False, "banner_url": None, "error": "Banner upload returned no URL", "filename": filename}
+
     def _record_banner_update(
         self,
         story_id: Optional[str],
