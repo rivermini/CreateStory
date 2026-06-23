@@ -1,28 +1,49 @@
 """Shared utilities and models for drive sync routes."""
 
 from pydantic import BaseModel
-from typing import Optional
-
-from api.services.drive_service import _RE_SOURCE_SUFFIX
+from typing import Optional, Tuple
 
 
-def _is_valid_upload_format(folder_name: str) -> bool:
+def _is_valid_upload_format(folder_name: str) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Correct format: PREFIX_{...}_{platform} - {title}
-    where platform is one of: wp, gd, Goodnovel (case-insensitive).
-    Must contain ' - ' after the status prefix AND a valid platform token
-    between the prefix and ' - '.
+    Valid platforms: wp, gd, Goodnovel, nw, ink  (case-insensitive).
+    Returns (is_valid, raw_token, recognized_source) where:
+      - raw_token is the token found between prefix '_' and ' - ', or None
+      - recognized_source is the normalized source name if recognized, or None
     """
     dash_pos = folder_name.find(" - ")
     if dash_pos == -1:
-        return False
+        return False, None, None
 
     prefix_end = folder_name.find("_")
     if prefix_end == -1 or dash_pos <= prefix_end:
-        return False
+        return False, None, None
 
     between_prefix_and_dash = folder_name[prefix_end:dash_pos]
-    return _RE_SOURCE_SUFFIX.search(between_prefix_and_dash) is not None
+
+    # The source token is the last _segment (e.g. _max from _Something_max)
+    segments = between_prefix_and_dash.split("_")
+    last_segment = segments[-1].strip() if segments else ""
+    raw_token = last_segment if last_segment else None
+
+    # Check if the raw token is a recognized source
+    if raw_token:
+        token_lower = raw_token.lower()
+        if token_lower == "gd":
+            return True, "gd", "Goodnovel"
+        if token_lower == "nw":
+            return True, "nw", "NovelWorm"
+        if token_lower in ("wp", "wattpad"):
+            return True, "wp", "Wattpad"
+        if token_lower in ("ink", "inkitt"):
+            return True, "ink", "Inkitt"
+        if token_lower in ("goodnovel", "novelworm"):
+            return True, token_lower, token_lower.capitalize()
+        # Not recognized
+        return False, raw_token, None
+
+    return False, None, None
 
 
 class DriveChapterPreview(BaseModel):

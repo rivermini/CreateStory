@@ -112,7 +112,9 @@ async def check_uploadable() -> CheckUploadableResponse:
     validation_candidates: list[dict] = []
 
     for folder in candidate_folders:
-        folder["is_valid_format"] = _is_valid_upload_format(folder.get("name", ""))
+        is_valid, raw_token, recognized = _is_valid_upload_format(folder.get("name", ""))
+        folder["is_valid_format"] = is_valid
+        folder["source_token"] = recognized
         folder["validation_errors"] = []
         entry = DriveFolderEntry(**folder)
         title_lower = _normalize(folder.get("display_name", ""))
@@ -121,8 +123,11 @@ async def check_uploadable() -> CheckUploadableResponse:
             already_on_server.append(entry)
             continue
 
-        if not folder["is_valid_format"]:
-            folder["validation_errors"].append("WRONG FORMAT")
+        if not is_valid:
+            if raw_token:
+                folder["validation_errors"].append(f"UNRECOGNIZED SOURCE: '{raw_token}' — try _nw, _gd, _wp, or _ink")
+            else:
+                folder["validation_errors"].append("MISSING SOURCE — needs format: DONE_{status}_{source} - {title}")
             invalid.append(DriveFolderEntry(**folder))
             continue
 
