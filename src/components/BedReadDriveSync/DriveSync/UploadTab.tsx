@@ -516,10 +516,16 @@ function UploadCard({
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
+  const hasPreUploadError = folder.validation_errors.length > 0 && !isSuccess;
+  const displayErrors = hasPreUploadError ? folder.validation_errors : (result && !result.success ? [result.message] : []);
+
   return (
     <div
       className="flex items-center gap-3 rounded-xl border px-4 py-3"
-      style={{ background: mutedSurface, borderColor: panelBorder }}
+      style={{
+        background: mutedSurface,
+        borderColor: hasPreUploadError ? '#f87171' : panelBorder,
+      }}
     >
       <div className="min-w-0 flex-1">
         <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
@@ -528,11 +534,18 @@ function UploadCard({
         <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
         </p>
-        <p className="mt-1 text-xs" style={{ color: secondaryText }}>
-          Chapters: <span className="font-semibold" style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
-        </p>
-        {result && (
-          <p className="mt-0.5 truncate text-xs" style={{ color: isSuccess ? (isDark ? '#34d399' : '#059669') : '#f87171' }}>
+        {!hasPreUploadError && (
+          <p className="mt-1 text-xs" style={{ color: secondaryText }}>
+            Chapters: <span className="font-semibold" style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
+          </p>
+        )}
+        {displayErrors.map((err, i) => (
+          <p key={i} className="mt-1 truncate text-xs" style={{ color: '#f87171' }}>
+            {err}
+          </p>
+        ))}
+        {result && result.success && (
+          <p className="mt-1 truncate text-xs" style={{ color: isDark ? '#34d399' : '#059669' }}>
             {result.message}
           </p>
         )}
@@ -546,13 +559,13 @@ function UploadCard({
             <span>Done</span>
           </div>
         )}
-        {isFailed && (
+        {isFailed && !hasPreUploadError && (
           <div className="flex items-center gap-1 text-xs" style={{ color: '#f87171' }}>
             <Icon icon={appIcons.close} className="h-4 w-4" />
             <span>Failed</span>
           </div>
         )}
-        {!isUploading && !isSuccess && !isFailed && (
+        {!isUploading && !isSuccess && !hasPreUploadError && (
           <button
             onClick={onUpload}
             className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors"
@@ -596,9 +609,11 @@ function InvalidUploadCard({
         <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
         </p>
-        <p className="mt-1 text-xs" style={{ color: '#f87171' }}>
-          Chapters: <span style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
-        </p>
+        {folder.validation_errors.map((err, i) => (
+          <p key={i} className={`mt-${i === 0 ? '1' : '0.5'} truncate text-xs`} style={{ color: '#f87171' }}>
+            {err}
+          </p>
+        ))}
       </div>
       <StatusBadge prefix="ERROR" isDark={isDark} />
     </div>
