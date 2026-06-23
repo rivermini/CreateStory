@@ -896,7 +896,16 @@ class HistoryJobsMixin:
         display_name = self._extract_story_name(folder_name)
         folder = {"id": job.folder_id, "name": folder_name}
 
-        chapters_added, chapters_skipped = self._process_story_folder_with_job(drive_service, folder, job_id)
+        chapters_added, chapters_skipped, story_created, story_error = self._process_story_folder_with_job(drive_service, folder, job_id)
+
+        if not story_created:
+            self.update_job(
+                job_id,
+                status=JobStatus.ERROR,
+                finished_at=datetime.now(timezone.utc).isoformat(),
+                error=story_error or "Story creation failed",
+            )
+            return self.get_job(job_id) or job
 
         msg = f"Done. Added {chapters_added} chapter(s), skipped {chapters_skipped}."
         self.update_job(
@@ -914,8 +923,8 @@ class HistoryJobsMixin:
         drive_service: "Any",
         folder: dict,
         job_id: str,
-    ) -> tuple[int, int]:
-        """Sync a story folder and track progress via job_id. Returns (chapters_added, chapters_skipped)."""
+    ) -> tuple[int, int, bool, str]:
+        """Sync a story folder and track progress via job_id. Returns (chapters_added, chapters_skipped, story_created, error_message)."""
         from api.services.drive_service._parsers import _natural_sort_key as _ns
 
         folder_id = folder["id"]
@@ -983,8 +992,9 @@ class HistoryJobsMixin:
         if existing_id:
             self.append_job_log(job_id, "info", f"Story already on server (id={existing_id}), syncing chapters only")
             story_id = existing_id
+            story_error = ""
         else:
-            story_id = self._post_story(
+            story_id, story_error = self._post_story(
                 display_name,
                 synopsis,
                 False,
@@ -1000,7 +1010,7 @@ class HistoryJobsMixin:
 
         if not story_id:
             self.append_job_log(job_id, "error", f"Story creation failed, skipping chapters for: {folder_name}")
-            return (0, 0)
+            return (0, 0, False, story_error)
 
         cover_file = self._find_cover_image_file(drive_service, folder_id)
         if cover_file:
@@ -1076,7 +1086,7 @@ class HistoryJobsMixin:
 
             next_index = max(next_index, posting_index + 1)
 
-        return (chapters_added, chapters_skipped)
+        return (chapters_added, chapters_skipped, True, "")
 
     # -------------------------------------------------------------------------
     # sync_update_as_job — background chapter update

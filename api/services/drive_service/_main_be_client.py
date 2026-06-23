@@ -120,10 +120,10 @@ class MainBEClientMixin:
         notification_config: Optional[dict] = None,
         free_chapters_count: int = 0,
         job_id: Optional[str] = None,
-    ) -> Optional[str]:
-        """POST to main BE /api/v1/story/. Returns storyId on success."""
+    ) -> tuple[Optional[str], str]:
+        """POST to main BE /api/v1/story/. Returns (storyId, error_message)."""
         if self._config is None:
-            return None
+            return (None, "Config not set")
         url = f"{self._config.main_be_api_base_url}/api/v1/story/"
         headers = self._main_be_headers(include_content_type=True)
         payload = {
@@ -158,10 +158,11 @@ class MainBEClientMixin:
                     if data.get("success"):
                         story_id = data.get("data", {}).get("id")
                         self._append_log("info", f"Story created: {title} (id={story_id})", title)
-                        return story_id
+                        return (story_id, "")
                     else:
                         err_msg = data.get("message") or "unknown error"
                         self._append_log("error", f"Story creation failed: {err_msg}", title, job_id)
+                        return (None, err_msg)
                 elif resp.status_code == 400:
                     resp_data = resp.json()
                     msg = resp_data.get("message", "")
@@ -173,16 +174,22 @@ class MainBEClientMixin:
                             existing_id = self._find_story_by_title(title)
                         if existing_id:
                             self._append_log("info", f"Story already exists: {title} (id={existing_id}), syncing chapters", title)
-                            return existing_id
+                            return (existing_id, "")
                         else:
                             self._append_log("error", f"Story '{title}' reported as duplicate but not found", title)
+                            return (None, f"Story reported as duplicate but not found on server")
                     else:
+                        err_msg = f"Story POST failed: {msg}"
                         self._append_log("error", f"Story POST failed {resp.status_code}: {resp.text[:200]}", title, job_id)
+                        return (None, msg)
                 else:
+                    err_msg = f"Story POST failed with status {resp.status_code}"
                     self._append_log("error", f"Story POST failed {resp.status_code}: {resp.text[:200]}", title, job_id)
+                    return (None, err_msg)
         except Exception as exc:
+            err_msg = f"Story POST exception: {exc}"
             self._append_log("error", f"Story POST exception: {exc}", title, job_id)
-        return None
+            return (None, err_msg)
 
     def _find_story_by_title(self, title: str) -> Optional[str]:
         """Look up a story by title via the main BE list API."""
