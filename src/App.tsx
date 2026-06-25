@@ -6,7 +6,15 @@ import { Sidebar } from './components/Shared/Sidebar';
 import { MobileSidebar } from './components/Shared/Mobile/MobileSidebar';
 import { ToastContainer } from './components/Shared/Toast';
 import { ErrorBoundary } from './components/Shared/ErrorBoundary';
-import { clearAuth, getCurrentUser, getStoredAuthUser, logout, type AuthUser } from './api';
+import {
+  AUTH_SESSION_EXPIRED_EVENT,
+  AUTH_USER_KEY,
+  clearAuth,
+  getCurrentUser,
+  getStoredAuthUser,
+  logout,
+  type AuthUser,
+} from './api';
 import { Icon, appIcons } from './components/Shared/Icon';
 import { type ThemeMode } from './types/theme';
 
@@ -83,6 +91,22 @@ function App() {
       });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => setAuthUser(null);
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === AUTH_USER_KEY && event.newValue === null) {
+        setAuthUser(null);
+      }
+    };
+
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 

@@ -7,6 +7,7 @@ export const FIXED_JSON_PREFIX = 'db://external_credentials/';
 export const ACCESS_TOKEN_KEY = 'create_story_access_token';
 export const REFRESH_TOKEN_KEY = 'create_story_refresh_token';
 export const AUTH_USER_KEY = 'create_story_auth_user';
+export const AUTH_SESSION_EXPIRED_EVENT = 'create-story:auth-session-expired';
 
 type FetchOptions = RequestInit & { timeout?: number };
 
@@ -44,6 +45,11 @@ export function clearAuth() {
   localStorage.removeItem(AUTH_USER_KEY);
 }
 
+export function expireAuthSession() {
+  clearAuth();
+  window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
+}
+
 function authHeaders(existing?: HeadersInit): Headers {
   const headers = new Headers(existing);
   const token = getStoredAccessToken();
@@ -63,14 +69,12 @@ async function refreshAccessToken(): Promise<boolean> {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     if (!res.ok) {
-      clearAuth();
       return false;
     }
     const tokens = await res.json() as import('./types').AuthTokensResponse;
     storeAuth(tokens);
     return true;
   } catch {
-    clearAuth();
     return false;
   }
 }
@@ -87,12 +91,17 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}, allo
   const { timeout = 10000, signal, ...fetchOptions } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
+  const hadAuthSession = Boolean(getStoredAccessToken() || getStoredRefreshToken());
 
   try {
     let res = await requestWithAuth(path, fetchOptions, signal ?? controller.signal);
 
     if (res.status === 401 && allowRetry && await refreshAccessToken()) {
       res = await requestWithAuth(path, fetchOptions, signal ?? controller.signal);
+    }
+
+    if (res.status === 401 && hadAuthSession) {
+      expireAuthSession();
     }
 
     if (!res.ok) {
@@ -120,11 +129,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}, allo
  * Uses fetch + Blob to avoid exposing the token in the URL.
  */
 export async function downloadWithAuth(url: string, filename: string): Promise<void> {
-  const token = getStoredAccessToken();
-  if (!token) throw new Error('Not authenticated');
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await fetchWithAuth(url);
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -142,6 +147,27 @@ export async function downloadWithAuth(url: string, filename: string): Promise<v
   a.click();
   a.remove();
   URL.revokeObjectURL(objectUrl);
+}
+
+export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  const hadAuthSession = Boolean(getStoredAccessToken() || getStoredRefreshToken());
+  if (!hadAuthSession) throw new Error('Not authenticated');
+
+  const request = () => fetch(url, {
+    ...options,
+    headers: authHeaders(options.headers),
+  });
+
+  let res = await request();
+  if (res.status === 401 && await refreshAccessToken()) {
+    res = await request();
+  }
+
+  if (res.status === 401) {
+    expireAuthSession();
+  }
+
+  return res;
 }
 
 /** Format a raw number for display: 21369584 -> "21.4M", 511542 -> "511.5K", 59 -> "59" */

@@ -18,7 +18,7 @@ import {
   type TTSVoice,
 } from '../../api/BedReadVoices';
 import { getDriveSyncConfig } from '../../api/BedReadDriveSync';
-import { downloadWithAuth, getStoredAccessToken } from '../../api/client';
+import { downloadWithAuth, fetchWithAuth } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 
@@ -422,10 +422,7 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
     const url = getChapterAudioUrl(batchId, chapterNumber);
     void (async () => {
       try {
-        const token = getStoredAccessToken();
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const res = await fetch(url, { headers });
+        const res = await fetchWithAuth(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
         const objectUrl = URL.createObjectURL(blob);
