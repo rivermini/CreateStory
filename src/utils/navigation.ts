@@ -34,6 +34,7 @@ const NAV_ITEMS_BEDREADS: NavItem[] = [
     { to: '/drive-sync', label: 'Drive Sync', iconKey: '/drive-sync' },
     { to: '/drive-sync/cover-update', label: 'Cover Update', iconKey: '/drive-sync/cover-update' },
     { to: '/drive-sync/banner-update', label: 'Banner Update', iconKey: '/drive-sync/banner-update' },
+    { to: '/drive-sync/intro-update', label: 'Intro Update', iconKey: '/drive-sync/intro-update' },
     { to: '/drive-sync/metadata-update', label: 'Metadata Update', iconKey: '/drive-sync/metadata-update' },
     { to: '/drive-sync/content-update', label: 'Content Update', iconKey: '/drive-sync/content-update' },
     { to: '/drive-sync/title-update', label: 'Title Update', iconKey: '/drive-sync/title-update' },

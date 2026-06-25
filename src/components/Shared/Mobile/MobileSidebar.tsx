@@ -25,6 +25,7 @@ const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/drive-sync/content-update': 'contentUpdate',
     '/drive-sync/cover-update': 'image',
     '/drive-sync/banner-update': 'flag',
+    '/drive-sync/intro-update': 'flag',
     '/drive-sync/metadata-update': 'info',
     '/drive-sync/title-update': 'edit',
     '/auto-audio': 'autoAudio',

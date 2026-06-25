@@ -705,6 +705,37 @@ export interface CoverUpdateUploadResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Drive Sync — Intro Update
+// ---------------------------------------------------------------------------
+
+export interface IntroUpdateEntry {
+  story_id: string | null;
+  story_title: string;
+  folder_id: string;
+  folder_name: string;
+  intro_file_name: string | null;
+  status: string;
+  last_updated: string | null;
+}
+
+export interface CheckAllIntroResponse {
+  can_update: IntroUpdateEntry[];
+  updated: IntroUpdateEntry[];
+  no_intro1_file: IntroUpdateEntry[];
+  no_server_match: IntroUpdateEntry[];
+}
+
+export interface CheckUpdatedIntroResponse {
+  entries: IntroUpdateEntry[];
+}
+
+export interface IntroUpdateUploadResponse {
+  success: boolean;
+  message: string;
+  intro_url?: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Drive Sync — Metadata Update
 // ---------------------------------------------------------------------------
 
