@@ -99,6 +99,7 @@ from api.services.drive_service._main_be_client import MainBEClientMixin
 from api.services.drive_service._history_jobs import HistoryJobsMixin
 from api.services.drive_service._cover_update import CoverUpdateMixin
 from api.services.drive_service._banner_update import BannerUpdateMixin
+from api.services.drive_service._intro_update import IntroUpdateMixin
 from api.services.drive_service._metadata_update import MetadataUpdateMixin
 from api.services.drive_service._title_update import TitleUpdateMixin
 
@@ -111,6 +112,7 @@ class DriveSyncService(
     HistoryJobsMixin,
     CoverUpdateMixin,
     BannerUpdateMixin,
+    IntroUpdateMixin,
     MetadataUpdateMixin,
     TitleUpdateMixin,
 ):

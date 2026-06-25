@@ -12,6 +12,7 @@ from api.routes.drive_sync import (
     cover_update,
     metadata_update,
     banner_update,
+    intro_update,
     title_update,
 )
 
@@ -24,5 +25,6 @@ router.include_router(jobs.router)
 router.include_router(dashboard.router)
 router.include_router(cover_update.router)
 router.include_router(banner_update.router)
+router.include_router(intro_update.router)
 router.include_router(metadata_update.router)
 router.include_router(title_update.router)

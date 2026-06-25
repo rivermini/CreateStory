@@ -1112,6 +1112,78 @@ class DriveAPIMixin:
         logger.info(f"[BANNER_SEARCH] Total: searched {len(folder_ids)} folders, found {total_found}")
         return result
 
+    def _batch_find_intro1_files(
+        self, drive_service: Any, folder_ids: list[str], intro_filename: str = "intro1.jpg"
+    ) -> dict[str, Optional[dict]]:
+        """
+        Batch-search for the configured intro file across Drive folders.
+        When intro_filename has no extension, both .jpg and .png are tried.
+        Returns the first exact (case-sensitive) match per folder.
+        """
+        from api.services.drive_service._intro_update import _intro_search_variants
+
+        result: dict[str, Optional[dict]] = {fid: None for fid in folder_ids}
+        if not folder_ids:
+            return result
+
+        candidates = _intro_search_variants(intro_filename)
+        if not candidates:
+            return result
+
+        for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
+            chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
+            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            for candidate in candidates:
+                query = (
+                    f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
+                    f"and trashed=false and name='{candidate}'"
+                )
+                logger.info(f"[INTRO_SEARCH] Query: {query}")
+
+                page_token = None
+                chunk_found_count = 0
+
+                while True:
+                    _pt = page_token
+
+                    def _call() -> dict:
+                        return drive_service.files().list(
+                            q=query,
+                            fields="files(id, name, parents),nextPageToken",
+                            pageSize=_CHECK_BATCH_PAGE_SIZE,
+                            pageToken=_pt,
+                        ).execute()
+
+                    try:
+                        response = self._retry_drive_call(_call)
+                    except (ssl.SSLError, TimeoutError):
+                        break
+
+                    files = response.get("files", [])
+                    if files:
+                        logger.info(f"[INTRO_SEARCH] Found {len(files)} files: {[f.get('name') for f in files]}")
+
+                    for file_info in files:
+                        if file_info.get("name") == candidate:
+                            for parent in file_info.get("parents", []):
+                                if parent in result and result[parent] is None:
+                                    result[parent] = file_info
+                                    chunk_found_count += 1
+                                    break
+
+                    page_token = response.get("nextPageToken")
+                    if not page_token:
+                        break
+
+                logger.info(
+                    f"[INTRO_SEARCH] Chunk {chunk_start // _CHECK_BATCH_CHUNK_SIZE + 1} "
+                    f"({candidate}): found {chunk_found_count} files"
+                )
+
+        total_found = sum(1 for v in result.values() if v is not None)
+        logger.info(f"[INTRO_SEARCH] Total: searched {len(folder_ids)} folders, found {total_found}")
+        return result
+
 
 logger = logging.getLogger(__name__)
 _SYSTEM_FOLDERS = {".tmp", ".workdir", ".cowork-trash"}

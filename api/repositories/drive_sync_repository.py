@@ -18,6 +18,7 @@ from api.models.db_models import (
     DriveSyncJobRecord,
     DriveSyncStatusRecord,
     ExternalCredential,
+    IntroUpdateHistoryRecord,
     utcnow,
 )
 
@@ -112,6 +113,41 @@ def _banner_history_entry_to_row_data(entry: dict) -> dict:
         "error": entry.get("error"),
         "finished_at": entry.get("finished_at"),
         "banner_file_name": entry.get("banner_file_name"),
+        "last_updated": entry.get("last_updated") or now,
+        "created_at": entry.get("created_at") or now,
+        "updated_at": now,
+    }
+
+
+def _normalize_intro_status(status: str | None) -> str:
+    if status in {"no_intro_file", "no_intro1_file"}:
+        return "no_intro1_file"
+    return status or "updated"
+
+
+def _intro_history_entry_to_row_data(entry: dict) -> dict:
+    now = utcnow()
+    status = _normalize_intro_status(entry.get("status"))
+    display_name = (
+        entry.get("display_name")
+        or entry.get("story_title")
+        or entry.get("folder_name")
+        or ""
+    )
+    story_title = entry.get("story_title") or display_name
+
+    return {
+        "id": entry["id"],
+        "folder_id": entry.get("folder_id") or "",
+        "folder_name": entry.get("folder_name") or display_name,
+        "display_name": display_name,
+        "story_id": entry.get("story_id") or "",
+        "story_title": story_title,
+        "status": status,
+        "intro_url": entry.get("intro_url"),
+        "error": entry.get("error"),
+        "finished_at": entry.get("finished_at"),
+        "intro_file_name": entry.get("intro_file_name"),
         "last_updated": entry.get("last_updated") or now,
         "created_at": entry.get("created_at") or now,
         "updated_at": now,
@@ -468,6 +504,73 @@ class DriveSyncRepository:
             "banner_file_name": row.banner_file_name,
             "status": _normalize_banner_status(row.status),
             "banner_url": row.banner_url,
+            "error": row.error,
+            "finished_at": row.finished_at,
+            "last_updated": last_updated.isoformat() if last_updated else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    def save_intro_update_history(self, entry: dict) -> None:
+        data = _intro_history_entry_to_row_data(entry)
+        update_data = {k: v for k, v in data.items() if k not in {"id", "created_at"}}
+        with self.session_factory() as db:
+            db.execute(
+                insert(IntroUpdateHistoryRecord).values(data).on_conflict_do_update(
+                    index_elements=["id"],
+                    set_=update_data,
+                )
+            )
+            db.commit()
+
+    def load_intro_update_histories(self) -> list[dict]:
+        with self.session_factory() as db:
+            rows = db.scalars(
+                select(IntroUpdateHistoryRecord).order_by(IntroUpdateHistoryRecord.last_updated.desc())
+            ).all()
+            return [self._intro_history_row_to_dict(row) for row in rows]
+
+    def delete_intro_update_history(self, history_id: str) -> None:
+        with self.session_factory() as db:
+            db.execute(
+                delete(IntroUpdateHistoryRecord).where(IntroUpdateHistoryRecord.id == history_id)
+            )
+            db.commit()
+
+    def get_intro_update_by_folder_id(self, folder_id: str) -> dict | None:
+        with self.session_factory() as db:
+            row = db.scalar(
+                select(IntroUpdateHistoryRecord)
+                .where(IntroUpdateHistoryRecord.folder_id == folder_id)
+                .order_by(IntroUpdateHistoryRecord.last_updated.desc())
+                .limit(1)
+            )
+            return self._intro_history_row_to_dict(row) if row is not None else None
+
+    def get_intro_update_by_story_id(self, story_id: str) -> dict | None:
+        with self.session_factory() as db:
+            row = db.scalar(
+                select(IntroUpdateHistoryRecord)
+                .where(IntroUpdateHistoryRecord.story_id == story_id)
+                .order_by(IntroUpdateHistoryRecord.last_updated.desc())
+                .limit(1)
+            )
+            return self._intro_history_row_to_dict(row) if row is not None else None
+
+    @staticmethod
+    def _intro_history_row_to_dict(row: IntroUpdateHistoryRecord) -> dict:
+        last_updated = row.last_updated or row.updated_at or row.created_at
+        display_name = row.display_name or row.story_title or row.folder_name
+        return {
+            "id": row.id,
+            "story_id": row.story_id or None,
+            "story_title": row.story_title or display_name,
+            "folder_id": row.folder_id,
+            "folder_name": row.folder_name,
+            "display_name": display_name,
+            "intro_file_name": row.intro_file_name,
+            "status": _normalize_intro_status(row.status),
+            "intro_url": row.intro_url,
             "error": row.error,
             "finished_at": row.finished_at,
             "last_updated": last_updated.isoformat() if last_updated else None,

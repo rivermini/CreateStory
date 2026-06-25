@@ -1497,6 +1497,33 @@ class MainBEClientMixin:
             self._append_log("error", f"Banner upload exception: {exc}")
         return None
 
+    def _upload_intro_image(self, story_id: str, image_bytes: bytes, filename: str = "intro1.jpg", content_type: str = "image/jpeg") -> Optional[str]:
+        """POST intro image to main BE /api/v1/admin-recommended-stories/{id}/upload-intro. Returns the intro URL on success."""
+        if self._config is None:
+            return None
+        url = f"{self._config.main_be_api_base_url}/api/v1/admin-recommended-stories/{story_id}/upload-intro"
+        headers = self._main_be_headers()
+        try:
+            with self._main_be_client(timeout=60.0) as client:
+                resp = client.post(
+                    url,
+                    files={"image": (filename, image_bytes, content_type)},
+                    headers=headers,
+                )
+                if resp.status_code in (200, 201):
+                    data = resp.json()
+                    intro_url = data.get("data", {}).get("introImageUrl")
+                    if intro_url:
+                        self._append_log("info", f"Intro image uploaded: {intro_url}")
+                        return intro_url
+                    else:
+                        self._append_log("warning", "Intro upload returned success but no introImageUrl in response")
+                else:
+                    self._append_log("error", f"Intro upload failed {resp.status_code}: {resp.text[:200]}")
+        except Exception as exc:
+            self._append_log("error", f"Intro upload exception: {exc}")
+        return None
+
     def get_stories_needing_update(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> dict:
         """
         Fetch stories needing update from the main BE dashboard API.

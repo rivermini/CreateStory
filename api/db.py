@@ -49,6 +49,7 @@ def init_db() -> None:
     _add_version_column_if_missing()
     _add_cover_update_histories_columns_if_missing()
     _add_banner_update_histories_table_if_missing()
+    _add_intro_update_histories_table_if_missing()
 
 
 def _add_version_column_if_missing() -> None:
@@ -210,4 +211,46 @@ def _add_banner_update_histories_table_if_missing() -> None:
             conn.execute(text("CREATE INDEX ix_banner_update_histories_status ON banner_update_histories (status)"))
             conn.execute(text("CREATE INDEX ix_banner_update_histories_display_name ON banner_update_histories (display_name)"))
             conn.execute(text("CREATE INDEX ix_banner_update_histories_finished_at ON banner_update_histories (finished_at)"))
+            conn.commit()
+
+
+def _add_intro_update_histories_table_if_missing() -> None:
+    """Create intro_update_histories table on startup if it doesn't exist.
+
+    This is a safe, idempotent migration run on every startup.  Intro history is
+    kept in a separate table for intro_url / intro_file_name columns.
+    """
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_name='intro_update_histories'"
+            )
+        )
+        if result.fetchone() is None:
+            conn.execute(text("""
+                CREATE TABLE intro_update_histories (
+                    id VARCHAR(64) PRIMARY KEY,
+                    folder_id VARCHAR NOT NULL,
+                    folder_name VARCHAR NOT NULL,
+                    display_name VARCHAR NOT NULL,
+                    story_id VARCHAR NOT NULL,
+                    story_title VARCHAR NOT NULL DEFAULT '',
+                    status VARCHAR NOT NULL,
+                    intro_url VARCHAR,
+                    error VARCHAR,
+                    finished_at VARCHAR(64),
+                    intro_file_name VARCHAR,
+                    last_updated TIMESTAMP WITH TIME ZONE NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+                )
+            """))
+            conn.execute(text("CREATE INDEX ix_intro_update_histories_story_id ON intro_update_histories (story_id)"))
+            conn.execute(text("CREATE INDEX ix_intro_update_histories_folder_id ON intro_update_histories (folder_id)"))
+            conn.execute(text("CREATE INDEX ix_intro_update_histories_status ON intro_update_histories (status)"))
+            conn.execute(text("CREATE INDEX ix_intro_update_histories_display_name ON intro_update_histories (display_name)"))
+            conn.execute(text("CREATE INDEX ix_intro_update_histories_finished_at ON intro_update_histories (finished_at)"))
             conn.commit()
