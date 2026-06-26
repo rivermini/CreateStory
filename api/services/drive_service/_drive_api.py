@@ -56,7 +56,6 @@ class DriveAPIMixin:
         super().__init__()
         self._folder_cache: dict = {}
         self._server_cache: Optional[tuple[float, list[dict]]] = None
-        self._recommended_cache: Optional[tuple[float, list[dict]]] = None
         self._tls = threading.local()
         self._build_lock = threading.Lock()
         # TTL caches for title-update scans
@@ -149,24 +148,10 @@ class DriveAPIMixin:
         """Store server stories in cache."""
         self._server_cache = (time.time(), stories)
 
-    def _get_cached_recommended_stories(self, ttl: float = 30.0) -> Optional[list[dict]]:
-        """Return cached admin recommended stories if still fresh, else None."""
-        if self._recommended_cache is None:
-            return None
-        ts, data = self._recommended_cache
-        if time.time() - ts < ttl:
-            return data
-        return None
-
-    def _set_cached_recommended_stories(self, stories: list[dict]) -> None:
-        """Store admin recommended stories in cache."""
-        self._recommended_cache = (time.time(), stories)
-
     def _invalidate_caches(self) -> None:
         """Clear all caches (call after any write operation)."""
         self._folder_cache.clear()
         self._server_cache = None
-        self._recommended_cache = None
 
     def get_extended_chapter_breakdown(self, folder_id: str) -> dict:
         """
