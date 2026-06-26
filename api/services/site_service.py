@@ -360,6 +360,16 @@ class SiteService:
             except Exception:
                 story_title = None
 
+        elif site_info.config_name == "goodnovel":
+            try:
+                from api.services.goodnovel_api import GoodNovelApiClient
+
+                story_title, metadata = GoodNovelApiClient(timeout=20).resolve_metadata(url)
+                if metadata:
+                    novel_meta = NovelMetadata(**metadata)
+            except Exception:
+                story_title = None
+
         elif site_info.config_name == "inkitt":
             story_title, novel_meta = _fetch_inkitt_metadata(url)
 

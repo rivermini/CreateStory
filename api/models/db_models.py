@@ -72,6 +72,31 @@ class InkittCookie(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
+class GoodNovelCookie(Base):
+    """Stores user-provided GoodNovel session cookies (chiefly the ``TOKEN`` login cookie).
+
+    GoodNovel authenticates the web reader with cookies scoped to ``.goodnovel.com``,
+    which are also sent to the ``api-akm.goodnovel.com`` API host. Replaying a logged-in
+    account's cookies lets the crawler read every chapter that account can access for free
+    (universally-free chapters plus any the account has unlocked with bonus/earned coins).
+
+    Only the most recently saved set of cookies is considered valid at any time.
+    Expired cookies are skipped at read time.
+    """
+
+    __tablename__ = "goodnovel_cookies"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    domain: Mapped[str] = mapped_column(String(256), nullable=False, default=".goodnovel.com")
+    path: Mapped[str] = mapped_column(String(64), nullable=False, default="/")
+    secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    expires_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
 class ScribbleHubCookie(Base):
     """Stores user-provided ScribbleHub session cookies (chiefly cf_clearance) in the database.
 

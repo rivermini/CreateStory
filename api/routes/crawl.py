@@ -69,6 +69,33 @@ class ScribbleHubCookieStatusResponse(BaseModel):
     tested_url: str | None = None
 
 
+class GoodNovelCookieUpdateRequest(BaseModel):
+    cookies: str = Field(..., min_length=1, description="GoodNovel cookies as JSON (Selenium/EditThisCookie export) or a raw Cookie header. Include the TOKEN login cookie.")
+    user_agent: str | None = Field(default=None, description="Optional User-Agent matching the cookies.")
+
+
+class GoodNovelCookieUpdateResponse(BaseModel):
+    updated: bool
+    cookie_count: int
+    has_token: bool
+
+
+class GoodNovelCookieStatusRequest(BaseModel):
+    story_url: str | None = Field(default=None, description="Optional GoodNovel book URL to verify how many chapters the cookies unlock.")
+
+
+class GoodNovelCookieStatusResponse(BaseModel):
+    valid: bool | None
+    reason: str
+    message: str
+    cookie_count: int
+    tested_url: str | None = None
+    readable: int | None = None
+    readable_without_login: int | None = None
+    total: int | None = None
+    extra_unlocked: int | None = None
+
+
 @router.post("/start", response_model=CrawlStartResponse)
 async def start_crawl(request: CrawlRequest, http_request: Request) -> CrawlStartResponse:
     """
@@ -169,6 +196,37 @@ async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest, htt
     )
     return ScribbleHubCookieStatusResponse(**result)
 
+
+
+@router.post("/goodnovel-cookies", response_model=GoodNovelCookieUpdateResponse)
+async def update_goodnovel_cookies(request: GoodNovelCookieUpdateRequest, http_request: Request) -> GoodNovelCookieUpdateResponse:
+    """Update the saved GoodNovel session cookies used by the GoodNovel spider."""
+    require_operator_identity(http_request)
+    from api.services.goodnovel_cookie_service import update_goodnovel_cookies as save_cookies
+
+    try:
+        result = save_cookies(request.cookies, request.user_agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    logger.info("Updated GoodNovel cookies: %d cookie(s), token=%s", result["cookie_count"], result["has_token"])
+    return GoodNovelCookieUpdateResponse(**result)
+
+
+@router.post("/goodnovel-cookies/status", response_model=GoodNovelCookieStatusResponse)
+async def check_goodnovel_cookies(request: GoodNovelCookieStatusRequest, http_request: Request) -> GoodNovelCookieStatusResponse:
+    """Check saved GoodNovel cookies and report how many chapters they unlock."""
+    require_operator_identity(http_request)
+    from api.services.goodnovel_cookie_service import check_goodnovel_cookies as run_check
+
+    result = run_check(request.story_url)
+    logger.info(
+        "Checked GoodNovel cookies: valid=%s reason=%s tested_url=%s",
+        result["valid"],
+        result["reason"],
+        result.get("tested_url"),
+    )
+    return GoodNovelCookieStatusResponse(**result)
 
 
 @router.post("/start-batch", response_model=list[CrawlStartResponse])

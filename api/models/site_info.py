@@ -9,6 +9,11 @@ class ChapterEntry(BaseModel):
     chapter_number: int = Field(..., description="1-based chapter index")
     title: str = Field(..., description="Chapter title (may be empty string)")
     url: str = Field(..., description="Full URL to the chapter page")
+    locked: Optional[bool] = Field(
+        default=None,
+        description="True if the chapter is paywalled and not readable for free. "
+        "None when the site exposes no free/paid distinction.",
+    )
 
 
 class NovelMetadata(BaseModel):
@@ -64,6 +69,9 @@ class ChapterListResponse(BaseModel):
     total_chapter_count: Optional[int] = Field(default=None, description="Total chapter count from site metadata (may arrive later for NovelWorm)")
     chapters: list[ChapterEntry] = Field(default_factory=list, description="List of chapter entries (max 50)")
     warning: Optional[str] = Field(default=None, description="Non-fatal warning")
+    free_chapter_count: Optional[int] = Field(default=None, description="Chapters readable for free across the whole book (sites with a paywall)")
+    paid_chapter_count: Optional[int] = Field(default=None, description="Paywalled/locked chapters across the whole book (sites with a paywall)")
+    authenticated: Optional[bool] = Field(default=None, description="Whether saved login cookies were applied when computing free/paid counts")
 
 
 class BinarySearchTotalResponse(BaseModel):

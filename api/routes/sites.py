@@ -60,6 +60,12 @@ def is_novellunar_chapter_url(url: str) -> bool:
     return bool(re.search(r"/novel/[^/]+/chapter/\d+$", parsed_path))
 
 
+def is_goodnovel_chapter_url(url: str) -> bool:
+    # Book: /book/<slug>_<bookId>   Chapter: /book/<slug>_<bookId>/Chapter-NNNN_<chapterId>
+    parsed_path = urllib.parse.urlparse(url).path.rstrip("/")
+    return bool(re.search(r"/book/[^/]+_\d+/[^/]+_\d+$", parsed_path, re.IGNORECASE))
+
+
 def is_chapter_url(url: str) -> bool:
     from urllib.parse import urlparse
 
@@ -83,6 +89,9 @@ def is_chapter_url(url: str) -> bool:
 
     if "novellunar" in parsed.netloc:
         return is_novellunar_chapter_url(url)
+
+    if "goodnovel" in parsed.netloc:
+        return is_goodnovel_chapter_url(url)
 
     return False
 
@@ -595,6 +604,35 @@ def _fetch_novellunar_chapters(story_url: str, timeout: int = 30) -> tuple[list[
     return entries, None, best, story_title
 
 
+def _fetch_goodnovel_chapters(story_url: str, timeout: int = 30) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str], dict]:
+    try:
+        from api.services.goodnovel_api import GoodNovelApiClient
+
+        client = GoodNovelApiClient(timeout=timeout)
+        story = client.resolve_story(story_url)
+    except Exception as exc:
+        logger.warning("[goodnovel] API chapter list failed for story page: %s", exc)
+        return [], f"GoodNovel API request failed: {exc}", None, None, {}
+
+    entries = [
+        ChapterEntry(
+            chapter_number=ref.chapter_number,
+            title=ref.title,
+            url=ref.url,
+            locked=ref.locked,
+        )
+        for ref in story.chapters[:50]
+    ]
+    free_count = sum(1 for ref in story.chapters if not ref.locked)
+    paid_count = sum(1 for ref in story.chapters if ref.locked)
+    counts = {
+        "free_chapter_count": free_count,
+        "paid_chapter_count": paid_count,
+        "authenticated": client.authenticated,
+    }
+    return entries, None, len(story.chapters), story.title, counts
+
+
 def _is_inkitt_blocked(html: str) -> bool:
     head = html[:10000]
     return (
@@ -710,6 +748,7 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
     chapters: list[ChapterEntry] = []
     warning: Optional[str] = None
     total_chapter_count: Optional[int] = None
+    extra_counts: dict = {}
 
     try:
         if site_info.config_name == "wattpad":
@@ -746,6 +785,12 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
                 warning = fetch_warning
             if fetched_story_title:
                 story_title = fetched_story_title
+        elif site_info.config_name == "goodnovel":
+            chapters, fetch_warning, total_chapter_count, fetched_story_title, extra_counts = _fetch_goodnovel_chapters(story_url)
+            if fetch_warning:
+                warning = fetch_warning
+            if fetched_story_title:
+                story_title = fetched_story_title
         else:
             warning = f"Chapter listing is not supported for '{site_info.site_name}'"
     except Exception as exc:
@@ -764,6 +809,9 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
         total_chapter_count=total_chapter_count,
         chapters=chapters,
         warning=warning if not chapters else None,
+        free_chapter_count=extra_counts.get("free_chapter_count"),
+        paid_chapter_count=extra_counts.get("paid_chapter_count"),
+        authenticated=extra_counts.get("authenticated"),
     )
 
 
