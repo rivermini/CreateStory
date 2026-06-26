@@ -8,8 +8,17 @@ export const ACCESS_TOKEN_KEY = 'create_story_access_token';
 export const REFRESH_TOKEN_KEY = 'create_story_refresh_token';
 export const AUTH_USER_KEY = 'create_story_auth_user';
 export const AUTH_SESSION_EXPIRED_EVENT = 'create-story:auth-session-expired';
+const AUTH_CHANNEL_NAME = 'create-story-auth';
+const AUTH_REFRESH_LOCK = 'create-story-auth-refresh';
 
 type FetchOptions = RequestInit & { timeout?: number };
+type AuthBroadcastMessage = { type: 'tokens-replaced' } | { type: 'logout' };
+
+let refreshPromise: Promise<boolean> | null = null;
+let sessionExpiredEmitted = false;
+const authChannel = typeof BroadcastChannel === 'undefined'
+  ? null
+  : new BroadcastChannel(AUTH_CHANNEL_NAME);
 
 export { BASE_URL };
 
@@ -35,20 +44,41 @@ function storeAuth(tokens: import('./types').AuthTokensResponse) {
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
   localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(tokens.user));
+  sessionExpiredEmitted = false;
+  authChannel?.postMessage({ type: 'tokens-replaced' } satisfies AuthBroadcastMessage);
 }
 
 export { storeAuth };
 
-export function clearAuth() {
+export function clearAuth(broadcast = true) {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
+  if (broadcast) {
+    authChannel?.postMessage({ type: 'logout' } satisfies AuthBroadcastMessage);
+  }
 }
 
 export function expireAuthSession() {
+  if (sessionExpiredEmitted) return;
+  sessionExpiredEmitted = true;
   clearAuth();
   window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
 }
+
+authChannel?.addEventListener('message', (event: MessageEvent<AuthBroadcastMessage>) => {
+  if (event.data?.type === 'tokens-replaced') {
+    sessionExpiredEmitted = false;
+    return;
+  }
+  if (event.data?.type === 'logout') {
+    clearAuth(false);
+    if (!sessionExpiredEmitted) {
+      sessionExpiredEmitted = true;
+      window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
+    }
+  }
+});
 
 function authHeaders(existing?: HeadersInit): Headers {
   const headers = new Headers(existing);
@@ -59,9 +89,7 @@ function authHeaders(existing?: HeadersInit): Headers {
   return headers;
 }
 
-async function refreshAccessToken(): Promise<boolean> {
-  const refreshToken = getStoredRefreshToken();
-  if (!refreshToken) return false;
+async function executeRefresh(refreshToken: string): Promise<boolean> {
   try {
     const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
       method: 'POST',
@@ -79,6 +107,39 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+async function refreshAccessToken(failedAccessToken: string | null): Promise<boolean> {
+  if (failedAccessToken && getStoredAccessToken() !== failedAccessToken) {
+    return true;
+  }
+  if (refreshPromise) return refreshPromise;
+
+  const refreshTokenBeforeLock = getStoredRefreshToken();
+  if (!refreshTokenBeforeLock) return false;
+
+  refreshPromise = (async () => {
+    const runLocked = async (): Promise<boolean> => {
+      const currentRefreshToken = getStoredRefreshToken();
+      if (!currentRefreshToken) return false;
+      if (
+        currentRefreshToken !== refreshTokenBeforeLock
+        || (failedAccessToken && getStoredAccessToken() !== failedAccessToken)
+      ) {
+        return true;
+      }
+      return executeRefresh(currentRefreshToken);
+    };
+
+    if (navigator.locks) {
+      return navigator.locks.request(AUTH_REFRESH_LOCK, runLocked);
+    }
+    return runLocked();
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
 async function requestWithAuth(path: string, fetchOptions: RequestInit, signal: AbortSignal): Promise<Response> {
   return fetch(`${BASE_URL}${path}`, {
     ...fetchOptions,
@@ -88,16 +149,17 @@ async function requestWithAuth(path: string, fetchOptions: RequestInit, signal: 
 }
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}, allowRetry = true): Promise<T> {
-  const { timeout = 10000, signal, ...fetchOptions } = options;
+  const { timeout = 10000, ...fetchOptions } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   const hadAuthSession = Boolean(getStoredAccessToken() || getStoredRefreshToken());
 
   try {
-    let res = await requestWithAuth(path, fetchOptions, signal ?? controller.signal);
+    const accessTokenUsed = getStoredAccessToken();
+    let res = await requestWithAuth(path, fetchOptions, controller.signal);
 
-    if (res.status === 401 && allowRetry && await refreshAccessToken()) {
-      res = await requestWithAuth(path, fetchOptions, signal ?? controller.signal);
+    if (res.status === 401 && allowRetry && await refreshAccessToken(accessTokenUsed)) {
+      res = await requestWithAuth(path, fetchOptions, controller.signal);
     }
 
     if (res.status === 401 && hadAuthSession) {
@@ -129,24 +191,19 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}, allo
  * Uses fetch + Blob to avoid exposing the token in the URL.
  */
 export async function downloadWithAuth(url: string, filename: string): Promise<void> {
-  const res = await fetchWithAuth(url);
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const body = await res.json();
-      message = body.detail ?? message;
-    } catch { /* ignore */ }
-    throw new Error(message);
-  }
-  const blob = await res.blob();
-  const objectUrl = URL.createObjectURL(blob);
+  const parsed = new URL(url, window.location.origin);
+  const ticket = await apiFetch<{ download_url: string }>('/api/download-ticket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: `${parsed.pathname}${parsed.search}` }),
+  });
   const a = document.createElement('a');
-  a.href = objectUrl;
+  a.href = `${BASE_URL}${ticket.download_url}`;
   a.download = filename;
+  a.referrerPolicy = 'no-referrer';
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(objectUrl);
 }
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
@@ -158,8 +215,9 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
     headers: authHeaders(options.headers),
   });
 
+  const accessTokenUsed = getStoredAccessToken();
   let res = await request();
-  if (res.status === 401 && await refreshAccessToken()) {
+  if (res.status === 401 && await refreshAccessToken(accessTokenUsed)) {
     res = await request();
   }
 

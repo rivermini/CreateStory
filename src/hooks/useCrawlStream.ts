@@ -99,19 +99,22 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
     if (!crawlId) return;
 
     stopPolling();
-    setLogLines([]);
-    setProgress(null);
-    setStatus('idle');
-    setError('');
-    setSourceUrl('');
-
-    // Initial fetch
-    fetchStatus();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLogLines([]);
+      setProgress(null);
+      setStatus('idle');
+      setError('');
+      setSourceUrl('');
+      void fetchStatus();
+    });
 
     // Poll every 2 seconds
     pollTimerRef.current = setInterval(fetchStatus, 2000);
 
     return () => {
+      cancelled = true;
       stopPolling();
     };
   }, [crawlId, fetchStatus, stopPolling]);

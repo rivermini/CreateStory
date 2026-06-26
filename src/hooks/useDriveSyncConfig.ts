@@ -129,7 +129,9 @@ export function useDriveSyncConfig({
   }, [enableEditing, validateToken]);
 
   useEffect(() => {
-    void reloadConfig();
+    queueMicrotask(() => {
+      void reloadConfig();
+    });
   }, [reloadConfig]);
 
   const handleConfigFormChange = useCallback((data: Partial<ConfigFormData>) => {

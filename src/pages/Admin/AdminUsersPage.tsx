@@ -18,13 +18,13 @@ interface AdminUsersPanelProps {
   readonly embedded?: boolean;
 }
 
-type Role = 'admin' | 'user';
+type Role = 'admin' | 'operator' | 'viewer';
 
 function emptyCreateForm(): AdminUserCreateRequest {
   return {
     email: '',
     password: '',
-    role: 'user',
+    role: 'viewer',
     is_active: true,
   };
 }
@@ -301,7 +301,8 @@ export function AdminUsersPanel({ themeMode, embedded = false }: AdminUsersPanel
                   onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as Role }))}
                   className={inputClass(isDark)}
                 >
-                  <option value="user">User</option>
+                  <option value="viewer">Viewer</option>
+                  <option value="operator">Operator</option>
                   <option value="admin">Admin</option>
                 </select>
               </Field>
@@ -498,7 +499,8 @@ export function AdminUsersPanel({ themeMode, embedded = false }: AdminUsersPanel
                   onChange={(event) => setEditForm((prev) => ({ ...prev, role: event.target.value as Role }))}
                   className={inputClass(isDark)}
                 >
-                  <option value="user">User</option>
+                  <option value="viewer">Viewer</option>
+                  <option value="operator">Operator</option>
                   <option value="admin">Admin</option>
                 </select>
               </Field>

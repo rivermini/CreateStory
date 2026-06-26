@@ -5,7 +5,7 @@
 export interface AuthUser {
   id: string;
   email: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'operator' | 'viewer';
   is_active: boolean;
 }
 
@@ -23,7 +23,7 @@ export interface AuthTokensResponse {
 export interface AdminUser {
   id: string;
   email: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'operator' | 'viewer';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -32,14 +32,14 @@ export interface AdminUser {
 export interface AdminUserCreateRequest {
   email: string;
   password: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'operator' | 'viewer';
   is_active: boolean;
 }
 
 export interface AdminUserUpdateRequest {
   email?: string;
   password?: string;
-  role?: 'admin' | 'user';
+  role?: 'admin' | 'operator' | 'viewer';
   is_active?: boolean;
 }
 
