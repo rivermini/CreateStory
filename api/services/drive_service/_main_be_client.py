@@ -63,9 +63,15 @@ class MainBEClientMixin:
 
     def _get_main_be_client(self, timeout: float = 600.0) -> httpx.Client:
         """Return a reusable per-thread main-BE HTTP client."""
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+        base_url = getattr(self._config, "main_be_api_base_url", None)
+        if not base_url or "REPLACE_WITH_YOUR_" in base_url:
+            raise RuntimeError("Drive sync is not configured. Please set the Main BE API Base URL in Settings.")
+
         client = getattr(self._main_be_tls, "client", None)
         client_key = (
-            getattr(self._config, "main_be_api_base_url", None),
+            base_url,
             getattr(self._config, "main_be_bearer_token", None),
             getattr(self._config, "main_be_user_id", None),
             timeout,
