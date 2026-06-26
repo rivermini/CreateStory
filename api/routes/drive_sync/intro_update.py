@@ -27,6 +27,7 @@ class CheckAllIntroResponse(BaseModel):
     updated: list[IntroUpdateStatus]
     no_intro1_file: list[IntroUpdateStatus]
     no_server_match: list[IntroUpdateStatus]
+    not_recommended: list[IntroUpdateStatus]
 
 
 class CheckUpdatedIntroResponse(BaseModel):
@@ -50,6 +51,8 @@ async def check_all(intro_filename: str = "intro1.jpg") -> CheckAllIntroResponse
     - updated: folder has intro file, story exists, prior update record found
     - no_intro1_file: folder has no intro file
     - no_server_match: folder has intro file but no matching story on server
+    - not_recommended: folder has intro file and story exists, but the story is not in the
+      admin recommended list, so the intro cannot be uploaded
     """
     import asyncio
     import sys
@@ -74,7 +77,8 @@ async def check_all(intro_filename: str = "intro1.jpg") -> CheckAllIntroResponse
         f"can_update={len(result.get('can_update', []))} "
         f"updated={len(result.get('updated', []))} "
         f"no_intro1_file={len(result.get('no_intro1_file', []))} "
-        f"no_server_match={len(result.get('no_server_match', []))}"
+        f"no_server_match={len(result.get('no_server_match', []))} "
+        f"not_recommended={len(result.get('not_recommended', []))}"
     )
     logger.info(summary)
     print(summary, flush=True)
@@ -96,6 +100,7 @@ async def check_all(intro_filename: str = "intro1.jpg") -> CheckAllIntroResponse
         updated=[make_entry(e) for e in result.get("updated", [])],
         no_intro1_file=[make_entry(e) for e in result.get("no_intro1_file", [])],
         no_server_match=[make_entry(e) for e in result.get("no_server_match", [])],
+        not_recommended=[make_entry(e) for e in result.get("not_recommended", [])],
     )
 
 
@@ -160,7 +165,7 @@ async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "int
     story_title = folder_info.get("display_name", "")
 
     def _do_upload():
-        success, result = service._upload_story_intro_from_folder(story_id, folder_id, intro_filename)
+        success, result = service._upload_story_intro_from_folder(story_id, folder_id, intro_filename, story_title)
         return success, result
 
     try:

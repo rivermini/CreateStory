@@ -76,6 +76,22 @@ def _run_free_tag_batch_check(service, folder_ids: list[str]):
     return service._batch_get_free_and_tag_counts(drive_service, folder_ids)
 
 
+def _run_intro_presence_check(service, folder_ids: list[str]) -> dict[str, bool]:
+    """Return {folder_id: True} for folders that contain an intro.{jpg,png,jpeg} file."""
+    if not folder_ids:
+        return {}
+    drive_service = service._build_drive_service()
+    # "intro" expands to intro.jpg + intro.png; sweep intro.jpeg for any still missing.
+    found = service._batch_find_intro1_files(drive_service, folder_ids, "intro")
+    missing = [fid for fid, value in found.items() if value is None]
+    if missing:
+        jpeg_found = service._batch_find_intro1_files(drive_service, missing, "intro.jpeg")
+        for fid, value in jpeg_found.items():
+            if value is not None:
+                found[fid] = value
+    return {fid: value is not None for fid, value in found.items()}
+
+
 def _normalize(s: str) -> str:
     """Normalize a story title for comparison."""
     for ch in ("\u2019", "\u2018", "\u201A", "\u201B", "\u02BC", "\u02BB", "\uFF07"):
@@ -84,6 +100,41 @@ def _normalize(s: str) -> str:
 
 
 router = APIRouter(tags=["Drive Sync"])
+
+
+class RecommendedStoryRef(BaseModel):
+    id: str
+    title: str
+
+
+class AdminRecommendedStoriesResponse(BaseModel):
+    stories: list[RecommendedStoryRef]
+    total: int
+
+
+# GET /api/drive-sync/admin-recommended-stories
+@router.get("/admin-recommended-stories", response_model=AdminRecommendedStoriesResponse, tags=["Drive Sync"])
+async def admin_recommended_stories() -> AdminRecommendedStoriesResponse:
+    """
+    Proxy the main BE's GET /api/v1/admin-recommended-stories list.
+
+    Returns every story currently in the admin recommended list. A story must appear
+    here before its intro image can be uploaded (enforced by the new-story upload and
+    intro-update flows).
+    """
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    try:
+        recommended = await asyncio.to_thread(service.get_admin_recommended_stories)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to load recommended stories: {exc}")
+
+    stories = [RecommendedStoryRef(id=r.get("id", ""), title=r.get("title", "")) for r in recommended]
+    return AdminRecommendedStoriesResponse(stories=stories, total=len(stories))
 
 
 # GET /api/drive-sync/check-uploadable
@@ -174,6 +225,32 @@ async def check_uploadable() -> CheckUploadableResponse:
         uploadable.append(entry)
 
     uploadable.sort(key=lambda f: f.is_valid_format, reverse=True)
+
+    # Recommended-list gate warning (read-only -> fails open): a story that is not in the
+    # admin recommended list cannot receive an intro even if an intro file exists in Drive.
+    # Warn only when an intro file is actually present, to avoid flagging every new story.
+    try:
+        _, recommended_titles = await asyncio.to_thread(service.get_recommended_story_lookup)
+        recommended_available = True
+    except Exception:
+        recommended_titles = set()
+        recommended_available = False
+
+    if recommended_available and uploadable:
+        not_recommended_entries = [
+            entry for entry in uploadable
+            if service._normalize_story_title(entry.display_name) not in recommended_titles
+        ]
+        nr_ids = [entry.id for entry in not_recommended_entries]
+        try:
+            intro_presence = await asyncio.to_thread(_run_intro_presence_check, service, nr_ids)
+        except Exception:
+            intro_presence = {}
+        for entry in not_recommended_entries:
+            if intro_presence.get(entry.id):
+                entry.warnings.append(
+                    "NOT_RECOMMENDED: Story is not in the admin recommended list — its intro will not be uploaded (the rest of the upload still proceeds)."
+                )
 
     return CheckUploadableResponse(
         drive_folders=candidate_folders,

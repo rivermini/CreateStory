@@ -1192,6 +1192,107 @@ class MainBEClientMixin:
         self._set_cached_server_stories(all_stories)
         return all_stories
 
+    @classmethod
+    def _recommended_ref_from_api(cls, item: Any) -> dict:
+        """Extract {id, title} for the underlying story from a recommended-list entry.
+
+        Handles entries that are story objects directly, or that wrap the story
+        under a 'story'/'storyInfo'/'storyDetail' key (in which case the top-level
+        'id' is the recommended-record id, not the story id).
+        """
+        if not isinstance(item, dict):
+            return {"id": "", "title": ""}
+        nested = None
+        for key in ("story", "storyInfo", "storyDetail"):
+            value = item.get(key)
+            if isinstance(value, dict):
+                nested = value
+                break
+        source = nested or item
+        story_id = (
+            source.get("id")
+            or source.get("storyId")
+            or item.get("storyId")
+            or (item.get("id") if nested is None else None)
+            or ""
+        )
+        title = (
+            source.get("title")
+            or source.get("name")
+            or item.get("title")
+            or ""
+        )
+        return {"id": str(story_id or ""), "title": str(title or "")}
+
+    def get_admin_recommended_stories(self) -> list[dict]:
+        """
+        Fetch ALL stories in the admin recommended list from the main BE via pagination.
+        Proxies GET /api/v1/admin-recommended-stories. Returns [{id, title}, ...] referring
+        to the underlying stories. Cached for 30 seconds.
+        """
+        cached = self._get_cached_recommended_stories(ttl=30.0)
+        if cached is not None:
+            return cached
+
+        if self._config is None:
+            raise RuntimeError("Drive sync config not set.")
+
+        headers = self._main_be_headers()
+        all_recommended: list[dict] = []
+        page = 1
+        try:
+            while True:
+                with self._main_be_client(timeout=600.0) as client:
+                    resp = client.get(
+                        f"{self._config.main_be_api_base_url}/api/v1/admin-recommended-stories",
+                        headers=headers,
+                        params={"page": page, "limit": 1000},
+                    )
+                    if resp.status_code == 401:
+                        raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+                    if resp.status_code not in (200, 201):
+                        logger.warning("get_admin_recommended_stories page %d returned %d", page, resp.status_code)
+                        break
+                    items = self._extract_api_items(resp.json())
+                    if not items:
+                        break
+                    for item in items:
+                        ref = self._recommended_ref_from_api(item)
+                        if ref["id"] or ref["title"]:
+                            all_recommended.append(ref)
+                    if len(items) < 1000:
+                        break
+                    page += 1
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 401:
+                raise RuntimeError("Unauthorized: Invalid or expired bearer token (401). Please check your Bearer Token in the Drive Sync configuration.")
+            raise
+
+        self._set_cached_recommended_stories(all_recommended)
+        return all_recommended
+
+    def get_recommended_story_lookup(self) -> tuple[set[str], set[str]]:
+        """Return (recommended_story_ids, recommended_titles_normalized) for membership checks."""
+        recommended = self.get_admin_recommended_stories()
+        ids = {r["id"] for r in recommended if r.get("id")}
+        titles = {self._normalize_story_title(r["title"]) for r in recommended if r.get("title")}
+        return ids, titles
+
+    def is_story_recommended(self, story_id: Optional[str] = None, title: Optional[str] = None) -> bool:
+        """
+        Return True if the story is in the admin recommended list, matched by story id
+        with a normalized-title fallback (needed before a story has a server id).
+
+        Raises on failure to fetch the recommended list so callers can decide how to
+        handle an unverifiable gate (write actions fail closed, read checks fail open).
+        """
+        ids, titles = self.get_recommended_story_lookup()
+        if story_id and story_id in ids:
+            return True
+        if title and self._normalize_story_title(title) in titles:
+            return True
+        return False
+
     def put_story_max_chapter(self, story_id: str, max_chapter: int) -> bool:
         """PUT maxChapter on a server story via the main BE API."""
         if self._config is None:

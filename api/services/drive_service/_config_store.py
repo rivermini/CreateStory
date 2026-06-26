@@ -101,5 +101,7 @@ class ConfigStoreMixin:
             self._folder_cache.clear()
         if hasattr(self, "_server_cache"):
             self._server_cache = None
+        if hasattr(self, "_recommended_cache"):
+            self._recommended_cache = None
         if hasattr(self, "_tls") and hasattr(self._tls, "drive_service"):
             delattr(self._tls, "drive_service")

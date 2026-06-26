@@ -75,6 +75,9 @@ class DriveFolderEntry(BaseModel):
     is_valid_format: bool = True
     has_chapter_duplicates: bool = False
     validation_errors: list[str] = []
+    # Non-blocking advisories (e.g. story not in the admin recommended list, so its intro
+    # will not be uploaded). Unlike validation_errors, these do not block the upload.
+    warnings: list[str] = []
     chapter_count: Optional[int] = None
     extended_chapter_count: Optional[int] = None
     modified_time: Optional[str] = None

@@ -144,14 +144,24 @@ class IntroUpdateMixin:
                     return f
         return None
 
-    def _upload_story_intro_from_folder(self, story_id: str, folder_id: str, intro_filename: str = "intro1.jpg") -> tuple[bool, Optional[str]]:
+    def _upload_story_intro_from_folder(self, story_id: str, folder_id: str, intro_filename: str = "intro1.jpg", story_title: Optional[str] = None) -> tuple[bool, Optional[str]]:
         """
         Download the configured intro file from Drive and POST it to main BE /api/v1/admin-recommended-stories/{id}/upload-intro.
         Returns (success, intro_url_or_error_message).
+
+        A story must be in the admin recommended list to receive an intro. This write
+        action fails closed: if membership cannot be verified, the upload is refused.
         """
         from api.services.drive_service._drive_api import DriveAPIMixin
 
         intro_filename = _normalize_intro_filename(intro_filename)
+
+        try:
+            recommended = self.is_story_recommended(story_id=story_id, title=story_title)
+        except Exception as exc:
+            return False, f"Could not verify the admin recommended-stories list: {exc}"
+        if not recommended:
+            return False, "Story is not in the admin recommended list — intro cannot be uploaded."
 
         try:
             drive_service = self._build_drive_service()
@@ -181,24 +191,29 @@ class IntroUpdateMixin:
             return True, intro_url
         return False, "Intro upload returned no URL"
 
-    def upload_intro_for_new_story(self, story_id: str, folder_id: str) -> dict:
+    def upload_intro_for_new_story(self, story_id: str, folder_id: str, story_title: Optional[str] = None) -> dict:
         """
         Look for `intro.jpg` / `intro.jpeg` / `intro.png` in the Drive folder and POST it to
         main BE `/api/v1/admin-recommended-stories/{id}/upload-intro`. Used by the new-story upload flow.
 
-        Returns a dict with four keys:
-          - uploaded: bool       (True only if an intro file was found AND uploaded successfully)
+        A story must be in the admin recommended list to receive an intro. When it is not,
+        the intro is never uploaded even if the file exists (the rest of the upload continues).
+
+        Returns a dict with five keys:
+          - uploaded: bool          (True only if an intro file was found AND uploaded successfully)
           - intro_url: str|None
-          - error: str|None      (set when the helper tried to upload but the call failed, or
-                                  the file was missing/download failure)
-          - filename: str|None   (the matched Drive filename, when one was found)
+          - error: str|None         (set when the helper tried to upload but the call failed, or
+                                     the file was missing/download failure)
+          - filename: str|None      (the matched Drive filename, when one was found)
+          - not_recommended: bool   (True when the story is not in the admin recommended list, so the
+                                     intro upload was skipped regardless of whether the file exists)
         """
         from api.services.drive_service._drive_api import DriveAPIMixin
 
         try:
             drive_service = self._build_drive_service()
         except Exception as exc:
-            return {"uploaded": False, "intro_url": None, "error": f"Failed to authenticate with Google Drive: {exc}", "filename": None}
+            return {"uploaded": False, "intro_url": None, "error": f"Failed to authenticate with Google Drive: {exc}", "filename": None, "not_recommended": False}
 
         intro_file = None
         for candidate in ("intro.jpg", "intro.jpeg", "intro.png"):
@@ -206,10 +221,27 @@ class IntroUpdateMixin:
             if intro_file is not None:
                 break
 
-        if intro_file is None:
-            return {"uploaded": False, "intro_url": None, "error": None, "filename": None}
+        filename = intro_file["name"] if intro_file else None
 
-        filename = intro_file["name"]
+        # Recommended-list gate: a story must be in the admin recommended list to receive an intro.
+        try:
+            recommended = self.is_story_recommended(story_id=story_id, title=story_title)
+        except Exception as exc:
+            # Cannot verify membership -> fail closed (skip intro) but report why.
+            return {
+                "uploaded": False,
+                "intro_url": None,
+                "error": f"Could not verify the admin recommended-stories list: {exc}",
+                "filename": filename,
+                "not_recommended": True,
+            }
+
+        if not recommended:
+            # Not in recommended list: never upload the intro, even when the file exists.
+            return {"uploaded": False, "intro_url": None, "error": None, "filename": filename, "not_recommended": True}
+
+        if intro_file is None:
+            return {"uploaded": False, "intro_url": None, "error": None, "filename": None, "not_recommended": False}
 
         try:
             intro_bytes = DriveAPIMixin._download_cover_image_bytes(self, drive_service, intro_file["id"])
@@ -219,6 +251,7 @@ class IntroUpdateMixin:
                 "intro_url": None,
                 "error": f"Failed to download {filename} from Drive: {exc}",
                 "filename": filename,
+                "not_recommended": False,
             }
 
         try:
@@ -234,11 +267,12 @@ class IntroUpdateMixin:
                 "intro_url": None,
                 "error": f"Failed to upload intro to main BE: {exc}",
                 "filename": filename,
+                "not_recommended": False,
             }
 
         if intro_url:
-            return {"uploaded": True, "intro_url": intro_url, "error": None, "filename": filename}
-        return {"uploaded": False, "intro_url": None, "error": "Intro upload returned no URL", "filename": filename}
+            return {"uploaded": True, "intro_url": intro_url, "error": None, "filename": filename, "not_recommended": False}
+        return {"uploaded": False, "intro_url": None, "error": "Intro upload returned no URL", "filename": filename, "not_recommended": False}
 
     def _record_intro_update(
         self,
@@ -334,6 +368,16 @@ class IntroUpdateMixin:
             if title:
                 server_by_title_lower[title] = s
 
+        # Admin recommended-stories gate. This is a read-only check, so it fails open:
+        # if the list can't be loaded, stories are not flagged as not_recommended.
+        try:
+            recommended_ids, recommended_titles = self.get_recommended_story_lookup()
+            recommended_available = True
+        except Exception as exc:
+            logger.warning("check_extended_folders_for_intro: could not load recommended stories: %s", exc)
+            recommended_ids, recommended_titles = set(), set()
+            recommended_available = False
+
         drive_service = self._build_drive_service()
         intro_files_by_folder_id = self._batch_find_intro1_files(
             drive_service,
@@ -354,6 +398,7 @@ class IntroUpdateMixin:
         updated: list[dict] = []
         no_intro1: list[dict] = []
         no_server_match: list[dict] = []
+        not_recommended: list[dict] = []
 
         hits_logged = 0
         misses_logged = 0
@@ -414,6 +459,28 @@ class IntroUpdateMixin:
                 no_server_match.append(entry)
                 continue
 
+            # Recommended-list gate (read-only check, fails open when the list is unavailable):
+            # a story must be in the admin recommended list before its intro can be uploaded.
+            if recommended_available:
+                is_recommended = (
+                    (server_story.get("id") and server_story.get("id") in recommended_ids)
+                    or (self._normalize_story_title(display_name) in recommended_titles)
+                )
+                if not is_recommended:
+                    print(
+                        f"[CHECK_ALL][HIT] intro-update folder={folder_name!r} "
+                        f"title={display_name!r} status=not_recommended "
+                        f"intro_file={intro1.get('name')!r}",
+                        flush=True,
+                    )
+                    entry = {
+                        **entry_base,
+                        "status": "not_recommended",
+                        "last_updated": history.get("last_updated") if history else None,
+                    }
+                    not_recommended.append(entry)
+                    continue
+
             if history_status == "updated":
                 if hits_logged < MAX_PER_FOLDER_LOGS:
                     print(
@@ -450,4 +517,5 @@ class IntroUpdateMixin:
             "updated": updated,
             "no_intro1_file": no_intro1,
             "no_server_match": no_server_match,
+            "not_recommended": not_recommended,
         }

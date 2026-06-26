@@ -1041,12 +1041,21 @@ class HistoryJobsMixin:
                 self.append_job_log(job_id, "info", "No banner.{jpg,jpeg,png} found in story folder — skipping banner upload")
 
         if not existing_id:
-            intro_result = self.upload_intro_for_new_story(story_id, folder_id)
+            intro_result = self.upload_intro_for_new_story(story_id, folder_id, display_name)
             intro_filename = intro_result.get("filename")
             if intro_filename:
                 self.append_job_log(job_id, "info", f"Intro image found in Drive: {intro_filename}")
             if intro_result.get("uploaded"):
                 self.append_job_log(job_id, "info", f"Intro image uploaded: {intro_result['intro_url']}")
+            elif intro_result.get("not_recommended"):
+                # Recommended-list gate: the intro is skipped because the story is not in the
+                # admin recommended list. When the intro file is also missing, warn about both.
+                if intro_result.get("error"):
+                    self.append_job_log(job_id, "warning", f"Intro not uploaded: {intro_result['error']}")
+                else:
+                    self.append_job_log(job_id, "warning", f"Story '{display_name}' is not in the admin recommended list — intro not uploaded.")
+                if not intro_filename:
+                    self.append_job_log(job_id, "warning", "No intro.{jpg,jpeg,png} found in story folder.")
             elif intro_result.get("error"):
                 self.append_job_log(job_id, "warning", f"Intro image upload failed: {intro_result['error']}")
             else:
