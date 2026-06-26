@@ -45,9 +45,20 @@ def main() -> int:
 
     with SessionLocal() as db:
         repo = AuthRepository(db)
+        
+        # Check if the administrator already exists
+        user = db.query(User).filter_by(email=normalize_email(email)).first()
+        if user:
+            user.password_hash = hash_password(password)
+            db.commit()
+            print(f"Updated password for existing administrator {normalize_email(email)}.")
+            return 0
+
+        # If user does not exist, only allow creation if the users table is completely empty
         if repo.count_users() != 0:
-            print("Refusing bootstrap: the users table is not empty.", file=sys.stderr)
+            print(f"Refusing to create: administrator {normalize_email(email)} does not exist and the users table is not empty.", file=sys.stderr)
             return 1
+            
         db.add(
             User(
                 email=normalize_email(email),
@@ -58,7 +69,7 @@ def main() -> int:
         )
         db.commit()
 
-    print(f"Created administrator {normalize_email(email)}.")
+    print(f"Created initial administrator {normalize_email(email)}.")
     return 0
 
 

@@ -93,7 +93,7 @@ def create_download_ticket(
     )
 
 
-@router.get("/api/download/{token}")
+@router.get("/api/download/{token}", response_model=None)
 async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse:
     with _tickets_lock:
         ticket = _tickets.pop(token, None)
