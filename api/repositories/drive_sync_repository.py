@@ -21,6 +21,7 @@ from api.models.db_models import (
     IntroUpdateHistoryRecord,
     utcnow,
 )
+from api.service_auth import current_owner
 
 if TYPE_CHECKING:
     from api.models.drive_sync import DriveSyncStatus, HistoryEntry, SyncJob
@@ -30,6 +31,7 @@ def _job_to_row_data(job: "SyncJob") -> dict:
     data = job.model_dump()
     return {
         "id": data["id"],
+        "created_by_user_id": data.get("created_by_user_id") or current_owner(),
         "kind": data["kind"],
         "status": data["status"],
         "folder_id": data["folder_id"],
@@ -68,6 +70,7 @@ def _cover_history_entry_to_row_data(entry: dict) -> dict:
 
     return {
         "id": entry["id"],
+        "created_by_user_id": entry.get("created_by_user_id") or current_owner(),
         "folder_id": entry.get("folder_id") or "",
         "folder_name": entry.get("folder_name") or display_name,
         "display_name": display_name,
@@ -103,6 +106,7 @@ def _banner_history_entry_to_row_data(entry: dict) -> dict:
 
     return {
         "id": entry["id"],
+        "created_by_user_id": entry.get("created_by_user_id") or current_owner(),
         "folder_id": entry.get("folder_id") or "",
         "folder_name": entry.get("folder_name") or display_name,
         "display_name": display_name,
@@ -138,6 +142,7 @@ def _intro_history_entry_to_row_data(entry: dict) -> dict:
 
     return {
         "id": entry["id"],
+        "created_by_user_id": entry.get("created_by_user_id") or current_owner(),
         "folder_id": entry.get("folder_id") or "",
         "folder_name": entry.get("folder_name") or display_name,
         "display_name": display_name,
@@ -334,6 +339,7 @@ class DriveSyncRepository:
         data = entry.model_dump()
         return DriveSyncHistoryRecord(
             id=data["id"],
+            created_by_user_id=data.get("created_by_user_id") or current_owner(),
             timestamp=data["timestamp"],
             kind=data["kind"],
             status=data["status"],
@@ -347,6 +353,7 @@ class DriveSyncRepository:
     def _history_row_to_dict(row: DriveSyncHistoryRecord) -> dict:
         return {
             "id": row.id,
+            "created_by_user_id": row.created_by_user_id,
             "timestamp": row.timestamp,
             "kind": row.kind,
             "status": row.status,
@@ -360,6 +367,7 @@ class DriveSyncRepository:
     def _job_row_to_dict(row: DriveSyncJobRecord) -> dict:
         return {
             "id": row.id,
+            "created_by_user_id": row.created_by_user_id,
             "kind": row.kind,
             "status": row.status,
             "folder_id": row.folder_id,
@@ -429,6 +437,7 @@ class DriveSyncRepository:
         display_name = row.display_name or row.story_title or row.folder_name
         return {
             "id": row.id,
+            "created_by_user_id": row.created_by_user_id,
             "story_id": row.story_id or None,
             "story_title": row.story_title or display_name,
             "folder_id": row.folder_id,
@@ -496,6 +505,7 @@ class DriveSyncRepository:
         display_name = row.display_name or row.story_title or row.folder_name
         return {
             "id": row.id,
+            "created_by_user_id": row.created_by_user_id,
             "story_id": row.story_id or None,
             "story_title": row.story_title or display_name,
             "folder_id": row.folder_id,
@@ -563,6 +573,7 @@ class DriveSyncRepository:
         display_name = row.display_name or row.story_title or row.folder_name
         return {
             "id": row.id,
+            "created_by_user_id": row.created_by_user_id,
             "story_id": row.story_id or None,
             "story_title": row.story_title or display_name,
             "folder_id": row.folder_id,

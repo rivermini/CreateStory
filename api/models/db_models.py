@@ -28,6 +28,7 @@ class DriveSyncHistoryRecord(Base):
     __tablename__ = "drive_sync_history"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     timestamp: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -43,6 +44,7 @@ class DriveSyncJobRecord(Base):
     __tablename__ = "drive_sync_jobs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     folder_id: Mapped[str] = mapped_column(Text, nullable=False)
@@ -86,6 +88,7 @@ class CoverUpdateHistoryRecord(Base):
     __tablename__ = "cover_update_histories"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     folder_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     folder_name: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
@@ -105,6 +108,7 @@ class BannerUpdateHistoryRecord(Base):
     __tablename__ = "banner_update_histories"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     folder_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     folder_name: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
@@ -124,6 +128,7 @@ class IntroUpdateHistoryRecord(Base):
     __tablename__ = "intro_update_histories"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     folder_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     folder_name: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)

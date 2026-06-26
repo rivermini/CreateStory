@@ -115,6 +115,7 @@ class HistoryItem(BaseModel):
 class HistoryEntry(BaseModel):
     """A single action history entry."""
     id: str
+    created_by_user_id: Optional[str] = None
     timestamp: str
     kind: str
     status: str
@@ -179,6 +180,7 @@ class JobLogEntry(BaseModel):
 class SyncJob(BaseModel):
     """A single sync job — tracks upload/update of a single story folder."""
     id: str
+    created_by_user_id: Optional[str] = None
     kind: str
     status: str
     folder_id: str

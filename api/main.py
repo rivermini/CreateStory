@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.db import init_db
 from api.routes.drive_sync import router as drive_sync_router
+from api.service_auth import enforce_service_auth
 
 
 @asynccontextmanager
@@ -46,7 +47,11 @@ app = FastAPI(
     description="Google Drive folder sync + Main BE API sync service.",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
+app.middleware("http")(enforce_service_auth)
 
 _allow_origins = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173,http://localhost:3000")
 app.add_middleware(

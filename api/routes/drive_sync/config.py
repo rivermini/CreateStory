@@ -5,7 +5,12 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from api.models.drive_sync import DriveSyncConfigResponse, DriveSyncProgressResponse, TokenValidationResponse
+from api.models.drive_sync import (
+    DriveSyncConfigResponse,
+    DriveSyncProgressResponse,
+    DriveSyncUpdateRequest,
+    TokenValidationResponse,
+)
 from api.services.drive_service import get_drive_sync_service, init_drive_sync_config
 
 
@@ -31,19 +36,6 @@ class InitDriveSyncRequest(BaseModel):
 class DriveSyncUrlResponse(BaseModel):
     """API response for GET /api/drive-sync/config/url."""
     url: Optional[str]
-
-
-# GET /api/drive-sync/config/token
-@router.get("/config/token", status_code=410, tags=["Drive Sync"])
-async def get_main_be_token():
-    """DEPRECATED (410 Gone). Bearer tokens are now set via POST /config with the
-    X-Auth-Token request header, and stored server-side. They can no longer be
-    read back through the API."""
-    raise HTTPException(
-        status_code=410,
-        detail="The /config/token endpoint is removed. Set the token via POST /config "
-               "using the X-Auth-Token header. The token cannot be retrieved after being set.",
-    )
 
 
 # GET /api/drive-sync/status
@@ -111,12 +103,11 @@ async def create_or_update_sync_config(
 
 # PUT /api/drive-sync/config
 @router.put("/config", response_model=DriveSyncConfigResponse, tags=["Drive Sync"])
-async def update_sync_config(body) -> DriveSyncConfigResponse:
+async def update_sync_config(body: DriveSyncUpdateRequest) -> DriveSyncConfigResponse:
     """Partially update the drive sync configuration.
 
     Note: to update the bearer token, use POST /config with the X-Auth-Token header.
     """
-    from api.models.drive_sync import DriveSyncUpdateRequest
     service = get_drive_sync_service()
     if service.get_config() is None:
         raise HTTPException(
