@@ -336,16 +336,42 @@ def _extract_wattpad_story_id(url: str) -> Optional[str]:
 def _fetch_inkitt_chapters(story_url: str, timeout: int = 30) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
     try:
         import requests
-        resp = requests.get(
-            story_url,
-            headers=_INKITT_HEADERS,
-            timeout=timeout,
-            proxies=requests_proxies("inkitt"),
-        )
+        from api.db import SessionLocal
+        from api.repositories.inkitt_cookie_repository import InkittCookieRepository
+
+        db = SessionLocal()
+        try:
+            repo = InkittCookieRepository(db)
+            saved_cookies = repo.get_valid()
+            user_agent = repo.get_user_agent()
+        finally:
+            db.close()
+
+        session = requests.Session()
+        if user_agent:
+            session.headers.update({**_INKITT_HEADERS, "User-Agent": user_agent})
+        else:
+            session.headers.update(_INKITT_HEADERS)
+
+        proxies = requests_proxies("inkitt")
+        if proxies:
+            session.proxies.update(proxies)
+
+        for cookie in saved_cookies:
+            session.cookies.set(
+                cookie.name,
+                cookie.value,
+                domain=cookie.domain,
+                path=cookie.path,
+            )
+
+        resp = session.get(story_url, timeout=timeout)
     except Exception as exc:
         return [], f"Inkitt request failed: {exc}", None, None
 
     if resp.status_code != 200:
+        if resp.status_code == 404:
+            return [], "This story was not found (HTTP 404). Please verify that the URL is correct and exists on Inkitt.", None, None
         return [], f"Inkitt returned HTTP {resp.status_code}", None, None
 
     html = resp.text

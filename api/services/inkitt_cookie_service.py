@@ -29,7 +29,7 @@ _STORY_RE = re.compile(r"/stories/(\d+)")
 _CHAPTER_RE = re.compile(r"/stories/(\d+)/chapters/(\d+)")
 
 
-def update_inkitt_cookies(raw_input: str) -> dict[str, Any]:
+def update_inkitt_cookies(raw_input: str, user_agent: str | None = None) -> dict[str, Any]:
     """Parse pasted cookies and persist them to the database."""
     cookies = _parse_cookie_input(raw_input)
     if not cookies:
@@ -41,13 +41,14 @@ def update_inkitt_cookies(raw_input: str) -> dict[str, Any]:
     db = SessionLocal()
     try:
         repo = InkittCookieRepository(db)
-        count = repo.save_cookies(cookies)
+        count = repo.save_cookies(cookies, user_agent=user_agent)
     finally:
         db.close()
 
     return {
         "updated": True,
         "cookie_count": count,
+        "has_user_agent": bool(user_agent),
     }
 
 
@@ -61,6 +62,7 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
         repo = InkittCookieRepository(db)
         saved = repo.get_valid()
         cookie_count = len(saved)
+        user_agent = repo.get_user_agent()
     finally:
         db.close()
 
@@ -68,7 +70,10 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
         return _status(False, "missing", "No saved Inkitt cookies found.", 0)
 
     session = requests.Session()
-    session.headers.update(_HEADERS)
+    if user_agent:
+        session.headers.update({**_HEADERS, "User-Agent": user_agent})
+    else:
+        session.headers.update(_HEADERS)
     proxies = requests_proxies("inkitt")
     if proxies:
         session.proxies.update(proxies)
@@ -81,7 +86,7 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
             path=cookie.path,
         )
 
-    test_url = _test_url_for_story(story_url) if story_url else "https://www.inkitt.com/"
+    test_url = _test_url_for_story(story_url) if story_url else "https://www.inkitt.com/home"
     try:
         response = session.get(test_url, timeout=30)
     except Exception as exc:
@@ -95,6 +100,14 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
 
     html = response.text
     if response.status_code != 200:
+        if response.status_code == 404:
+            return _status(
+                False,
+                "not_found",
+                "This story or chapter was not found (HTTP 404). Please verify that the URL is correct and exists on Inkitt.",
+                cookie_count,
+                test_url,
+            )
         return _status(
             False,
             "http_error",
@@ -111,6 +124,18 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
             cookie_count,
             test_url,
         )
+
+    if not story_url:
+        is_logged_in = "/settings" in html or "/manage-stories" in html
+        is_logged_out = "sign in" in html.lower() or "forgot your password" in html.lower()
+        if not is_logged_in or is_logged_out:
+            return _status(
+                False,
+                "login_required",
+                "Saved Inkitt cookies are present but not logged in. Please log in to Inkitt and update cookies.",
+                cookie_count,
+                test_url,
+            )
 
     if _is_login_gated_response(html):
         return _status(
@@ -139,7 +164,7 @@ def check_inkitt_cookies(story_url: str | None = None) -> dict[str, Any]:
             test_url,
         )
 
-    return _status(True, "ok", "Saved Inkitt cookies are present and Inkitt responded.", cookie_count, test_url)
+    return _status(True, "ok", "Saved Inkitt cookies are present and working.", cookie_count, test_url)
 
 
 def _status(
@@ -160,7 +185,7 @@ def _status(
 
 def _test_url_for_story(story_url: str | None) -> str:
     if not story_url:
-        return "https://www.inkitt.com/"
+        return "https://www.inkitt.com/home"
 
     parsed = urllib.parse.urlparse(story_url)
     match = _CHAPTER_RE.search(parsed.path)
@@ -171,7 +196,7 @@ def _test_url_for_story(story_url: str | None) -> str:
     if not story_match:
         return story_url
 
-    return f"https://www.inkitt.com/stories/{story_match.group(1)}/chapters/4"
+    return f"https://www.inkitt.com/stories/{story_match.group(1)}/chapters/1"
 
 
 def _is_blocked_response(html: str) -> bool:

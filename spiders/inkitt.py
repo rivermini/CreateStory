@@ -267,11 +267,17 @@ class InkittSpider(BaseSpider):
     def _load_saved_cookies(self) -> int:
         self._cookies_loaded = True
 
-        db_cookies = self._load_cookies_from_db()
+        db_cookies, user_agent = self._load_cookies_from_db()
         if db_cookies:
             for c in db_cookies:
                 self._session.cookies.set(c["name"], c["value"], domain=c.get("domain", ".inkitt.com"), path=c.get("path", "/"))
-            self.logger.info("[inkitt] Loaded %d cookie(s) from database.", len(db_cookies))
+            if user_agent:
+                self._session.headers["User-Agent"] = user_agent
+            self.logger.info(
+                "[inkitt] Loaded %d cookie(s) from database (with saved User-Agent: %s).",
+                len(db_cookies),
+                user_agent,
+            )
             return len(db_cookies)
 
         json_cookies = self._load_cookies_from_json()
@@ -283,7 +289,7 @@ class InkittSpider(BaseSpider):
 
         return 0
 
-    def _load_cookies_from_db(self) -> list[dict[str, Any]]:
+    def _load_cookies_from_db(self) -> tuple[list[dict[str, Any]], Optional[str]]:
         try:
             from api.db import SessionLocal
             from api.repositories.inkitt_cookie_repository import InkittCookieRepository
@@ -292,15 +298,17 @@ class InkittSpider(BaseSpider):
             try:
                 repo = InkittCookieRepository(db)
                 rows = repo.get_valid()
-                return [
+                user_agent = repo.get_user_agent()
+                cookies = [
                     {"name": r.name, "value": r.value, "domain": r.domain, "path": r.path}
                     for r in rows
                 ]
+                return cookies, user_agent
             finally:
                 db.close()
         except Exception as exc:
             self.logger.debug("[inkitt] Could not load cookies from database: %s", exc)
-            return []
+            return [], None
 
     def _load_cookies_from_json(self) -> list[dict[str, Any]]:
         cookie_files = [

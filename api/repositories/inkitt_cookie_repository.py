@@ -31,7 +31,13 @@ class InkittCookieRepository:
         now = int(time.time())
         return [r for r in rows if r.expires_at is None or r.expires_at > now]
 
-    def save_cookies(self, parsed_cookies: list[dict[str, Any]]) -> int:
+    def get_user_agent(self) -> str | None:
+        for row in self.get_all():
+            if row.user_agent:
+                return row.user_agent
+        return None
+
+    def save_cookies(self, parsed_cookies: list[dict[str, Any]], user_agent: str | None = None) -> int:
         """Replace all existing cookies with a fresh set. Returns count saved."""
         self.db.execute(delete(InkittCookie))
         for raw in parsed_cookies:
@@ -43,6 +49,7 @@ class InkittCookieRepository:
                     path=str(raw.get("path", "/")),
                     secure=bool(raw.get("secure", True)),
                     expires_at=raw.get("expiry"),
+                    user_agent=user_agent or None,
                 )
             )
         self.db.commit()

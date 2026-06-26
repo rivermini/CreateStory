@@ -16,7 +16,7 @@ from api.models.crawl_request import (
     ProgressUpdate,
 )
 from api.routes.crawl_stream import crawl_event_generator
-from api.service_auth import current_owner, require_admin_identity, require_owner
+from api.service_auth import current_owner, require_admin_identity, require_owner, require_operator_identity
 
 logger = logging.getLogger(__name__)
 MAX_CRAWL_BATCH = int(os.getenv("MAX_CRAWL_BATCH", "10"))
@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api/crawl", tags=["Crawl"])
 
 class InkittCookieUpdateRequest(BaseModel):
     cookies: str = Field(..., min_length=1, description="Inkitt cookies as Selenium JSON or a raw Cookie header.")
+    user_agent: str | None = Field(None, description="The User-Agent matching the cookies.")
 
 
 class InkittCookieUpdateResponse(BaseModel):
@@ -106,11 +107,11 @@ async def start_crawl(request: CrawlRequest, http_request: Request) -> CrawlStar
 @router.post("/inkitt-cookies", response_model=InkittCookieUpdateResponse)
 async def update_inkitt_cookies(request: InkittCookieUpdateRequest, http_request: Request) -> InkittCookieUpdateResponse:
     """Update the saved Inkitt login cookies used by the Inkitt spider."""
-    require_admin_identity(http_request)
+    require_operator_identity(http_request)
     from api.services.inkitt_cookie_service import update_inkitt_cookies as save_inkitt_cookies
 
     try:
-        result = save_inkitt_cookies(request.cookies)
+        result = save_inkitt_cookies(request.cookies, request.user_agent)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -121,7 +122,7 @@ async def update_inkitt_cookies(request: InkittCookieUpdateRequest, http_request
 @router.post("/inkitt-cookies/status", response_model=InkittCookieStatusResponse)
 async def check_inkitt_cookies(request: InkittCookieStatusRequest, http_request: Request) -> InkittCookieStatusResponse:
     """Check whether saved Inkitt cookies can access a likely login-gated page."""
-    require_admin_identity(http_request)
+    require_operator_identity(http_request)
     from api.services.inkitt_cookie_service import check_inkitt_cookies as run_check
 
     result = run_check(request.story_url)
@@ -137,7 +138,7 @@ async def check_inkitt_cookies(request: InkittCookieStatusRequest, http_request:
 @router.post("/scribblehub-cookies", response_model=ScribbleHubCookieUpdateResponse)
 async def update_scribblehub_cookies(request: ScribbleHubCookieUpdateRequest, http_request: Request) -> ScribbleHubCookieUpdateResponse:
     """Update the saved ScribbleHub session cookies (cf_clearance + matching User-Agent)."""
-    require_admin_identity(http_request)
+    require_operator_identity(http_request)
     from api.services.scribblehub_cookie_service import update_scribblehub_cookies as save_cookies
 
     try:
@@ -156,7 +157,7 @@ async def update_scribblehub_cookies(request: ScribbleHubCookieUpdateRequest, ht
 @router.post("/scribblehub-cookies/status", response_model=ScribbleHubCookieStatusResponse)
 async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest, http_request: Request) -> ScribbleHubCookieStatusResponse:
     """Check whether saved ScribbleHub cookies clear the Cloudflare challenge."""
-    require_admin_identity(http_request)
+    require_operator_identity(http_request)
     from api.services.scribblehub_cookie_service import check_scribblehub_cookies as run_check
 
     result = run_check(request.story_url)
@@ -167,6 +168,7 @@ async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest, htt
         result.get("tested_url"),
     )
     return ScribbleHubCookieStatusResponse(**result)
+
 
 
 @router.post("/start-batch", response_model=list[CrawlStartResponse])

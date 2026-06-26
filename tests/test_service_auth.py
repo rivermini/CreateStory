@@ -47,3 +47,33 @@ def test_service_auth_accepts_internal_token_and_identity(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"user_id": "user-123", "role": "operator"}
+
+
+def test_require_roles():
+    from fastapi import HTTPException
+    import pytest
+    from api.service_auth import require_admin_identity, require_operator_identity
+
+    class DummyState:
+        def __init__(self, role):
+            self.create_story_role = role
+
+    class DummyRequest:
+        def __init__(self, role):
+            self.state = DummyState(role)
+
+    # Test require_admin_identity
+    require_admin_identity(DummyRequest("admin"))  # Should not raise
+
+    with pytest.raises(HTTPException) as exc:
+        require_admin_identity(DummyRequest("operator"))
+    assert exc.value.status_code == 403
+
+    # Test require_operator_identity
+    require_operator_identity(DummyRequest("admin"))  # Should not raise
+    require_operator_identity(DummyRequest("operator"))  # Should not raise
+
+    with pytest.raises(HTTPException) as exc:
+        require_operator_identity(DummyRequest("user"))
+    assert exc.value.status_code == 403
+
