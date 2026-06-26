@@ -1,20 +1,22 @@
 """Results routes — list output files, preview, download, and combine."""
 
 import json
+import os
 import re
+import tempfile
 import zipfile
-from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from urllib.parse import quote
+from starlette.background import BackgroundTask
 
 from api.models.crawl_request import CrawlResult, OutputFile
 from api.services.crawler_service import chapter_record_from_output_file, get_crawl_service
-from api.services.file_service import get_file_service
+from api.services.file_service import CrawlPathError, get_file_service
+from api.service_auth import require_owner
 from utils.sanitize import sanitize_filename
 
 
@@ -77,8 +79,55 @@ def _make_combined_filename(crawl_id: str, output_dir: Path, chapter_files: list
 router = APIRouter(prefix="/api/results", tags=["Results"])
 
 
+def _delete_temp_file(path: str) -> None:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
+def _zip_file_response(files: list[tuple[Path, str]], filename: str) -> FileResponse:
+    temp = tempfile.NamedTemporaryFile(prefix="create_story_", suffix=".zip", delete=False)
+    temp_path = temp.name
+    temp.close()
+    try:
+        with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
+            for path, archive_name in files:
+                if path.is_file() and not path.is_symlink():
+                    archive.write(path, archive_name)
+    except Exception:
+        _delete_temp_file(temp_path)
+        raise
+    return FileResponse(
+        temp_path,
+        media_type="application/zip",
+        filename=filename,
+        background=BackgroundTask(_delete_temp_file, temp_path),
+    )
+
+
+def _require_progress(crawl_id: str, request: Request):
+    try:
+        get_file_service().validate_crawl_id(crawl_id)
+    except CrawlPathError as exc:
+        raise HTTPException(status_code=404, detail="Crawl not found.") from exc
+    progress = get_crawl_service().get_progress(crawl_id)
+    if progress is None:
+        raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
+    require_owner(request, progress.created_by_user_id)
+    return progress
+
+
+def _safe_output_file(crawl_id: str, filename: str, request: Request) -> Path:
+    _require_progress(crawl_id, request)
+    try:
+        return get_file_service().get_output_file(crawl_id, filename)
+    except CrawlPathError as exc:
+        raise HTTPException(status_code=403, detail="Access denied: invalid output path.") from exc
+
+
 @router.get("")
-async def list_all_results() -> list[dict]:
+async def list_all_results(request: Request) -> list[dict]:
     """Return a lightweight summary for every crawl session.
     
     Does NOT enumerate output files or extract novel metadata to avoid
@@ -87,6 +136,13 @@ async def list_all_results() -> list[dict]:
     """
     crawl_service = get_crawl_service()
     sessions = crawl_service.get_all_sessions()
+    role = getattr(request.state, "create_story_role", None)
+    user_id = getattr(request.state, "create_story_user_id", None)
+    sessions = [
+        session
+        for session in sessions
+        if role == "admin" or (session.created_by_user_id and session.created_by_user_id == user_id)
+    ]
 
     results: list[dict] = []
     for progress in sessions:
@@ -113,93 +169,67 @@ async def list_all_results() -> list[dict]:
 
 
 @router.post("/delete")
-async def delete_crawl_sessions(request: DeleteRequest) -> dict:
+async def delete_crawl_sessions(body: DeleteRequest, request: Request) -> dict:
     """Delete one or more crawl sessions and their associated output files."""
-    if not request.crawl_ids:
+    if not body.crawl_ids:
         raise HTTPException(status_code=400, detail="No crawl_ids provided.")
 
     crawl_service = get_crawl_service()
-    deleted_count = crawl_service.delete_sessions(request.crawl_ids)
+    for crawl_id in body.crawl_ids:
+        _require_progress(crawl_id, request)
+    deleted_count = crawl_service.delete_sessions(body.crawl_ids)
     return {"deleted_count": deleted_count}
 
 
 @router.get("/download-all")
-async def download_all_sessions() -> StreamingResponse:
+async def download_all_sessions(request: Request) -> FileResponse:
     """Zip all output files from every crawl session."""
     crawl_service = get_crawl_service()
     file_service = get_file_service()
     sessions = crawl_service.get_all_sessions()
+    role = getattr(request.state, "create_story_role", None)
+    user_id = getattr(request.state, "create_story_user_id", None)
+    sessions = [s for s in sessions if role == "admin" or s.created_by_user_id == user_id]
 
-    buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for progress in sessions:
-            crawl_id = progress.crawl_id
-            output_dir = file_service.get_output_dir(crawl_id)
-            fmt = progress.output_format or "md"
-            chapter_files = file_service.list_output_files(crawl_id, fmt=fmt)
-            for file_meta in sorted(chapter_files, key=lambda f: f.chapter_number):
-                fp = output_dir / file_meta.filename
-                if fp.exists():
-                    zf.write(fp, file_meta.filename)
-            if progress.combined_file:
-                cp = output_dir / progress.combined_file
-                if cp.exists():
-                    zf.write(cp, progress.combined_file)
-            if progress.combined_md_file:
-                tp = output_dir / progress.combined_md_file
-                if tp.exists():
-                    zf.write(tp, progress.combined_md_file)
-
-    buffer.seek(0)
-    zip_bytes = buffer.getvalue()
-    return StreamingResponse(
-        iter([zip_bytes]),
-        media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=\"all_sessions.zip\"", "Content-Length": str(len(zip_bytes))},
-    )
+    files: list[tuple[Path, str]] = []
+    for progress in sessions:
+        crawl_id = progress.crawl_id
+        fmt = progress.output_format or "md"
+        chapter_files = file_service.list_output_files(crawl_id, fmt=fmt)
+        for file_meta in sorted(chapter_files, key=lambda f: f.chapter_number):
+            files.append((file_service.get_output_file(crawl_id, file_meta.filename), file_meta.filename))
+        for name in (progress.combined_file, progress.combined_md_file):
+            if name:
+                files.append((file_service.get_output_file(crawl_id, name), name))
+    return _zip_file_response(files, "all_sessions.zip")
 
 
 @router.get("/download-all-combined")
-async def download_all_combined() -> StreamingResponse:
+async def download_all_combined(request: Request) -> FileResponse:
     """Zip the combined files from every crawl session."""
     crawl_service = get_crawl_service()
     file_service = get_file_service()
     sessions = crawl_service.get_all_sessions()
+    role = getattr(request.state, "create_story_role", None)
+    user_id = getattr(request.state, "create_story_user_id", None)
+    sessions = [s for s in sessions if role == "admin" or s.created_by_user_id == user_id]
 
-    buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for progress in sessions:
-            crawl_id = progress.crawl_id
-            output_dir = file_service.get_output_dir(crawl_id)
-            if progress.combined_file:
-                cp = output_dir / progress.combined_file
-                if cp.exists():
-                    zf.write(cp, progress.combined_file)
-            if progress.combined_md_file:
-                tp = output_dir / progress.combined_md_file
-                if tp.exists():
-                    zf.write(tp, progress.combined_md_file)
-
-    buffer.seek(0)
-    zip_bytes = buffer.getvalue()
-    return StreamingResponse(
-        iter([zip_bytes]),
-        media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=\"all_combined.zip\"", "Content-Length": str(len(zip_bytes))},
-    )
+    files: list[tuple[Path, str]] = []
+    for progress in sessions:
+        for name in (progress.combined_file, progress.combined_md_file):
+            if name:
+                files.append((file_service.get_output_file(progress.crawl_id, name), name))
+    return _zip_file_response(files, "all_combined.zip")
 
 
 @router.get("/{crawl_id}/download-all")
-async def download_all_files(crawl_id: str) -> StreamingResponse:
+async def download_all_files(crawl_id: str, request: Request) -> FileResponse:
     """Zip all output files from a crawl session and stream as a single download."""
     crawl_service = get_crawl_service()
     file_service = get_file_service()
 
-    progress = crawl_service.get_progress(crawl_id)
-    if progress is None:
-        raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
+    progress = _require_progress(crawl_id, request)
 
-    output_dir = file_service.get_output_dir(crawl_id)
     fmt = progress.output_format or "md"
     chapter_files = file_service.list_output_files(crawl_id, fmt=fmt)
 
@@ -213,40 +243,23 @@ async def download_all_files(crawl_id: str) -> StreamingResponse:
     else:
         zip_name = f"{crawl_id}.zip"
 
-    buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file_meta in sorted(chapter_files, key=lambda f: f.chapter_number):
-            filepath = output_dir / file_meta.filename
-            if filepath.exists():
-                zf.write(filepath, file_meta.filename)
-        if progress.combined_file:
-            combined_path = output_dir / progress.combined_file
-            if combined_path.exists():
-                zf.write(combined_path, progress.combined_file)
-        if progress.combined_md_file:
-            combined_md_path = output_dir / progress.combined_md_file
-            if combined_md_path.exists():
-                zf.write(combined_md_path, progress.combined_md_file)
-
-    buffer.seek(0)
-    zip_bytes = buffer.getvalue()
-
-    return StreamingResponse(
-        iter([zip_bytes]),
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{zip_name}"', "Content-Length": str(len(zip_bytes))},
-    )
+    files = [
+        (file_service.get_output_file(crawl_id, file_meta.filename), file_meta.filename)
+        for file_meta in sorted(chapter_files, key=lambda f: f.chapter_number)
+    ]
+    for name in (progress.combined_file, progress.combined_md_file):
+        if name:
+            files.append((file_service.get_output_file(crawl_id, name), name))
+    return _zip_file_response(files, zip_name)
 
 
 @router.get("/{crawl_id}", response_model=CrawlResult)
-async def get_crawl_result(crawl_id: str) -> CrawlResult:
+async def get_crawl_result(crawl_id: str, request: Request) -> CrawlResult:
     """Return the complete result for a crawl session."""
     crawl_service = get_crawl_service()
     file_service = get_file_service()
 
-    progress = crawl_service.get_progress(crawl_id)
-    if progress is None:
-        raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
+    progress = _require_progress(crawl_id, request)
 
     output_dir = file_service.get_output_dir(crawl_id)
     fmt = progress.output_format or "md"
@@ -273,41 +286,26 @@ async def get_crawl_result(crawl_id: str) -> CrawlResult:
 
 
 @router.get("/{crawl_id}/download")
-async def download_file(crawl_id: str, filename: str) -> StreamingResponse:
+async def download_file(crawl_id: str, filename: str, request: Request) -> FileResponse:
     """Stream a single output file for download."""
     file_service = get_file_service()
-
-    output_dir = file_service.get_output_dir(crawl_id)
-    filepath = (output_dir / filename).resolve()
-
-    if not str(filepath).startswith(str(output_dir.resolve())):
-        raise HTTPException(status_code=403, detail="Access denied: path traversal detected.")
+    filepath = _safe_output_file(crawl_id, filename, request)
 
     if not filepath.exists():
         raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
 
-    content, mime_type = file_service.get_file_content(filepath)
-
-    return StreamingResponse(
-        iter([content]),
-        media_type=mime_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{quote(filepath.name)}"',
-            "Content-Length": str(len(content)),
-        },
+    return FileResponse(
+        filepath,
+        filename=filepath.name,
+        media_type="application/octet-stream",
     )
 
 
 @router.get("/{crawl_id}/preview")
-async def preview_file(crawl_id: str, filename: str) -> dict:
+async def preview_file(crawl_id: str, filename: str, request: Request) -> dict:
     """Return a text preview of an output file."""
     file_service = get_file_service()
-
-    output_dir = file_service.get_output_dir(crawl_id)
-    filepath = (output_dir / filename).resolve()
-
-    if not str(filepath).startswith(str(output_dir.resolve())):
-        raise HTTPException(status_code=403, detail="Access denied: path traversal detected.")
+    filepath = _safe_output_file(crawl_id, filename, request)
 
     if not filepath.exists():
         raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
@@ -317,15 +315,9 @@ async def preview_file(crawl_id: str, filename: str) -> dict:
 
 
 @router.get("/{crawl_id}/content")
-async def get_file_content(crawl_id: str, filename: str) -> dict:
+async def get_file_content(crawl_id: str, filename: str, request: Request) -> dict:
     """Return the full raw content of an output file as a dict with {content: string}."""
-    file_service = get_file_service()
-
-    output_dir = file_service.get_output_dir(crawl_id)
-    filepath = (output_dir / filename).resolve()
-
-    if not str(filepath).startswith(str(output_dir.resolve())):
-        raise HTTPException(status_code=403, detail="Access denied: path traversal detected.")
+    filepath = _safe_output_file(crawl_id, filename, request)
 
     if not filepath.exists():
         raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
@@ -340,7 +332,7 @@ async def get_file_content(crawl_id: str, filename: str) -> dict:
 
 
 @router.post("/{crawl_id}/combine")
-async def combine_chapters(crawl_id: str) -> dict:
+async def combine_chapters(crawl_id: str, request: Request) -> dict:
     """
     Merge all individual chapter files into a single combined Markdown file.
     Mirrors _run_combine naming exactly: {site_name}_{safe_novel_name}_Ongoing.md
@@ -348,9 +340,7 @@ async def combine_chapters(crawl_id: str) -> dict:
     crawl_service = get_crawl_service()
     file_service = get_file_service()
 
-    progress = crawl_service.get_progress(crawl_id)
-    if progress is None:
-        raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
+    progress = _require_progress(crawl_id, request)
 
     output_dir = file_service.get_output_dir(crawl_id)
     output_format = progress.output_format or "md"
@@ -429,16 +419,14 @@ async def combine_chapters(crawl_id: str) -> dict:
 
 
 @router.get("/{crawl_id}/combined")
-async def get_combined_result(crawl_id: str) -> dict:
+async def get_combined_result(crawl_id: str, request: Request) -> dict:
     """
     Return the combined Markdown file content for a crawl session.
     """
     crawl_service = get_crawl_service()
     file_service = get_file_service()
 
-    progress = crawl_service.get_progress(crawl_id)
-    if progress is None:
-        raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
+    progress = _require_progress(crawl_id, request)
 
     output_dir = file_service.get_output_dir(crawl_id)
     output_format = progress.output_format or "md"
@@ -450,7 +438,7 @@ async def get_combined_result(crawl_id: str) -> dict:
 
     if not md_path or not md_path.exists():
         try:
-            await combine_chapters(crawl_id)
+            await combine_chapters(crawl_id, request)
         except HTTPException:
             pass
         progress = crawl_service.get_progress(crawl_id)

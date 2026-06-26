@@ -8,23 +8,53 @@ from api.models.crawl_request import OutputFile
 from api.repositories.crawl_repository import CrawlOutputRepository
 
 
+CRAWL_ID_PATTERN = re.compile(r"^[0-9a-f]{8}$")
+
+
+class CrawlPathError(ValueError):
+    """Raised when a crawl identifier or output path escapes the crawl root."""
+
+
 class FileService:
     def __init__(self) -> None:
         self._project_root = Path(__file__).parent.parent.parent.resolve()
+        self._crawl_root = (self._project_root / "output" / "crawl").resolve()
         self._output_repo = CrawlOutputRepository()
 
-    def get_output_dir(self, crawl_id: str, custom_dir: Optional[str] = None) -> Path:
-        if custom_dir:
-            return Path(custom_dir).resolve()
-        return self._project_root / "output" / "crawl" / crawl_id
+    @staticmethod
+    def validate_crawl_id(crawl_id: str) -> str:
+        if not CRAWL_ID_PATTERN.fullmatch(crawl_id):
+            raise CrawlPathError("Invalid crawl identifier.")
+        return crawl_id
+
+    def get_output_dir(self, crawl_id: str) -> Path:
+        self.validate_crawl_id(crawl_id)
+        candidate = self._crawl_root / crawl_id
+        if candidate.is_symlink():
+            raise CrawlPathError("Symbolic-link crawl directories are not allowed.")
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(self._crawl_root):
+            raise CrawlPathError("Crawl path escapes the output root.")
+        return resolved
+
+    def get_output_file(self, crawl_id: str, filename: str) -> Path:
+        output_dir = self.get_output_dir(crawl_id)
+        if not filename or Path(filename).is_absolute() or Path(filename).name != filename:
+            raise CrawlPathError("Invalid output filename.")
+        candidate = output_dir / filename
+        if candidate.is_symlink():
+            raise CrawlPathError("Symbolic-link output files are not allowed.")
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(output_dir):
+            raise CrawlPathError("Output file escapes the crawl directory.")
+        return resolved
 
     def list_output_files(
         self,
         crawl_id: str,
         fmt: Literal["md"],
-        custom_dir: Optional[str] = None,
     ) -> list[OutputFile]:
-        output_dir = self.get_output_dir(crawl_id, custom_dir)
+        output_dir = self.get_output_dir(crawl_id)
         ext = "json" if fmt == "jsonl" else fmt
         files: list[Path] = []
 

@@ -19,6 +19,7 @@ class CrawlSessionRecord(Base):
     __tablename__ = "crawl_sessions"
 
     crawl_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     site_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     novel_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     chapters_crawled: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

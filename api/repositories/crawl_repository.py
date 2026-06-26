@@ -37,6 +37,7 @@ class CrawlSessionRepository:
     def _dict_to_row(entry: dict) -> CrawlSessionRecord:
         return CrawlSessionRecord(
             crawl_id=entry.get("crawl_id", ""),
+            created_by_user_id=entry.get("created_by_user_id"),
             site_name=entry.get("site_name", ""),
             novel_name=entry.get("novel_name", ""),
             chapters_crawled=entry.get("chapters_crawled", 0),
@@ -58,6 +59,7 @@ class CrawlSessionRepository:
         data = dict(row.raw or {})
         data.update({
             "crawl_id": row.crawl_id,
+            "created_by_user_id": row.created_by_user_id,
             "site_name": row.site_name,
             "novel_name": row.novel_name,
             "chapters_crawled": row.chapters_crawled,

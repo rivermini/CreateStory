@@ -22,6 +22,12 @@ from api.repositories.crawl_repository import CrawlOutputRepository, CrawlSessio
 from utils.sanitize import sanitize_filename
 
 logger = logging.getLogger(__name__)
+MAX_ACTIVE_CRAWLS_PER_USER = int(os.getenv("MAX_ACTIVE_CRAWLS_PER_USER", "2"))
+MAX_ACTIVE_CRAWLS_GLOBAL = int(os.getenv("MAX_ACTIVE_CRAWLS_GLOBAL", "4"))
+
+
+class CrawlCapacityError(RuntimeError):
+    """Raised when crawl admission limits have been reached."""
 
 
 def _get_wdm_cached_driver() -> str | None:
@@ -171,6 +177,7 @@ class CrawlProgress:
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     crawl_id: str = ""
+    created_by_user_id: str | None = None
     novel_name: str = ""
     site_name: str = ""
     completed: Optional[bool] = None
@@ -230,6 +237,7 @@ class CrawlService:
                     ]
                     self._sessions[crawl_id] = CrawlProgress(
                         crawl_id=crawl_id,
+                        created_by_user_id=entry.get("created_by_user_id"),
                         site_name=entry.get("site_name", ""),
                         novel_name=entry.get("novel_name", ""),
                         chapters_crawled=entry.get("chapters_crawled", 0),
@@ -257,6 +265,7 @@ class CrawlService:
             for p in self._sessions.values():
                 entries.append({
                     "crawl_id": p.crawl_id,
+                    "created_by_user_id": p.created_by_user_id,
                     "site_name": p.site_name,
                     "novel_name": p.novel_name,
                     "chapters_crawled": p.chapters_crawled,
@@ -296,6 +305,7 @@ class CrawlService:
         completed: Optional[bool] = None,
         combine_chapters: bool = False,
         source_url: Optional[str] = None,
+        created_by_user_id: str | None = None,
     ) -> str:
         crawl_id = self._new_crawl_id()
         output_dir = f"output/crawl/{crawl_id}"
@@ -326,6 +336,7 @@ class CrawlService:
             status="running",
             started_at=self._now(),
             crawl_id=crawl_id,
+            created_by_user_id=created_by_user_id,
             site_name=site_name,
             completed=completed,
             novel_name=novel_name or "",
@@ -336,6 +347,14 @@ class CrawlService:
         progress.add_log(f"[CMD] {' '.join(scrapy_cmd)}", "info")
 
         with self._lock:
+            running = [session for session in self._sessions.values() if session.status == "running"]
+            owner_running = [
+                session for session in running if session.created_by_user_id == created_by_user_id
+            ]
+            if len(running) >= MAX_ACTIVE_CRAWLS_GLOBAL:
+                raise CrawlCapacityError("Global crawl capacity reached.")
+            if created_by_user_id and len(owner_running) >= MAX_ACTIVE_CRAWLS_PER_USER:
+                raise CrawlCapacityError("Per-user crawl capacity reached.")
             self._sessions[crawl_id] = progress
             self._cancel_flags[crawl_id] = False
 
@@ -701,12 +720,16 @@ class CrawlService:
 
     def delete_sessions(self, crawl_ids: list[str]) -> int:
         import shutil
-        from api.services.file_service import get_file_service
+        from api.services.file_service import CrawlPathError, get_file_service
 
         deleted_count = 0
         file_service = get_file_service()
 
         with self._lock:
+            if any(crawl_id not in self._sessions for crawl_id in crawl_ids):
+                raise ValueError("Unknown crawl identifier.")
+            for crawl_id in crawl_ids:
+                file_service.validate_crawl_id(crawl_id)
             for crawl_id in crawl_ids:
                 if crawl_id in self._sessions:
                     del self._sessions[crawl_id]
@@ -720,6 +743,8 @@ class CrawlService:
                 if output_dir.exists():
                     shutil.rmtree(output_dir)
                     logger.info("Deleted output directory for crawl %s", crawl_id)
+            except CrawlPathError:
+                raise
             except Exception as exc:
                 logger.warning("Failed to delete output directory for %s: %s", crawl_id, exc)
 

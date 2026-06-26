@@ -1,9 +1,10 @@
 """Crawl execution routes — start, stream (SSE), cancel, and status."""
 
 import logging
+import os
 import re
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -15,8 +16,10 @@ from api.models.crawl_request import (
     ProgressUpdate,
 )
 from api.routes.crawl_stream import crawl_event_generator
+from api.service_auth import current_owner, require_admin_identity, require_owner
 
 logger = logging.getLogger(__name__)
+MAX_CRAWL_BATCH = int(os.getenv("MAX_CRAWL_BATCH", "10"))
 
 router = APIRouter(prefix="/api/crawl", tags=["Crawl"])
 
@@ -66,7 +69,7 @@ class ScribbleHubCookieStatusResponse(BaseModel):
 
 
 @router.post("/start", response_model=CrawlStartResponse)
-async def start_crawl(request: CrawlRequest) -> CrawlStartResponse:
+async def start_crawl(request: CrawlRequest, http_request: Request) -> CrawlStartResponse:
     """
     Start a new crawl session. Returns immediately with a crawl_id.
 
@@ -77,28 +80,33 @@ async def start_crawl(request: CrawlRequest) -> CrawlStartResponse:
         if paywall_blocked:
             return paywall_blocked
 
-    from api.services.crawler_service import get_crawl_service
+    from api.services.crawler_service import CrawlCapacityError, get_crawl_service
 
     service = get_crawl_service()
-    crawl_id = service.start_crawl(
-        spider_name=request.spider_name,
-        site_name=request.site_name,
-        novel=request.novel,
-        limit=request.limit,
-        output_format=request.output_format,
-        chapter_range=request.chapter_range,
-        novel_name=request.novel_name,
-        completed=request.completed,
-        combine_chapters=request.combine_chapters,
-        source_url=request.source_url,
-    )
+    try:
+        crawl_id = service.start_crawl(
+            spider_name=request.spider_name,
+            site_name=request.site_name,
+            novel=request.novel,
+            limit=request.limit,
+            output_format=request.output_format,
+            chapter_range=request.chapter_range,
+            novel_name=request.novel_name,
+            completed=request.completed,
+            combine_chapters=request.combine_chapters,
+            source_url=request.source_url,
+            created_by_user_id=current_owner(http_request),
+        )
+    except CrawlCapacityError as exc:
+        raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
     logger.info("Crawl started: %s", crawl_id)
     return CrawlStartResponse(crawl_id=crawl_id, status="running")
 
 
 @router.post("/inkitt-cookies", response_model=InkittCookieUpdateResponse)
-async def update_inkitt_cookies(request: InkittCookieUpdateRequest) -> InkittCookieUpdateResponse:
+async def update_inkitt_cookies(request: InkittCookieUpdateRequest, http_request: Request) -> InkittCookieUpdateResponse:
     """Update the saved Inkitt login cookies used by the Inkitt spider."""
+    require_admin_identity(http_request)
     from api.services.inkitt_cookie_service import update_inkitt_cookies as save_inkitt_cookies
 
     try:
@@ -111,8 +119,9 @@ async def update_inkitt_cookies(request: InkittCookieUpdateRequest) -> InkittCoo
 
 
 @router.post("/inkitt-cookies/status", response_model=InkittCookieStatusResponse)
-async def check_inkitt_cookies(request: InkittCookieStatusRequest) -> InkittCookieStatusResponse:
+async def check_inkitt_cookies(request: InkittCookieStatusRequest, http_request: Request) -> InkittCookieStatusResponse:
     """Check whether saved Inkitt cookies can access a likely login-gated page."""
+    require_admin_identity(http_request)
     from api.services.inkitt_cookie_service import check_inkitt_cookies as run_check
 
     result = run_check(request.story_url)
@@ -126,8 +135,9 @@ async def check_inkitt_cookies(request: InkittCookieStatusRequest) -> InkittCook
 
 
 @router.post("/scribblehub-cookies", response_model=ScribbleHubCookieUpdateResponse)
-async def update_scribblehub_cookies(request: ScribbleHubCookieUpdateRequest) -> ScribbleHubCookieUpdateResponse:
+async def update_scribblehub_cookies(request: ScribbleHubCookieUpdateRequest, http_request: Request) -> ScribbleHubCookieUpdateResponse:
     """Update the saved ScribbleHub session cookies (cf_clearance + matching User-Agent)."""
+    require_admin_identity(http_request)
     from api.services.scribblehub_cookie_service import update_scribblehub_cookies as save_cookies
 
     try:
@@ -144,8 +154,9 @@ async def update_scribblehub_cookies(request: ScribbleHubCookieUpdateRequest) ->
 
 
 @router.post("/scribblehub-cookies/status", response_model=ScribbleHubCookieStatusResponse)
-async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest) -> ScribbleHubCookieStatusResponse:
+async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest, http_request: Request) -> ScribbleHubCookieStatusResponse:
     """Check whether saved ScribbleHub cookies clear the Cloudflare challenge."""
+    require_admin_identity(http_request)
     from api.services.scribblehub_cookie_service import check_scribblehub_cookies as run_check
 
     result = run_check(request.story_url)
@@ -159,14 +170,20 @@ async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest) -> 
 
 
 @router.post("/start-batch", response_model=list[CrawlStartResponse])
-async def start_batch_crawl(requests: list[CrawlRequest]) -> list[CrawlStartResponse]:
+async def start_batch_crawl(requests: list[CrawlRequest], http_request: Request) -> list[CrawlStartResponse]:
     """
     Start multiple crawl sessions in parallel.
 
     Each request in the list is started in parallel. Returns a list of crawl_id+status
     for every submitted entry (including entries that are paywalled — returned with status='blocked').
     """
-    from api.services.crawler_service import get_crawl_service
+    from api.services.crawler_service import CrawlCapacityError, get_crawl_service
+
+    if not requests or len(requests) > MAX_CRAWL_BATCH:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Batch must contain between 1 and {MAX_CRAWL_BATCH} crawl requests.",
+        )
 
     service = get_crawl_service()
     results: list[CrawlStartResponse] = []
@@ -178,18 +195,22 @@ async def start_batch_crawl(requests: list[CrawlRequest]) -> list[CrawlStartResp
                 results.append(blocked)
                 continue
 
-        crawl_id = service.start_crawl(
-            spider_name=request.spider_name,
-            site_name=request.site_name,
-            novel=request.novel,
-            limit=request.limit,
-            output_format=request.output_format,
-            chapter_range=request.chapter_range,
-            novel_name=request.novel_name,
-            completed=request.completed,
-            combine_chapters=request.combine_chapters,
-            source_url=request.source_url,
-        )
+        try:
+            crawl_id = service.start_crawl(
+                spider_name=request.spider_name,
+                site_name=request.site_name,
+                novel=request.novel,
+                limit=request.limit,
+                output_format=request.output_format,
+                chapter_range=request.chapter_range,
+                novel_name=request.novel_name,
+                completed=request.completed,
+                combine_chapters=request.combine_chapters,
+                source_url=request.source_url,
+                created_by_user_id=current_owner(http_request),
+            )
+        except CrawlCapacityError as exc:
+            raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
         logger.info("Batch crawl started: %s", crawl_id)
         results.append(CrawlStartResponse(crawl_id=crawl_id, status="running"))
 
@@ -237,6 +258,7 @@ def _check_and_reject_paywalled(request: CrawlRequest) -> CrawlStartResponse | N
 
 @router.get("/stream")
 async def crawl_stream(
+    request: Request,
     crawl_id: str = Query(..., description="The crawl session ID returned by /start"),
 ):
     """
@@ -247,6 +269,9 @@ async def crawl_stream(
     from api.services.crawler_service import get_crawl_service
 
     service = get_crawl_service()
+    progress = service.get_progress(crawl_id)
+    if progress is not None:
+        require_owner(request, progress.created_by_user_id)
 
     async def _make_response(crawl_id: str):
         generator = crawl_event_generator(crawl_id)
@@ -270,18 +295,24 @@ async def crawl_stream(
 
 @router.delete("/cancel", response_model=CrawlCancelResponse)
 async def cancel_crawl(
+    request: Request,
     crawl_id: str = Query(..., description="The crawl session ID to cancel"),
 ) -> CrawlCancelResponse:
     """Cancel a running crawl session."""
     from api.services.crawler_service import get_crawl_service
 
     service = get_crawl_service()
+    progress = service.get_progress(crawl_id)
+    if progress is None:
+        raise HTTPException(status_code=404, detail=f"Crawl '{crawl_id}' not found.")
+    require_owner(request, progress.created_by_user_id)
     cancelled = service.cancel_crawl(crawl_id)
     return CrawlCancelResponse(crawl_id=crawl_id, cancelled=cancelled)
 
 
 @router.get("/status", response_model=ProgressUpdate)
 async def crawl_status(
+    request: Request,
     crawl_id: str = Query(..., description="The crawl session ID"),
 ) -> ProgressUpdate:
     """Return the current progress for a crawl (polling fallback)."""
@@ -294,11 +325,12 @@ async def crawl_status(
             status_code=404,
             content={"detail": f"Crawl '{crawl_id}' not found."},
         )
+    require_owner(request, progress.created_by_user_id)
     return progress.to_progress_update()
 
 
 @router.get("/status/{crawl_id}")
-async def crawl_status_full(crawl_id: str) -> dict:
+async def crawl_status_full(crawl_id: str, request: Request) -> dict:
     """Return full crawl status including progress and recent logs."""
     from api.services.crawler_service import get_crawl_service
 
@@ -309,6 +341,7 @@ async def crawl_status_full(crawl_id: str) -> dict:
             status_code=404,
             content={"detail": f"Crawl '{crawl_id}' not found."},
         )
+    require_owner(request, session.created_by_user_id)
     return {
         "progress": session.to_progress_update(),
         "log_lines": session.log_lines[-100:],
@@ -316,12 +349,19 @@ async def crawl_status_full(crawl_id: str) -> dict:
 
 
 @router.get("/active")
-async def active_crawls() -> list[dict]:
+async def active_crawls(request: Request) -> list[dict]:
     """Return all running and recently finished crawl sessions."""
     from api.services.crawler_service import get_crawl_service
 
     service = get_crawl_service()
     sessions = service.get_all_sessions()
+    role = getattr(request.state, "create_story_role", None)
+    user_id = getattr(request.state, "create_story_user_id", None)
+    sessions = [
+        session
+        for session in sessions
+        if role == "admin" or (session.created_by_user_id and session.created_by_user_id == user_id)
+    ]
     return [
         {
             "crawl_id": s.crawl_id,

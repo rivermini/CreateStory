@@ -10,7 +10,7 @@ class CrawlRequest(BaseModel):
     spider_name: str = Field(..., description="Scrapy spider name, e.g. 'wattpad'")
     site_name: str = Field(..., description="Human-readable site name, e.g. 'Wattpad'")
     novel: str = Field(..., description="Novel slug or full chapter URL")
-    limit: int = Field(default=10, ge=1, le=10000, description="Number of chapters to crawl")
+    limit: int = Field(default=10, ge=1, le=1000, description="Number of chapters to crawl")
     chapter_range: Optional[str] = Field(
         default=None,
         description='Chapter range such as "3-5" or "10-15". When set, overrides limit.',

@@ -24,6 +24,7 @@ if str(_project_root) not in sys.path:
 
 from api.db import init_db
 from api.routes import crawl, results, sites
+from api.service_auth import enforce_service_auth
 
 
 @asynccontextmanager
@@ -60,7 +61,11 @@ app = FastAPI(
     description="REST + SSE API for multi-site novel scraping. Handles site detection and Scrapy crawl execution.",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
+app.middleware("http")(enforce_service_auth)
 
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
