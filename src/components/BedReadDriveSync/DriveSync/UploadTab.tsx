@@ -544,11 +544,6 @@ function UploadCard({
             {err}
           </p>
         ))}
-        {(folder.warnings ?? []).map((warn, i) => (
-          <p key={`warn-${i}`} className="mt-1 text-xs" style={{ color: '#d97706' }}>
-            ⚠ {warn}
-          </p>
-        ))}
         {result && result.success && (
           <p className="mt-1 truncate text-xs" style={{ color: isDark ? '#34d399' : '#059669' }}>
             {result.message}

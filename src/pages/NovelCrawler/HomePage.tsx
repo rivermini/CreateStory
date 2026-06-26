@@ -22,6 +22,9 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
     chapters,
     chapterCount,
     totalChapterCount,
+    freeChapterCount,
+    paidChapterCount,
+    authenticated,
     storyTitle: panelTitle,
     isLoadingChapters,
     chaptersError,
@@ -135,10 +138,18 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
   }, [siteInfo?.config_name, isValid, inputUrl]);
 
   const inputsLocked = !isValid;
-  const effectiveMax = totalChapterCount ?? 999999;
+  // GoodNovel: let users request beyond the detected count (e.g. to be safe with a paid
+  // account, or if more chapters exist than the preview listing reports). The backend only
+  // crawls chapters that actually exist and are readable, so over-asking is harmless.
+  const allowOverMax = siteInfo?.config_name === 'goodnovel';
+  const effectiveMax = allowOverMax ? 999999 : (totalChapterCount ?? 999999);
+  const chapterCapWord = allowOverMax ? 'available' : 'max';
   const rangeTotal = Math.max(0, rangeTo - rangeFrom + 1);
   const isInkitt = siteInfo?.config_name === 'inkitt';
-  const isPaywalled = novelMetadata?.is_paywalled === true;
+  // Wattpad Originals are fully locked (author monetization / ToS) — crawling is disabled.
+  // Other sites (e.g. GoodNovel) have a per-chapter paywall: free chapters are still crawlable,
+  // so we never block the whole crawl for them.
+  const isWattpadOriginal = siteInfo?.config_name === 'wattpad' && novelMetadata?.is_paywalled === true;
 
   const pageBackground = isDark
     ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
@@ -185,8 +196,8 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
       setStartError('Please enter a valid novel URL and wait for site detection to complete.');
       return;
     }
-    if (isPaywalled) {
-      setStartError('Crawling is disabled for this story (paywalled content).');
+    if (isWattpadOriginal) {
+      setStartError('Crawling is disabled for this story (Wattpad Original — paywalled content).');
       return;
     }
 
@@ -380,7 +391,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                         {totalChapterCount.toLocaleString()}
                       </p>
                       <p className="text-[10px]" style={{ color: tertiaryText }}>
-                        max chapters
+                        {chapterCapWord} chapters
                       </p>
                     </div>
                   )}
@@ -416,7 +427,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                     <label className="mb-2 block text-sm" style={{ color: secondaryText }}>
                       Max chapters to crawl
                       {totalChapterCount != null && (
-                        <span style={{ color: tertiaryText }}> (max: {totalChapterCount.toLocaleString()})</span>
+                        <span style={{ color: tertiaryText }}> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
                       )}
                     </label>
                     <div className="relative">
@@ -443,7 +454,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                       <label className="mb-2 block text-sm" style={{ color: secondaryText }}>
                         From chapter
                         {totalChapterCount != null && (
-                          <span style={{ color: tertiaryText }}> (max: {totalChapterCount.toLocaleString()})</span>
+                          <span style={{ color: tertiaryText }}> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
                         )}
                       </label>
                       <input
@@ -464,7 +475,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                       <label className="mb-2 block text-sm" style={{ color: secondaryText }}>
                         To chapter
                         {totalChapterCount != null && (
-                          <span style={{ color: tertiaryText }}> (max: {totalChapterCount.toLocaleString()})</span>
+                          <span style={{ color: tertiaryText }}> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
                         )}
                       </label>
                       <input
@@ -508,12 +519,12 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
 
               <button
                 onClick={handleStart}
-                disabled={isStarting || !isValid || isPaywalled}
-                title={isPaywalled ? 'Crawling disabled — Wattpad Original' : undefined}
+                disabled={isStarting || !isValid || isWattpadOriginal}
+                title={isWattpadOriginal ? 'Crawling disabled — Wattpad Original' : undefined}
                 className="flex w-full items-center justify-center gap-2 rounded-md py-3.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed"
                 style={{
-                  background: isPaywalled || isStarting || !isValid ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.14)') : accentSolid,
-                  color: isPaywalled || isStarting || !isValid ? secondaryText : (isDark ? '#111111' : '#ffffff'),
+                  background: isWattpadOriginal || isStarting || !isValid ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.14)') : accentSolid,
+                  color: isWattpadOriginal || isStarting || !isValid ? secondaryText : (isDark ? '#111111' : '#ffffff'),
                   opacity: isStarting ? 0.7 : 1,
                 }}
               >
@@ -547,6 +558,10 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                     isChapterUrl={isChapterUrl}
                     novelMetadata={novelMetadata}
                     onCrawlNovel={handleCrawlNovel}
+                    crawlBlocked={isWattpadOriginal}
+                    freeChapterCount={freeChapterCount}
+                    paidChapterCount={paidChapterCount}
+                    authenticated={authenticated}
                     isDark={isDark}
                   />
                 </div>

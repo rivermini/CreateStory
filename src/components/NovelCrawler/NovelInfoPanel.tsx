@@ -16,6 +16,14 @@ export interface NovelInfoPanelProps {
   readonly isChapterUrl: boolean;
   readonly novelMetadata: NovelMetadata | null | undefined;
   readonly onCrawlNovel: (toChapter: number) => void;
+  /** When true, crawling is fully disabled (e.g. Wattpad Originals). */
+  readonly crawlBlocked?: boolean;
+  /** Chapters readable for free across the whole book (sites with a per-chapter paywall). */
+  readonly freeChapterCount?: number | null;
+  /** Paywalled/locked chapters across the whole book. */
+  readonly paidChapterCount?: number | null;
+  /** Whether saved login cookies were applied when computing the free/paid split. */
+  readonly authenticated?: boolean | null;
   readonly isDark?: boolean;
 }
 
@@ -32,6 +40,10 @@ export function NovelInfoPanel({
   isChapterUrl,
   novelMetadata,
   onCrawlNovel,
+  crawlBlocked = false,
+  freeChapterCount = null,
+  paidChapterCount = null,
+  authenticated = null,
   isDark = true,
 }: NovelInfoPanelProps) {
   const tocRef = useRef<HTMLDivElement>(null);
@@ -63,7 +75,9 @@ export function NovelInfoPanel({
     );
   }
 
-  const isPaywalled = novelMetadata?.is_paywalled ?? false;
+  // A per-chapter paywall (some chapters paid, free ones still crawlable) — distinct from a
+  // fully-blocked story (crawlBlocked, e.g. Wattpad Original).
+  const hasPartialPaywall = !crawlBlocked && (paidChapterCount ?? 0) > 0;
   const displayedTotal = totalChapterCount ?? (chapters.length > 0 ? Math.max(...chapters.map((chapter) => chapter.chapter_number)) : 0);
   const estimatedMax = totalChapterCount ?? displayedTotal;
   const showPartial = totalChapterCount != null && chapterCount < totalChapterCount;
@@ -155,7 +169,7 @@ export function NovelInfoPanel({
         {warning && <p className="text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>{warning}</p>}
       </div>
 
-      {isPaywalled && (
+      {crawlBlocked && (
         <div className="shrink-0 border-b px-3 py-2.5" style={{ borderColor: panelBorder }}>
           <div className="rounded-lg border p-3" style={{ borderColor: 'rgba(251,191,36,0.24)', background: isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)' }}>
             <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
@@ -168,6 +182,30 @@ export function NovelInfoPanel({
             <p className="mt-2 flex items-center gap-1 text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)' }}>
               <InfoIcon />
               Free chapters may be available on other sources.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {hasPartialPaywall && (
+        <div className="shrink-0 border-b px-3 py-2.5" style={{ borderColor: panelBorder }}>
+          <div className="rounded-lg border p-3" style={{ borderColor: 'rgba(251,191,36,0.24)', background: isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)' }}>
+            <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
+              <LockIcon />
+              Some chapters are paywalled
+            </div>
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
+              <span className="font-semibold" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{(freeChapterCount ?? 0).toLocaleString()} free</span>
+              {' · '}
+              <span className="font-semibold">{(paidChapterCount ?? 0).toLocaleString()} paid</span>
+              {'. '}
+              Crawling reads the free chapters and skips the locked ones.
+            </p>
+            <p className="mt-2 flex items-center gap-1 text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(17,17,17,0.56)' }}>
+              <InfoIcon />
+              {authenticated
+                ? 'Using your saved login — chapters you have unlocked count as free.'
+                : 'Tip: add your login cookies in Settings to unlock more chapters for free.'}
             </p>
           </div>
         </div>
@@ -202,7 +240,7 @@ export function NovelInfoPanel({
             Range: 1 &ndash; {estimatedMax.toLocaleString()}
           </p>
         )}
-        {isPaywalled ? (
+        {crawlBlocked ? (
           <p className="text-center text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(17,17,17,0.72)' }}>
             Crawling unavailable for Wattpad Originals
           </p>
@@ -282,9 +320,22 @@ function ChapterRow({ chapter, isDark, isLast }: { readonly chapter: ChapterEntr
         {chapter.chapter_number}
       </td>
       <td className="px-4 py-2.5 align-top text-xs leading-relaxed" style={{ color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(55,53,47,0.72)' }}>
-        <span className="block truncate" title={chapter.title}>
-          {chapter.title || <em className="not-italic" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }}>Untitled</em>}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="block min-w-0 flex-1 truncate" title={chapter.title}>
+            {chapter.title || <em className="not-italic" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }}>Untitled</em>}
+          </span>
+          {chapter.locked === true && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium" style={{ borderColor: 'rgba(251,191,36,0.3)', background: isDark ? 'rgba(251,191,36,0.1)' : 'rgba(251,191,36,0.08)', color: isDark ? 'rgb(252 211 77)' : 'rgb(180 83 9)' }} title="Paywalled — skipped when crawling">
+              <Icon icon={appIcons.paywall} className="h-2.5 w-2.5" />
+              Paid
+            </span>
+          )}
+          {chapter.locked === false && (
+            <span className="inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium" style={{ borderColor: isDark ? 'rgba(74,222,128,0.28)' : 'rgba(21,128,61,0.25)', background: isDark ? 'rgba(74,222,128,0.1)' : 'rgba(21,128,61,0.06)', color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }} title="Free to crawl">
+              Free
+            </span>
+          )}
+        </div>
       </td>
     </tr>
   );

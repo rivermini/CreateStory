@@ -145,6 +145,24 @@ export interface ScribbleHubCookieStatusResponse {
   tested_url?: string | null;
 }
 
+export interface GoodNovelCookieUpdateResponse {
+  updated: boolean;
+  cookie_count: number;
+  has_token: boolean;
+}
+
+export interface GoodNovelCookieStatusResponse {
+  valid: boolean | null;
+  reason: string;
+  message: string;
+  cookie_count: number;
+  tested_url?: string | null;
+  readable?: number | null;
+  readable_without_login?: number | null;
+  total?: number | null;
+  extra_unlocked?: number | null;
+}
+
 export interface ProgressUpdate {
   chapters_crawled: number;
   chapters_total: number;
@@ -281,6 +299,8 @@ export interface ChapterEntry {
   chapter_number: number;
   title: string;
   url: string;
+  /** True if the chapter is paywalled/not free; null when the site has no free/paid distinction. */
+  locked?: boolean | null;
 }
 
 export interface ChapterListResponse {
@@ -292,6 +312,12 @@ export interface ChapterListResponse {
   total_chapter_count?: number | null;
   chapters: ChapterEntry[];
   warning?: string | null;
+  /** Chapters readable for free across the whole book (sites with a per-chapter paywall). */
+  free_chapter_count?: number | null;
+  /** Paywalled/locked chapters across the whole book. */
+  paid_chapter_count?: number | null;
+  /** Whether saved login cookies were applied when computing the free/paid split. */
+  authenticated?: boolean | null;
 }
 
 export interface BinarySearchTotalResponse {
@@ -362,8 +388,6 @@ export interface DriveFolderEntry {
   is_valid_format: boolean;
   has_chapter_duplicates: boolean;
   validation_errors: string[];
-  /** Non-blocking advisories (e.g. story not in the admin recommended list). */
-  warnings?: string[];
   chapter_count: number | null;
   extended_chapter_count: number | null;
   modified_time: string | null;
@@ -725,8 +749,6 @@ export interface CheckAllIntroResponse {
   updated: IntroUpdateEntry[];
   no_intro1_file: IntroUpdateEntry[];
   no_server_match: IntroUpdateEntry[];
-  /** Story exists on the server but is not in the admin recommended list, so its intro cannot be uploaded. */
-  not_recommended: IntroUpdateEntry[];
 }
 
 export interface CheckUpdatedIntroResponse {

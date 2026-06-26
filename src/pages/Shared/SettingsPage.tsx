@@ -5,6 +5,8 @@ import {
   checkInkittCookies,
   updateScribblehubCookies,
   checkScribblehubCookies,
+  updateGoodnovelCookies,
+  checkGoodnovelCookies,
   getSettings,
   updateSettings,
   getDriveSyncConfig,
@@ -20,7 +22,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 import { showToast } from '../../components/Shared/Toast';
 
-type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'crawler' | 'audio' | 'danger';
+type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'goodnovel' | 'crawler' | 'audio' | 'danger';
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
@@ -42,6 +44,7 @@ const CATEGORY_ITEMS: CategoryItem[] = [
   { id: 'driveSync', label: 'Drive Sync', description: 'Google Drive and API', icon: 'sync' },
   { id: 'inkitt', label: 'Inkitt Cookies', description: 'Crawler login cookies', icon: 'shield' },
   { id: 'scribblehub', label: 'ScribbleHub Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
+  { id: 'goodnovel', label: 'GoodNovel Cookies', description: 'Login cookies to unlock chapters', icon: 'shield' },
   { id: 'crawler', label: 'Crawler', description: 'Default crawl behavior', icon: 'settings' },
   { id: 'audio', label: 'Audio Pipeline', description: 'Auto Audio and TTS', icon: 'music' },
   { id: 'danger', label: 'Advanced', description: 'Cleanup actions', icon: 'delete' },
@@ -136,6 +139,13 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [checkingScribblehubCookies, setCheckingScribblehubCookies] = useState(false);
   const [scribblehubCookieError, setScribblehubCookieError] = useState('');
   const [scribblehubCookieMessage, setScribblehubCookieMessage] = useState('');
+  const [goodnovelCookies, setGoodnovelCookies] = useState('');
+  const [goodnovelUserAgent, setGoodnovelUserAgent] = useState('');
+  const [goodnovelTestUrl, setGoodnovelTestUrl] = useState('');
+  const [savingGoodnovelCookies, setSavingGoodnovelCookies] = useState(false);
+  const [checkingGoodnovelCookies, setCheckingGoodnovelCookies] = useState(false);
+  const [goodnovelCookieError, setGoodnovelCookieError] = useState('');
+  const [goodnovelCookieMessage, setGoodnovelCookieMessage] = useState('');
 
   useEffect(() => {
     getSettings()
@@ -577,6 +587,101 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     }
   };
 
+  const handleSaveGoodnovelCookies = async () => {
+    const cookies = goodnovelCookies.trim();
+    const userAgent = goodnovelUserAgent.trim();
+    if (!cookies) {
+      setGoodnovelCookieError('Paste your GoodNovel cookies (at least the TOKEN cookie) before saving.');
+      setGoodnovelCookieMessage('');
+      return;
+    }
+
+    setSavingGoodnovelCookies(true);
+    setGoodnovelCookieError('');
+    setGoodnovelCookieMessage('');
+    try {
+      const result = await updateGoodnovelCookies(cookies, userAgent || undefined);
+      if (!result.has_token) {
+        setGoodnovelCookieError('Saved, but no TOKEN cookie was found — login may not work, so only universally-free chapters will be crawlable.');
+      } else {
+        const message = `Saved ${result.cookie_count} GoodNovel cookie${result.cookie_count === 1 ? '' : 's'}.`;
+        setGoodnovelCookieMessage(message);
+        showToast(message, 'success', 2200, 'top-center');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update GoodNovel cookies.';
+      setGoodnovelCookieError(message);
+      showToast('Failed to update GoodNovel cookies.', 'error', 2500, 'top-center');
+    } finally {
+      setSavingGoodnovelCookies(false);
+    }
+  };
+
+  const handleCheckGoodnovelCookies = async () => {
+    setCheckingGoodnovelCookies(true);
+    setGoodnovelCookieError('');
+    setGoodnovelCookieMessage('');
+    try {
+      const result = await checkGoodnovelCookies(goodnovelTestUrl.trim() || undefined);
+      if (result.valid) {
+        setGoodnovelCookieMessage(result.message);
+        showToast('GoodNovel cookies are working.', 'success', 2200, 'top-center');
+      } else if (result.valid === null) {
+        // Inconclusive / no-extra — show as an informational message, not an error.
+        setGoodnovelCookieMessage(result.message);
+        showToast('Checked GoodNovel cookies.', 'info', 2500, 'top-center');
+      } else {
+        setGoodnovelCookieError(result.message);
+      }
+    } catch (err) {
+      setGoodnovelCookieError(err instanceof Error ? err.message : 'Failed to test GoodNovel cookies.');
+    } finally {
+      setCheckingGoodnovelCookies(false);
+    }
+  };
+
+  const handleGoodnovelJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let json = JSON.parse(text);
+
+      // Extract user_agent from the wrapper object our extractor writes.
+      let extractedUA = '';
+      if (json && !Array.isArray(json) && typeof json === 'object') {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+
+      // Unwrap { cookies: [...] } (goodnovel.json) or { data: [...] }.
+      if (json && !Array.isArray(json) && (json.cookies || json.data)) json = json.cookies || json.data;
+
+      if (Array.isArray(json)) {
+        setGoodnovelCookies(JSON.stringify(json));
+        if (!extractedUA) {
+          const uaEntry = json.find((c) => (c?.name || '').toLowerCase() === 'user-agent');
+          if (uaEntry?.value) extractedUA = String(uaEntry.value);
+        }
+      } else if (json && typeof json === 'object' && json.cookieHeader) {
+        setGoodnovelCookies(String(json.cookieHeader));
+      } else {
+        setGoodnovelCookies(text.trim());
+      }
+
+      if (extractedUA) {
+        setGoodnovelUserAgent(String(extractedUA));
+        showToast('GoodNovel cookies + User-Agent loaded from file.', 'success', 2500, 'top-center');
+      } else {
+        showToast('GoodNovel cookies loaded from file.', 'success', 2500, 'top-center');
+      }
+      setGoodnovelCookieError('');
+    } catch (err) {
+      setGoodnovelCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -764,6 +869,41 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
             <p className="text-xs" style={{ color: tertiaryText }}>In Chrome at `https://www.scribblehub.com`: DevTools → Application → Cookies → copy `cf_clearance`. cf_clearance is tied to your IP + User-Agent, so the crawler must run on this machine and the User-Agent must match. It expires every ~30–60 min — re-paste when crawls start failing.</p>
             {scribblehubCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{scribblehubCookieMessage}</div>}
             {scribblehubCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{scribblehubCookieError}</div>}
+          </section>
+        );
+      case 'goodnovel':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="GoodNovel Cookies" description="Log in to GoodNovel and paste your session cookies so the crawler can read every chapter your account can access for free (free chapters plus any you've unlocked with bonus/earned coins)." pageText={pageText} secondaryText={secondaryText} />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label htmlFor="settings-goodnovel-cookies" className={labelClassName}>Cookies — a full Cookie header (`TOKEN=...; ...`) or a JSON cookie array</label>
+                <textarea id="settings-goodnovel-cookies" value={goodnovelCookies} onChange={(e) => { setGoodnovelCookies(e.target.value); setGoodnovelCookieError(''); setGoodnovelCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} placeholder={'TOKEN=AbCd...; uid=...'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-goodnovel-ua" className={labelClassName}>Browser User-Agent (optional — auto-extracted when you upload goodnovel.json)</label>
+                <textarea id="settings-goodnovel-ua" value={goodnovelUserAgent} onChange={(e) => { setGoodnovelUserAgent(e.target.value); setGoodnovelCookieError(''); setGoodnovelCookieMessage(''); }} rows={2} className={`${fieldClassName} resize-y font-mono text-xs`} placeholder={'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/... Safari/537.36'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-goodnovel-test-url" className={labelClassName}>Book URL to test against (optional — shows how many extra chapters the login unlocks)</label>
+                <input id="settings-goodnovel-test-url" value={goodnovelTestUrl} onChange={(e) => { setGoodnovelTestUrl(e.target.value); setGoodnovelCookieError(''); setGoodnovelCookieMessage(''); }} className={`${fieldClassName} font-mono text-xs`} placeholder={'https://www.goodnovel.com/book/Title_31000725726'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={handleSaveGoodnovelCookies} disabled={savingGoodnovelCookies || !goodnovelCookies.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingGoodnovelCookies || !goodnovelCookies.trim() ? subtleSurface : primaryButton, color: savingGoodnovelCookies || !goodnovelCookies.trim() ? tertiaryText : '#fff' }}>
+                {savingGoodnovelCookies ? 'Saving...' : 'Save Cookies'}
+              </button>
+              <button type="button" onClick={handleCheckGoodnovelCookies} disabled={checkingGoodnovelCookies} className="rounded-lg border px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                {checkingGoodnovelCookies ? 'Testing...' : 'Test Cookies'}
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                <span>Upload goodnovel.json</span>
+                <input type="file" accept="application/json" onChange={handleGoodnovelJsonFileUpload} className="hidden" />
+              </label>
+            </div>
+            <p className="text-xs" style={{ color: tertiaryText }}>Easiest way: run `miscellaneous/GoodNovel Cookies/update_goodnovel_cookies.bat`, log in to GoodNovel in the Chrome window it opens, and it writes `goodnovel.json` — then upload that file here. Or in Chrome at `https://www.goodnovel.com` (logged in): DevTools → Application → Cookies → copy the `TOKEN` cookie (or the whole Cookie header). Cookies expire — re-paste when the test shows the login no longer unlocks extra chapters.</p>
+            {goodnovelCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{goodnovelCookieMessage}</div>}
+            {goodnovelCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{goodnovelCookieError}</div>}
           </section>
         );
       case 'crawler':

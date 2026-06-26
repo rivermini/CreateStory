@@ -6,6 +6,9 @@ export interface UseNovelInfoResult {
   chapters: ChapterEntry[];
   chapterCount: number;
   totalChapterCount: number | null;
+  freeChapterCount: number | null;
+  paidChapterCount: number | null;
+  authenticated: boolean | null;
   storyTitle: string | null;
   isLoadingChapters: boolean;
   chaptersError: string;
@@ -20,6 +23,9 @@ export function useNovelInfo(): UseNovelInfoResult {
   const [chapters, setChapters] = useState<ChapterEntry[]>([]);
   const [chapterCount, setChapterCount] = useState(0);
   const [totalChapterCount, setTotalChapterCount] = useState<number | null>(null);
+  const [freeChapterCount, setFreeChapterCount] = useState<number | null>(null);
+  const [paidChapterCount, setPaidChapterCount] = useState<number | null>(null);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [storyTitle, setStoryTitle] = useState<string | null>(null);
   const [isLoadingChapters, setIsLoadingChapters] = useState(false);
   const [chaptersError, setChaptersError] = useState('');
@@ -47,6 +53,9 @@ export function useNovelInfo(): UseNovelInfoResult {
     setChapters([]);
     setChapterCount(0);
     setTotalChapterCount(null);
+    setFreeChapterCount(null);
+    setPaidChapterCount(null);
+    setAuthenticated(null);
     setStoryTitle(null);
     setIsLoadingChapters(false);
     setChaptersError('');
@@ -97,6 +106,9 @@ export function useNovelInfo(): UseNovelInfoResult {
     setIsLoadingChapters(true);
     setChaptersError('');
     setWarning(null);
+    setFreeChapterCount(null);
+    setPaidChapterCount(null);
+    setAuthenticated(null);
     setIsChapterUrl(false);
     // Keep the old total visible until a new one arrives — don't clear it
     // so the panel doesn't flicker between "2262" and blank when re-visiting a story
@@ -125,6 +137,9 @@ export function useNovelInfo(): UseNovelInfoResult {
       setChapters(result.chapters);
       setChapterCount(result.chapter_count);
       setTotalChapterCount(result.total_chapter_count ?? null);
+      setFreeChapterCount(result.free_chapter_count ?? null);
+      setPaidChapterCount(result.paid_chapter_count ?? null);
+      setAuthenticated(result.authenticated ?? null);
       setStoryTitle(result.story_title ?? null);
       setWarning(result.warning ?? null);
       setIsChapterUrl(false);
@@ -159,6 +174,9 @@ export function useNovelInfo(): UseNovelInfoResult {
     chapters,
     chapterCount,
     totalChapterCount,
+    freeChapterCount,
+    paidChapterCount,
+    authenticated,
     storyTitle,
     isLoadingChapters,
     chaptersError,

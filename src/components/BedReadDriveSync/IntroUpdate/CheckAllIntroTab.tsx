@@ -44,7 +44,7 @@ export function CheckAllIntroTab({
 }: Readonly<CheckAllIntroTabProps>) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
-  const [filterSection, setFilterSection] = useState<'all' | 'can_update' | 'updated' | 'no_intro' | 'no_match' | 'not_recommended'>('all');
+  const [filterSection, setFilterSection] = useState<'all' | 'can_update' | 'updated' | 'no_intro' | 'no_match'>('all');
   const [bulkUploading, setBulkUploading] = useState(false);
 
   const query = search.toLowerCase().trim();
@@ -60,13 +60,11 @@ export function CheckAllIntroTab({
   const filteredUpdated = filter(data?.updated ?? []);
   const filteredNoIntro = filter(data?.no_intro1_file ?? []);
   const filteredNoMatch = filter(data?.no_server_match ?? []);
-  const filteredNotRecommended = filter(data?.not_recommended ?? []);
 
   const canUpdateCount = filteredCanUpdate.length;
   const updatedCount = filteredUpdated.length;
   const noIntroCount = filteredNoIntro.length;
   const noMatchCount = filteredNoMatch.length;
-  const notRecommendedCount = filteredNotRecommended.length;
   const availableUpdateEntries = filteredCanUpdate.filter(
     (entry) => entry.story_id && !uploadingIds.has(entry.folder_id) && !uploadResults.get(entry.folder_id)?.success,
   );
@@ -174,12 +172,11 @@ export function CheckAllIntroTab({
 
       {data && (
         <div className="flex items-center gap-1 border-b px-4 py-2" style={{ background: mutedSurface, borderColor: panelBorder }}>
-          <FilterChip label="All" count={canUpdateCount + updatedCount + noIntroCount + noMatchCount + notRecommendedCount} active={filterSection === 'all'} onClick={() => setFilterSection('all')} isDark={isDark} />
+          <FilterChip label="All" count={canUpdateCount + updatedCount + noIntroCount + noMatchCount} active={filterSection === 'all'} onClick={() => setFilterSection('all')} isDark={isDark} />
           <FilterChip label="Can Update" count={canUpdateCount} active={filterSection === 'can_update'} onClick={() => setFilterSection('can_update')} variant="green" isDark={isDark} />
           <FilterChip label="Updated" count={updatedCount} active={filterSection === 'updated'} onClick={() => setFilterSection('updated')} variant="amber" isDark={isDark} />
           <FilterChip label={`No ${introFilename}`} count={noIntroCount} active={filterSection === 'no_intro'} onClick={() => setFilterSection('no_intro')} variant="red" isDark={isDark} />
           <FilterChip label="No Match" count={noMatchCount} active={filterSection === 'no_match'} onClick={() => setFilterSection('no_match')} isDark={isDark} />
-          <FilterChip label="Not Recommended" count={notRecommendedCount} active={filterSection === 'not_recommended'} onClick={() => setFilterSection('not_recommended')} variant="red" isDark={isDark} />
         </div>
       )}
 
@@ -187,7 +184,7 @@ export function CheckAllIntroTab({
         <div className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs" style={{ background: mutedSurface, color: secondaryText }}>
           <div className="flex items-center gap-1.5">
             <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
-            {(data.can_update.length ?? 0) + (data.updated.length ?? 0) + ((data.no_intro1_file ?? []).length) + (data.no_server_match.length ?? 0) + ((data.not_recommended ?? []).length)} DONE_/EXTENDED_ folders
+            {(data.can_update.length ?? 0) + (data.updated.length ?? 0) + ((data.no_intro1_file ?? []).length) + (data.no_server_match.length ?? 0)} DONE_/EXTENDED_ folders
           </div>
           {canUpdateCount > 0 && (
             <div className="flex items-center gap-1.5" style={{ color: isDark ? '#34d399' : '#059669' }}>
@@ -211,12 +208,6 @@ export function CheckAllIntroTab({
             <div className="flex items-center gap-1.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>
               <Icon icon={appIcons.folder} className="h-3.5 w-3.5" />
               {noMatchCount} no server match
-            </div>
-          )}
-          {notRecommendedCount > 0 && (
-            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
-              <Icon icon={appIcons.error} className="h-3.5 w-3.5" />
-              {notRecommendedCount} not recommended
             </div>
           )}
         </div>
@@ -275,20 +266,10 @@ export function CheckAllIntroTab({
               </div>
             )}
             {filteredNoMatch.length > 0 && (
-              <div className="mb-4">
+              <div>
                 <SectionHeader label={`No Server Match (${filteredNoMatch.length})`} color="#818cf8" icon={<Icon icon={appIcons.folder} className="h-4 w-4" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />} />
                 <div className="space-y-2">
                   {filteredNoMatch.map((entry) => (
-                    <IntroEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadIntro} isDark={isDark} introFilename={introFilename} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {filteredNotRecommended.length > 0 && (
-              <div>
-                <SectionHeader label={`Not Recommended (${filteredNotRecommended.length})`} color="#f87171" icon={<Icon icon={appIcons.error} className="h-4 w-4" style={{ color: '#f87171' }} />} />
-                <div className="space-y-2">
-                  {filteredNotRecommended.map((entry) => (
                     <IntroEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadIntro} isDark={isDark} introFilename={introFilename} />
                   ))}
                 </div>
@@ -332,15 +313,6 @@ export function CheckAllIntroTab({
           </div>
         )}
         {data && filterSection === 'no_match' && filteredNoMatch.length === 0 && <EmptySection isDark={isDark} message="No folders missing a server story match." />}
-
-        {data && filterSection === 'not_recommended' && filteredNotRecommended.length > 0 && (
-          <div className="space-y-2">
-            {filteredNotRecommended.map((entry) => (
-              <IntroEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadIntro} isDark={isDark} introFilename={introFilename} />
-            ))}
-          </div>
-        )}
-        {data && filterSection === 'not_recommended' && filteredNotRecommended.length === 0 && <EmptySection isDark={isDark} message="No folders blocked by the recommended-stories list." />}
       </div>
     </div>
   );
@@ -393,7 +365,6 @@ function IntroEntryCard({
   const isUpdated = entry.status === 'updated';
   const isNoIntro = entry.status === 'no_intro1_file';
   const isNoMatch = entry.status === 'no_server_match';
-  const isNotRecommended = entry.status === 'not_recommended';
   const isCanUpdate = entry.status === 'can_update';
   const canUpload = isCanUpdate && entry.story_id && !isUploading && !result?.success;
   const isSuccess = result?.success;
@@ -404,7 +375,7 @@ function IntroEntryCard({
   const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
-  const borderColor = isNoIntro || isNotRecommended
+  const borderColor = isNoIntro
     ? isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.25)'
     : isUpdated
       ? isDark ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.15)'
@@ -420,11 +391,6 @@ function IntroEntryCard({
           </div>
           <p className="mb-1 font-mono text-xs" style={{ color: secondaryText }}>{entry.folder_name}</p>
           {entry.intro_file_name && <p className="text-xs" style={{ color: tertiaryText }}>intro: {entry.intro_file_name}</p>}
-          {isNotRecommended && (
-            <p className="mt-1 text-xs" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
-              Story is not in the admin recommended list — its intro cannot be uploaded.
-            </p>
-          )}
           {entry.last_updated && <p className="mt-1 text-xs" style={{ color: tertiaryText }}>last updated: {formatLastUpdated(entry.last_updated)}</p>}
           {result && (
             <p className="mt-1.5 flex items-center gap-1 text-xs" style={{ color: isSuccess ? (isDark ? '#34d399' : '#059669') : isFailed ? (isDark ? '#f87171' : '#dc2626') : tertiaryText }}>
@@ -466,11 +432,6 @@ function IntroEntryCard({
               <Icon icon={appIcons.folder} className="h-3.5 w-3.5" />
               No Match
             </span>
-          ) : isNotRecommended ? (
-            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)', borderColor: isDark ? 'rgba(239,68,68,0.24)' : 'rgba(239,68,68,0.2)', color: isDark ? '#f87171' : '#dc2626' }}>
-              <Icon icon={appIcons.error} className="h-3.5 w-3.5" />
-              Not Recommended
-            </span>
           ) : null}
         </div>
       </div>
@@ -485,7 +446,6 @@ function IntroStatusChip({ status, isDark, introFilename = 'intro1' }: { readonl
     updated: { bg: 'rgba(251,191,36,0.15)', text: isDark ? '#fbbf24' : '#d97706', label: 'UPDATED' },
     no_intro1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noIntroLabel },
     no_server_match: { bg: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.06)', text: isDark ? '#818cf8' : '#4f46e5', label: 'NO MATCH' },
-    not_recommended: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'NOT RECOMMENDED' },
     error: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'ERROR' },
   };
 
