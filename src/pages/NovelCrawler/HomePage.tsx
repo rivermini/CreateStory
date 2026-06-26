@@ -347,7 +347,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                             ? 'Checking saved Inkitt cookies...'
                             : inkittCookieStatus?.message || 'Could not test saved Inkitt cookies.'}
                         </p>
-                        {!isCheckingInkittCookies && inkittCookieStatus?.valid !== true && (
+                        {!isCheckingInkittCookies && inkittCookieStatus?.valid !== true && inkittCookieStatus?.reason !== "not_found" && (
                           <p className="mt-1 text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(55,53,47,0.6)' }}>
                             Update Inkitt cookies in Settings before crawling login-gated chapters.
                           </p>

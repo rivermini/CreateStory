@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   clearBackendData,
   updateInkittCookies,
+  checkInkittCookies,
   updateScribblehubCookies,
   checkScribblehubCookies,
   getSettings,
@@ -123,7 +124,9 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [uploadError, setUploadError] = useState('');
   const [inkittUserCredentials, setInkittUserCredentials] = useState('');
   const [inkittCfClearance, setInkittCfClearance] = useState('');
+  const [inkittUserAgent, setInkittUserAgent] = useState('');
   const [savingInkittCookies, setSavingInkittCookies] = useState(false);
+  const [checkingInkittCookies, setCheckingInkittCookies] = useState(false);
   const [inkittCookieError, setInkittCookieError] = useState('');
   const [inkittCookieMessage, setInkittCookieMessage] = useState('');
   const [inkittJsonText, setInkittJsonText] = useState('');
@@ -334,8 +337,9 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   };
 
   const handleSaveInkittCookies = async () => {
-    const userCredentials = inkittUserCredentials.replace(/\s+/g, '').trim();
+    const userCredentials = inkittUserCredentials.trim();
     const cfClearance = inkittCfClearance.replace(/\s+/g, '').trim();
+    const userAgent = inkittUserAgent.trim();
     if (!userCredentials || !cfClearance) {
       setInkittCookieError('Paste both user_credentials and cf_clearance before saving.');
       setInkittCookieMessage('');
@@ -346,11 +350,15 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     setInkittCookieError('');
     setInkittCookieMessage('');
     try {
-      const result = await updateInkittCookies(`user_credentials=${userCredentials}; cf_clearance=${cfClearance}`);
+      const result = await updateInkittCookies(
+        `user_credentials=${userCredentials}; cf_clearance=${cfClearance}`,
+        userAgent || undefined
+      );
       const message = `Saved ${result.cookie_count} Inkitt cookie${result.cookie_count === 1 ? '' : 's'}.`;
       setInkittCookieMessage(message);
       setInkittUserCredentials('');
       setInkittCfClearance('');
+      setInkittUserAgent('');
       showToast(message, 'success', 2200, 'top-center');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update Inkitt cookies.';
@@ -361,12 +369,38 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     }
   };
 
+  const handleCheckInkittCookies = async () => {
+    setCheckingInkittCookies(true);
+    setInkittCookieError('');
+    setInkittCookieMessage('');
+    try {
+      const result = await checkInkittCookies();
+      if (result.valid) {
+        setInkittCookieMessage(result.message);
+        showToast('Inkitt cookies are working.', 'success', 2200, 'top-center');
+      } else {
+        setInkittCookieError(result.message);
+      }
+    } catch (err) {
+      setInkittCookieError(err instanceof Error ? err.message : 'Failed to test Inkitt cookies.');
+    } finally {
+      setCheckingInkittCookies(false);
+    }
+  };
+
   const handleInkittJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      let json = JSON.parse(await file.text());
+      const text = await file.text();
+      let json = JSON.parse(text);
+
+      let extractedUA = '';
+      if (json && !Array.isArray(json) && typeof json === 'object') {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+
       if (Array.isArray(json)) json = json[0] || {};
       if (json.data) json = json.data;
       else if (json.config) json = json.config;
@@ -381,8 +415,17 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
 
       setInkittUserCredentials(userCred);
       setInkittCfClearance(cfClear);
+      if (!extractedUA) {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+      if (extractedUA) {
+        setInkittUserAgent(String(extractedUA));
+        showToast('Inkitt cookies + User-Agent loaded from file.', 'success', 2500, 'top-center');
+      } else {
+        setInkittUserAgent('');
+        showToast('Inkitt cookie values loaded from file. User-Agent not found — please enter it manually.', 'info', 3000, 'top-center');
+      }
       setInkittCookieError('');
-      showToast('Inkitt cookie values loaded from file.', 'success', 2000, 'top-center');
     } catch (err) {
       setInkittCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
     } finally {
@@ -398,6 +441,11 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
 
     try {
       let json = JSON.parse(inkittJsonText);
+      let extractedUA = '';
+      if (json && !Array.isArray(json) && typeof json === 'object') {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+
       if (Array.isArray(json)) json = json[0] || {};
       if (json.data) json = json.data;
       else if (json.config) json = json.config;
@@ -412,9 +460,18 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
 
       setInkittUserCredentials(userCred);
       setInkittCfClearance(cfClear);
+      if (!extractedUA) {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+      if (extractedUA) {
+        setInkittUserAgent(String(extractedUA));
+        showToast('Inkitt cookie values + User-Agent loaded.', 'success', 2000, 'top-center');
+      } else {
+        setInkittUserAgent('');
+        showToast('Inkitt cookie values loaded. User-Agent not found — please enter it manually.', 'info', 3000, 'top-center');
+      }
       setInkittJsonText('');
       setInkittCookieError('');
-      showToast('Inkitt cookie values loaded.', 'success', 2000, 'top-center');
     } catch (err) {
       setInkittCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
     }
@@ -480,21 +537,39 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     try {
       const text = await file.text();
       let json = JSON.parse(text);
+
+      // Extract user_agent from wrapper object before unwrapping
+      let extractedUA = '';
+      if (json && !Array.isArray(json) && typeof json === 'object') {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+
+      // Unwrap wrapper objects (our extractor saves { cookies: [...], user_agent: "..." })
       if (json && !Array.isArray(json) && (json.cookies || json.data)) json = json.cookies || json.data;
+
       // Array of cookie objects (Selenium / EditThisCookie export) → keep as JSON for the backend parser.
       if (Array.isArray(json)) {
         setScribblehubCookies(JSON.stringify(json));
-        const uaEntry = json.find((c) => (c?.name || '').toLowerCase() === 'user-agent');
-        if (uaEntry?.value) setScribblehubUserAgent(String(uaEntry.value));
+        // Also check if any cookie entry is named 'user-agent' (EditThisCookie style)
+        if (!extractedUA) {
+          const uaEntry = json.find((c) => (c?.name || '').toLowerCase() === 'user-agent');
+          if (uaEntry?.value) extractedUA = String(uaEntry.value);
+        }
       } else if (json && typeof json === 'object') {
         const cf = json.cf_clearance || json.cfClearance || '';
         if (cf) setScribblehubCookies(`cf_clearance=${cf}`);
-        const ua = json.user_agent || json.userAgent || json['User-Agent'] || '';
-        if (ua) setScribblehubUserAgent(String(ua));
+        if (!extractedUA) extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
         if (!cf) setScribblehubCookies(text.trim());
       }
+
+      // Auto-populate User-Agent if found
+      if (extractedUA) {
+        setScribblehubUserAgent(String(extractedUA));
+        showToast('ScribbleHub cookies + User-Agent loaded from file.', 'success', 2500, 'top-center');
+      } else {
+        showToast('ScribbleHub cookie values loaded from file. User-Agent not found — please enter it manually.', 'info', 3500, 'top-center');
+      }
       setScribblehubCookieError('');
-      showToast('ScribbleHub cookie values loaded from file.', 'success', 2000, 'top-center');
     } catch (err) {
       setScribblehubCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
     } finally {
@@ -623,19 +698,28 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         return (
           <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
             <SectionTitle title="Inkitt Cookies" description="Update login cookies for Inkitt chapter crawling." pageText={pageText} secondaryText={secondaryText} />
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div>
-                <label htmlFor="settings-inkitt-user-credentials" className={labelClassName}>`user_credentials` value</label>
-                <textarea id="settings-inkitt-user-credentials" value={inkittUserCredentials} onChange={(e) => { setInkittUserCredentials(e.target.value); setInkittCookieError(''); setInkittCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div>
+                  <label htmlFor="settings-inkitt-user-credentials" className={labelClassName}>`user_credentials` value</label>
+                  <textarea id="settings-inkitt-user-credentials" value={inkittUserCredentials} onChange={(e) => { setInkittUserCredentials(e.target.value); setInkittCookieError(''); setInkittCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+                </div>
+                <div>
+                  <label htmlFor="settings-inkitt-cf-clearance" className={labelClassName}>`cf_clearance` value</label>
+                  <textarea id="settings-inkitt-cf-clearance" value={inkittCfClearance} onChange={(e) => { setInkittCfClearance(e.target.value); setInkittCookieError(''); setInkittCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+                </div>
               </div>
               <div>
-                <label htmlFor="settings-inkitt-cf-clearance" className={labelClassName}>`cf_clearance` value</label>
-                <textarea id="settings-inkitt-cf-clearance" value={inkittCfClearance} onChange={(e) => { setInkittCfClearance(e.target.value); setInkittCookieError(''); setInkittCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+                <label htmlFor="settings-inkitt-ua" className={labelClassName}>Browser User-Agent (will be auto-extracted if you upload or paste JSON)</label>
+                <textarea id="settings-inkitt-ua" value={inkittUserAgent} onChange={(e) => { setInkittUserAgent(e.target.value); setInkittCookieError(''); setInkittCookieMessage(''); }} rows={2} className={`${fieldClassName} resize-y font-mono text-xs`} placeholder={'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/... Safari/537.36'} style={{ background: inputBackground, borderColor: inputBorder }} />
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" onClick={handleSaveInkittCookies} disabled={savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim() ? subtleSurface : primaryButton, color: savingInkittCookies || !inkittUserCredentials.trim() || !inkittCfClearance.trim() ? tertiaryText : '#fff' }}>
                 {savingInkittCookies ? 'Saving...' : 'Save Cookies'}
+              </button>
+              <button type="button" onClick={handleCheckInkittCookies} disabled={checkingInkittCookies} className="rounded-lg border px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                {checkingInkittCookies ? 'Testing...' : 'Test Cookies'}
               </button>
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
                 <span>Upload Cookies JSON</span>
@@ -643,7 +727,7 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
               </label>
             </div>
             <div className="flex min-w-0 items-center gap-2">
-              <textarea value={inkittJsonText} onChange={(e) => setInkittJsonText(e.target.value)} rows={2} placeholder={'{\n  "user_credentials": "...",\n  "cf_clearance": "..."\n}'} className={`${fieldClassName} min-w-0 flex-1 resize-none font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
+              <textarea value={inkittJsonText} onChange={(e) => setInkittJsonText(e.target.value)} rows={2} placeholder={'{\n  "user_credentials": "...",\n  "cf_clearance": "...",\n  "user_agent": "..."\n}'} className={`${fieldClassName} min-w-0 flex-1 resize-none font-mono text-xs`} style={{ background: inputBackground, borderColor: inputBorder }} />
               <button onClick={handleInkittJsonPaste} disabled={!inkittJsonText.trim()} className="rounded-lg px-3 py-2 text-sm font-medium disabled:cursor-not-allowed" style={{ background: inkittJsonText.trim() ? primaryButton : subtleSurface, color: inkittJsonText.trim() ? '#fff' : tertiaryText }}>Apply</button>
             </div>
             <p className="text-xs" style={{ color: tertiaryText }}>Copy these from Chrome DevTools under Application → Cookies for `https://www.inkitt.com`.</p>

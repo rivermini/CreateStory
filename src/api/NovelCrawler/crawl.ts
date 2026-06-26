@@ -28,11 +28,11 @@ export async function startBatchCrawl(requests: CrawlRequest[]): Promise<CrawlSt
   });
 }
 
-export async function updateInkittCookies(cookies: string): Promise<InkittCookieUpdateResponse> {
+export async function updateInkittCookies(cookies: string, userAgent?: string): Promise<InkittCookieUpdateResponse> {
   return apiFetch<InkittCookieUpdateResponse>('/api/crawl/inkitt-cookies', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cookies }),
+    body: JSON.stringify({ cookies, user_agent: userAgent }),
   });
 }
 
