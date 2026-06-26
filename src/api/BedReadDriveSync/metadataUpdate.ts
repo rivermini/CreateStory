@@ -7,7 +7,7 @@ import type {
 } from '../types';
 
 export async function checkMetadataUpdateAll(): Promise<MetadataCheckAllResponse> {
-  return apiFetch<MetadataCheckAllResponse>('/api/drive-sync/metadata-update/check-all', { timeout: 180000 });
+  return apiFetch<MetadataCheckAllResponse>('/api/drive-sync/metadata-update/check-all', { timeout: 600000 });
 }
 
 export async function updateMetadata(
