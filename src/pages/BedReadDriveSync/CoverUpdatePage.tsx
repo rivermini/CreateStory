@@ -42,8 +42,10 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
   const [coverEdited, setCoverEdited] = useState(false);
 
   const handleCoverNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Allow an empty value: blank means "no number suffix", i.e. search for
+    // cover.<ext> (e.g. cover.png) instead of forcing cover1/cover0.
     const raw = e.target.value.replace(/\D/g, '');
-    setCoverNumber(raw || '1');
+    setCoverNumber(raw);
     setCoverEdited(raw !== savedCoverNumber);
   };
 
@@ -179,7 +181,8 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
                   pattern="[0-9]*"
                   value={coverNumber}
                   onChange={handleCoverNumberChange}
-                  placeholder="1"
+                  placeholder=""
+                  title="Leave blank to search for cover.{ext} (e.g. cover.png) with no number suffix."
                   className="w-16 rounded-md border px-3 py-1.5 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-sky-500"
                   style={{ 
                     background: isDark ? '#232323' : '#fff', 
