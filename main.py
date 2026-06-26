@@ -120,6 +120,11 @@ def api_info() -> dict:
 
 @app.post("/api/dev/reset-state", tags=["Development"])
 def reset_runtime_state() -> dict:
+    """Reset runtime state. Only available when DEV_MODE=true."""
+    if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
+
     from core.service import get_auto_audio_service
 
     get_auto_audio_service().reset_runtime_state()
