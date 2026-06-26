@@ -19,6 +19,7 @@ class BedReadAudioJobRecord(Base):
     __tablename__ = "bedread_audio_jobs"
 
     batch_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     story_id: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
     story_title: Mapped[str] = mapped_column(Text, nullable=False, default="")
     voice: Mapped[str] = mapped_column(String(128), nullable=False, default="af_sarah")
@@ -47,6 +48,7 @@ class GeneratedAudioFileRecord(Base):
     )
 
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(64), nullable=False, default="queued", index=True)
     voice: Mapped[str] = mapped_column(String(128), nullable=False, default="af_sarah")
     lang: Mapped[str] = mapped_column(String(32), nullable=False, default="en-us")

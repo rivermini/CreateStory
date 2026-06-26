@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,9 @@ from api.services.tts_service import (
     MAX_KOKORO_CONCURRENCY,
     MIN_KOKORO_CONCURRENCY,
     SAMPLE_RATE,
+    TTSCapacityError,
 )
+from api.service_auth import current_owner, require_admin_identity, require_owner
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tts", tags=["TTS"])
@@ -28,7 +30,7 @@ def _content_disposition(filename: str) -> str:
 
 
 class SpeakRequest(BaseModel):
-    text: str = Field(..., min_length=1, description="Text to synthesize.")
+    text: str = Field(..., min_length=1, max_length=100000, description="Text to synthesize.")
     voice: str = Field(default="af_heart", description="Voice ID (e.g. af_sarah, am_adam).")
     lang: str = Field(default="en-us", description="Language code.")
     speed: float = Field(default=0.69, ge=0.5, le=2.0, description="Speech speed (0.5-2.0).")
@@ -61,7 +63,8 @@ class ConcurrencyRequest(BaseModel):
 
 
 @router.post("/concurrency")
-def update_concurrency(request: ConcurrencyRequest) -> dict:
+def update_concurrency(request: ConcurrencyRequest, http_request: Request) -> dict:
+    require_admin_identity(http_request)
     service = get_tts_service()
     if request.concurrency is None:
         service.set_auto_concurrency()
@@ -86,7 +89,7 @@ def list_languages() -> list[LanguageResponse]:
 
 
 @router.post("/speak", response_model=SpeakResponse)
-def start_speak(request: SpeakRequest) -> SpeakResponse:
+def start_speak(request: SpeakRequest, http_request: Request) -> SpeakResponse:
     service = get_tts_service()
 
     supported_langs = {l["code"] for l in service.get_languages()}
@@ -106,7 +109,14 @@ def start_speak(request: SpeakRequest) -> SpeakResponse:
             lang=request.lang,
             speed=request.speed,
             format=request.format,
+            created_by_user_id=current_owner(http_request),
         )
+    except TTSCapacityError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": "60"},
+        ) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except ValueError as exc:
@@ -116,15 +126,26 @@ def start_speak(request: SpeakRequest) -> SpeakResponse:
 
 
 @router.get("/jobs")
-def list_all_jobs() -> list[dict]:
+def list_all_jobs(request: Request) -> list[dict]:
     service = get_tts_service()
-    return service.list_jobs()
+    jobs = service.list_jobs()
+    role = getattr(request.state, "create_story_role", None)
+    owner_id = current_owner(request)
+    if role == "admin" or (role is None and owner_id is None):
+        return jobs
+    return [job for job in jobs if job.get("created_by_user_id") == owner_id]
 
 
 @router.get("/queue")
-def get_queue() -> dict:
+def get_queue(request: Request) -> dict:
     service = get_tts_service()
     jobs = service.list_jobs()
+    jobs = [
+        job
+        for job in jobs
+        if getattr(request.state, "create_story_role", None) == "admin"
+        or job.get("created_by_user_id") == current_owner(request)
+    ]
 
     processing = [j for j in jobs if j["status"] == "processing"]
     queued = [j for j in jobs if j["status"] == "queued"]
@@ -139,24 +160,30 @@ def get_queue() -> dict:
 
 
 @router.post("/release-idle-models")
-def release_idle_models() -> dict:
+def release_idle_models(request: Request) -> dict:
+    require_admin_identity(request)
     service = get_tts_service()
     released = service.release_idle_models()
     return {"released": released, "concurrency": service.get_concurrency()}
 
 
 @router.get("/jobs/{job_id}")
-def get_job_status(job_id: str) -> dict:
+def get_job_status(job_id: str, request: Request) -> dict:
     service = get_tts_service()
     job = service.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
     return job
 
 
 @router.delete("/jobs/{job_id}")
-def cancel_job(job_id: str) -> dict:
+def cancel_job(job_id: str, request: Request) -> dict:
     service = get_tts_service()
+    existing = service.get_job(job_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    require_owner(request, existing.get("created_by_user_id"))
     cancelled = service.cancel_job(job_id)
     if not cancelled:
         job = service.get_job(job_id)
@@ -170,12 +197,13 @@ def cancel_job(job_id: str) -> dict:
 
 
 @router.api_route("/jobs/{job_id}/audio", methods=["GET", "HEAD"])
-def stream_audio(job_id: str) -> StreamingResponse:
+def stream_audio(job_id: str, request: Request) -> StreamingResponse:
     service = get_tts_service()
     job = service.get_job(job_id)
 
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
 
     output_dir = service.get_output_dir(job_id)
 
@@ -268,7 +296,7 @@ class PreviewAcceptedResponse(BaseModel):
 
 
 @router.post("/preview", response_model=PreviewAcceptedResponse, status_code=202)
-def preview_voice(request: PreviewRequest) -> PreviewAcceptedResponse:
+def preview_voice(request: PreviewRequest, http_request: Request) -> PreviewAcceptedResponse:
     """Queue a preview TTS job and return immediately with a status URL.
 
     The client should poll `status_url` until `status == "completed"`, then
@@ -290,7 +318,14 @@ def preview_voice(request: PreviewRequest) -> PreviewAcceptedResponse:
             lang=request.lang,
             speed=request.speed,
             format="wav",
+            created_by_user_id=current_owner(http_request),
         )
+    except TTSCapacityError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": "60"},
+        ) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except ValueError as exc:

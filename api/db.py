@@ -17,7 +17,17 @@ _FASTAPI_ENV = _PROJECT_ROOT.parent / "FastAPIServer" / ".env"
 if _FASTAPI_ENV.exists():
     load_dotenv(_FASTAPI_ENV, override=False)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+def _env_or_file(name: str) -> str | None:
+    value = os.getenv(name)
+    if value:
+        return value.strip()
+    file_path = os.getenv(f"{name}_FILE")
+    if file_path:
+        return Path(file_path).read_text(encoding="utf-8").strip()
+    return None
+
+
+DATABASE_URL = _env_or_file("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError(
         "DATABASE_URL is not set. "
@@ -43,6 +53,5 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
+    """Register ORM models without performing schema changes at runtime."""
     import api.models.db_models  # noqa: F401
-
-    Base.metadata.create_all(bind=engine)

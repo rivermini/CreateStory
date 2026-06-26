@@ -10,7 +10,6 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Optional
@@ -22,6 +21,12 @@ from api.repositories.audio_repository import BedReadJobRepository
 
 logger = logging.getLogger(__name__)
 MAX_CHAPTER_TTS_RETRIES = 2
+MAX_QUEUED_JOBS_PER_USER = int(os.getenv("MAX_QUEUED_JOBS_PER_USER", "20"))
+MAX_QUEUED_JOBS_GLOBAL = int(os.getenv("MAX_QUEUED_JOBS_GLOBAL", "100"))
+
+
+class BedReadCapacityError(RuntimeError):
+    """Raised when the BedRead queue has reached an admission limit."""
 
 
 class BedReadConfigError(Exception):
@@ -41,9 +46,15 @@ def _get_external_api_config() -> tuple[str, dict]:
     try:
         import httpx
         fastapi_base = os.environ.get("SERVICE_URLS_FastAPIServer", "http://localhost:8000").rstrip("/")
-        url = f"{fastapi_base}/api/bedread/config/external-api"
+        url = f"{fastapi_base}/internal/v1/bedread/external-api-config"
+        service_token = os.environ.get("INTERNAL_SERVICE_TOKEN", "").strip()
+        service_token_file = os.environ.get("INTERNAL_SERVICE_TOKEN_FILE", "").strip()
+        if not service_token and service_token_file:
+            service_token = Path(service_token_file).read_text(encoding="utf-8").strip()
+        if not service_token:
+            raise BedReadConfigError("INTERNAL_SERVICE_TOKEN is not configured.")
         with httpx.Client(timeout=10.0) as client:
-            resp = client.get(url)
+            resp = client.get(url, headers={"Authorization": f"Bearer {service_token}"})
             if resp.status_code == 200:
                 data = resp.json()
                 api_base = data.get("external_api_base_url", "").strip()
@@ -53,8 +64,10 @@ def _get_external_api_config() -> tuple[str, dict]:
                     if token:
                         headers["Authorization"] = f"Bearer {token}"
                     return api_base.rstrip("/"), headers
-    except Exception:
-        pass
+    except BedReadConfigError:
+        raise
+    except Exception as exc:
+        logger.warning("Unable to load internal BedRead configuration: %s", exc)
 
     # Fallback: use env vars (for backward compatibility in dev environments)
     api_base = os.environ.get("EXTERNAL_API_BASE_URL", "").strip()
@@ -114,6 +127,7 @@ class BatchJob:
     queue_position: int = 0
     zip_path: Optional[Path] = None
     from_auto_mode: bool = False
+    created_by_user_id: str | None = None
 
     @property
     def progress_pct(self) -> int:
@@ -125,6 +139,7 @@ class BatchJob:
     def to_dict(self, include_queue_position: bool = True) -> dict:
         result = {
             "batch_id": self.batch_id,
+            "created_by_user_id": self.created_by_user_id,
             "story_id": self.story_id,
             "story_title": self.story_title,
             "voice": self.voice,
@@ -226,6 +241,7 @@ class BedReadService:
                     finished_at=entry.get("finished_at"),
                     error=entry.get("error", ""),
                     from_auto_mode=entry.get("from_auto_mode", False),
+                    created_by_user_id=entry.get("created_by_user_id"),
                 )
                 self._batch_jobs[batch_id] = batch
 
@@ -402,12 +418,12 @@ class BedReadService:
         speed: float,
         format: str,
         from_auto_mode: bool = False,
+        created_by_user_id: str | None = None,
     ) -> str:
         _get_external_api_config()
 
         batch_id = str(uuid.uuid4())[:8]
         output_dir = self._output_base / batch_id
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         chapters: list[ChapterTask] = []
         try:
@@ -423,6 +439,21 @@ class BedReadService:
             ))
 
         with self._lock:
+            active_jobs = [
+                existing
+                for existing in self._batch_jobs.values()
+                if existing.status in {"pending", "queued", "running"}
+            ]
+            owner_jobs = [
+                existing
+                for existing in active_jobs
+                if existing.created_by_user_id == created_by_user_id
+            ]
+            if len(active_jobs) >= MAX_QUEUED_JOBS_GLOBAL:
+                raise BedReadCapacityError("Global BedRead queue capacity reached.")
+            if created_by_user_id and len(owner_jobs) >= MAX_QUEUED_JOBS_PER_USER:
+                raise BedReadCapacityError("Per-user BedRead queue capacity reached.")
+            output_dir.mkdir(parents=True, exist_ok=True)
             queue_position = len(self._batch_queue) + 1
             batch = BatchJob(
                 batch_id=batch_id,
@@ -438,6 +469,7 @@ class BedReadService:
                 started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 queue_position=queue_position,
                 from_auto_mode=from_auto_mode,
+                created_by_user_id=created_by_user_id,
             )
             self._batch_jobs[batch_id] = batch
             self._batch_queue.append(batch_id)
@@ -569,12 +601,19 @@ class BedReadService:
             self._mark_chapter_failed(batch_id, chapter_number, "Empty chapter content")
             return True
 
+        with self._lock:
+            owner_id = (
+                self._batch_jobs[batch_id].created_by_user_id
+                if batch_id in self._batch_jobs
+                else None
+            )
         tts_job_id = self.tts_service.start_job(
             text=clean_text,
             voice=voice,
             lang=lang,
             speed=speed,
             format=format,
+            created_by_user_id=owner_id,
         )
         should_cancel_tts = False
         retry_count = 0
@@ -997,36 +1036,6 @@ class BedReadService:
         if not file_path.exists():
             return None
         return file_path
-
-    def get_batch_zip(self, batch_id: str) -> Optional[BytesIO]:
-        batch = self.get_batch_job(batch_id)
-        if batch is None:
-            return None
-
-        output_dir = self.get_output_dir(batch_id)
-        if output_dir is None:
-            return None
-
-        voice_name = _voice_display_name(batch["voice"])
-        zip_buffer = BytesIO()
-
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for ch in batch["chapters"]:
-                if ch["status"] != "completed" or not ch["output_filename"]:
-                    continue
-
-                file_path = output_dir / ch["output_filename"]
-                if not file_path.exists():
-                    continue
-
-                arcname = f"{batch['story_title']}_{voice_name}_{ch['chapter_number']:03d}.{batch['format']}"
-                zf.write(str(file_path), arcname)
-
-        if zip_buffer.tell() == 0:
-            return None
-
-        zip_buffer.seek(0)
-        return zip_buffer
 
     def build_batch_zip_on_disk(self, batch_id: str) -> Optional[Path]:
         """Build the batch zip on disk and return its path.

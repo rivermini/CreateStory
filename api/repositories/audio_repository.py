@@ -47,6 +47,7 @@ class BedReadJobRepository:
         output_dir = entry.get("output_dir") or ""
         return BedReadAudioJobRecord(
             batch_id=entry.get("batch_id", ""),
+            created_by_user_id=entry.get("created_by_user_id"),
             story_id=entry.get("story_id", ""),
             story_title=entry.get("story_title", ""),
             voice=entry.get("voice", "af_sarah"),
@@ -72,6 +73,7 @@ class BedReadJobRepository:
         data = dict(row.raw or {})
         data.update({
             "batch_id": row.batch_id,
+            "created_by_user_id": row.created_by_user_id,
             "story_id": row.story_id,
             "story_title": row.story_title,
             "voice": row.voice,
@@ -175,6 +177,7 @@ class GeneratedAudioRepository:
 
         return GeneratedAudioFileRecord(
             job_id=entry.get("job_id", ""),
+            created_by_user_id=entry.get("created_by_user_id"),
             status=entry.get("status", "queued"),
             voice=entry.get("voice", "af_sarah"),
             lang=entry.get("lang", "en-us"),
@@ -199,6 +202,7 @@ class GeneratedAudioRepository:
         data = dict(row.raw or {})
         data.update({
             "job_id": row.job_id,
+            "created_by_user_id": row.created_by_user_id,
             "status": row.status,
             "voice": row.voice,
             "lang": row.lang,

@@ -6,11 +6,12 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from api.services.bedread_service import get_bedread_service
+from api.service_auth import current_owner, require_owner
+from api.services.bedread_service import BedReadCapacityError, get_bedread_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bedread", tags=["BedRead"])
@@ -30,6 +31,7 @@ class BatchGenerateRequest(BaseModel):
     story_title: str = Field(..., description="Display title for the story.")
     chapter_numbers: Optional[list[int]] = Field(
         default=None,
+        max_length=500,
         description="Specific chapter numbers to generate. When provided, chapter_start/end are ignored.",
     )
     chapter_start: int = Field(default=1, ge=1, description="Starting chapter number (used when chapter_numbers is not set).")
@@ -185,6 +187,7 @@ def get_story_chapters(
 @router.post("/generate", response_model=BatchGenerateResponse)
 def start_batch_generate(
     request: BatchGenerateRequest,
+    http_request: Request,
     x_user_id: Optional[str] = Header(default=None, alias="x-user-id"),
 ) -> BatchGenerateResponse:
     """
@@ -223,8 +226,8 @@ def start_batch_generate(
         if not chapter_numbers:
             raise HTTPException(status_code=400, detail="No chapters in the specified range.")
 
-    if len(chapter_numbers) > 100:
-        logger.warning("Batch generation for %d chapters (story: %s)", len(chapter_numbers), request.story_title)
+    if len(chapter_numbers) > 500:
+        raise HTTPException(status_code=422, detail="A BedRead batch may contain at most 500 chapters.")
 
     try:
         batch_id = service.start_batch_job(
@@ -236,7 +239,14 @@ def start_batch_generate(
             speed=request.speed,
             format=request.format,
             from_auto_mode=request.from_auto_mode,
+            created_by_user_id=current_owner(http_request),
         )
+    except BedReadCapacityError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": "60"},
+        ) from exc
     except Exception as exc:
         logger.exception("Failed to start batch job")
         raise HTTPException(status_code=500, detail=str(exc))
@@ -249,26 +259,36 @@ def start_batch_generate(
 
 
 @router.get("/jobs/{batch_id}")
-def get_batch_status(batch_id: str) -> dict:
+def get_batch_status(batch_id: str, request: Request) -> dict:
     """Return current state of a batch job including per-chapter progress."""
     service = get_bedread_service()
     job = service.get_batch_job(batch_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
     return job
 
 
 @router.get("/jobs")
-def list_all_batch_jobs() -> list[dict]:
+def list_all_batch_jobs(request: Request) -> list[dict]:
     """Return all batch jobs for the management page."""
     service = get_bedread_service()
-    return service.list_batch_jobs()
+    jobs = service.list_batch_jobs()
+    role = getattr(request.state, "create_story_role", None)
+    owner_id = current_owner(request)
+    if role == "admin" or (role is None and owner_id is None):
+        return jobs
+    return [job for job in jobs if job.get("created_by_user_id") == owner_id]
 
 
 @router.delete("/jobs/{batch_id}")
-def cancel_batch(batch_id: str) -> dict:
+def cancel_batch(batch_id: str, request: Request) -> dict:
     """Cancel a running batch job."""
     service = get_bedread_service()
+    job = service.get_batch_job(batch_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
     cancelled = service.delete_batch_job(batch_id)
     if not cancelled:
         job = service.get_batch_job(batch_id)
@@ -282,9 +302,13 @@ def cancel_batch(batch_id: str) -> dict:
 
 
 @router.delete("/jobs/{batch_id}/output")
-def delete_batch_output(batch_id: str) -> dict:
+def delete_batch_output(batch_id: str, request: Request) -> dict:
     """Delete the output directory for a batch job after all chapters have been uploaded by the consumer."""
     service = get_bedread_service()
+    job = service.get_batch_job(batch_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
     deleted = service.delete_batch_output(batch_id)
     if not deleted:
         job = service.get_batch_job(batch_id)
@@ -298,9 +322,13 @@ def delete_batch_output(batch_id: str) -> dict:
 
 
 @router.post("/jobs/{batch_id}/remove")
-def remove_batch(batch_id: str) -> dict:
+def remove_batch(batch_id: str, request: Request) -> dict:
     """Remove a batch job from tracking (does not cancel active TTS jobs)."""
     service = get_bedread_service()
+    job = service.get_batch_job(batch_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
     removed = service.remove_batch_job(batch_id)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
@@ -310,6 +338,7 @@ def remove_batch(batch_id: str) -> dict:
 @router.get("/jobs/{batch_id}/download")
 def download_chapter(
     batch_id: str,
+    request: Request,
     chapter: int = Query(..., description="Chapter number to download."),
 ) -> FileResponse:
     """Stream a single chapter's audio file."""
@@ -318,6 +347,7 @@ def download_chapter(
     job = service.get_batch_job(batch_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
 
     file_path = service.get_chapter_file(batch_id, chapter)
     if file_path is None or not file_path.exists():
@@ -338,13 +368,14 @@ def download_chapter(
 
 
 @router.get("/jobs/{batch_id}/zip")
-def download_batch_zip(batch_id: str) -> FileResponse:
+def download_batch_zip(batch_id: str, request: Request) -> FileResponse:
     """Stream a ZIP file containing all completed chapter audio files."""
     service = get_bedread_service()
 
     job = service.get_batch_job(batch_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
 
     zip_path = job.get("zip_path")
     if zip_path:

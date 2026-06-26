@@ -79,6 +79,12 @@ def _default_concurrency(ignore_env: bool = False) -> int:
 
 
 SAMPLE_RATE = 24000
+MAX_QUEUED_JOBS_PER_USER = int(os.getenv("MAX_QUEUED_JOBS_PER_USER", "20"))
+MAX_QUEUED_JOBS_GLOBAL = int(os.getenv("MAX_QUEUED_JOBS_GLOBAL", "100"))
+
+
+class TTSCapacityError(RuntimeError):
+    """Raised when the TTS queue has reached an admission limit."""
 
 VOICE_LANG_MAP: dict[str, str] = {
     "en-us": "English (US)",
@@ -138,6 +144,7 @@ VOICE_METADATA: dict[str, tuple[str, str]] = {
 @dataclass
 class TTSJob:
     job_id: str = ""
+    created_by_user_id: str | None = None
     status: str = "idle"
     text: str = ""
     voice: str = "af_sarah"
@@ -156,6 +163,7 @@ class TTSJob:
     def to_dict(self, queue_position: int = 0) -> dict:
         return {
             "job_id": self.job_id,
+            "created_by_user_id": self.created_by_user_id,
             "status": self.status,
             "voice": self.voice,
             "lang": self.lang,
@@ -226,6 +234,7 @@ class TTSService:
                     was_interrupted = False
                 job = TTSJob(
                     job_id=job_id,
+                    created_by_user_id=entry.get("created_by_user_id"),
                     status=status,
                     text=entry.get("text", ""),
                     voice=entry.get("voice", "af_sarah"),
@@ -503,18 +512,19 @@ class TTSService:
         lang: str = "en-us",
         speed: float = 1.0,
         format: str = "wav",
+        created_by_user_id: str | None = None,
     ) -> str:
         if not text or not text.strip():
             raise ValueError("Text cannot be empty.")
 
         job_id = str(uuid.uuid4())[:8]
         output_dir = self._output_base / job_id
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         clean = self.clean_text(text)
 
         job = TTSJob(
             job_id=job_id,
+            created_by_user_id=created_by_user_id,
             status="queued",
             text=clean,
             voice=voice,
@@ -525,6 +535,21 @@ class TTSService:
         )
 
         with self._lock:
+            active_jobs = [
+                existing
+                for existing in self._jobs.values()
+                if existing.status in {"queued", "processing"}
+            ]
+            owner_jobs = [
+                existing
+                for existing in active_jobs
+                if existing.created_by_user_id == created_by_user_id
+            ]
+            if len(active_jobs) >= MAX_QUEUED_JOBS_GLOBAL:
+                raise TTSCapacityError("Global TTS queue capacity reached.")
+            if created_by_user_id and len(owner_jobs) >= MAX_QUEUED_JOBS_PER_USER:
+                raise TTSCapacityError("Per-user TTS queue capacity reached.")
+            output_dir.mkdir(parents=True, exist_ok=True)
             self._jobs[job_id] = job
             self._queue.append(job_id)
             queue_position = len(self._queue)
