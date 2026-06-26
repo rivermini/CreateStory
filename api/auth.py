@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import uuid
+import time
+from collections import defaultdict, deque
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -17,9 +20,14 @@ from api.app_config import ACCESS_TOKEN_EXPIRES, JWT_ALGORITHM, JWT_SECRET_KEY
 from api.db import get_db
 from api.models.db_models import User
 from api.repositories.auth_repository import AuthRepository
+from api.service_client import set_request_identity
 
 password_hasher = PasswordHasher()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+_job_rate_lock = Lock()
+_job_rate_windows: dict[str, deque[float]] = defaultdict(deque)
+_JOB_RATE_LIMIT = 10
+_JOB_RATE_WINDOW_SECONDS = 60
 
 
 def hash_password(password: str) -> str:
@@ -46,14 +54,10 @@ def create_access_token(user: User) -> str:
 
 
 def get_bearer_token(
-    request: Request,
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> str:
     if token:
         return token
-    query_token = request.query_params.get("access_token")
-    if query_token:
-        return query_token
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Missing access token.",
@@ -82,10 +86,37 @@ def get_current_user(
     user = AuthRepository(db).get_user_by_id(user_id)
     if user is None or not user.is_active:
         raise credentials_error
+    set_request_identity(str(user.id), user.role)
     return user
 
 
 def require_active_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    return current_user
+
+
+def require_operator(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if current_user.role not in {"operator", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator role required.")
+    return current_user
+
+
+def require_job_creation_rate(
+    current_user: Annotated[User, Depends(require_operator)],
+) -> User:
+    now = time.monotonic()
+    user_id = str(current_user.id)
+    with _job_rate_lock:
+        window = _job_rate_windows[user_id]
+        while window and now - window[0] >= _JOB_RATE_WINDOW_SECONDS:
+            window.popleft()
+        if len(window) >= _JOB_RATE_LIMIT:
+            retry_after = max(1, int(_JOB_RATE_WINDOW_SECONDS - (now - window[0])))
+            raise HTTPException(
+                status_code=429,
+                detail="Job creation rate limit exceeded.",
+                headers={"Retry-After": str(retry_after)},
+            )
+        window.append(now)
     return current_user
 
 

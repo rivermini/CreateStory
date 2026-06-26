@@ -1,52 +1,31 @@
-"""Tests for FastAPIServer /api/dev/* endpoint guards."""
+"""Executable API tests for development endpoint containment."""
 
-from __future__ import annotations
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-import re
-from pathlib import Path
-
-import pytest
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEV_PY = PROJECT_ROOT / "FastAPIServer" / "api" / "routes" / "dev.py"
+from api.auth import require_admin
+from api.db import get_db
+from api.routes.dev import router
 
 
-class TestDevEndpoints:
-    """Verify dev endpoints are gated behind DEV_MODE."""
+def _unused_db():
+    yield object()
 
-    def test_clear_data_returns_404_when_dev_mode_off(self) -> None:
-        """POST /api/dev/clear-data must return 404 when DEV_MODE is not set."""
-        source = DEV_PY.read_text()
 
-        assert "DEV_MODE" in source, (
-            "clear-data endpoint must check DEV_MODE environment variable"
-        )
-        assert 'os.getenv("DEV_MODE"' in source, (
-            "clear-data endpoint must read DEV_MODE from environment"
-        )
-        assert "HTTPException(status_code=404" in source, (
-            "clear-data endpoint must return 404 (not 403) when DEV_MODE is off, "
-            "to avoid disclosing that the endpoint exists"
-        )
+def _admin():
+    return object()
 
-    def test_clear_data_checks_dev_mode_within_function(self) -> None:
-        """The DEV_MODE check must appear in the clear-data function body."""
-        source = DEV_PY.read_text()
 
-        # Extract the clear-data function body using a regex
-        match = re.search(
-            r"async def clear_backend_data\((.+?)\n(?=async def |def |class |#|$)",
-            source,
-            re.DOTALL,
-        )
-        assert match, "Could not find clear_backend_data function"
-        func_body = match.group(0)
+def test_clear_data_returns_404_when_dev_mode_off(monkeypatch) -> None:
+    monkeypatch.setenv("DEV_MODE", "false")
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_db] = _unused_db
+    app.dependency_overrides[require_admin] = _admin
 
-        # DEV_MODE guard must appear before the confirmation check in this function
-        dev_mode_pos = func_body.find("DEV_MODE")
-        confirm_pos = func_body.find("confirmation")
-        assert dev_mode_pos != -1, "DEV_MODE check not found in clear-data function"
-        assert confirm_pos != -1, "confirmation check not found in clear-data function"
-        assert dev_mode_pos < confirm_pos, (
-            "DEV_MODE guard must appear before the confirmation check in clear-data endpoint"
-        )
+    response = TestClient(app).post(
+        "/api/dev/clear-data",
+        json={"confirmation": "CLEAR_BACKEND_DATA"},
+    )
+
+    assert response.status_code == 404

@@ -27,7 +27,5 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
+    """Register ORM models without performing schema changes at runtime."""
     import api.models.db_models  # noqa: F401
-
-    Base.metadata.create_all(bind=engine)
-

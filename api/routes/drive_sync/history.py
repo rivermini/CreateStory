@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from api.service_client import service_async_client
+
 import os
 
 from fastapi import APIRouter, Query
@@ -32,7 +34,7 @@ def _ds_url() -> str:
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with service_async_client(timeout=60.0) as client:
         resp = await client.get(url, params=params or {})
         try:
             resp.raise_for_status()
@@ -48,7 +50,7 @@ async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
 async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with service_async_client(timeout=60.0) as client:
         resp = await client.post(url, json=json_body or {})
         try:
             resp.raise_for_status()
@@ -64,7 +66,7 @@ async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
 async def _proxy_patch(path: str, json_body: dict | None = None) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with service_async_client(timeout=60.0) as client:
         resp = await client.patch(url, json=json_body or {})
         try:
             resp.raise_for_status()
@@ -80,7 +82,7 @@ async def _proxy_patch(path: str, json_body: dict | None = None) -> JSONResponse
 async def _proxy_delete(path: str) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with service_async_client(timeout=60.0) as client:
         resp = await client.delete(url)
         try:
             resp.raise_for_status()

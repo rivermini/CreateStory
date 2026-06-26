@@ -20,13 +20,28 @@ class StartupError(Exception):
     pass
 
 
+def _env_or_file(name: str) -> str | None:
+    """Read a secret from NAME or from the file referenced by NAME_FILE."""
+    value = os.environ.get(name)
+    if value is not None:
+        return value.strip()
+    file_path = os.environ.get(f"{name}_FILE")
+    if not file_path:
+        return None
+    try:
+        return Path(file_path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        print(f"[FATAL] Unable to read {name}_FILE: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
 def _required_env(name: str) -> str:
     """Return the value of a required env var, or exit with a clear message."""
-    value = os.environ.get(name)
-    if value is None:
+    value = _env_or_file(name)
+    if not value:
         print(
             f"[FATAL] {name} is not set. "
-            f"Please set it in your .env file or environment before starting the server.",
+            f"Set {name} or {name}_FILE before starting the server.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -35,10 +50,9 @@ def _required_env(name: str) -> str:
 
 # Required — no defaults; server will not start without these.
 JWT_SECRET_KEY = _required_env("JWT_SECRET_KEY")
-_BOOTSTRAP_PASSWORD_DEFAULT = "+E8ep0m7(h5ut#Q$"
-BOOTSTRAP_ADMIN_PASSWORD = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", _BOOTSTRAP_PASSWORD_DEFAULT)
+INTERNAL_SERVICE_TOKEN = _required_env("INTERNAL_SERVICE_TOKEN")
 
-_DATABASE_URL = os.environ.get("DATABASE_URL")
+_DATABASE_URL = _env_or_file("DATABASE_URL")
 if _DATABASE_URL:
     DATABASE_URL = _DATABASE_URL
 else:
@@ -60,4 +74,3 @@ def _int_env(name: str, default: int) -> int:
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRES = timedelta(minutes=_int_env("JWT_ACCESS_TOKEN_MINUTES", 30))
 REFRESH_TOKEN_EXPIRES = timedelta(days=_int_env("JWT_REFRESH_TOKEN_DAYS", 14))
-BOOTSTRAP_ADMIN_EMAIL = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "admin@gmail.com")

@@ -8,9 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends, Header, Query, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.auth import require_active_user
-from api.config import load_external_api_config
-from api.db import get_db
+from api.auth import require_active_user, require_job_creation_rate, require_operator
+from api.proxy import json_proxy, streaming_proxy
 
 router = APIRouter(prefix="/api/bedread", tags=["BedRead"])
 _AUTH = [Depends(require_active_user)]
@@ -21,41 +20,25 @@ def _bv_url() -> str:
 
 
 async def _proxy_get(path: str, params: dict | None = None, headers: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_bv_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(url, params=params or {}, headers=headers or {})
-        resp.raise_for_status()
-        return JSONResponse(content=resp.json())
+    return await json_proxy("GET", f"{_bv_url()}{path}", params=params, headers=headers, timeout=60.0)
 
 
 async def _proxy_post(path: str, json_body: dict | None = None, headers: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_bv_url()}{path}"
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        resp = await client.post(url, json=json_body or {}, headers=headers or {})
-        resp.raise_for_status()
-        return JSONResponse(content=resp.json())
+    return await json_proxy(
+        "POST",
+        f"{_bv_url()}{path}",
+        json_body=json_body or {},
+        headers=headers,
+        timeout=300.0,
+    )
 
 
 async def _proxy_delete(path: str) -> JSONResponse:
-    import httpx
-    url = f"{_bv_url()}{path}"
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.delete(url)
-        resp.raise_for_status()
-        return JSONResponse(content=resp.json())
+    return await json_proxy("DELETE", f"{_bv_url()}{path}", timeout=30.0)
 
 
-async def _proxy_stream(path: str, timeout: float = 300.0) -> StreamingResponse:
-    import httpx
-    url = f"{_bv_url()}{path}"
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        content_type = resp.headers.get("content-type", "application/octet-stream")
-        hdrs = {k: v for k, v in resp.headers.items() if k.lower() not in ("host", "connection")}
-        return StreamingResponse(resp.aiter_bytes(), media_type=content_type, headers=hdrs)
+async def _proxy_stream(path: str, timeout: float = 300.0) -> StreamingResponse | JSONResponse:
+    return await streaming_proxy("GET", f"{_bv_url()}{path}", timeout=timeout)
 
 
 @router.get("/stories", dependencies=_AUTH)
@@ -99,7 +82,7 @@ async def get_story_chapters(
     return await _proxy_get(f"/api/bedread/stories/{story_id}/chapters", headers=headers)
 
 
-@router.post("/generate", dependencies=_AUTH)
+@router.post("/generate", dependencies=[*_AUTH, Depends(require_job_creation_rate)])
 async def start_batch_generate(
     request: dict = Body(...),
     x_user_id: Optional[str] = Header(None, alias="x-user-id"),
@@ -120,12 +103,12 @@ async def list_all_batch_jobs() -> JSONResponse:
     return await _proxy_get("/api/bedread/jobs")
 
 
-@router.delete("/jobs/{batch_id}", dependencies=_AUTH)
+@router.delete("/jobs/{batch_id}", dependencies=[*_AUTH, Depends(require_operator)])
 async def cancel_batch(batch_id: str) -> JSONResponse:
     return await _proxy_delete(f"/api/bedread/jobs/{batch_id}")
 
 
-@router.post("/jobs/{batch_id}/remove", dependencies=_AUTH)
+@router.post("/jobs/{batch_id}/remove", dependencies=[*_AUTH, Depends(require_operator)])
 async def remove_batch(batch_id: str) -> JSONResponse:
     return await _proxy_post(f"/api/bedread/jobs/{batch_id}/remove")
 
@@ -138,18 +121,3 @@ async def download_chapter(batch_id: str, chapter: int = Query(...)) -> Streamin
 @router.get("/jobs/{batch_id}/zip", dependencies=_AUTH)
 async def download_batch_zip(batch_id: str) -> StreamingResponse:
     return await _proxy_stream(f"/api/bedread/jobs/{batch_id}/zip")
-
-
-@router.get("/config/external-api")
-async def get_external_api_config(db=Depends(get_db)) -> JSONResponse:
-    """Serve external API config to downstream services (e.g. BedReadVoices).
-    The config is sourced from PostgreSQL app_settings saved by the FE.
-    """
-    try:
-        config = load_external_api_config(db)
-        return JSONResponse(content={
-            "external_api_base_url": config["main_be_api_base_url"],
-            "external_api_token": config["main_be_bearer_token"],
-        })
-    except Exception as exc:
-        return JSONResponse(status_code=503, content={"detail": str(exc)})

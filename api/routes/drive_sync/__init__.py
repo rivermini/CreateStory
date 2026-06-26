@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Annotated
 
-from api.auth import require_active_user
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from api.auth import get_current_user
+from api.models.db_models import User
 from api.routes.drive_sync import (
     config,
     dashboard,
@@ -20,7 +23,16 @@ from api.routes.drive_sync import (
     title_update,
 )
 
-router = APIRouter(prefix="/api/drive-sync", tags=["Drive Sync"], dependencies=[Depends(require_active_user)])
+def require_drive_access(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required.")
+    return current_user
+
+
+router = APIRouter(prefix="/api/drive-sync", tags=["Drive Sync"], dependencies=[Depends(require_drive_access)])
 router.include_router(config.router)
 router.include_router(folders.router)
 router.include_router(uploadability.router)

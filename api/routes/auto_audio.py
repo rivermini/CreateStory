@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 
-from api.auth import require_active_user
+from api.auth import require_active_user, require_job_creation_rate, require_operator
 from api.models.auto_audio import (
     AutoAudioHistoryEntry,
     AutoAudioPauseResponse,
@@ -20,7 +20,7 @@ from services.orchestrator.auto_audio_service import get_auto_audio_service
 router = APIRouter(prefix="/api/auto-audio", tags=["Auto Audio"], dependencies=[Depends(require_active_user)])
 
 
-@router.post("/start", response_model=StartSessionResponse)
+@router.post("/start", response_model=StartSessionResponse, dependencies=[Depends(require_job_creation_rate)])
 async def start_session(request: StartSessionRequest) -> StartSessionResponse:
     """Start a new auto audio session. Only one session can run at a time."""
     service = get_auto_audio_service()
@@ -54,7 +54,7 @@ async def get_status(
     return AutoAudioSessionResponse(**data)
 
 
-@router.post("/stop")
+@router.post("/stop", dependencies=[Depends(require_operator)])
 async def stop_session() -> dict:
     """Signal the active session to stop gracefully."""
     service = get_auto_audio_service()
@@ -65,7 +65,7 @@ async def stop_session() -> dict:
     return {"message": "Stop signal sent."}
 
 
-@router.post("/pause", response_model=AutoAudioPauseResponse)
+@router.post("/pause", response_model=AutoAudioPauseResponse, dependencies=[Depends(require_operator)])
 async def pause_session() -> AutoAudioPauseResponse:
     """Pause the active auto-audio session."""
     service = get_auto_audio_service()
@@ -76,7 +76,7 @@ async def pause_session() -> AutoAudioPauseResponse:
     return AutoAudioPauseResponse(**data)
 
 
-@router.post("/resume", response_model=AutoAudioPauseResponse)
+@router.post("/resume", response_model=AutoAudioPauseResponse, dependencies=[Depends(require_operator)])
 async def resume_session() -> AutoAudioPauseResponse:
     """Resume a paused auto-audio session."""
     service = get_auto_audio_service()
@@ -95,6 +95,7 @@ async def get_history() -> list[AutoAudioHistoryEntry]:
     return [
         AutoAudioHistoryEntry(
             session_id=s.get("session_id", ""),
+            created_by_user_id=s.get("created_by_user_id"),
             phase=s.get("phase", "phase1"),
             test_mode=s.get("test_mode", False),
             voice=s.get("voice") or "",
@@ -121,7 +122,7 @@ async def get_session(session_id: str) -> AutoAudioSessionResponse:
     return AutoAudioSessionResponse(**session_data)
 
 
-@router.post("/history/batch-delete", response_model=DeleteSessionsBatchResponse)
+@router.post("/history/batch-delete", response_model=DeleteSessionsBatchResponse, dependencies=[Depends(require_operator)])
 async def delete_sessions_batch(request: DeleteSessionsBatchRequest) -> DeleteSessionsBatchResponse:
     """Delete multiple sessions from history in a single operation."""
     service = get_auto_audio_service()
@@ -129,7 +130,7 @@ async def delete_sessions_batch(request: DeleteSessionsBatchRequest) -> DeleteSe
     return DeleteSessionsBatchResponse(deleted=deleted, requested=len(request.session_ids))
 
 
-@router.delete("/history/{session_id}")
+@router.delete("/history/{session_id}", dependencies=[Depends(require_operator)])
 async def delete_session(session_id: str) -> dict:
     """Delete a session from history."""
     service = get_auto_audio_service()

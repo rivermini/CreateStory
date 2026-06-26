@@ -17,19 +17,21 @@ load_dotenv(_project_root / ".env")
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.bootstrap import ensure_bootstrap_admin
 from api.db import SessionLocal, init_db
 from api.migration import import_existing_shared_state
 from api.middleware import (
     RequestIDMiddleware,
+    RequestBodyLimitMiddleware,
     SecurityHeadersMiddleware,
     close_shared_http_client,
     init_shared_http_client,
 )
-from api.routes import admin, auth, auto_audio, bedread, crawl, dev, results, settings, sites, drive_sync, tts
+from api.routes import admin, auth, auto_audio, bedread, crawl, dev, downloads, drive_sync, internal, results, settings, sites, tts
 from api.routes.auth import _limiter
 from api.routes.drive_sync.config import _DRIVE_SYNC_CONFIG_EXAMPLE
 from api.routes.settings import _SETTINGS_EXAMPLE
@@ -54,7 +56,6 @@ async def lifespan(app: FastAPI):
     _logger.info("FastAPIServer startup: initializing database...")
     init_db()
     with SessionLocal() as db:
-        ensure_bootstrap_admin(db)
         import_existing_shared_state(db, _SETTINGS_EXAMPLE, _DRIVE_SYNC_CONFIG_EXAMPLE)
     # Pre-populate caches on startup so first user requests don't pay cold-start cost.
     _logger.info("FastAPIServer startup: warming caches...")
@@ -89,6 +90,31 @@ app = FastAPI(
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "code": "http_error",
+            "request_id": getattr(request.state, "request_id", "unknown"),
+        },
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": exc.errors(),
+            "code": "validation_error",
+            "request_id": getattr(request.state, "request_id", "unknown"),
+        },
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
@@ -98,9 +124,12 @@ app.add_middleware(
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(RequestIDMiddleware)
 
 app.include_router(auth.router)
+app.include_router(downloads.router)
+app.include_router(internal.router)
 app.include_router(admin.router)
 app.include_router(settings.router)
 app.include_router(dev.router)

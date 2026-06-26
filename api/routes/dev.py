@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from api.service_client import service_async_client
+
 import logging
 import os
 import shutil
@@ -139,7 +141,7 @@ async def _reset_worker_services() -> list[str]:
     except Exception:
         service_urls = {}
 
-    async with httpx.AsyncClient(timeout=3.0) as client:
+    async with service_async_client(timeout=3.0) as client:
         for name, fallback in RESET_TARGETS:
             base = os.environ.get(f"SERVICE_URLS_{name}") or service_urls.get(name) or fallback
             url = f"{base.rstrip('/')}/api/dev/reset-state"

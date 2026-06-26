@@ -24,7 +24,7 @@ _limiter = Limiter(key_func=get_remote_address)
 class AuthUserResponse(BaseModel):
     id: str
     email: EmailStr
-    role: Literal["admin", "user"]
+    role: Literal["admin", "operator", "viewer"]
     is_active: bool
 
 
@@ -95,4 +95,3 @@ def logout(req: LogoutRequest, db: Annotated[Session, Depends(get_db)]) -> dict:
 @router.get("/me", response_model=AuthUserResponse)
 def me(current_user: Annotated[User, Depends(require_active_user)]) -> AuthUserResponse:
     return _user_response(current_user)
-

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from api.service_client import service_async_client
+
 import os
 from typing import Optional
 
@@ -32,7 +34,7 @@ def _ds_url() -> str:
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with service_async_client(timeout=60.0) as client:
         resp = await client.get(url, params=params or {})
         try:
             resp.raise_for_status()

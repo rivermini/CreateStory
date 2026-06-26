@@ -16,6 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Service modules (api.db, api.app_config) raise errors at import time if absent.
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://test:test@localhost/test")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-unit-tests")
+os.environ.setdefault("INTERNAL_SERVICE_TOKEN", "test-internal-service-token")
 
 
 @pytest.fixture

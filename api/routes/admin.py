@@ -17,7 +17,7 @@ from api.repositories.auth_repository import AuthRepository, normalize_email
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
-UserRole = Literal["admin", "user"]
+UserRole = Literal["admin", "operator", "viewer"]
 
 
 class AdminUserResponse(BaseModel):
@@ -32,7 +32,7 @@ class AdminUserResponse(BaseModel):
 class UserCreateRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    role: UserRole = "user"
+    role: UserRole = "viewer"
     is_active: bool = True
 
 

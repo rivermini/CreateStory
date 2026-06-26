@@ -14,6 +14,7 @@ import time
 from typing import Optional
 
 import httpx
+from api.service_client import current_request_identity, inject_service_headers
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class AutoAudioServiceProxy:
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            event_hooks={"request": [inject_service_headers]},
         )
 
     async def _cached_get(self, key: str, fetch_fn) -> object:
@@ -71,7 +73,10 @@ class AutoAudioServiceProxy:
         Uses an asyncio.Lock to ensure only one coroutine fetches a given key
         at a time. Other coroutines waiting on the same key share the result.
         """
-        ttl = self._STATUS_CACHE_TTL if key.startswith("status") else self._CACHE_TTL
+        identity = current_request_identity()
+        identity_key = f"{identity[0]}:{identity[1]}" if identity else "system"
+        key = f"{identity_key}:{key}"
+        ttl = self._STATUS_CACHE_TTL if ":status" in key else self._CACHE_TTL
         now = time.monotonic()
 
         async with self._lock:
@@ -88,10 +93,12 @@ class AutoAudioServiceProxy:
             for k in keys:
                 if k == "status":
                     for existing_key in list(self._cache):
-                        if existing_key.startswith("status"):
+                        if ":status" in existing_key:
                             self._cache.pop(existing_key, None)
                 else:
-                    self._cache.pop(k, None)
+                    for existing_key in list(self._cache):
+                        if existing_key.endswith(f":{k}"):
+                            self._cache.pop(existing_key, None)
 
     def _normalize_status_summary(self, data: Optional[dict]) -> Optional[dict]:
         if data is None:

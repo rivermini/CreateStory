@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from api.service_client import service_async_client
+
 import os
 
 from fastapi import APIRouter
@@ -34,7 +36,7 @@ async def _proxy_get(path: str, params: dict | None = None, timeout: float = 60.
     import httpx
     url = f"{_ds_url()}{path}"
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with service_async_client(timeout=timeout) as client:
             resp = await client.get(url, params=params or {})
             try:
                 resp.raise_for_status()
@@ -53,7 +55,7 @@ async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
     import httpx
     url = f"{_ds_url()}{path}"
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with service_async_client(timeout=300.0) as client:
             resp = await client.post(url, json=json_body or {})
             try:
                 resp.raise_for_status()

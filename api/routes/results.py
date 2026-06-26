@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.auth import require_active_user
+from api.auth import require_active_user, require_operator
+from api.proxy import json_proxy, streaming_proxy
 
 router = APIRouter(prefix="/api/results", tags=["Results"], dependencies=[Depends(require_active_user)])
 
@@ -19,41 +19,17 @@ def _nc_url() -> str:
 
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
     """Forward a GET request to NovelCrawler."""
-    import httpx
-
-    url = f"{_nc_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(url, params=params or {})
-        resp.raise_for_status()
-        return JSONResponse(content=resp.json())
+    return await json_proxy("GET", f"{_nc_url()}{path}", params=params, timeout=60.0)
 
 
 async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
     """Forward a POST request to NovelCrawler."""
-    import httpx
-
-    url = f"{_nc_url()}{path}"
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(url, json=json_body or {})
-        resp.raise_for_status()
-        return JSONResponse(content=resp.json())
+    return await json_proxy("POST", f"{_nc_url()}{path}", json_body=json_body or {}, timeout=120.0)
 
 
-async def _proxy_download(path: str, params: dict | None = None) -> StreamingResponse:
+async def _proxy_download(path: str, params: dict | None = None) -> StreamingResponse | JSONResponse:
     """Forward a download request to NovelCrawler and stream the response."""
-    import httpx
-
-    url = f"{_nc_url()}{path}"
-    async with httpx.AsyncClient(timeout=300.0, follow_redirects=True) as client:
-        resp = await client.get(url, params=params or {})
-        resp.raise_for_status()
-        content_type = resp.headers.get("content-type", "application/octet-stream")
-        headers = {k: v for k, v in resp.headers.items() if k.lower() not in ("host", "connection")}
-        return StreamingResponse(
-            resp.aiter_bytes(),
-            media_type=content_type,
-            headers=headers,
-        )
+    return await streaming_proxy("GET", f"{_nc_url()}{path}", params=params, timeout=300.0)
 
 
 @router.get("")
@@ -74,7 +50,7 @@ async def download_all_combined() -> StreamingResponse:
     return await _proxy_download("/api/results/download-all-combined")
 
 
-@router.post("/delete")
+@router.post("/delete", dependencies=[Depends(require_operator)])
 async def delete_crawl_sessions(request: dict) -> JSONResponse:
     """Delete one or more crawl sessions."""
     return await _proxy_post("/api/results/delete", json_body=request)
@@ -116,7 +92,7 @@ async def get_file_content(crawl_id: str, filename: str = Query(...)) -> JSONRes
     return await _proxy_get(f"/api/results/{crawl_id}/content", params={"filename": filename})
 
 
-@router.post("/{crawl_id}/combine")
+@router.post("/{crawl_id}/combine", dependencies=[Depends(require_operator)])
 async def combine_chapters(crawl_id: str) -> JSONResponse:
     """Merge all individual chapter JSON files into a single combined file."""
     return await _proxy_post(f"/api/results/{crawl_id}/combine")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from api.service_client import service_async_client
+
 import os
 from typing import Annotated, Optional
 
@@ -78,7 +80,7 @@ async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
     import httpx
 
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with service_async_client(timeout=60.0) as client:
         resp = await client.get(url, params=params or {})
         try:
             resp.raise_for_status()
@@ -95,7 +97,7 @@ async def _proxy_post(path: str, json_body: dict | None = None, headers: dict | 
     import httpx
 
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with service_async_client(timeout=120.0) as client:
         resp = await client.post(url, json=json_body or {}, headers=headers or {})
         try:
             resp.raise_for_status()
@@ -112,7 +114,7 @@ async def _proxy_put(path: str, json_body: dict | None = None, headers: dict | N
     import httpx
 
     url = f"{_ds_url()}{path}"
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with service_async_client(timeout=120.0) as client:
         resp = await client.put(url, json=json_body or {}, headers=headers or {})
         try:
             resp.raise_for_status()
@@ -125,21 +127,15 @@ async def _proxy_put(path: str, json_body: dict | None = None, headers: dict | N
         return JSONResponse(content=resp.json())
 
 
-class DriveSyncTokenResponse(BaseModel):
-    token: Optional[str]
-
-
 class DriveSyncUrlResponse(BaseModel):
     url: Optional[str]
 
 
-@router.get("/config/token", response_model=DriveSyncTokenResponse)
-async def get_main_be_token(
-    db: Annotated[Session, Depends(get_db)],
-    _admin=Depends(require_admin),
-) -> JSONResponse:
-    config = SharedStateRepository(db).get_drive_config() or {}
-    return JSONResponse(content={"token": config.get("main_be_bearer_token")})
+class DriveSyncUpdateRequest(BaseModel):
+    enabled: Optional[bool] = None
+    main_category_id: Optional[str] = None
+    main_be_user_id: Optional[str] = None
+    main_be_api_base_url: Optional[str] = None
 
 
 @router.get("/status")
@@ -198,7 +194,7 @@ async def create_or_update_sync_config(
 
 @router.put("/config")
 async def update_sync_config(
-    body: dict,
+    body: DriveSyncUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
     _admin=Depends(require_admin),
     x_auth_token: Annotated[Optional[str], Header(alias="X-Auth-Token")] = None,
@@ -207,9 +203,10 @@ async def update_sync_config(
     current = repo.get_drive_config()
     if current is None:
         raise HTTPException(status_code=400, detail="Drive sync not configured. POST /api/drive-sync/config first.")
-    merged = {**current, **{k: v for k, v in body.items() if v is not None}}
+    updates = body.model_dump(exclude_none=True)
+    merged = {**current, **updates}
     saved = repo.upsert_drive_config(merged)
-    worker_body = {k: v for k, v in body.items() if v is not None and k != "main_be_bearer_token"}
+    worker_body = updates
     worker_headers: dict[str, str] = {}
     if x_auth_token:
         worker_headers["X-Auth-Token"] = x_auth_token

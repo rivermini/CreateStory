@@ -9,14 +9,23 @@ import uuid
 from typing import TYPE_CHECKING
 
 import httpx
+from api.service_client import (
+    clear_request_identity,
+    inject_service_headers,
+    reset_request_id,
+    reset_request_identity,
+    set_request_id,
+)
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.responses import JSONResponse
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))
 
 # Module-level shared client — initialized in lifespan, closed on shutdown.
 _shared_client: httpx.AsyncClient | None = None
@@ -100,6 +109,7 @@ def init_shared_http_client() -> None:
         timeout=httpx.Timeout(30.0, connect=10.0),
         limits=httpx.Limits(max_connections=40, max_keepalive_connections=20),
         transport=_RetryTransport(),
+        event_hooks={"request": [inject_service_headers]},
     )
     logger.info("Shared httpx.AsyncClient initialised.")
 
@@ -147,6 +157,28 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
+    """Reject request bodies larger than the configured gateway limit."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > MAX_REQUEST_BODY_BYTES:
+                    request_id = getattr(request.state, "request_id", "unknown")
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "detail": "Request body exceeds the 2 MiB limit.",
+                            "code": "request_too_large",
+                            "request_id": request_id,
+                        },
+                    )
+            except ValueError:
+                pass
+        return await call_next(request)
+
+
 # ── Request-ID middleware ───────────────────────────────────────────────────────
 
 
@@ -159,10 +191,25 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-        request.state.request_id = request_id
-        logger.info("[%s] %s %s", request_id, request.method, request.url.path)
-        response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        logger.info("[%s] %s %s -> %s", request_id, request.method, request.url.path, response.status_code)
-        return response
+        identity_token = clear_request_identity()
+        try:
+            request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+            request_id_token = set_request_id(request_id)
+            request.state.request_id = request_id
+            logger.info("[%s] %s %s", request_id, request.method, request.url.path)
+            response: Response = await call_next(request)
+            if request.url.path.startswith("/internal/"):
+                for header in (
+                    "access-control-allow-origin",
+                    "access-control-allow-credentials",
+                    "access-control-expose-headers",
+                ):
+                    if header in response.headers:
+                        del response.headers[header]
+            response.headers["X-Request-ID"] = request_id
+            logger.info("[%s] %s %s -> %s", request_id, request.method, request.url.path, response.status_code)
+            return response
+        finally:
+            if "request_id_token" in locals():
+                reset_request_id(request_id_token)
+            reset_request_identity(identity_token)

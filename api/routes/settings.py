@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api.auth import require_active_user
+from api.auth import require_active_user, require_admin
 from api.db import get_db
 from api.middleware import get_shared_http_client
 from api.models.settings import SettingsResponse, SettingsUpdateRequest
@@ -89,7 +89,7 @@ async def update_settings(
     req: SettingsUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
     client: Annotated[httpx.AsyncClient, Depends(get_shared_http_client)],
-    _user=Depends(require_active_user),
+    _admin=Depends(require_admin),
 ) -> SettingsResponse:
     """Partially update shared settings. Only explicitly sent fields are updated."""
     data = _load_settings(db)
