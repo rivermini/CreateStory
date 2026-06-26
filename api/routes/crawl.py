@@ -45,64 +45,28 @@ async def start_batch_crawl(request: list[dict] = Body(...)) -> JSONResponse:
     return result
 
 
-@router.post("/inkitt-cookies", dependencies=[Depends(require_admin)])
+@router.post("/inkitt-cookies", dependencies=[Depends(require_operator)])
 async def update_inkitt_cookies(request: dict = Body(...)) -> JSONResponse:
     """Update saved Inkitt login cookies in the NovelCrawler service."""
-    import httpx
-
-    url = f"{_nc_url()}/api/crawl/inkitt-cookies"
-    async with service_async_client(timeout=30.0) as client:
-        resp = await client.post(url, json=request)
-        try:
-            content = resp.json()
-        except ValueError:
-            content = {"detail": resp.text or f"HTTP {resp.status_code}"}
-        return JSONResponse(content=content, status_code=resp.status_code)
+    return await _forward_request("POST", "/api/crawl/inkitt-cookies", json_body=request)
 
 
-@router.post("/inkitt-cookies/status", dependencies=[Depends(require_admin)])
+@router.post("/inkitt-cookies/status", dependencies=[Depends(require_operator)])
 async def check_inkitt_cookies(request: dict | None = Body(default=None)) -> JSONResponse:
     """Check saved Inkitt login cookies in the NovelCrawler service."""
-    import httpx
-
-    url = f"{_nc_url()}/api/crawl/inkitt-cookies/status"
-    async with service_async_client(timeout=45.0) as client:
-        resp = await client.post(url, json=request or {})
-        try:
-            content = resp.json()
-        except ValueError:
-            content = {"detail": resp.text or f"HTTP {resp.status_code}"}
-        return JSONResponse(content=content, status_code=resp.status_code)
+    return await _forward_request("POST", "/api/crawl/inkitt-cookies/status", json_body=request or {})
 
 
-@router.post("/scribblehub-cookies", dependencies=[Depends(require_admin)])
+@router.post("/scribblehub-cookies", dependencies=[Depends(require_operator)])
 async def update_scribblehub_cookies(request: dict = Body(...)) -> JSONResponse:
     """Update saved ScribbleHub session cookies (cf_clearance + User-Agent) in the NovelCrawler service."""
-    import httpx
-
-    url = f"{_nc_url()}/api/crawl/scribblehub-cookies"
-    async with service_async_client(timeout=30.0) as client:
-        resp = await client.post(url, json=request)
-        try:
-            content = resp.json()
-        except ValueError:
-            content = {"detail": resp.text or f"HTTP {resp.status_code}"}
-        return JSONResponse(content=content, status_code=resp.status_code)
+    return await _forward_request("POST", "/api/crawl/scribblehub-cookies", json_body=request)
 
 
-@router.post("/scribblehub-cookies/status", dependencies=[Depends(require_admin)])
+@router.post("/scribblehub-cookies/status", dependencies=[Depends(require_operator)])
 async def check_scribblehub_cookies(request: dict | None = Body(default=None)) -> JSONResponse:
     """Check saved ScribbleHub session cookies in the NovelCrawler service."""
-    import httpx
-
-    url = f"{_nc_url()}/api/crawl/scribblehub-cookies/status"
-    async with service_async_client(timeout=45.0) as client:
-        resp = await client.post(url, json=request or {})
-        try:
-            content = resp.json()
-        except ValueError:
-            content = {"detail": resp.text or f"HTTP {resp.status_code}"}
-        return JSONResponse(content=content, status_code=resp.status_code)
+    return await _forward_request("POST", "/api/crawl/scribblehub-cookies/status", json_body=request or {})
 
 
 @router.get("/stream")

@@ -53,7 +53,7 @@ def create_access_token(user: User) -> str:
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-def get_bearer_token(
+async def get_bearer_token(
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> str:
     if token:
@@ -65,7 +65,7 @@ def get_bearer_token(
     )
 
 
-def get_current_user(
+async def get_current_user(
     token: Annotated[str, Depends(get_bearer_token)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
@@ -90,17 +90,17 @@ def get_current_user(
     return user
 
 
-def require_active_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+async def require_active_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     return current_user
 
 
-def require_operator(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+async def require_operator(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     if current_user.role not in {"operator", "admin"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator role required.")
     return current_user
 
 
-def require_job_creation_rate(
+async def require_job_creation_rate(
     current_user: Annotated[User, Depends(require_operator)],
 ) -> User:
     now = time.monotonic()
@@ -120,7 +120,7 @@ def require_job_creation_rate(
     return current_user
 
 
-def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+async def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required.")
     return current_user
