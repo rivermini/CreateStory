@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 from typing import Optional
 
 from pydantic import BaseModel
@@ -102,20 +100,3 @@ def _is_valid_upload_format(folder_name: str) -> bool:
     between = folder_name[prefix_end:dash_pos]
     source_suffix = re.compile(r"wp|gd|Goodnovel|nw|ink", re.IGNORECASE)
     return source_suffix.search(between) is not None
-
-
-def _ds_url() -> str:
-    """Return BedReadDriveSync base URL, checking env vars and SERVICE_URLS JSON."""
-    override = os.environ.get("SERVICE_URLS_BedReadDriveSync")
-    if override:
-        return override.rstrip("/")
-    urls_raw = os.environ.get("SERVICE_URLS", "{}")
-    try:
-        service_urls = json.loads(urls_raw)
-        if isinstance(service_urls, dict):
-            url = service_urls.get("BedReadDriveSync")
-            if url:
-                return str(url).rstrip("/")
-    except Exception:
-        pass
-    return "http://localhost:8003"

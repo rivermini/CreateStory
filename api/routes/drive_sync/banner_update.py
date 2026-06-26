@@ -2,70 +2,20 @@
 
 from __future__ import annotations
 
-from api.service_client import service_async_client
-
-import os
-
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+
+from api.routes.drive_sync.proxy import drive_get, drive_post
 
 router = APIRouter(prefix="/banner-update", tags=["Drive Sync"])
 
 
-def _ds_url() -> str:
-    """Return BedReadDriveSync base URL, checking env vars and SERVICE_URLS JSON."""
-    override = os.environ.get("SERVICE_URLS_BedReadDriveSync")
-    if override:
-        return override.rstrip("/")
-    urls_raw = os.environ.get("SERVICE_URLS", "{}")
-    try:
-        import json
-        service_urls = json.loads(urls_raw)
-        if isinstance(service_urls, dict):
-            url = service_urls.get("BedReadDriveSync")
-            if url:
-                return str(url).rstrip("/")
-    except Exception:
-        pass
-    return "http://localhost:8003"
-
-
 async def _proxy_get(path: str, params: dict | None = None, timeout: float = 60.0) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    try:
-        async with service_async_client(timeout=timeout) as client:
-            resp = await client.get(url, params=params or {})
-            try:
-                resp.raise_for_status()
-            except httpx.HTTPStatusError:
-                try:
-                    detail = resp.json()
-                except Exception:
-                    detail = {"detail": resp.text or resp.reason_phrase}
-                return JSONResponse(status_code=resp.status_code, content=detail)
-            return JSONResponse(content=resp.json())
-    except Exception as exc:
-        return JSONResponse(status_code=502, content={"detail": f"Upstream request failed: {exc}"})
+    return await drive_get(path, params=params, timeout=timeout)
 
 
 async def _proxy_post(path: str, json_body: dict | None = None, params: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    try:
-        async with service_async_client(timeout=120.0) as client:
-            resp = await client.post(url, json=json_body or {}, params=params or {})
-            try:
-                resp.raise_for_status()
-            except httpx.HTTPStatusError:
-                try:
-                    detail = resp.json()
-                except Exception:
-                    detail = {"detail": resp.text or resp.reason_phrase}
-                return JSONResponse(status_code=resp.status_code, content=detail)
-            return JSONResponse(content=resp.json())
-    except Exception as exc:
-        return JSONResponse(status_code=502, content={"detail": f"Upstream request failed: {exc}"})
+    return await drive_post(path, json_body=json_body, params=params, timeout=120.0)
 
 
 @router.get("/check-all")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -12,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from api.auth import require_active_user, require_admin
 from api.db import get_db
-from api.proxy import json_proxy
 from api.repositories.shared_state import SharedStateRepository
+from api.routes.drive_sync.proxy import drive_get, drive_post, drive_put
 
 router = APIRouter(tags=["Drive Sync"])
 
@@ -40,24 +39,6 @@ def _is_placeholder(value: object | None) -> bool:
     return isinstance(value, str) and value in _PLACEHOLDER_VALUES
 
 
-def _ds_url() -> str:
-    """Return BedReadDriveSync base URL, checking env vars and SERVICE_URLS JSON."""
-    override = os.environ.get("SERVICE_URLS_BedReadDriveSync")
-    if override:
-        return override.rstrip("/")
-    urls_raw = os.environ.get("SERVICE_URLS", "{}")
-    try:
-        import json
-        service_urls = json.loads(urls_raw)
-        if isinstance(service_urls, dict):
-            url = service_urls.get("BedReadDriveSync")
-            if url:
-                return str(url).rstrip("/")
-    except Exception:
-        pass
-    return "http://localhost:8003"
-
-
 def _extract_json_name(service_account_json_path: str | None) -> Optional[str]:
     if not service_account_json_path:
         return None
@@ -76,27 +57,15 @@ def _config_response(config: dict) -> dict:
 
 
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
-    return await json_proxy("GET", f"{_ds_url()}{path}", params=params or {}, timeout=60.0)
+    return await drive_get(path, params=params, timeout=60.0)
 
 
 async def _proxy_post(path: str, json_body: dict | None = None, headers: dict | None = None) -> JSONResponse:
-    return await json_proxy(
-        "POST",
-        f"{_ds_url()}{path}",
-        json_body=json_body or {},
-        headers=headers or {},
-        timeout=120.0,
-    )
+    return await drive_post(path, json_body=json_body, headers=headers, timeout=120.0)
 
 
 async def _proxy_put(path: str, json_body: dict | None = None, headers: dict | None = None) -> JSONResponse:
-    return await json_proxy(
-        "PUT",
-        f"{_ds_url()}{path}",
-        json_body=json_body or {},
-        headers=headers or {},
-        timeout=120.0,
-    )
+    return await drive_put(path, json_body=json_body, headers=headers, timeout=120.0)
 
 
 class DriveSyncUrlResponse(BaseModel):

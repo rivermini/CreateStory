@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from api.service_client import service_async_client
-
 from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .utils import _ds_url
+from api.routes.drive_sync.proxy import drive_get, drive_post
 
 router = APIRouter(tags=["Drive Sync"])
 
@@ -35,35 +33,11 @@ class BatchUpdateRequest(BaseModel):
 
 
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=600.0) as client:
-        resp = await client.get(url, params=params or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await drive_get(path, params=params, timeout=600.0)
 
 
 async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=600.0) as client:
-        resp = await client.post(url, json=json_body or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await drive_post(path, json_body=json_body, timeout=600.0)
 
 
 @router.get("/check-uploadable")

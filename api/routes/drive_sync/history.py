@@ -2,97 +2,29 @@
 
 from __future__ import annotations
 
-from api.service_client import service_async_client
-
-import os
-
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from api.routes.drive_sync.proxy import drive_delete, drive_get, drive_patch, drive_post
+
 router = APIRouter(tags=["Drive Sync"])
 
 
-def _ds_url() -> str:
-    """Return BedReadDriveSync base URL, checking env vars and SERVICE_URLS JSON."""
-    override = os.environ.get("SERVICE_URLS_BedReadDriveSync")
-    if override:
-        return override.rstrip("/")
-    urls_raw = os.environ.get("SERVICE_URLS", "{}")
-    try:
-        import json
-        service_urls = json.loads(urls_raw)
-        if isinstance(service_urls, dict):
-            url = service_urls.get("BedReadDriveSync")
-            if url:
-                return str(url).rstrip("/")
-    except Exception:
-        pass
-    return "http://localhost:8003"
-
-
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=60.0) as client:
-        resp = await client.get(url, params=params or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await drive_get(path, params=params, timeout=60.0)
 
 
 async def _proxy_post(path: str, json_body: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=60.0) as client:
-        resp = await client.post(url, json=json_body or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await drive_post(path, json_body=json_body, timeout=60.0)
 
 
 async def _proxy_patch(path: str, json_body: dict | None = None) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=60.0) as client:
-        resp = await client.patch(url, json=json_body or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await drive_patch(path, json_body=json_body, timeout=60.0)
 
 
 async def _proxy_delete(path: str) -> JSONResponse:
-    import httpx
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=60.0) as client:
-        resp = await client.delete(url)
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await drive_delete(path, timeout=60.0)
 
 
 @router.get("/history")
