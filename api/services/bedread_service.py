@@ -70,7 +70,7 @@ def _get_external_api_config() -> tuple[str, dict]:
         logger.warning("Unable to load internal BedRead configuration: %s", exc)
 
     # Fallback: use env vars (for backward compatibility in dev environments)
-    api_base = os.environ.get("EXTERNAL_API_BASE_URL", "").strip()
+    api_base = _env_or_file("EXTERNAL_API_BASE_URL") or ""
     if not api_base:
         raise BedReadConfigError(
             "External API Base URL is not configured. "
@@ -78,11 +78,21 @@ def _get_external_api_config() -> tuple[str, dict]:
         )
 
     headers: dict[str, str] = {}
-    token = os.environ.get("EXTERNAL_API_TOKEN", "").strip()
+    token = _env_or_file("EXTERNAL_API_TOKEN") or ""
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
     return api_base.rstrip("/"), headers
+
+
+def _env_or_file(name: str) -> str | None:
+    value = os.environ.get(name, "").strip()
+    file_path = os.environ.get(f"{name}_FILE", "").strip()
+    if value:
+        return value
+    if file_path:
+        return Path(file_path).read_text(encoding="utf-8").strip()
+    return None
 
 
 def _safe_filename(title: str) -> str:
