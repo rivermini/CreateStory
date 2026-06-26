@@ -362,6 +362,8 @@ export interface DriveFolderEntry {
   is_valid_format: boolean;
   has_chapter_duplicates: boolean;
   validation_errors: string[];
+  /** Non-blocking advisories (e.g. story not in the admin recommended list). */
+  warnings?: string[];
   chapter_count: number | null;
   extended_chapter_count: number | null;
   modified_time: string | null;
@@ -723,6 +725,8 @@ export interface CheckAllIntroResponse {
   updated: IntroUpdateEntry[];
   no_intro1_file: IntroUpdateEntry[];
   no_server_match: IntroUpdateEntry[];
+  /** Story exists on the server but is not in the admin recommended list, so its intro cannot be uploaded. */
+  not_recommended: IntroUpdateEntry[];
 }
 
 export interface CheckUpdatedIntroResponse {
