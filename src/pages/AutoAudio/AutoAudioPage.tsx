@@ -6,8 +6,12 @@ import {
   stopAutoAudio,
   pauseAutoAudio,
   resumeAutoAudio,
+  getAutoScanState,
+  updateAutoScan,
+  runAutoScanNow,
   type AutoAudioSession,
   type AutoAudioStoryResult,
+  type AutoScanState,
 } from '../../api/AutoAudio';
 import { getDriveSyncConfig, type DriveSyncConfig } from '../../api/BedReadDriveSync';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
@@ -37,12 +41,19 @@ function formatElapsed(secs: number): string {
 }
 
 const PHASES = [
-  { id: 'phase1', label: 'Needing Update', desc: 'Stories with missing audio in the dashboard.' },
+  { id: 'auto_scan', label: 'Auto Scan', desc: 'Full library scan on a schedule.' },
   { id: 'phase2', label: 'Recently Updated', desc: 'Most recently updated stories.' },
   { id: 'phase3', label: 'Test Story', desc: 'Hardcoded test IDs. Verifies the pipeline safely.' },
 ];
 
 const PHASE_ACCENT: Record<string, { dark: string; light: string; softDark: string; softLight: string }> = {
+  auto_scan: {
+    dark: '#60a5fa',
+    light: '#2563eb',
+    softDark: 'rgba(96,165,250,0.14)',
+    softLight: 'rgba(37,99,235,0.08)',
+  },
+  // Kept for backward-compat with historical phase1 ("Needing Update") sessions.
   phase1: {
     dark: '#60a5fa',
     light: '#2563eb',
@@ -96,8 +107,9 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
     }
     return null;
   });
-  const [selectedPhase, setSelectedPhase] = useState<string>('phase1');
+  const [selectedPhase, setSelectedPhase] = useState<string>('auto_scan');
   const [phase2Limit, setPhase2Limit] = useState(20);
+  const [autoScan, setAutoScan] = useState<AutoScanState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showStartConfirm, setShowStartConfirm] = useState(false);
@@ -120,9 +132,9 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const isStopping = session?.status === 'stopping';
   const isLive = isActive || isStopping;
   const isDone = session?.status === 'completed' || session?.status === 'error' || session?.status === 'stopped';
-  const currentPhaseInfo = PHASES.find((phase) => phase.id === effectivePhase)!;
-  const runningPhase = session?.phase || 'phase1';
-  const runningPalette = PHASE_ACCENT[runningPhase] || PHASE_ACCENT.phase1;
+  const currentPhaseInfo = PHASES.find((phase) => phase.id === effectivePhase) ?? PHASES[0];
+  const runningPhase = session?.phase || 'auto_scan';
+  const runningPalette = PHASE_ACCENT[runningPhase] || PHASE_ACCENT.auto_scan;
   const runningAccent = isDark ? runningPalette.dark : runningPalette.light;
   const runningSoft = isDark ? runningPalette.softDark : runningPalette.softLight;
 
@@ -140,6 +152,12 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
           if (data === null && sessionRef.current !== null) return;
           setSession(data);
         }
+      } catch {
+        // ignore
+      }
+      try {
+        const scan = await getAutoScanState();
+        if (!cancelled) setAutoScan(scan);
       } catch {
         // ignore
       }
@@ -229,6 +247,38 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
       setSession(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update pause state.');
+    }
+  };
+
+  const persistAutoScan = async (patch: { enabled?: boolean; interval_hours?: number; chapter_threshold?: number }) => {
+    setError('');
+    setAutoScan((prev) => (prev ? { ...prev, ...patch } : prev));
+    try {
+      const next = await updateAutoScan(patch);
+      setAutoScan(next);
+      if (patch.enabled) {
+        // Enabling kicks off an immediate scan — pull fresh status.
+        const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
+        setSession(data);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update auto-scan settings.');
+      try {
+        setAutoScan(await getAutoScanState());
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleRunScanNow = async () => {
+    setError('');
+    try {
+      await runAutoScanNow();
+      const data = await getAutoAudioStatus({ logLimit: 200, resultLimit: 100 });
+      setSession(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start scan.');
     }
   };
 
@@ -429,7 +479,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                     {currentPhaseInfo.label}
                   </h2>
                   <span className={chipBase} style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}>
-                    Phase {effectivePhase.replace('phase', '')}
+                    {effectivePhase === 'auto_scan' ? 'Schedule' : `Phase ${effectivePhase.replace('phase', '')}`}
                   </span>
                 </div>
                 <p className="mt-1 text-sm" style={{ color: secondaryText }}>
@@ -463,6 +513,16 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                       {isStopping ? 'Stopping…' : 'Stop'}
                     </button>
                   </>
+                ) : effectivePhase === 'auto_scan' ? (
+                  <button
+                    onClick={handleRunScanNow}
+                    disabled={needsConfig || Boolean(autoScan?.is_running)}
+                    className={buttonBase}
+                    style={{ ...neutralButtonStyle, opacity: needsConfig || autoScan?.is_running ? 0.5 : 1 }}
+                  >
+                    <Icon icon={appIcons.refresh} className="h-[14px] w-[14px]" />
+                    Run scan now
+                  </button>
                 ) : showStartConfirm ? (
                   <>
                     <button onClick={() => setShowStartConfirm(false)} disabled={loading} className={buttonBase} style={neutralButtonStyle}>
@@ -519,6 +579,115 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                   >
                     +
                   </button>
+                </div>
+              </div>
+            )}
+
+            {effectivePhase === 'auto_scan' && (
+              <div className="mt-5 space-y-4">
+                <div
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3"
+                  style={{ background: subtleSurface, borderColor: panelBorder }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold" style={{ color: pageText }}>
+                      Auto-scan schedule
+                    </p>
+                    <p className="mt-0.5 text-xs" style={{ color: secondaryText }}>
+                      When on, scans the full library every {autoScan?.interval_hours ?? 2}h and
+                      generates audio when more than {autoScan?.chapter_threshold ?? 20} chapters are missing.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => autoScan && persistAutoScan({ enabled: !autoScan.enabled })}
+                    disabled={needsConfig || !autoScan}
+                    aria-pressed={autoScan?.enabled ?? false}
+                    className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed"
+                    style={{
+                      background: autoScan?.enabled ? runningAccent : mutedSurface,
+                      border: `1px solid ${panelBorder}`,
+                      opacity: needsConfig || !autoScan ? 0.5 : 1,
+                    }}
+                  >
+                    <span
+                      className="inline-block h-4 w-4 rounded-full bg-white transition-transform"
+                      style={{ transform: autoScan?.enabled ? 'translateX(22px)' : 'translateX(3px)' }}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium" style={{ color: secondaryText }}>
+                      Every
+                    </span>
+                    <button
+                      onClick={() => autoScan && persistAutoScan({ interval_hours: Math.max(1, Math.round(autoScan.interval_hours) - 1) })}
+                      disabled={!autoScan}
+                      className={iconButtonBase}
+                      style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
+                    >
+                      −
+                    </button>
+                    <span className="w-12 text-center text-sm font-semibold tabular-nums" style={{ color: pageText }}>
+                      {autoScan?.interval_hours ?? 2}h
+                    </span>
+                    <button
+                      onClick={() => autoScan && persistAutoScan({ interval_hours: Math.min(168, Math.round(autoScan.interval_hours) + 1) })}
+                      disabled={!autoScan}
+                      className={iconButtonBase}
+                      style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium" style={{ color: secondaryText }}>
+                      Generate if &gt;
+                    </span>
+                    <button
+                      onClick={() => autoScan && persistAutoScan({ chapter_threshold: Math.max(0, autoScan.chapter_threshold - 5) })}
+                      disabled={!autoScan}
+                      className={iconButtonBase}
+                      style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
+                    >
+                      −
+                    </button>
+                    <span className="w-16 text-center text-sm font-semibold tabular-nums" style={{ color: pageText }}>
+                      {autoScan?.chapter_threshold ?? 20} ch
+                    </span>
+                    <button
+                      onClick={() => autoScan && persistAutoScan({ chapter_threshold: autoScan.chapter_threshold + 5 })}
+                      disabled={!autoScan}
+                      className={iconButtonBase}
+                      style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: tertiaryText }}>
+                  <span
+                    className={chipBase}
+                    style={
+                      autoScan?.is_running || autoScan?.enabled
+                        ? { background: runningSoft, borderColor: runningSoft, color: runningAccent }
+                        : { background: mutedSurface, borderColor: panelBorder, color: secondaryText }
+                    }
+                  >
+                    {autoScan?.is_running ? 'Scanning…' : autoScan?.enabled ? 'Scheduled' : 'Off'}
+                  </span>
+                  <span>Last run: {formatTime(autoScan?.last_run_at ?? null)}</span>
+                  <span>
+                    Next run:{' '}
+                    {autoScan?.is_running
+                      ? 'in progress'
+                      : autoScan?.enabled
+                        ? formatTime(autoScan?.next_run_at ?? null)
+                        : '—'}
+                  </span>
                 </div>
               </div>
             )}

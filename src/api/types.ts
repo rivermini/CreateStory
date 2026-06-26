@@ -1057,3 +1057,13 @@ export interface AutoAudioPauseResponse {
   is_paused: boolean;
   status: string;
 }
+
+export interface AutoScanState {
+  enabled: boolean;
+  interval_hours: number;
+  chapter_threshold: number;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_session_id: string | null;
+  is_running: boolean;
+}

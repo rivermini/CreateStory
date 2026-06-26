@@ -3,6 +3,7 @@ import type {
   AutoAudioSession,
   AutoAudioHistoryEntry,
   AutoAudioPauseResponse,
+  AutoScanState,
 } from '../types';
 
 export async function startAutoAudio(cfg: { phase: string; test_mode: boolean; voice?: string; limit?: number }): Promise<{ session_id: string }> {
@@ -24,6 +25,26 @@ export async function getAutoAudioStatus(options: { compact?: boolean; logLimit?
 
 export async function stopAutoAudio(): Promise<void> {
   await apiFetch('/api/auto-audio/stop', { method: 'POST' });
+}
+
+export async function getAutoScanState(): Promise<AutoScanState> {
+  return apiFetch<AutoScanState>('/api/auto-audio/auto-scan');
+}
+
+export async function updateAutoScan(body: {
+  enabled?: boolean;
+  interval_hours?: number;
+  chapter_threshold?: number;
+}): Promise<AutoScanState> {
+  return apiFetch<AutoScanState>('/api/auto-audio/auto-scan', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function runAutoScanNow(): Promise<{ session_id: string }> {
+  return apiFetch<{ session_id: string }>('/api/auto-audio/auto-scan/run-now', { method: 'POST' });
 }
 
 export async function pauseAutoAudio(): Promise<AutoAudioPauseResponse> {
