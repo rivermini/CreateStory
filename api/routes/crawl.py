@@ -69,6 +69,18 @@ async def check_scribblehub_cookies(request: dict | None = Body(default=None)) -
     return await _forward_request("POST", "/api/crawl/scribblehub-cookies/status", json_body=request or {})
 
 
+@router.post("/goodnovel-cookies", dependencies=[Depends(require_operator)])
+async def update_goodnovel_cookies(request: dict = Body(...)) -> JSONResponse:
+    """Update saved GoodNovel session cookies in the NovelCrawler service."""
+    return await _forward_request("POST", "/api/crawl/goodnovel-cookies", json_body=request)
+
+
+@router.post("/goodnovel-cookies/status", dependencies=[Depends(require_operator)])
+async def check_goodnovel_cookies(request: dict | None = Body(default=None)) -> JSONResponse:
+    """Check saved GoodNovel session cookies in the NovelCrawler service."""
+    return await _forward_request("POST", "/api/crawl/goodnovel-cookies/status", json_body=request or {})
+
+
 @router.get("/stream")
 async def crawl_stream(crawl_id: str = Query(...)) -> StreamingResponse:
     """Server-Sent Events stream for live crawl progress."""
