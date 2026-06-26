@@ -26,6 +26,19 @@ class SessionManager:
         self._repo = AutoAudioRepository()
         self._repo.import_existing_logs(logs_dir)
 
+    def get_app_setting(self, key: str) -> dict:
+        try:
+            return self._repo.get_app_setting(key)
+        except Exception as exc:
+            logger.warning("Failed to load app setting %s: %s", key, exc)
+            return {}
+
+    def save_app_setting(self, key: str, value: dict) -> None:
+        try:
+            self._repo.save_app_setting(key, value)
+        except Exception as exc:
+            logger.warning("Failed to save app setting %s: %s", key, exc)
+
     def get_completed_stories_path(self, phase: str) -> Path:
         return self._logs_dir / f"completed_stories_{phase}.json"
 

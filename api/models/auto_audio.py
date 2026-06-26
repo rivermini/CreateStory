@@ -68,3 +68,19 @@ class AutoAudioHistoryEntry(BaseModel):
 
 class BatchDeleteRequest(BaseModel):
     session_ids: list[str]
+
+
+class AutoScanStateResponse(BaseModel):
+    enabled: bool
+    interval_hours: float
+    chapter_threshold: int
+    last_run_at: str | None = None
+    next_run_at: str | None = None
+    last_session_id: str | None = None
+    is_running: bool = False
+
+
+class UpdateAutoScanRequest(BaseModel):
+    enabled: Optional[bool] = Field(default=None, description="Master ON/OFF for the auto-scan schedule.")
+    interval_hours: Optional[float] = Field(default=None, gt=0, description="Hours between scheduled scans.")
+    chapter_threshold: Optional[int] = Field(default=None, ge=0, description="Generate only if total missing chapters exceed this.")

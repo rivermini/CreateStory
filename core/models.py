@@ -90,6 +90,7 @@ class AutoAudioSession:
     _pause_event: Event = field(default_factory=Event)
     _lock: Lock = field(default_factory=Lock)
     limit: int = 20
+    chapter_threshold: int | None = None
 
     def __post_init__(self) -> None:
         self._pause_event.set()

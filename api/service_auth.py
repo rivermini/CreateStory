@@ -48,6 +48,10 @@ def require_owner(request: Request, owner_id: str | None) -> None:
     user_id = current_owner(request)
     if role == "admin" or (role is None and user_id is None):
         return
+    if owner_id is None:
+        # System-owned sessions (e.g. scheduled auto-scan cycles) are visible to
+        # any authenticated caller — they have no per-user owner to scope to.
+        return
     if owner_id and owner_id == user_id:
         return
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")

@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
     svc = get_auto_audio_service()
     _ = svc.get_history()  # triggers _session_mgr.load_history()
     _ = svc.get_status()   # triggers downstream calls, warming up httpx connections
+    svc.start_scheduler_if_enabled()  # resume auto-scan schedule if it was left on
     _logger.info("AutoAudio startup: pre-initialization complete.")
     yield
     _logger.info("AutoAudio shutdown: closing HTTP clients...")

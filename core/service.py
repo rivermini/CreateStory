@@ -17,6 +17,7 @@ from core.config import (
 from core.models import AutoAudioSession, StoryMissingAudio
 from core.orchestrator.batch import BatchPoller
 from core.orchestrator.pipeline import StoryPipeline
+from core.orchestrator.scheduler import AutoScanScheduler
 from core.orchestrator.session import SessionManager
 from core.services.bedread_client import BedReadClient
 from core.services.discovery import StoryDiscovery
@@ -24,6 +25,16 @@ from core.services.external_api import ExternalAPIClient
 from core.services.upload import UploadManager
 
 logger = logging.getLogger(__name__)
+
+_AUTO_SCAN_STATE_KEY = "auto_scan_state"
+_DEFAULT_AUTO_SCAN_STATE = {
+    "enabled": False,
+    "interval_hours": 2,
+    "chapter_threshold": 20,
+    "last_run_at": None,
+    "next_run_at": None,
+    "last_session_id": None,
+}
 
 
 def _init_logs_dir() -> Path:
@@ -50,6 +61,7 @@ class AutoAudioService:
         self._pipeline = StoryPipeline(
             self._api, self._br, self._poller, self._uploader, self._session_mgr
         )
+        self._scheduler = AutoScanScheduler(self)
 
     def _run_session(self, session: AutoAudioSession) -> None:
         from datetime import datetime
@@ -154,6 +166,79 @@ class AutoAudioService:
                 session.set_step(3, "Processing stories needing update")
                 session.update_progress(0, len(phase1_missing))
                 self._run_story_pipeline(session, phase1_missing)
+
+            elif session.phase == "auto_scan":
+                threshold = (
+                    session.chapter_threshold
+                    if session.chapter_threshold is not None
+                    else 20
+                )
+                session.set_step(1, "Auto scan: fetching all stories")
+                session.add_log(1, "Auto scan: fetching all stories (recent first)...")
+                all_stories = self._api.fetch_all_stories()
+
+                def _updated_at_key(s: dict) -> str:
+                    return str(s.get("updatedAt") or s.get("updated_at") or "")
+
+                all_stories.sort(key=_updated_at_key, reverse=True)
+                scan_story_ids = [
+                    str(s.get("storyId") or s.get("story_id") or s.get("id"))
+                    for s in all_stories
+                    if (s.get("storyId") or s.get("story_id") or s.get("id"))
+                ]
+                scan_meta = {
+                    str(s.get("storyId") or s.get("story_id") or s.get("id")): s
+                    for s in all_stories
+                    if (s.get("storyId") or s.get("story_id") or s.get("id"))
+                }
+                session.add_log(1, f"Found {len(scan_story_ids)} stories to scan")
+
+                if not scan_story_ids:
+                    session.add_log(1, "No stories found", level="info")
+                    session.set_status("completed")
+                    session.add_log(11, "Auto audio session completed (no stories to process)")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
+                    self._session_mgr.save_session_log(session)
+                    self._session_mgr.persist_history(session)
+                    return
+
+                session.set_step(1, "Discovering stories with missing audio")
+                scan_missing = self._discovery.discover(
+                    session, scan_story_ids, scan_meta
+                )
+                total_missing = sum(len(s.missing_chapters) for s in scan_missing)
+                session.add_log(
+                    1,
+                    f"Auto scan: {len(scan_missing)} stories with {total_missing} missing chapters",
+                )
+
+                session.set_stories_preview([
+                    {"storyId": s.story_id, "title": s.story_title,
+                     "missingCount": len(s.missing_chapters),
+                     "existingVoice": s.existing_voice}
+                    for s in scan_missing
+                ])
+
+                if total_missing <= threshold:
+                    session.add_log(
+                        1,
+                        f"Found {total_missing} missing chapters "
+                        f"(<= threshold {threshold}) — skipping generation",
+                        level="info",
+                    )
+                    session.set_status("completed")
+                    session.add_log(11, "Auto audio session completed successfully")
+                    session.set_step(11, "Auto audio session completed successfully")
+                    session.current_story = ""
+                    self._session_mgr.save_session_log(session)
+                    self._session_mgr.persist_history(session)
+                    return
+
+                _update_chapter_progress(scan_missing)
+                session.set_step(3, "Processing stories with missing audio")
+                session.update_progress(0, len(scan_missing))
+                self._run_story_pipeline(session, scan_missing)
 
             elif session.phase == "phase2":
                 phase_limit = session.limit
@@ -352,22 +437,18 @@ class AutoAudioService:
             "is_paused": data.get("is_paused", False),
         }
 
-    def start_session(
+    def _build_session(
         self,
+        *,
         phase: str,
         test_mode: bool,
         voice: Optional[str],
         limit: int = 20,
         created_by_user_id: str | None = None,
-    ) -> str:
-        if self._active_session is not None:
-            existing = self._active_session
-            if existing.status in ("running", "paused", "stopping"):
-                raise RuntimeError("A session is already running. Stop it first.")
-
-        session_id = str(uuid.uuid4())[:8]
-        session = AutoAudioSession(
-            session_id=session_id,
+        chapter_threshold: int | None = None,
+    ) -> AutoAudioSession:
+        return AutoAudioSession(
+            session_id=str(uuid.uuid4())[:8],
             created_by_user_id=created_by_user_id,
             phase=phase,
             test_mode=test_mode,
@@ -384,6 +465,32 @@ class AutoAudioService:
             finished_at=None,
             error="",
             limit=limit,
+            chapter_threshold=chapter_threshold,
+        )
+
+    def is_session_active(self) -> bool:
+        session = self._active_session
+        return session is not None and session.status in ("running", "paused", "stopping")
+
+    def start_session(
+        self,
+        phase: str,
+        test_mode: bool,
+        voice: Optional[str],
+        limit: int = 20,
+        created_by_user_id: str | None = None,
+        chapter_threshold: int | None = None,
+    ) -> str:
+        if self.is_session_active():
+            raise RuntimeError("A session is already running. Stop it first.")
+
+        session = self._build_session(
+            phase=phase,
+            test_mode=test_mode,
+            voice=voice,
+            limit=limit,
+            created_by_user_id=created_by_user_id,
+            chapter_threshold=chapter_threshold,
         )
 
         self._active_session = session
@@ -392,12 +499,87 @@ class AutoAudioService:
 
         session.add_log(
             0,
-            f"Session {session_id} started "
+            f"Session {session.session_id} started "
             f"(phase={phase}, test_mode={test_mode}, "
             f"voice={'random' if voice is None else voice})",
         )
         session.set_status("running")
-        return session_id
+        return session.session_id
+
+    # ---- Auto-scan schedule -------------------------------------------------
+
+    def get_auto_scan_state(self) -> dict:
+        stored = self._session_mgr.get_app_setting(_AUTO_SCAN_STATE_KEY)
+        state = {**_DEFAULT_AUTO_SCAN_STATE, **(stored or {})}
+        return state
+
+    def _patch_auto_scan_state(self, **fields) -> dict:
+        state = self.get_auto_scan_state()
+        state.update(fields)
+        self._session_mgr.save_app_setting(_AUTO_SCAN_STATE_KEY, state)
+        return state
+
+    def update_auto_scan_state(
+        self,
+        enabled: Optional[bool] = None,
+        interval_hours: Optional[float] = None,
+        chapter_threshold: Optional[int] = None,
+    ) -> dict:
+        current = self.get_auto_scan_state()
+        was_enabled = bool(current.get("enabled"))
+
+        patch: dict = {}
+        if interval_hours is not None:
+            patch["interval_hours"] = max(1.0 / 60.0, float(interval_hours))
+        if chapter_threshold is not None:
+            patch["chapter_threshold"] = max(0, int(chapter_threshold))
+        if enabled is not None:
+            patch["enabled"] = bool(enabled)
+            # Turning the master switch ON runs a cycle immediately.
+            if bool(enabled) and not was_enabled:
+                patch["next_run_at"] = None
+
+        new_state = self._patch_auto_scan_state(**patch)
+
+        if new_state.get("enabled"):
+            self._scheduler.start()
+            self._scheduler.wake()
+        return new_state
+
+    def start_scheduler_if_enabled(self) -> None:
+        """Resume the scheduler on service startup when persisted state is enabled."""
+        try:
+            if self.get_auto_scan_state().get("enabled"):
+                self._scheduler.start()
+        except Exception:
+            logger.exception("Failed to resume auto-scan scheduler on startup")
+
+    def run_auto_scan_now(self) -> str:
+        """Manually trigger a one-off auto-scan cycle (independent of the toggle)."""
+        state = self.get_auto_scan_state()
+        return self.start_session(
+            phase="auto_scan",
+            test_mode=False,
+            voice=None,
+            chapter_threshold=int(state.get("chapter_threshold", 20)),
+        )
+
+    def _run_auto_scan_cycle(self) -> None:
+        """Run a single auto-scan cycle synchronously (called by the scheduler)."""
+        if self.is_session_active():
+            return
+        state = self.get_auto_scan_state()
+        session = self._build_session(
+            phase="auto_scan",
+            test_mode=False,
+            voice=None,
+            chapter_threshold=int(state.get("chapter_threshold", 20)),
+        )
+        self._active_session = session
+        self._patch_auto_scan_state(last_session_id=session.session_id)
+        session.add_log(0, f"Auto-scan scheduled cycle {session.session_id} started")
+        session.set_status("running")
+        self._run_session(session)
 
     def get_status(
         self,
@@ -471,6 +653,7 @@ class AutoAudioService:
         return self._session_mgr.delete_sessions_batch(session_ids)
 
     def close(self) -> None:
+        self._scheduler.stop()
         self._api.close()
         self._br.close()
         self._uploader.close()

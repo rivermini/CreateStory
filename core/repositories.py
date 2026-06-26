@@ -8,7 +8,11 @@ from pathlib import Path
 from sqlalchemy import delete, func, select
 
 from core.db import SessionLocal
-from core.db_models import AutoAudioCompletedStoriesRecord, AutoAudioSessionRecord
+from core.db_models import (
+    AppSetting,
+    AutoAudioCompletedStoriesRecord,
+    AutoAudioSessionRecord,
+)
 
 
 class AutoAudioRepository:
@@ -86,6 +90,16 @@ class AutoAudioRepository:
             result = db.execute(delete(AutoAudioSessionRecord).where(AutoAudioSessionRecord.session_id.in_(session_ids)))
             db.commit()
             return int(result.rowcount or 0)
+
+    def get_app_setting(self, key: str) -> dict:
+        with self.session_factory() as db:
+            row = db.get(AppSetting, key)
+            return dict(row.value) if row is not None and row.value else {}
+
+    def save_app_setting(self, key: str, value: dict) -> None:
+        with self.session_factory() as db:
+            db.merge(AppSetting(key=key, value=value))
+            db.commit()
 
     def load_completed_stories(self, phase: str) -> set[str]:
         with self.session_factory() as db:
