@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.auth import require_active_user, require_admin, require_job_creation_rate, require_operator
+from api.auth import require_active_user, require_job_creation_rate, require_operator
 from api.middleware import get_shared_http_client
 from api.proxy import json_proxy, streaming_proxy
 
@@ -64,7 +64,7 @@ async def get_queue() -> JSONResponse:
     return await _proxy_get("/api/tts/queue", timeout=300.0)
 
 
-@router.post("/release-idle-models", dependencies=[Depends(require_admin)])
+@router.post("/release-idle-models", dependencies=[Depends(require_operator)])
 async def release_idle_models() -> JSONResponse:
     return await _proxy_post("/api/tts/release-idle-models")
 

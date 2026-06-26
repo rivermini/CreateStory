@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from api.auth import require_active_user, require_admin
+from api.auth import require_active_user, require_operator
 from api.db import get_db
 from api.repositories.shared_state import DRIVE_CREDENTIAL_NAME, SharedStateRepository
 
@@ -20,7 +20,7 @@ _FIXED_CREDENTIALS_FILENAME = "google-service-account.json"
 @router.post("/credentials/upload")
 async def upload_credentials(
     db: Annotated[Session, Depends(get_db)],
-    _admin=Depends(require_admin),
+    _operator=Depends(require_operator),
     file: UploadFile = File(...),
 ) -> JSONResponse:
     if not file.filename:

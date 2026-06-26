@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from api.auth import require_active_user, require_admin
+from api.auth import require_active_user, require_operator
 from api.db import get_db
 from api.repositories.shared_state import SharedStateRepository
 from api.routes.drive_sync.proxy import drive_get, drive_post, drive_put
@@ -99,7 +99,7 @@ async def get_sync_config(
 async def create_or_update_sync_config(
     body: dict,
     db: Annotated[Session, Depends(get_db)],
-    _admin=Depends(require_admin),
+    _operator=Depends(require_operator),
     x_auth_token: Annotated[Optional[str], Header(alias="X-Auth-Token")] = None,
 ) -> JSONResponse:
     repo = SharedStateRepository(db)
@@ -137,7 +137,7 @@ async def create_or_update_sync_config(
 async def update_sync_config(
     body: DriveSyncUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
-    _admin=Depends(require_admin),
+    _operator=Depends(require_operator),
     x_auth_token: Annotated[Optional[str], Header(alias="X-Auth-Token")] = None,
 ) -> JSONResponse:
     repo = SharedStateRepository(db)
@@ -167,5 +167,5 @@ async def get_main_be_url(
 
 
 @router.get("/config/validate-token")
-async def validate_bearer_token(_admin=Depends(require_admin)) -> JSONResponse:
+async def validate_bearer_token(_operator=Depends(require_operator)) -> JSONResponse:
     return await _proxy_get("/api/drive-sync/config/validate-token")

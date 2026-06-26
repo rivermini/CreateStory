@@ -27,8 +27,8 @@ def require_drive_access(
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required.")
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and current_user.role not in {"operator", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator or admin role required.")
     return current_user
 
 
