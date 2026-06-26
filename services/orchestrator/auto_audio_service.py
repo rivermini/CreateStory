@@ -191,6 +191,48 @@ class AutoAudioServiceProxy:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_auto_scan_state(self) -> dict:
+        async def fetch() -> dict:
+            url = f"{_autoaudio_url()}/api/auto-audio/auto-scan"
+            resp = await self._client.get(url, timeout=30.0)
+            resp.raise_for_status()
+            return resp.json()
+
+        return await self._cached_get("auto_scan", fetch)
+
+    async def update_auto_scan(
+        self,
+        enabled: Optional[bool] = None,
+        interval_hours: Optional[float] = None,
+        chapter_threshold: Optional[int] = None,
+    ) -> dict:
+        await self._invalidate_cache("auto_scan", "status")
+        body: dict[str, object] = {}
+        if enabled is not None:
+            body["enabled"] = enabled
+        if interval_hours is not None:
+            body["interval_hours"] = interval_hours
+        if chapter_threshold is not None:
+            body["chapter_threshold"] = chapter_threshold
+        url = f"{_autoaudio_url()}/api/auto-audio/auto-scan"
+        resp = await self._client.put(url, json=body, timeout=30.0)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def run_auto_scan_now(self) -> str:
+        await self._invalidate_cache("auto_scan", "status", "history")
+        url = f"{_autoaudio_url()}/api/auto-audio/auto-scan/run-now"
+        resp = await self._client.post(url, timeout=30.0)
+        if resp.status_code == 409:
+            detail = "A session is already running."
+            try:
+                detail = resp.json().get("detail", detail)
+            except Exception:
+                pass
+            raise RuntimeError(detail)
+        resp.raise_for_status()
+        return resp.json()["session_id"]
+
     async def get_history(self) -> list[dict]:
         async def fetch() -> list[dict]:
             url = f"{_autoaudio_url()}/api/auto-audio/history"

@@ -10,10 +10,12 @@ from api.models.auto_audio import (
     AutoAudioHistoryEntry,
     AutoAudioPauseResponse,
     AutoAudioSessionResponse,
+    AutoScanStateResponse,
     DeleteSessionsBatchRequest,
     DeleteSessionsBatchResponse,
     StartSessionRequest,
     StartSessionResponse,
+    UpdateAutoScanRequest,
 )
 from services.orchestrator.auto_audio_service import get_auto_audio_service
 
@@ -31,6 +33,37 @@ async def start_session(request: StartSessionRequest) -> StartSessionResponse:
             voice=request.voice,
             limit=request.limit,
         )
+        return StartSessionResponse(session_id=session_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get("/auto-scan", response_model=AutoScanStateResponse)
+async def get_auto_scan() -> AutoScanStateResponse:
+    """Return the persisted auto-scan schedule state plus whether a scan is running."""
+    service = get_auto_audio_service()
+    data = await service.get_auto_scan_state()
+    return AutoScanStateResponse(**data)
+
+
+@router.put("/auto-scan", response_model=AutoScanStateResponse, dependencies=[Depends(require_operator)])
+async def update_auto_scan(request: UpdateAutoScanRequest) -> AutoScanStateResponse:
+    """Toggle the schedule and/or update the interval and chapter threshold."""
+    service = get_auto_audio_service()
+    data = await service.update_auto_scan(
+        enabled=request.enabled,
+        interval_hours=request.interval_hours,
+        chapter_threshold=request.chapter_threshold,
+    )
+    return AutoScanStateResponse(**data)
+
+
+@router.post("/auto-scan/run-now", response_model=StartSessionResponse, dependencies=[Depends(require_operator)])
+async def run_auto_scan_now() -> StartSessionResponse:
+    """Trigger a one-off full-library scan immediately, regardless of the toggle."""
+    service = get_auto_audio_service()
+    try:
+        session_id = await service.run_auto_scan_now()
         return StartSessionResponse(session_id=session_id)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
