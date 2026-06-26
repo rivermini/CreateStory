@@ -31,6 +31,7 @@ class AutoAudioPauseResponse(BaseModel):
 
 class AutoAudioSessionResponse(BaseModel):
     session_id: str
+    created_by_user_id: str | None = None
     phase: str
     test_mode: bool
     voice: Optional[str]
@@ -51,6 +52,7 @@ class AutoAudioSessionResponse(BaseModel):
 
 class AutoAudioHistoryEntry(BaseModel):
     session_id: str
+    created_by_user_id: str | None = None
     phase: str
     test_mode: bool
     voice: Optional[str]

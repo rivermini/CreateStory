@@ -134,6 +134,7 @@ class AutoAudioRepository:
 
         return AutoAudioSessionRecord(
             session_id=data.get("session_id", ""),
+            created_by_user_id=data.get("created_by_user_id"),
             phase=data.get("phase", ""),
             test_mode=data.get("test_mode", False),
             voice=data.get("voice"),
@@ -158,6 +159,7 @@ class AutoAudioRepository:
     def _row_to_summary(row: AutoAudioSessionRecord) -> dict:
         return {
             "session_id": row.session_id,
+            "created_by_user_id": row.created_by_user_id,
             "phase": row.phase,
             "test_mode": row.test_mode,
             "voice": row.voice,
@@ -176,6 +178,7 @@ class AutoAudioRepository:
         data = dict(row.full_data or {})
         data.update({
             "session_id": row.session_id,
+            "created_by_user_id": row.created_by_user_id,
             "phase": row.phase,
             "test_mode": row.test_mode,
             "voice": row.voice,

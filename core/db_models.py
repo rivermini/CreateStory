@@ -19,6 +19,7 @@ class AutoAudioSessionRecord(Base):
     __tablename__ = "auto_audio_sessions"
 
     session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     phase: Mapped[str] = mapped_column(String(32), nullable=False, default="", index=True)
     test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     voice: Mapped[str | None] = mapped_column(String(128), nullable=True)

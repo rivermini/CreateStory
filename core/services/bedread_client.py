@@ -9,6 +9,7 @@ from typing import Optional
 
 import httpx
 
+from api.service_auth import internal_service_headers
 from core.config import _get_bedreadvoices_url
 from core.models import StoryMissingAudio
 
@@ -25,7 +26,7 @@ class BedReadClient:
             timeout=30.0,
             # BedReadVoices often runs on another PC. Avoid stale keep-alive sockets
             # because they can surface as RemoteProtocolError during status polling.
-            headers={"Connection": "close"},
+            headers={**internal_service_headers(), "Connection": "close"},
             limits=httpx.Limits(max_connections=30, max_keepalive_connections=0),
         )
 

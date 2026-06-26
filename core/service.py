@@ -358,6 +358,7 @@ class AutoAudioService:
         test_mode: bool,
         voice: Optional[str],
         limit: int = 20,
+        created_by_user_id: str | None = None,
     ) -> str:
         if self._active_session is not None:
             existing = self._active_session
@@ -367,6 +368,7 @@ class AutoAudioService:
         session_id = str(uuid.uuid4())[:8]
         session = AutoAudioSession(
             session_id=session_id,
+            created_by_user_id=created_by_user_id,
             phase=phase,
             test_mode=test_mode,
             voice=voice,

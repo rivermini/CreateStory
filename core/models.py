@@ -68,6 +68,7 @@ class StoryResult:
 @dataclass
 class AutoAudioSession:
     session_id: str
+    created_by_user_id: str | None
     phase: str
     test_mode: bool
     voice: Optional[str]
@@ -113,6 +114,7 @@ class AutoAudioSession:
             )
             return {
                 "session_id": self.session_id,
+                "created_by_user_id": self.created_by_user_id,
                 "phase": self.phase,
                 "test_mode": self.test_mode,
                 "voice": self.voice,
@@ -144,6 +146,7 @@ class AutoAudioSession:
             )
             return {
                 "session_id": self.session_id,
+                "created_by_user_id": self.created_by_user_id,
                 "phase": self.phase,
                 "test_mode": self.test_mode,
                 "voice": self.voice,
