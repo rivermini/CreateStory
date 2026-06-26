@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from api.service_client import service_async_client
-
 import os
 from typing import Annotated, Optional
 
@@ -14,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from api.auth import require_active_user, require_admin
 from api.db import get_db
+from api.proxy import json_proxy
 from api.repositories.shared_state import SharedStateRepository
 
 router = APIRouter(tags=["Drive Sync"])
@@ -77,54 +76,27 @@ def _config_response(config: dict) -> dict:
 
 
 async def _proxy_get(path: str, params: dict | None = None) -> JSONResponse:
-    import httpx
-
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=60.0) as client:
-        resp = await client.get(url, params=params or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await json_proxy("GET", f"{_ds_url()}{path}", params=params or {}, timeout=60.0)
 
 
 async def _proxy_post(path: str, json_body: dict | None = None, headers: dict | None = None) -> JSONResponse:
-    import httpx
-
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=120.0) as client:
-        resp = await client.post(url, json=json_body or {}, headers=headers or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await json_proxy(
+        "POST",
+        f"{_ds_url()}{path}",
+        json_body=json_body or {},
+        headers=headers or {},
+        timeout=120.0,
+    )
 
 
 async def _proxy_put(path: str, json_body: dict | None = None, headers: dict | None = None) -> JSONResponse:
-    import httpx
-
-    url = f"{_ds_url()}{path}"
-    async with service_async_client(timeout=120.0) as client:
-        resp = await client.put(url, json=json_body or {}, headers=headers or {})
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = {"detail": resp.text or resp.reason_phrase}
-            return JSONResponse(status_code=resp.status_code, content=detail)
-        return JSONResponse(content=resp.json())
+    return await json_proxy(
+        "PUT",
+        f"{_ds_url()}{path}",
+        json_body=json_body or {},
+        headers=headers or {},
+        timeout=120.0,
+    )
 
 
 class DriveSyncUrlResponse(BaseModel):
