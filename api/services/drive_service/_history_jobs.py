@@ -179,7 +179,7 @@ class HistoryJobsMixin:
             self._append_log("info", f"Story already on server (id={existing_id}), syncing chapters only", display_name)
             story_id = existing_id
         else:
-            story_id = self._post_story(
+            story_id, _story_error = self._post_story(
                 display_name, synopsis, is_completed, author_id,
                 main_cat_id, sub_cat_ids, tags, reference_platform,
                 notification_config, free_chapters_count,
@@ -223,7 +223,14 @@ class HistoryJobsMixin:
                 self._append_log("debug", f"Skipped {file_name} — empty content", display_name)
                 continue
 
-            posting_index = parsed["chapter_index"] or next_index
+            ch_idx = parsed["chapter_index"]
+            # Re-upload guard: skip chapters whose index is already on the server
+            # (prevents collision-bumping identical files into N+1.. duplicates).
+            if existing_indices and ch_idx is not None and ch_idx in existing_indices:
+                self._append_log("info", f"  Chapter {ch_idx} ({file_name}) already on server — skipping (no re-upload)", display_name)
+                continue
+
+            posting_index = ch_idx or next_index
             while posting_index in existing_indices:
                 posting_index += 1
 
@@ -748,6 +755,35 @@ class HistoryJobsMixin:
                 return True
         return False
 
+    def reconcile_interrupted_jobs(self) -> int:
+        """Mark jobs left QUEUED/RUNNING by a previous process as ERROR.
+
+        Job workers are daemon threads that do not survive a process restart,
+        and the final status write can also be lost under DB lock/connection
+        pressure. Either way the job is orphaned: it stays "Running" forever in
+        the UI with no thread behind it. At startup there are no live workers
+        yet, so any QUEUED/RUNNING job is definitionally stale. Called once on
+        service startup. Returns the number of jobs reconciled.
+        """
+        from api.models.drive_sync import JobStatus
+
+        now = datetime.now(timezone.utc).isoformat()
+        reconciled: list[str] = []
+
+        def _mutate(all_jobs: list["SyncJob"]) -> list["SyncJob"]:
+            for job in all_jobs:
+                if job.status in (JobStatus.QUEUED, JobStatus.RUNNING):
+                    job.status = JobStatus.ERROR
+                    if not job.finished_at:
+                        job.finished_at = now
+                    prefix = f"{job.error} | " if job.error else ""
+                    job.error = f"{prefix}Interrupted: the service restarted (or the worker died) before this job finished."
+                    reconciled.append(job.id)
+            return all_jobs
+
+        self._with_jobs_lock(_mutate)
+        return len(reconciled)
+
     def append_job_log(self, job_id: str, level: str, message: str) -> None:
         """Append a log entry to a job. No-op if the job is not found."""
         from api.models.drive_sync import JobLogEntry
@@ -1083,7 +1119,17 @@ class HistoryJobsMixin:
                 chapters_skipped += 1
                 continue
 
-            posting_index = parsed["chapter_index"] or next_index
+            ch_idx = parsed["chapter_index"]
+            # Re-upload guard: never re-post a chapter whose index is already on
+            # the server. Without this, re-running an upload on a story that
+            # already has chapters 1..N collision-bumps identical files to
+            # N+1.. and silently duplicates them (the 1-6 -> 7-12 failure mode).
+            if existing_indices and ch_idx is not None and ch_idx in existing_indices:
+                self.append_job_log(job_id, "info", f"  Chapter {ch_idx} ({file_name}) already on server - skipping (no re-upload)")
+                chapters_skipped += 1
+                continue
+
+            posting_index = ch_idx or next_index
             while posting_index in existing_indices:
                 posting_index += 1
 

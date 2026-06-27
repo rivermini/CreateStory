@@ -32,6 +32,16 @@ async def lifespan(app: FastAPI):
     logger.info("BedReadDriveSync startup: initializing database...")
     init_db()
     logger.info("BedReadDriveSync startup: database ready.")
+    # Any job still QUEUED/RUNNING at startup is orphaned — its daemon worker
+    # thread did not survive the previous process. Mark them ERROR so they don't
+    # show as "Running" forever in the UI.
+    try:
+        from api.services.drive_service import get_drive_sync_service
+        reconciled = get_drive_sync_service().reconcile_interrupted_jobs()
+        if reconciled:
+            logger.warning("BedReadDriveSync startup: marked %d interrupted job(s) as error.", reconciled)
+    except Exception as exc:
+        logger.warning("BedReadDriveSync startup: job reconciliation failed: %s", exc)
     yield
     logger.info("BedReadDriveSync shutdown: closing HTTP clients...")
     try:
