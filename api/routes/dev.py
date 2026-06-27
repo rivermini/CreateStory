@@ -102,17 +102,33 @@ def _assert_inside_services(path: Path) -> Path:
 def _clear_directory_contents(path: Path) -> tuple[list[str], list[str]]:
     deleted: list[str] = []
     skipped: list[str] = []
-    resolved = _assert_inside_services(path)
+    try:
+        resolved = _assert_inside_services(path)
+    except ValueError as exc:
+        logger.warning("Refusing to clear runtime dir %s: %s", path, exc)
+        skipped.append(str(path))
+        return deleted, skipped
+    # Nothing to clear if the directory isn't present. Do NOT create it: in the
+    # containerized deployment these constants point at sibling services that
+    # live in other containers, so the path is absent and not writable here
+    # (creating it raises PermissionError). Those services wipe their own state
+    # via /api/dev/reset-state instead.
     if not resolved.exists():
-        resolved.mkdir(parents=True, exist_ok=True)
         return deleted, skipped
     if not resolved.is_dir():
         skipped.append(str(resolved))
         return deleted, skipped
 
-    for child in resolved.iterdir():
-        child = _assert_inside_services(child)
+    try:
+        children = list(resolved.iterdir())
+    except OSError as exc:
+        logger.warning("Failed to list runtime dir %s: %s", resolved, exc)
+        skipped.append(str(resolved))
+        return deleted, skipped
+
+    for child in children:
         try:
+            child = _assert_inside_services(child)
             if child.name == ".gitkeep":
                 continue
             if child.is_dir():

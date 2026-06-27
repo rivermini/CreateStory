@@ -37,10 +37,13 @@ _shared_client: httpx.AsyncClient | None = None
 class _RetryTransport(httpx.AsyncBaseTransport):
     """Async transport wrapper that retries on transient failures.
 
-    Retries on HTTP 502, 503, 504 and on network-level ``httpx.PoolTimeout``.
-    Retries on any method, but only when the response is a retryable status
-    code (GET / HEAD / OPTIONS on 5xx) — non-idempotent methods (POST / PUT /
-    PATCH / DELETE) are never retried.
+    Retries idempotent methods (GET / HEAD / OPTIONS) on retryable HTTP status
+    codes (502, 503, 504) and on transient network errors: ``httpx.PoolTimeout``,
+    ``httpx.ConnectError``, ``httpx.ReadError`` and ``httpx.RemoteProtocolError``
+    — the "server disconnected without sending a response" race that happens when
+    a pooled keep-alive connection is reused at the same moment the upstream
+    closes it. Non-idempotent methods (POST / PUT / PATCH / DELETE) are never
+    retried.
     """
 
     _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -74,7 +77,12 @@ class _RetryTransport(httpx.AsyncBaseTransport):
                     request = request.copy()
                     continue
                 return response
-            except (httpx.PoolTimeout, httpx.ConnectError, httpx.ReadError) as exc:
+            except (
+                httpx.PoolTimeout,
+                httpx.ConnectError,
+                httpx.ReadError,
+                httpx.RemoteProtocolError,
+            ) as exc:
                 last_exc = exc
                 if is_idempotent and attempt < self._retries:
                     await asyncio.sleep(self._backoff_factor * (2**attempt))

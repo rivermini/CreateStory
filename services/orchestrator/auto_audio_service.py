@@ -14,6 +14,7 @@ import time
 from typing import Optional
 
 import httpx
+from api.middleware import _RetryTransport
 from api.service_client import current_request_identity, inject_service_headers
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,18 @@ class AutoAudioServiceProxy:
         self._lock = asyncio.Lock()
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=10,
+                # Expire pooled connections before the upstream uvicorn's ~5s
+                # keep-alive timeout so we never reuse a half-closed socket
+                # (the source of "Server disconnected without sending a
+                # response" on the frequent status/auto-scan polls).
+                keepalive_expiry=4.0,
+            ),
+            # Retry idempotent GETs on the keep-alive reuse race / transient
+            # network blips instead of surfacing a 500 to the dashboard.
+            transport=_RetryTransport(),
             event_hooks={"request": [inject_service_headers]},
         )
 
