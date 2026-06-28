@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   type CheckUpdatableResponse,
   type UpdatableStoryEntry,
@@ -78,20 +78,43 @@ export function UpdateTab({
     onChapterErrorsChange(chapterErrors.size > 0);
   }, [chapterErrors.size, onChapterErrorsChange]);
 
+  const lastMaxChapters = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
     if (!data) return;
     const updatable = data.updatable;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing chapter count inputs when new updatable entries appear; returns same reference when no new entries exist to avoid cascading renders
     setChapterCountInputs((prev) => {
       const next = new Map(prev);
       let changed = false;
+      const currentIds = new Set<string>();
+
       for (const entry of updatable) {
         const id = entry.server_story.id;
-        if (!next.has(id)) {
-          next.set(id, entry.new_chapters_count ?? 1);
+        currentIds.add(id);
+        const newMax = entry.new_chapters_count ?? 1;
+        const lastMax = lastMaxChapters.current.get(id);
+        const currentInput = next.get(id);
+
+        if (
+          currentInput === undefined ||
+          lastMax !== newMax ||
+          currentInput > newMax
+        ) {
+          next.set(id, newMax);
+          lastMaxChapters.current.set(id, newMax);
           changed = true;
         }
       }
+
+      // Clean up inputs and last max caches for stories that are no longer updatable
+      for (const id of next.keys()) {
+        if (!currentIds.has(id)) {
+          next.delete(id);
+          lastMaxChapters.current.delete(id);
+          changed = true;
+        }
+      }
+
       return changed ? next : prev;
     });
   }, [data]);
