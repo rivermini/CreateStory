@@ -198,6 +198,12 @@ class BedReadService:
         self._lock = Lock()
         self._poll_thread: Optional[Thread] = None
         self._poll_running = False
+        # Serializes chapter submission for the active batch (request thread vs
+        # poll thread) so the same chapter can never be double-submitted.
+        self._submit_lock = Lock()
+        # Cached chapter content per active batch so capacity-deferred chapters
+        # can be submitted later without re-fetching the whole story.
+        self._chapter_maps: dict[str, dict[int, dict]] = {}
         self._project_root = Path(__file__).parent.parent.parent.resolve()
         self._output_base = self._project_root / "output" / "bedread"
         self._output_base.mkdir(parents=True, exist_ok=True)
@@ -518,15 +524,11 @@ class BedReadService:
 
             story_id = batch.story_id
             batch_id_for_tts = batch_id
-            voice = batch.voice
-            lang = batch.lang
-            speed = batch.speed
-            format = batch.format
-            chapters = list(batch.chapters)
-
         self._persist_jobs()
 
-        # Fetch all chapters at once — the /chapter endpoint includes content for each chapter
+        # Fetch all chapters at once — the /chapter endpoint includes content for
+        # each chapter — and cache it so chapters deferred for queue capacity can
+        # be submitted later (by the poller) without re-fetching the story.
         chapter_map: dict[int, dict] = {}
         try:
             all_chapters = self.fetch_chapters(story_id)
@@ -536,39 +538,92 @@ class BedReadService:
                     chapter_map[idx] = ch
         except Exception:
             logger.warning("Failed to fetch chapter list for batch %s", batch_id_for_tts)
+        self._chapter_maps[batch_id_for_tts] = chapter_map
 
-        for ch in chapters:
-            try:
-                with self._lock:
-                    batch = self._batch_jobs.get(batch_id_for_tts)
-                    if batch is None or batch.status == "cancelled":
-                        logger.info(
-                            "BedRead batch %s cancelled while starting chapter jobs",
-                            batch_id_for_tts,
-                        )
-                        break
+        # Submit only as many chapters as the global TTS queue can currently
+        # admit; the remainder stays 'pending' and is started by the poller as
+        # slots free. A story with more chapters than the queue cap therefore no
+        # longer loses its overflow chapters to TTSCapacityError.
+        self._submit_pending_chapters(batch_id_for_tts)
 
-                if not self._queue_chapter_tts_job(
-                    batch_id=batch_id_for_tts,
-                    chapter_number=ch.chapter_number,
-                    story_id=story_id,
-                    voice=voice,
-                    lang=lang,
-                    speed=speed,
-                    format=format,
-                    chapter_map=chapter_map,
-                ):
+    def _submit_pending_chapters(self, batch_id: str) -> None:
+        """Start not-yet-submitted chapters up to the TTS queue's free capacity.
+
+        Capacity rejections are NON-terminal: the chapter is left 'pending' and
+        retried on a later poll tick as the global TTS queue drains. This keeps a
+        story with more chapters than MAX_QUEUED_JOBS_GLOBAL from permanently
+        failing its overflow chapters (the TTSCapacityError cascade). Capacity
+        deferral deliberately does NOT touch retry_count, so deferred chapters are
+        never burned against MAX_CHAPTER_TTS_RETRIES.
+        """
+        from api.services.tts_service import TTSCapacityError
+
+        # Only one submission pass runs at a time for the (single) active batch;
+        # if one is already in progress, the next poll tick will continue.
+        if not self._submit_lock.acquire(blocking=False):
+            return
+        try:
+            with self._lock:
+                batch = self._batch_jobs.get(batch_id)
+                if batch is None or batch.status == "cancelled":
+                    return
+                story_id = batch.story_id
+                voice = batch.voice
+                lang = batch.lang
+                speed = batch.speed
+                fmt = batch.format
+                pending = [c.chapter_number for c in batch.chapters if c.status == "pending"]
+
+            if not pending:
+                return
+
+            headroom = self.tts_service.get_admission_headroom()
+            if headroom <= 0:
+                return
+
+            chapter_map = self._chapter_maps.get(batch_id)
+            submitted = 0
+            for idx, chapter_number in enumerate(pending):
+                if submitted >= headroom:
                     break
-            except Exception as exc:
                 with self._lock:
-                    batch = self._batch_jobs.get(batch_id_for_tts)
-                    if batch:
-                        for c in batch.chapters:
-                            if c.chapter_number == ch.chapter_number:
-                                c.status = "failed"
-                                c.error = repr(exc)
-                logger.exception("BedRead batch %s: failed to fetch chapter %d",
-                                 batch_id_for_tts, ch.chapter_number)
+                    batch = self._batch_jobs.get(batch_id)
+                    if batch is None or batch.status == "cancelled":
+                        return
+                try:
+                    if not self._queue_chapter_tts_job(
+                        batch_id=batch_id,
+                        chapter_number=chapter_number,
+                        story_id=story_id,
+                        voice=voice,
+                        lang=lang,
+                        speed=speed,
+                        format=fmt,
+                        chapter_map=chapter_map,
+                    ):
+                        return  # batch cancelled mid-submit
+                    submitted += 1
+                except TTSCapacityError:
+                    # Global queue filled (possibly by another producer); stop and
+                    # resume the rest on a later poll tick. Chapters stay 'pending'.
+                    logger.info(
+                        "BedRead batch %s: TTS queue full, deferring %d chapter(s)",
+                        batch_id,
+                        len(pending) - idx,
+                    )
+                    break
+                except Exception as exc:
+                    self._mark_chapter_failed(batch_id, chapter_number, repr(exc))
+                    logger.exception(
+                        "BedRead batch %s: failed to start chapter %d",
+                        batch_id,
+                        chapter_number,
+                    )
+
+            if submitted:
+                self._persist_jobs()
+        finally:
+            self._submit_lock.release()
 
     def _queue_chapter_tts_job(
         self,
@@ -778,11 +833,17 @@ class BedReadService:
             for batch_id, story_title, fmt, output_dir, chapters_data in batches_to_process:
                 all_done = True
 
+                # Top up: start any chapters that were deferred for queue capacity
+                # now that earlier jobs may have drained and freed slots.
+                self._submit_pending_chapters(batch_id)
+
                 with self._lock:
                     batch = self._batch_jobs.get(batch_id)
                     if batch is None:
+                        self._chapter_maps.pop(batch_id, None)
                         continue
                     if batch.status == "cancelled":
+                        self._chapter_maps.pop(batch_id, None)
                         if self._active_batch_id == batch_id:
                             self._active_batch_id = None
                         continue
@@ -790,6 +851,12 @@ class BedReadService:
                 try:
                     for cn, status, job_id, progress in chapters_data:
                         if status in ("completed", "failed"):
+                            continue
+
+                        if status == "pending":
+                            # Deferred for TTS capacity; _submit_pending_chapters
+                            # starts it as the queue drains. Keep the batch alive.
+                            all_done = False
                             continue
 
                         if not job_id:
@@ -859,8 +926,10 @@ class BedReadService:
                 with self._lock:
                     batch = self._batch_jobs.get(batch_id)
                     if batch is None:
+                        self._chapter_maps.pop(batch_id, None)
                         continue
                     if batch.status == "cancelled":
+                        self._chapter_maps.pop(batch_id, None)
                         if self._active_batch_id == batch_id:
                             self._active_batch_id = None
                         continue
@@ -883,6 +952,7 @@ class BedReadService:
                     self._persist_jobs()
 
                 if batch_finished:
+                    self._chapter_maps.pop(batch_id, None)
                     with self._lock:
                         if self._active_batch_id == batch_id:
                             self._active_batch_id = None
@@ -936,6 +1006,7 @@ class BedReadService:
 
             batch.status = "cancelled"
             batch.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._chapter_maps.pop(batch_id, None)
 
             if self._active_batch_id == batch_id:
                 self._active_batch_id = None
@@ -1006,6 +1077,7 @@ class BedReadService:
                     batch.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self._batch_jobs.clear()
             self._batch_queue.clear()
+            self._chapter_maps.clear()
             self._active_batch_id = None
             self._poll_running = False
 

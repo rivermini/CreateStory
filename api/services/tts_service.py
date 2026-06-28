@@ -637,6 +637,18 @@ class TTSService:
         with self._lock:
             return sum(1 for jid in self._queue if self._jobs.get(jid, TTSJob()).status == "queued")
 
+    def get_active_job_count(self) -> int:
+        """Jobs currently counted against the global admission cap."""
+        with self._lock:
+            return sum(
+                1 for j in self._jobs.values()
+                if j.status in {"queued", "processing"}
+            )
+
+    def get_admission_headroom(self) -> int:
+        """Free global TTS queue slots right now (>= 0), shared across all producers."""
+        return max(0, MAX_QUEUED_JOBS_GLOBAL - self.get_active_job_count())
+
     def get_concurrency(self) -> int:
         return self.CONCURRENCY
 
