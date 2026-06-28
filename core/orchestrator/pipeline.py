@@ -518,23 +518,17 @@ class StoryPipeline:
             return False
         return True
 
+    # Upload workers and batch window are hardcoded to 2 — the settings that
+    # used to drive them were removed from the UI because they map to fixed
+    # bottlenecks (upload I/O and cross-story pipelining) where 2 is optimal.
+    _UPLOAD_WORKERS = 2
+    _BATCH_WINDOW = 2
+
     def _upload_worker_count(self, file_count: int) -> int:
-        if file_count <= 1:
-            return 1
-        raw = _get_settings().get("auto_audio_upload_workers", 3)
-        try:
-            workers = int(raw)
-        except Exception:
-            workers = 3
-        return max(1, min(4, workers, file_count))
+        return max(1, min(self._UPLOAD_WORKERS, file_count))
 
     def _batch_window_size(self) -> int:
-        raw = _get_settings().get("auto_audio_batch_window", 2)
-        try:
-            window = int(raw)
-        except Exception:
-            window = 2
-        return max(1, min(2, window))
+        return self._BATCH_WINDOW
 
     def _rest_between_stories(
         self,
