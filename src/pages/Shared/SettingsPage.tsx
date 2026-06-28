@@ -84,8 +84,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [rangeTo, setRangeTo] = useState(10);
   const [crawlAutoMaxChapters, setCrawlAutoMaxChapters] = useState(false);
   const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(0);
-  const [autoAudioUploadWorkers, setAutoAudioUploadWorkers] = useState(3);
-  const [autoAudioBatchWindow, setAutoAudioBatchWindow] = useState(2);
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
   const [ttsConcurrency, setTtsConcurrency] = useState(1);
@@ -158,8 +156,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         setRangeTo(s.crawl_default_range_to);
         setCrawlAutoMaxChapters(s.crawl_auto_max_chapters ?? false);
         setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 0);
-        setAutoAudioUploadWorkers(s.auto_audio_upload_workers ?? 3);
-        setAutoAudioBatchWindow(s.auto_audio_batch_window ?? 2);
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
         setTtsConcurrency(Math.min(2, Math.max(1, s.tts_concurrency ?? 1)));
@@ -305,8 +301,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         crawl_default_range_to: rangeTo,
         crawl_auto_max_chapters: crawlAutoMaxChapters,
         auto_audio_rest_seconds: autoAudioRestSeconds,
-        auto_audio_upload_workers: autoAudioUploadWorkers,
-        auto_audio_batch_window: autoAudioBatchWindow,
         auto_audio_test_story_ids: autoAudioTestStoryIds,
         tts_concurrency: ttsConcurrency,
       });
@@ -958,28 +952,10 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         return (
           <div className="space-y-4">
             <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
-              <SectionTitle title="Auto Audio Settings" description="Configure backoff, pipeline window, upload workers, and test story IDs." pageText={pageText} secondaryText={secondaryText} />
-              <div className="grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <label htmlFor="settings-audio-rest-seconds" className={labelClassName}>Backoff after failed story (seconds)</label>
-                  <input id="settings-audio-rest-seconds" type="number" min={0} max={600} value={autoAudioRestSeconds} onChange={(e) => setAutoAudioRestSeconds(Math.max(0, Number.parseInt(e.target.value, 10) || 0))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
-                </div>
-                <fieldset>
-                  <legend className={labelClassName}>Upload workers</legend>
-                  <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
-                    {[1, 2, 3, 4].map((v) => (
-                      <button key={v} onClick={() => setAutoAudioUploadWorkers(v)} className="min-w-10 rounded-md px-3 py-2 text-sm font-medium" style={{ background: autoAudioUploadWorkers === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
-                    ))}
-                  </div>
-                </fieldset>
-                <fieldset>
-                  <legend className={labelClassName}>Batch window</legend>
-                  <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
-                    {[1, 2].map((v) => (
-                      <button key={v} onClick={() => setAutoAudioBatchWindow(v)} className="min-w-10 rounded-md px-3 py-2 text-sm font-medium" style={{ background: autoAudioBatchWindow === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
-                    ))}
-                  </div>
-                </fieldset>
+              <SectionTitle title="Auto Audio Settings" description="Configure backoff and test story IDs." pageText={pageText} secondaryText={secondaryText} />
+              <div className="max-w-xs">
+                <label htmlFor="settings-audio-rest-seconds" className={labelClassName}>Backoff after failed story (seconds)</label>
+                <input id="settings-audio-rest-seconds" type="number" min={0} max={600} value={autoAudioRestSeconds} onChange={(e) => setAutoAudioRestSeconds(Math.max(0, Number.parseInt(e.target.value, 10) || 0))} className={fieldClassName} style={{ background: inputBackground, borderColor: inputBorder }} />
               </div>
               <div className="max-w-lg">
                 <label htmlFor="settings-audio-test-story-ids" className={labelClassName}>Test Story IDs</label>
