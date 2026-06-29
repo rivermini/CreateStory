@@ -3,14 +3,16 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class CrawlRequest(BaseModel):
     spider_name: str = Field(..., description="Scrapy spider name, e.g. 'wattpad'")
     site_name: str = Field(..., description="Human-readable site name, e.g. 'Wattpad'")
     novel: str = Field(..., description="Novel slug or full chapter URL")
-    limit: int = Field(default=10, ge=1, le=1000, description="Number of chapters to crawl")
+    limit: int = Field(default=10, ge=1, description="Number of chapters to crawl")
     chapter_range: Optional[str] = Field(
         default=None,
         description='Chapter range such as "3-5" or "10-15". When set, overrides limit.',
@@ -34,6 +36,24 @@ class CrawlRequest(BaseModel):
         default=None,
         description="The original URL the user submitted for the crawl.",
     )
+
+    @field_validator("chapter_range")
+    @classmethod
+    def validate_chapter_range(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+
+        match = re.fullmatch(r"\s*(\d+)\s*-\s*(\d+)\s*", value)
+        if not match:
+            raise ValueError('chapter_range must use "start-end" with positive chapter numbers.')
+
+        start, end = (int(part) for part in match.groups())
+        if start < 1 or end < 1:
+            raise ValueError("chapter_range values must be positive chapter numbers.")
+        if end < start:
+            raise ValueError("chapter_range end must be greater than or equal to start.")
+
+        return f"{start}-{end}"
 
 
 class CrawlStartResponse(BaseModel):
