@@ -13,6 +13,14 @@ const AUTH_REFRESH_LOCK = 'create-story-auth-refresh';
 
 type FetchOptions = RequestInit & { timeout?: number };
 type AuthBroadcastMessage = { type: 'tokens-replaced' } | { type: 'logout' };
+type ApiErrorBody = {
+  detail?: unknown;
+  message?: unknown;
+};
+type ValidationErrorDetail = {
+  loc?: unknown[];
+  msg?: unknown;
+};
 
 let refreshPromise: Promise<boolean> | null = null;
 let sessionExpiredEmitted = false;
@@ -87,6 +95,37 @@ function authHeaders(existing?: HeadersInit): Headers {
     headers.set('Authorization', `Bearer ${token}`);
   }
   return headers;
+}
+
+function formatValidationDetail(detail: ValidationErrorDetail): string {
+  const loc = Array.isArray(detail.loc)
+    ? detail.loc.filter((part) => part !== 'body').join('.')
+    : '';
+  const message = typeof detail.msg === 'string' ? detail.msg : JSON.stringify(detail);
+  return loc ? `${loc}: ${message}` : message;
+}
+
+function formatApiError(body: unknown, fallback: string): string {
+  if (!body || typeof body !== 'object') return fallback;
+
+  const { detail, message } = body as ApiErrorBody;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === 'object') {
+          return formatValidationDetail(item as ValidationErrorDetail);
+        }
+        return String(item);
+      })
+      .join('; ');
+  }
+  if (detail && typeof detail === 'object') {
+    return JSON.stringify(detail);
+  }
+  if (typeof message === 'string') return message;
+
+  return fallback;
 }
 
 async function executeRefresh(refreshToken: string): Promise<boolean> {
@@ -170,7 +209,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}, allo
       let message = `HTTP ${res.status}`;
       try {
         const body = await res.json();
-        message = body.detail ?? message;
+        message = formatApiError(body, message);
       } catch { /* ignore */ }
       throw new Error(message);
     }
