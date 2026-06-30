@@ -17,7 +17,7 @@ type BannerVariant = 'error' | 'production' | 'nonproduction' | 'token_invalid';
 const VARIANT_ACCENT: Record<BannerVariant, string> = {
   error: '#ef4444',
   production: '#10b981',
-  nonproduction: '#6366f1',
+  nonproduction: '#ff5b00',
   token_invalid: '#f97316',
 };
 

@@ -128,8 +128,8 @@ export function CheckTitleUpdateTabContent({
             disabled={batchUpdating || loading || (data?.can_update.length ?? 0) === 0}
             className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
             style={{
-              background: batchUpdating || loading || (data?.can_update.length ?? 0) === 0 ? mutedSurface : '#4f46e5',
-              borderColor: batchUpdating || loading || (data?.can_update.length ?? 0) === 0 ? panelBorder : '#4f46e5',
+              background: batchUpdating || loading || (data?.can_update.length ?? 0) === 0 ? mutedSurface : '#ff5b00',
+              borderColor: batchUpdating || loading || (data?.can_update.length ?? 0) === 0 ? panelBorder : '#ff5b00',
               color: batchUpdating || loading || (data?.can_update.length ?? 0) === 0 ? secondaryText : '#ffffff',
               opacity: batchUpdating || loading || (data?.can_update.length ?? 0) === 0 ? 0.65 : 1,
             }}
@@ -151,8 +151,8 @@ export function CheckTitleUpdateTabContent({
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
             style={{
-              background: loading ? mutedSurface : '#4f46e5',
-              borderColor: loading ? panelBorder : '#4f46e5',
+              background: loading ? mutedSurface : '#ff5b00',
+              borderColor: loading ? panelBorder : '#ff5b00',
               color: loading ? secondaryText : '#ffffff',
               opacity: loading ? 0.65 : 1,
             }}
@@ -202,7 +202,7 @@ export function CheckTitleUpdateTabContent({
       {data && !loading && (
         <div className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs" style={{ background: mutedSurface, color: secondaryText }}>
           <div className="flex items-center gap-1.5">
-            <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
+            <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />
             {allFolders.length} DONE_/EXTENDED_ folders
           </div>
           {canUpdateCount > 0 && (
@@ -212,7 +212,7 @@ export function CheckTitleUpdateTabContent({
             </div>
           )}
           {allMatchCount > 0 && (
-            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>
+            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }}>
               <Icon icon={appIcons.checkCircle} className="h-3.5 w-3.5" />
               {allMatchCount} all match
             </div>
@@ -245,7 +245,7 @@ export function CheckTitleUpdateTabContent({
         {loading && (
           <div className="flex h-full w-full flex-col items-center justify-center py-16">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}>
-              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
+              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />
             </div>
             <p className="text-sm" style={{ color: secondaryText }}>
               Scanning DONE_/EXTENDED_ folders and comparing titles...
@@ -280,7 +280,7 @@ export function CheckTitleUpdateTabContent({
             )}
             {filteredAllMatch.length > 0 && (
               <div className="mb-4">
-                <SectionHeader label={`All Match (${filteredAllMatch.length})`} color="#818cf8" icon={<Icon icon={appIcons.checkCircle} className="h-4 w-4" style={{ color: '#818cf8' }} />} />
+                <SectionHeader label={`All Match (${filteredAllMatch.length})`} color="#ff7c33" icon={<Icon icon={appIcons.checkCircle} className="h-4 w-4" style={{ color: '#ff7c33' }} />} />
                 <div className="space-y-3">
                   {filteredAllMatch.map((entry) => (
                     <FolderCard
@@ -450,7 +450,7 @@ function FilterChip({ label, count, active, onClick, variant, isDark }: { readon
   const colors = variant === 'green'
     ? { active: 'rgba(52,211,153,0.15)', activeText: isDark ? '#34d399' : '#059669', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'indigo'
-    ? { active: 'rgba(99,102,241,0.15)', activeText: isDark ? '#818cf8' : '#4f46e5', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
+    ? { active: 'rgba(255,91,0,0.15)', activeText: isDark ? '#ff7c33' : '#ff5b00', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'amber'
     ? { active: 'rgba(251,191,36,0.15)', activeText: isDark ? '#fbbf24' : '#d97706', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : { active: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.06)', activeText: isDark ? 'rgba(255,255,255,0.85)' : '#37352f', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' };
@@ -478,7 +478,7 @@ function EmptySection({ isDark, message }: { readonly isDark: boolean; readonly 
 function StatusChip({ status, isDark }: { status: TitleFolderStatus; isDark: boolean }) {
   const variants: Record<TitleFolderStatus, { bg: string; text: string; label: string }> = {
     can_update: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'CAN UPDATE' },
-    all_match: { bg: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.06)', text: isDark ? '#818cf8' : '#4f46e5', label: 'ALL MATCH' },
+    all_match: { bg: isDark ? 'rgba(255,91,0,0.15)' : 'rgba(255,91,0,0.06)', text: isDark ? '#ff7c33' : '#ff5b00', label: 'ALL MATCH' },
     no_server_match: { bg: isDark ? 'rgba(251,191,36,0.15)' : 'rgba(251,191,36,0.06)', text: isDark ? '#fbbf24' : '#d97706', label: 'NO MATCH' },
     empty_chapters: { bg: isDark ? 'rgba(148,163,184,0.15)' : 'rgba(148,163,184,0.06)', text: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(55,53,47,0.7)', label: 'EMPTY CHAPTERS' },
   };
@@ -547,7 +547,7 @@ function FolderCard({
   const borderColor = isNoMatch
     ? isDark ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.25)'
     : isAllMatch
-    ? isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.15)'
+    ? isDark ? 'rgba(255,91,0,0.2)' : 'rgba(255,91,0,0.15)'
     : isEmptyChapters
     ? isDark ? 'rgba(148,163,184,0.2)' : 'rgba(148,163,184,0.25)'
     : panelBorder;
@@ -582,7 +582,7 @@ function FolderCard({
               type="button"
               onClick={() => onFolderUpdate(entry)}
               className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
-              style={{ background: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff' }}
+              style={{ background: '#ff5b00', borderColor: '#ff5b00', color: '#ffffff' }}
             >
               <Icon icon={appIcons.uploadFile} className="h-4 w-4" />
               Update All ({entry.can_update_count})
@@ -600,7 +600,7 @@ function FolderCard({
           ) : entry.folder_status === 'all_match' ? (
             <span
               className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium"
-              style={{ background: isDark ? 'rgba(99,102,241,0.14)' : 'rgba(99,102,241,0.08)', borderColor: isDark ? 'rgba(99,102,241,0.24)' : 'rgba(99,102,241,0.2)', color: isDark ? '#818cf8' : '#4f46e5' }}
+              style={{ background: isDark ? 'rgba(255,91,0,0.14)' : 'rgba(255,91,0,0.08)', borderColor: isDark ? 'rgba(255,91,0,0.24)' : 'rgba(255,91,0,0.2)', color: isDark ? '#ff7c33' : '#ff5b00' }}
             >
               <Icon icon={appIcons.checkCircle} className="h-3.5 w-3.5" />
               All Match
@@ -638,9 +638,9 @@ function FolderCard({
           }}
           className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors"
           style={{
-            background: isExpanded ? (isDark ? 'rgba(99,102,241,0.16)' : 'rgba(99,102,241,0.1)') : mutedSurface,
-            borderColor: isExpanded ? (isDark ? 'rgba(99,102,241,0.35)' : 'rgba(79,70,229,0.25)') : panelBorder,
-            color: isExpanded ? (isDark ? '#a5b4fc' : '#4f46e5') : pageText,
+            background: isExpanded ? (isDark ? 'rgba(255,91,0,0.16)' : 'rgba(255,91,0,0.1)') : mutedSurface,
+            borderColor: isExpanded ? (isDark ? 'rgba(255,91,0,0.35)' : 'rgba(255,91,0,0.25)') : panelBorder,
+            color: isExpanded ? (isDark ? '#ff9b66' : '#ff5b00') : pageText,
           }}
           aria-expanded={isExpanded}
         >
@@ -758,9 +758,9 @@ function ChapterRow({
           <button
             className="rounded-lg border px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
             style={{
-              borderColor: '#4f46e5',
-              background: 'rgba(79,70,229,0.12)',
-              color: isDark ? '#a5b4fc' : '#4f46e5',
+              borderColor: '#ff5b00',
+              background: 'rgba(255,91,0,0.12)',
+              color: isDark ? '#ff9b66' : '#ff5b00',
             }}
             onClick={() => onUpdate(chapter.chapter_number)}
             disabled={isUpdating}

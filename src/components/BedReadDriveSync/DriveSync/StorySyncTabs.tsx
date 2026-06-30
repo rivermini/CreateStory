@@ -147,16 +147,16 @@ export function StorySyncTabs({
               color:
                 activeTab === 'uploadable'
                   ? isDark
-                    ? '#818cf8'
-                    : '#4f46e5'
+                    ? '#ff7c33'
+                    : '#ff5b00'
                   : isDark
                     ? 'rgba(255,255,255,0.5)'
                     : 'rgba(55,53,47,0.55)',
               background:
                 activeTab === 'uploadable'
                   ? isDark
-                    ? 'rgba(99,102,241,0.08)'
-                    : 'rgba(99,102,241,0.06)'
+                    ? 'rgba(255, 91, 0, 0.10)'
+                    : 'rgba(255, 91, 0, 0.06)'
                   : 'transparent',
             }}
           >
@@ -169,20 +169,20 @@ export function StorySyncTabs({
                   background:
                     activeTab === 'uploadable'
                       ? isDark
-                        ? 'rgba(99,102,241,0.14)'
-                        : 'rgba(99,102,241,0.12)'
+                        ? 'rgba(255, 91, 0, 0.14)'
+                        : 'rgba(255, 91, 0, 0.10)'
                       : mutedSurface,
                   borderColor:
                     activeTab === 'uploadable'
                       ? isDark
-                        ? 'rgba(99,102,241,0.3)'
-                        : 'rgba(99,102,241,0.24)'
+                        ? 'rgba(255, 91, 0, 0.24)'
+                        : 'rgba(255, 91, 0, 0.18)'
                       : panelBorder,
                   color:
                     activeTab === 'uploadable'
                       ? isDark
-                        ? '#818cf8'
-                        : '#4f46e5'
+                        ? '#ff7c33'
+                        : '#ff5b00'
                       : isDark
                         ? 'rgba(255,255,255,0.5)'
                         : 'rgba(55,53,47,0.55)',
@@ -201,7 +201,7 @@ export function StorySyncTabs({
             {activeTab === 'uploadable' && (
               <div
                 className="absolute bottom-0 left-0 right-0 h-0.5"
-                style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }}
+                style={{ background: 'linear-gradient(90deg, #ff5b00, #ff7c33)' }}
               />
             )}
           </button>
@@ -215,16 +215,16 @@ export function StorySyncTabs({
               color:
                 activeTab === 'updatable'
                   ? isDark
-                    ? '#fcd34d'
-                    : '#b45309'
+                    ? '#ff7c33'
+                    : '#ff5b00'
                   : isDark
                     ? 'rgba(255,255,255,0.5)'
                     : 'rgba(55,53,47,0.55)',
               background:
                 activeTab === 'updatable'
                   ? isDark
-                    ? 'rgba(245,158,11,0.08)'
-                    : 'rgba(245,158,11,0.06)'
+                    ? 'rgba(255, 91, 0, 0.10)'
+                    : 'rgba(255, 91, 0, 0.06)'
                   : 'transparent',
             }}
           >
@@ -237,20 +237,20 @@ export function StorySyncTabs({
                   background:
                     activeTab === 'updatable'
                       ? isDark
-                        ? 'rgba(245,158,11,0.14)'
-                        : 'rgba(245,158,11,0.12)'
+                        ? 'rgba(255, 91, 0, 0.14)'
+                        : 'rgba(255, 91, 0, 0.10)'
                       : mutedSurface,
                   borderColor:
                     activeTab === 'updatable'
                       ? isDark
-                        ? 'rgba(245,158,11,0.3)'
-                        : 'rgba(245,158,11,0.24)'
+                        ? 'rgba(255, 91, 0, 0.24)'
+                        : 'rgba(255, 91, 0, 0.18)'
                       : panelBorder,
                   color:
                     activeTab === 'updatable'
                       ? isDark
-                        ? '#fcd34d'
-                        : '#b45309'
+                        ? '#ff7c33'
+                        : '#ff5b00'
                       : isDark
                         ? 'rgba(255,255,255,0.5)'
                         : 'rgba(55,53,47,0.55)',
@@ -269,7 +269,7 @@ export function StorySyncTabs({
             {activeTab === 'updatable' && (
               <div
                 className="absolute bottom-0 left-0 right-0 h-0.5"
-                style={{ background: 'linear-gradient(90deg, #f59e0b, #ea580c)' }}
+                style={{ background: 'linear-gradient(90deg, #ff5b00, #ff7c33)' }}
               />
             )}
           </button>

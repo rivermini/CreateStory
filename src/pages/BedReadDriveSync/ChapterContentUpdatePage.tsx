@@ -288,8 +288,8 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                       disabled={!canSearch}
                       className="inline-flex items-center justify-center gap-2 rounded-md border px-5 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed"
                       style={{
-                        background: canSearch ? '#4f46e5' : mutedSurface,
-                        borderColor: canSearch ? '#4f46e5' : panelBorder,
+                        background: canSearch ? '#ff5b00' : mutedSurface,
+                        borderColor: canSearch ? '#ff5b00' : panelBorder,
                         color: canSearch ? '#ffffff' : secondaryText,
                         opacity: canSearch ? 1 : 0.65,
                       }}
@@ -328,7 +328,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                     <Icon
                       icon={appIcons.spinner}
                       className="h-8 w-8 animate-spin"
-                      style={{ color: isDark ? '#818cf8' : '#4f46e5' }}
+                      style={{ color: isDark ? '#ff7c33' : '#ff5b00' }}
                     />
                   </div>
                   <p className="text-sm" style={{ color: secondaryText }}>
@@ -450,7 +450,7 @@ function SingleFolderPanel(props: {
               {scanData.story && (
                 <span
                   className="rounded-md border px-2 py-0.5 text-xs font-medium"
-                  style={{ background: 'rgba(99,102,241,0.1)', borderColor: 'rgba(99,102,241,0.2)', color: '#818cf8' }}
+                  style={{ background: 'rgba(255,91,0,0.1)', borderColor: 'rgba(255,91,0,0.2)', color: '#ff7c33' }}
                 >
                   Story matched
                 </span>

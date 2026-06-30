@@ -113,8 +113,8 @@ export function MetadataUpdateTabContent({
             disabled={bulkUpdating || loading || availableUpdateEntries.length === 0}
             className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
             style={{
-              background: bulkUpdating || loading || availableUpdateEntries.length === 0 ? mutedSurface : '#4f46e5',
-              borderColor: bulkUpdating || loading || availableUpdateEntries.length === 0 ? panelBorder : '#4f46e5',
+              background: bulkUpdating || loading || availableUpdateEntries.length === 0 ? mutedSurface : '#ff5b00',
+              borderColor: bulkUpdating || loading || availableUpdateEntries.length === 0 ? panelBorder : '#ff5b00',
               color: bulkUpdating || loading || availableUpdateEntries.length === 0 ? secondaryText : '#ffffff',
               opacity: bulkUpdating || loading || availableUpdateEntries.length === 0 ? 0.65 : 1,
             }}
@@ -127,8 +127,8 @@ export function MetadataUpdateTabContent({
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
             style={{
-              background: loading ? mutedSurface : '#4f46e5',
-              borderColor: loading ? panelBorder : '#4f46e5',
+              background: loading ? mutedSurface : '#ff5b00',
+              borderColor: loading ? panelBorder : '#ff5b00',
               color: loading ? secondaryText : '#ffffff',
               opacity: loading ? 0.65 : 1,
             }}
@@ -177,7 +177,7 @@ export function MetadataUpdateTabContent({
       {data && !loading && (
         <div className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs" style={{ background: mutedSurface, color: secondaryText }}>
           <div className="flex items-center gap-1.5">
-            <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
+            <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />
             {(data.can_update.length ?? 0) + (data.all_match.length ?? 0) + (data.no_server_match.length ?? 0)} folders
           </div>
           {filteredCanUpdate.length > 0 && (
@@ -187,7 +187,7 @@ export function MetadataUpdateTabContent({
             </div>
           )}
           {filteredAllMatch.length > 0 && (
-            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>
+            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }}>
               <Icon icon={appIcons.checkCircle} className="h-3.5 w-3.5" />
               {filteredAllMatch.length} all match
             </div>
@@ -214,7 +214,7 @@ export function MetadataUpdateTabContent({
         {loading && (
           <div className="flex h-full w-full flex-col items-center justify-center py-16">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}>
-              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
+              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />
             </div>
             <p className="text-sm" style={{ color: secondaryText }}>
               Scanning folders and comparing metadata...
@@ -236,7 +236,7 @@ export function MetadataUpdateTabContent({
             )}
             {filteredAllMatch.length > 0 && (
               <div className="mb-4">
-                <SectionHeader label={`All Match (${filteredAllMatch.length})`} color="#818cf8" icon={<Icon icon={appIcons.checkCircle} className="h-4 w-4" style={{ color: '#818cf8' }} />} />
+                <SectionHeader label={`All Match (${filteredAllMatch.length})`} color="#ff7c33" icon={<Icon icon={appIcons.checkCircle} className="h-4 w-4" style={{ color: '#ff7c33' }} />} />
                 <div className="space-y-3">
                   {filteredAllMatch.map((entry) => (
                     <MetadataEntryCard key={entry.folder_id} entry={entry} result={updateResults.get(entry.folder_id)} isUpdating={updatingIds.has(entry.folder_id)} onUpdate={onUpdateMetadata} isDark={isDark} />
@@ -296,7 +296,7 @@ function FilterChip({ label, count, active, onClick, variant, isDark }: { readon
   const colors = variant === 'green'
     ? { active: 'rgba(52,211,153,0.15)', activeText: isDark ? '#34d399' : '#059669', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'indigo'
-    ? { active: 'rgba(99,102,241,0.15)', activeText: isDark ? '#818cf8' : '#4f46e5', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
+    ? { active: 'rgba(255,91,0,0.15)', activeText: isDark ? '#ff7c33' : '#ff5b00', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : variant === 'amber'
     ? { active: 'rgba(251,191,36,0.15)', activeText: isDark ? '#fbbf24' : '#d97706', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }
     : { active: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.06)', activeText: isDark ? 'rgba(255,255,255,0.85)' : '#37352f', inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' };
@@ -355,7 +355,7 @@ function MetadataEntryCard({ entry, result, isUpdating, onUpdate, isDark }: Meta
   const borderColor = isNoMatch
     ? isDark ? 'rgba(251,191,36,0.2)' : 'rgba(251,191,36,0.25)'
     : isAllMatch
-    ? isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.15)'
+    ? isDark ? 'rgba(255,91,0,0.2)' : 'rgba(255,91,0,0.15)'
     : panelBorder;
 
   const loadFieldDetail = async (field: MetadataFieldDifference['field']) => {
@@ -396,7 +396,7 @@ function MetadataEntryCard({ entry, result, isUpdating, onUpdate, isDark }: Meta
             </p>
           )}
           {!hasDifferences && !isNoMatch && (
-            <p className="text-xs" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>All metadata matches</p>
+            <p className="text-xs" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }}>All metadata matches</p>
           )}
           {result && (
             <p className="mt-1 flex items-center gap-1 text-xs" style={{ color: isSuccess ? (isDark ? '#34d399' : '#059669') : isFailed ? (isDark ? '#f87171' : '#dc2626') : secondaryText }}>
@@ -411,7 +411,7 @@ function MetadataEntryCard({ entry, result, isUpdating, onUpdate, isDark }: Meta
             <button
               onClick={() => onUpdate(entry.folder_id, entry.story_id!, entry.differences)}
               className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
-              style={{ background: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff' }}
+              style={{ background: '#ff5b00', borderColor: '#ff5b00', color: '#ffffff' }}
             >
               <Icon icon={appIcons.uploadFile} className="h-4 w-4" />
               Update
@@ -432,7 +432,7 @@ function MetadataEntryCard({ entry, result, isUpdating, onUpdate, isDark }: Meta
               No Match
             </span>
           ) : isAllMatch ? (
-            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(99,102,241,0.14)' : 'rgba(99,102,241,0.08)', borderColor: isDark ? 'rgba(99,102,241,0.24)' : 'rgba(99,102,241,0.2)', color: isDark ? '#818cf8' : '#4f46e5' }}>
+            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(255,91,0,0.14)' : 'rgba(255,91,0,0.08)', borderColor: isDark ? 'rgba(255,91,0,0.24)' : 'rgba(255,91,0,0.2)', color: isDark ? '#ff7c33' : '#ff5b00' }}>
               <Icon icon={appIcons.checkCircle} className="h-3.5 w-3.5" />
               All Match
             </span>
@@ -572,7 +572,7 @@ function categoryLabel(values: { main_category?: string | null; sub_category?: s
 function StatusChip({ status, isDark }: { readonly status: string; readonly isDark: boolean }) {
   const variants: Record<string, { bg: string; text: string; label: string }> = {
     can_update: { bg: isDark ? 'rgba(52,211,153,0.15)' : 'rgba(5,150,105,0.08)', text: isDark ? '#34d399' : '#059669', label: 'CAN UPDATE' },
-    all_match: { bg: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.06)', text: isDark ? '#818cf8' : '#4f46e5', label: 'ALL MATCH' },
+    all_match: { bg: isDark ? 'rgba(255,91,0,0.15)' : 'rgba(255,91,0,0.06)', text: isDark ? '#ff7c33' : '#ff5b00', label: 'ALL MATCH' },
     no_server_match: { bg: isDark ? 'rgba(251,191,36,0.15)' : 'rgba(251,191,36,0.06)', text: isDark ? '#fbbf24' : '#d97706', label: 'NO MATCH' },
   };
   const variant = variants[status] ?? { bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.06)', text: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(55,53,47,0.55)', label: status };

@@ -121,8 +121,8 @@ export function CheckAllTab({
             disabled={bulkUploading || loading || availableUpdateEntries.length === 0}
             className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
             style={{
-              background: bulkUploading || loading || availableUpdateEntries.length === 0 ? mutedSurface : '#4f46e5',
-              borderColor: bulkUploading || loading || availableUpdateEntries.length === 0 ? panelBorder : '#4f46e5',
+              background: bulkUploading || loading || availableUpdateEntries.length === 0 ? mutedSurface : '#ff5b00',
+              borderColor: bulkUploading || loading || availableUpdateEntries.length === 0 ? panelBorder : '#ff5b00',
               color: bulkUploading || loading || availableUpdateEntries.length === 0 ? secondaryText : '#ffffff',
               opacity: bulkUploading || loading || availableUpdateEntries.length === 0 ? 0.65 : 1,
             }}
@@ -135,8 +135,8 @@ export function CheckAllTab({
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
             style={{
-              background: loading ? mutedSurface : '#4f46e5',
-              borderColor: loading ? panelBorder : '#4f46e5',
+              background: loading ? mutedSurface : '#ff5b00',
+              borderColor: loading ? panelBorder : '#ff5b00',
               color: loading ? secondaryText : '#ffffff',
               opacity: loading ? 0.65 : 1,
             }}
@@ -183,7 +183,7 @@ export function CheckAllTab({
       {data && !loading && (
         <div className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs" style={{ background: mutedSurface, color: secondaryText }}>
           <div className="flex items-center gap-1.5">
-            <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
+            <Icon icon={appIcons.folder} className="h-3.5 w-3.5" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />
             {(data.can_update.length ?? 0) + (data.updated.length ?? 0) + ((data.no_banner1_file ?? data.no_cover1_file ?? []).length) + (data.no_server_match.length ?? 0)} DONE_/EXTENDED_ folders
           </div>
           {canUpdateCount > 0 && (
@@ -205,7 +205,7 @@ export function CheckAllTab({
             </div>
           )}
           {noMatchCount > 0 && (
-            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#818cf8' : '#4f46e5' }}>
+            <div className="flex items-center gap-1.5" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }}>
               <Icon icon={appIcons.folder} className="h-3.5 w-3.5" />
               {noMatchCount} no server match
             </div>
@@ -225,7 +225,7 @@ export function CheckAllTab({
         {loading && (
           <div className="flex h-full w-full flex-col items-center justify-center py-16">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}>
-              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />
+              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />
             </div>
             <p className="text-sm" style={{ color: secondaryText }}>
               Scanning DONE_/EXTENDED_ folders for banner images...
@@ -267,7 +267,7 @@ export function CheckAllTab({
             )}
             {filteredNoMatch.length > 0 && (
               <div>
-                <SectionHeader label={`No Server Match (${filteredNoMatch.length})`} color="#818cf8" icon={<Icon icon={appIcons.folder} className="h-4 w-4" style={{ color: isDark ? '#818cf8' : '#4f46e5' }} />} />
+                <SectionHeader label={`No Server Match (${filteredNoMatch.length})`} color="#ff7c33" icon={<Icon icon={appIcons.folder} className="h-4 w-4" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />} />
                 <div className="space-y-2">
                   {filteredNoMatch.map((entry) => (
                     <BannerEntryCard key={entry.folder_id} entry={entry} result={uploadResults.get(entry.folder_id)} isUploading={uploadingIds.has(entry.folder_id)} onUpload={onUploadBanner} isDark={isDark} bannerFilename={bannerFilename} />
@@ -403,7 +403,7 @@ function BannerEntryCard({
 
         <div className="flex flex-col items-end gap-1">
           {canUpload ? (
-            <button onClick={() => onUpload(entry.folder_id, entry.story_id!)} className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors" style={{ background: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff' }}>
+            <button onClick={() => onUpload(entry.folder_id, entry.story_id!)} className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors" style={{ background: '#ff5b00', borderColor: '#ff5b00', color: '#ffffff' }}>
               <Icon icon={appIcons.uploadFile} className="h-4 w-4" />
               Update Banner
             </button>
@@ -428,7 +428,7 @@ function BannerEntryCard({
               No {bannerFilename}
             </span>
           ) : isNoMatch ? (
-            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(99,102,241,0.14)' : 'rgba(99,102,241,0.08)', borderColor: isDark ? 'rgba(99,102,241,0.24)' : 'rgba(99,102,241,0.2)', color: isDark ? '#818cf8' : '#4f46e5' }}>
+            <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium" style={{ background: isDark ? 'rgba(255,91,0,0.14)' : 'rgba(255,91,0,0.08)', borderColor: isDark ? 'rgba(255,91,0,0.24)' : 'rgba(255,91,0,0.2)', color: isDark ? '#ff7c33' : '#ff5b00' }}>
               <Icon icon={appIcons.folder} className="h-3.5 w-3.5" />
               No Match
             </span>
@@ -446,7 +446,7 @@ function StatusChip({ status, isDark, bannerFilename = 'banner1' }: { readonly s
     updated: { bg: 'rgba(251,191,36,0.15)', text: isDark ? '#fbbf24' : '#d97706', label: 'UPDATED' },
     no_banner1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noBannerLabel },
     no_cover1_file: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: noBannerLabel },
-    no_server_match: { bg: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.06)', text: isDark ? '#818cf8' : '#4f46e5', label: 'NO MATCH' },
+    no_server_match: { bg: isDark ? 'rgba(255,91,0,0.15)' : 'rgba(255,91,0,0.06)', text: isDark ? '#ff7c33' : '#ff5b00', label: 'NO MATCH' },
     error: { bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)', text: isDark ? '#f87171' : '#dc2626', label: 'ERROR' },
   };
 

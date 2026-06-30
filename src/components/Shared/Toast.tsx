@@ -154,12 +154,12 @@ function ToastItem({ toast }: Readonly<{ toast: Readonly<Toast> }>) {
       icon: <Icon icon={appIcons.statusWarning} className="h-5 w-5" style={{ color: '#fbbf24' }} />,
     },
     info: {
-      accent: '#6366f1',
+      accent: '#ff5b00',
       background: isDark ? 'rgba(30,41,99,0.24)' : 'rgba(255,255,255,0.96)',
-      border: isDark ? 'rgba(129,140,248,0.24)' : 'rgba(99,102,241,0.18)',
+      border: isDark ? 'rgba(255,124,51,0.24)' : 'rgba(255,91,0,0.18)',
       text: isDark ? 'rgba(238,242,255,0.96)' : '#312e81',
       close: isDark ? 'rgba(238,242,255,0.72)' : 'rgba(49,46,129,0.72)',
-      icon: <Icon icon={appIcons.info} className="h-5 w-5" style={{ color: '#818cf8' }} />,
+      icon: <Icon icon={appIcons.info} className="h-5 w-5" style={{ color: '#ff7c33' }} />,
     },
   };
 

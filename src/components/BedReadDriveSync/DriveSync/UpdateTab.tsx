@@ -422,7 +422,7 @@ export function UpdateTab({
             </div>
           ) : null}
           <StatPill label="can update" value={updateCount} color="#f59e0b" isDark={isDark} />
-          <StatPill label="up-to-date" value={filteredNoUpdate.length} color={isDark ? '#818cf8' : '#4f46e5'} isDark={isDark} />
+          <StatPill label="up-to-date" value={filteredNoUpdate.length} color={isDark ? '#ff7c33' : '#ff5b00'} isDark={isDark} />
           {filteredInvalid.length > 0 && <StatPill label="invalid" value={filteredInvalid.length} color="#f87171" isDark={isDark} />}
           {filteredNoServerMatch.length > 0 && (
             <StatPill label="no server match" value={filteredNoServerMatch.length} color="#94a3b8" isDark={isDark} />

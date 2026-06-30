@@ -288,7 +288,7 @@ export function DriveConfig({
       <div className="lg-glass-deep w-full max-w-3xl rounded-2xl overflow-hidden h-[80vh] flex flex-col justify-between">
         <div className="flex items-center justify-between px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="lg-icon-btn" style={{ background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.08)', color: '#818cf8' }}>
+            <div className="lg-icon-btn" style={{ background: isDark ? 'rgba(255,91,0,0.2)' : 'rgba(255,91,0,0.08)', color: '#ff7c33' }}>
               <Icon icon={appIcons.settings} className="w-5 h-5" />
             </div>
             <div>

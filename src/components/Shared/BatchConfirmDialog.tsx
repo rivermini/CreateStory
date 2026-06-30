@@ -139,7 +139,7 @@ export function BatchConfirmDialog({
 
         <div className="mb-6">
           <label htmlFor="batch-confirm-input" className="mb-2 block text-sm font-medium" style={{ color: secondaryText }}>
-            Type <span className="font-mono font-bold" style={{ color: '#818cf8' }}>confirm</span> to proceed:
+            Type <span className="font-mono font-bold" style={{ color: '#ff7c33' }}>confirm</span> to proceed:
           </label>
           <input
             id="batch-confirm-input"
@@ -164,8 +164,8 @@ export function BatchConfirmDialog({
             disabled={!isConfirmEnabled}
             className="flex-1 rounded-xl border py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed"
             style={{
-              background: isConfirmEnabled ? '#4f46e5' : mutedSurface,
-              borderColor: isConfirmEnabled ? '#4f46e5' : panelBorder,
+              background: isConfirmEnabled ? '#ff5b00' : mutedSurface,
+              borderColor: isConfirmEnabled ? '#ff5b00' : panelBorder,
               color: isConfirmEnabled ? '#ffffff' : secondaryText,
               opacity: isConfirmEnabled ? 1 : 0.5,
             }}

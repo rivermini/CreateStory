@@ -999,8 +999,6 @@ html[data-theme='dark'] .cs-main-content .thesvg-hero-gradient {
   border-radius: 12px !important;
 }
 
-.cs-main-content button:not(.cs-icon-button):not(.thesvg-card),
-.cs-main-content a[role='button']:not(.cs-icon-button):not(.thesvg-card),
 .cs-main-content button[class*='rounded-']:not(.cs-icon-button):not(.thesvg-card),
 .cs-main-content a[role='button'][class*='rounded-']:not(.cs-icon-button):not(.thesvg-card) {
   border-radius: 9999px !important;

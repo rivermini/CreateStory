@@ -234,7 +234,7 @@ function DatePickerPanel({ value, onDateChange, isDark: _isDark, onClose }: Read
               onClick={() => selectDay(day)}
               className="flex h-9 w-9 items-center justify-center rounded-md text-xs transition-colors"
               style={{
-                background: selectedDay ? '#6366f1' : todayCell ? activeSurface : 'transparent',
+                background: selectedDay ? '#ff5b00' : todayCell ? activeSurface : 'transparent',
                 color: selectedDay ? '#ffffff' : pageText,
                 border: `1px solid ${todayCell || selectedDay ? panelBorder : 'transparent'}`,
               }}
