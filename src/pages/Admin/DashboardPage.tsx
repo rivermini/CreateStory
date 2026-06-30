@@ -13,9 +13,7 @@ interface DashboardPageProps {
 export function DashboardPage(props: Readonly<DashboardPageProps>) {
   const { themeMode, authUser } = props;
   const isDark = themeMode === 'dark';
-  const pageBackground = isDark
-    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
-    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
+  const pageBackground = 'var(--cs-page)';
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
@@ -34,17 +32,16 @@ export function DashboardPage(props: Readonly<DashboardPageProps>) {
 }
 
 function DashboardSidebar(props: Readonly<{ themeMode: ThemeMode; authUser: AuthUser }>) {
-  const { themeMode, authUser } = props;
+  const { authUser } = props;
   const location = useLocation();
-  const isDark = themeMode === 'dark';
   const active = location.pathname === '/dashboard' || location.pathname.startsWith('/dashboard/users');
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const panelBorder = 'var(--cs-border)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const mutedSurface = 'var(--cs-surface-muted)';
+  const activeSurface = 'var(--cs-primary-soft)';
 
   return (
     <aside

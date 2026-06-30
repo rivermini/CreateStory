@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { AppIcon } from '../AppIcon';
 import { Icon, appIcons } from '../Icon';
-import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import type { ThemeMode } from '../../../types/theme';
 import { navActive, NAV_SECTIONS } from '../../../utils/navigation';
+import { getThemeTokens } from '../design';
 
 interface MobileSidebarProps {
     themeMode: ThemeMode;
@@ -40,25 +40,59 @@ export function MobileSidebar({
     onClose,
 }: Readonly<MobileSidebarProps>) {
     const location = useLocation();
-    const isDark = themeMode === 'dark';
+    const tokens = getThemeTokens(themeMode);
+    const isDark = tokens.isDark;
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
-    const asideBackground = isDark ? '#191919' : '#fbfbfa';
-    const asideBorder = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.08)';
-    const headerText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-    const mutedText = isDark ? 'rgba(255,255,255,0.42)' : 'rgba(55,53,47,0.58)';
-    const sectionText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.52)';
-    const itemText = isDark ? 'rgba(255,255,255,0.74)' : 'rgba(55,53,47,0.84)';
-    const itemMuted = isDark ? 'rgba(255,255,255,0.44)' : 'rgba(55,53,47,0.58)';
-    const hoverBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)';
-    const activeBackground = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
-
     const makeNavItem = (item: NavItem) => {
-        const active = navActive(location.pathname, item.to);
-        const hovered = hoveredItem === item.to;
-        const background = active ? activeBackground : hovered ? hoverBackground : 'transparent';
-        const color = active ? headerText : hovered ? itemText : itemMuted;
         const iconKey = NAV_ICONS_MOBILE[item.iconKey] ?? 'add';
+        const active = navActive(location.pathname, item.to);
+
+        if (item.to === '/') {
+            return (
+                <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={onClose}
+                    className="group relative my-2 flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-bold transition-all duration-150"
+                    style={{
+                        textDecoration: 'none',
+                        background: active ? tokens.colors.primary : tokens.colors.primarySoft,
+                        borderColor: active ? tokens.colors.primary : isDark ? 'rgba(255,91,0,0.25)' : 'rgba(255,91,0,0.18)',
+                        color: active ? '#ffffff' : tokens.colors.primary,
+                    }}
+                >
+                    <span className="flex h-4.5 w-4.5 items-center justify-center flex-shrink-0">
+                        <Icon icon={appIcons[iconKey]} className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="text-xs tracking-wide">
+                        {item.label}
+                    </span>
+                </Link>
+            );
+        }
+
+        const hovered = hoveredItem === item.to;
+        const background = active ? tokens.colors.active : hovered ? tokens.colors.surfaceMuted : 'transparent';
+        const color = active ? tokens.colors.activeText : hovered ? tokens.colors.text : tokens.colors.textSoft;
+
+        let badgeText: string | null = null;
+        let badgeColor = 'transparent';
+        let badgeTextColor = tokens.colors.textMuted;
+
+        if (item.to === '/supported-sites') {
+            badgeText = '10+';
+            badgeColor = isDark ? 'rgba(52,211,153,0.12)' : 'rgba(21,128,61,0.08)';
+            badgeTextColor = isDark ? '#34d399' : '#15803d';
+        } else if (item.to === '/auto-audio') {
+            badgeText = 'AI';
+            badgeColor = isDark ? 'rgba(255,91,0,0.12)' : 'rgba(255,91,0,0.08)';
+            badgeTextColor = '#ff5b00';
+        } else if (item.to === '/drive-sync') {
+            badgeText = 'Cloud';
+            badgeColor = isDark ? 'rgba(59,130,246,0.12)' : 'rgba(29,78,216,0.08)';
+            badgeTextColor = isDark ? '#60a5fa' : '#1d4ed8';
+        }
 
         return (
             <Link
@@ -67,10 +101,9 @@ export function MobileSidebar({
                 onClick={onClose}
                 onMouseEnter={() => setHoveredItem(item.to)}
                 onMouseLeave={() => setHoveredItem(null)}
-                className="group relative flex items-center gap-2.5 rounded-md transition-colors duration-150"
+                className="group relative flex min-h-11 items-center gap-2.5 rounded-full px-3 py-2 transition-all duration-150"
                 style={{
                     textDecoration: 'none',
-                    padding: '10px 10px',
                     background,
                 }}
             >
@@ -78,14 +111,23 @@ export function MobileSidebar({
                     className="flex h-5 w-5 items-center justify-center flex-shrink-0 transition-colors duration-150"
                     style={{ color }}
                 >
-                    <Icon icon={iconKey as unknown as IconDefinition} className="w-4 h-4" />
+                    <Icon icon={appIcons[iconKey]} className="w-3.5 h-3.5" />
                 </span>
                 <span
-                    className="min-w-0 flex-1 truncate text-sm font-medium transition-colors duration-150"
+                    className="min-w-0 flex-1 whitespace-normal break-words text-sm font-semibold tracking-[0.01em] transition-colors duration-150"
                     style={{ color }}
                 >
                     {item.label}
                 </span>
+
+                {badgeText && (
+                    <span 
+                        className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none scale-90"
+                        style={{ background: badgeColor, color: badgeTextColor }}
+                    >
+                        {badgeText}
+                    </span>
+                )}
             </Link>
         );
     };
@@ -98,6 +140,7 @@ export function MobileSidebar({
                 className={`fixed inset-0 z-40 transition-opacity duration-200 cursor-default ${isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
                 style={{
                     background: isDark ? 'rgba(0,0,0,0.42)' : 'rgba(17,17,17,0.18)',
+                    backdropFilter: 'blur(3px)',
                 }}
                 onClick={onClose}
                 aria-label="Close sidebar"
@@ -107,38 +150,37 @@ export function MobileSidebar({
             <aside
                 className="fixed inset-0 z-50 flex flex-col transition-transform duration-200 ease-out"
                 style={{
-                    width: 272,
-                    background: asideBackground,
-                    borderRight: `1px solid ${asideBorder}`,
+                    width: 292,
+                    background: tokens.colors.surfaceElevated,
+                    borderRight: `1px solid ${tokens.colors.border}`,
+                    boxShadow: tokens.shadows.floating,
                     transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
                 }}
             >
                 {/* Brand */}
                 <div
-                    className="flex items-center gap-3"
+                    className="flex items-center gap-3 border-b"
                     style={{
-                        padding: '14px 14px 12px',
+                        padding: 'max(env(safe-area-inset-top), 14px) 14px 12px',
+                        borderColor: tokens.colors.border,
                     }}
                 >
                     <div
-                        className="flex h-8 w-8 items-center justify-center rounded-md overflow-hidden flex-shrink-0"
-                        style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.06)' }}
-                    >
+                        className="flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden flex-shrink-0"                    >
                         <AppIcon size="md" className="flex-shrink-0" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h1 className="text-sm font-semibold truncate" style={{ color: headerText }}>
-                            Novel Crawler
+                        <h1 className="text-sm font-semibold" style={{ color: tokens.colors.text }}>
+                            CreateStory
                         </h1>
-                        <p className="text-xs truncate" style={{ color: mutedText }}>
+                        <p className="text-xs" style={{ color: tokens.colors.textMuted }}>
                             Workspace
                         </p>
                     </div>
                     <button
                         type="button"
                         onClick={onOpenSettings}
-                        className="flex h-10 w-10 items-center justify-center rounded-md flex-shrink-0 transition-colors duration-150 touch-manipulation"
-                        style={{ background: hoveredItem === '/settings' ? hoverBackground : 'transparent', color: mutedText }}
+                        className="cs-icon-button flex-shrink-0 touch-manipulation"
                         onMouseEnter={() => setHoveredItem('/settings')}
                         onMouseLeave={() => setHoveredItem(null)}
                         aria-label="Open settings"
@@ -157,12 +199,12 @@ export function MobileSidebar({
                     {NAV_SECTIONS.map((section) => (
                         <div key={section.label} style={{ marginTop: 14 }}>
                             <p
-                                className="px-2 pb-1 text-[11px] font-medium"
-                                style={{ color: sectionText }}
+                                className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.16em]"
+                                style={{ color: tokens.colors.textFaint }}
                             >
                                 {section.label}
                             </p>
-                            <div className="space-y-0.5">
+                            <div className="space-y-1">
                                 {section.items.map((item) => makeNavItem(item))}
                             </div>
                         </div>

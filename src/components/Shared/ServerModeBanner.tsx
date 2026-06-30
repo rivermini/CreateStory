@@ -37,10 +37,10 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
   }
 
   const accent = VARIANT_ACCENT[variant];
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const panelBorder = 'var(--cs-border)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const mutedSurface = 'var(--cs-surface-muted)';
   const iconBgAlpha = isDark ? '15' : '12';
   const iconBorderAlpha = isDark ? '28' : '22';
   const bannerBorderAlpha = isDark ? '22' : '16';

@@ -74,14 +74,12 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
   const uploadLocksRef = useRef<Set<string>>(new Set());
   const uploadResultVersionRef = useRef(0);
 
-  const pageBackground = isDark
-    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
-    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
+  const pageBackground = 'var(--cs-page)';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const panelBorder = 'var(--cs-border)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
 
   const resetUploadUiState = () => {
     uploadResultVersionRef.current += 1;

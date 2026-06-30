@@ -36,13 +36,9 @@ export function DatePicker({ value, onDateChange, isDark }: Readonly<DatePickerP
   }, []);
 
   const hasValue = !!value;
-  const triggerBackground = hasValue
-    ? isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)'
-    : isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const triggerBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const triggerText = hasValue
-    ? isDark ? 'rgba(255,255,255,0.92)' : '#37352f'
-    : isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const triggerBackground = 'var(--cs-surface-muted)';
+  const triggerBorder = 'var(--cs-border)';
+  const triggerText = hasValue ? 'var(--cs-text)' : 'var(--cs-text-faint)';
 
   return (
     <div ref={ref} className="relative">
@@ -88,7 +84,7 @@ interface DatePickerPanelProps {
   onClose: () => void;
 }
 
-function DatePickerPanel({ value, onDateChange, isDark, onClose }: Readonly<DatePickerPanelProps>) {
+function DatePickerPanel({ value, onDateChange, isDark: _isDark, onClose }: Readonly<DatePickerPanelProps>) {
   const today = new Date();
   const [viewYear, setViewYear] = useState(() => {
     if (value) {
@@ -132,13 +128,13 @@ function DatePickerPanel({ value, onDateChange, isDark, onClose }: Readonly<Date
   while (cells.length % 7 !== 0) cells.push(null);
 
   const selected = value ? new Date(value) : null;
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const panelBorder = 'var(--cs-border)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const mutedSurface = 'var(--cs-surface-muted)';
+  const activeSurface = 'var(--cs-primary-soft)';
 
   const isToday = (day: number) =>
     day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();

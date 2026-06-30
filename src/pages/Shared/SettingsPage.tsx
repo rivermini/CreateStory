@@ -96,17 +96,17 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
   const secondaryText = isDark ? 'rgba(255,255,255,0.48)' : 'rgba(55,53,47,0.64)';
   const tertiaryText = isDark ? 'rgba(255,255,255,0.32)' : 'rgba(55,53,47,0.46)';
-  const shellBackground = isDark ? '#191919' : '#fbfbfa';
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const shellBackground = isDark ? 'rgba(18,18,17,0.96)' : 'rgba(251,251,250,0.96)';
+  const panelBackground = isDark ? 'rgba(28,28,27,0.96)' : 'rgba(255,255,255,0.96)';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.09)';
   const subtleSurface = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.05)';
   const subtleSurfaceHover = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(55,53,47,0.08)';
   const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
   const inputBackground = isDark ? '#232323' : '#ffffff';
   const inputBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.16)';
-  const primaryButton = '#2f80ed';
+  const primaryButton = '#ff5b00';
 
-  const sectionClassName = 'rounded-lg border p-4 space-y-4';
+  const sectionClassName = 'rounded-2xl border p-4 space-y-4 shadow-sm';
   const labelClassName = `block text-xs mb-1.5 ${isDark ? 'text-white/55' : 'text-[rgba(55,53,47,0.68)]'}`;
   const fieldClassName = `w-full rounded-md border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent ${isDark ? 'text-white/90 placeholder:text-white/25' : 'text-[rgba(55,53,47,0.92)] placeholder:text-[rgba(55,53,47,0.35)]'}`;
 
@@ -1002,17 +1002,17 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         type="button"
         aria-label="Close settings"
         className="fixed inset-0 z-[70]"
-        style={{ background: 'rgba(15, 23, 42, 0.28)', backdropFilter: 'blur(6px)' }}
+        style={{ background: isDark ? 'rgba(0,0,0,0.48)' : 'rgba(17,17,17,0.18)', backdropFilter: 'blur(10px)' }}
         onClick={handleClose}
       />
       <div className="fixed inset-0 z-[80] flex items-center justify-center p-2 sm:p-4 lg:p-6">
         <dialog
           open
-          className="flex h-[min(82vh,760px)] w-full max-w-[80vw] overflow-hidden rounded-2xl border shadow-2xl"
-          style={{ background: shellBackground, borderColor: panelBorder, color: pageText }}
+          className="flex h-[min(88vh,820px)] w-full max-w-6xl overflow-hidden rounded-[24px] border shadow-2xl"
+          style={{ background: shellBackground, borderColor: panelBorder, color: pageText, boxShadow: isDark ? '0 30px 90px rgba(0,0,0,0.58)' : '0 30px 90px rgba(17,17,17,0.18)', backdropFilter: 'blur(18px)' }}
         >
-          <aside className="hidden w-[208px] shrink-0 border-r md:flex md:flex-col" style={{ borderColor: panelBorder, background: isDark ? '#1b1b1b' : '#f7f6f3' }}>
-            <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
+          <aside className="hidden w-[232px] shrink-0 border-r md:flex md:flex-col" style={{ borderColor: panelBorder, background: isDark ? 'rgba(20,20,19,0.78)' : 'rgba(247,246,243,0.86)' }}>
+            <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
               {categories.map((category) => {
                 const active = category.id === activeCategory;
                 return (
@@ -1020,8 +1020,8 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
                     key={category.id}
                     type="button"
                     onClick={() => setActiveCategory(category.id)}
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors"
-                    style={{ background: active ? activeSurface : 'transparent', color: active ? pageText : secondaryText }}
+                    className="flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition-colors"
+                    style={{ background: active ? (isDark ? '#f5f5f1' : '#111111') : 'transparent', color: active ? (isDark ? '#111111' : '#ffffff') : secondaryText }}
                   >
                     <Icon icon={appIcons[category.icon]} className="h-3.5 w-3.5 flex-shrink-0" />
                     <span className="text-sm font-medium">{category.label}</span>
@@ -1033,9 +1033,9 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
 
           <div className="flex min-w-0 flex-1 flex-col" style={{ background: shellBackground }}>
             {/* Header */}
-            <div className="flex items-center justify-between border-b px-4 py-2.5 md:px-5" style={{ borderColor: panelBorder }}>
+            <div className="flex items-center justify-between border-b px-4 py-3 md:px-5" style={{ borderColor: panelBorder }}>
               <p className="text-sm font-semibold md:text-base" style={{ color: pageText }}>{categories.find((item) => item.id === activeCategory)?.label}</p>
-              <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-md" style={{ background: subtleSurface, color: secondaryText }}>
+              <button onClick={handleClose} className="cs-icon-button">
                 <Icon icon={appIcons.close} className="h-4 w-4" />
               </button>
             </div>
@@ -1070,15 +1070,15 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-4">
-              <div className="mx-auto w-full max-w-[60%]">
+            <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
+              <div className="mx-auto w-full max-w-5xl">
                 {renderContent()}
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-t px-4 py-2.5 md:px-5" style={{ borderColor: panelBorder, background: isDark ? '#1b1b1b' : '#fafafa' }}>
+            <div className="flex items-center justify-between border-t px-4 py-3 md:px-5" style={{ borderColor: panelBorder, background: isDark ? 'rgba(20,20,19,0.78)' : 'rgba(250,250,250,0.86)' }}>
               <p className="text-xs" style={{ color: tertiaryText }}>Changes apply to this workspace after saving.</p>
-              <button onClick={handleSave} disabled={saveState === 'saving' || saveState === 'saved'} className="rounded-md px-4 py-2 text-sm font-semibold transition-colors" style={{ background: saveState === 'saving' || saveState === 'saved' ? (saveState === 'saved' ? '#16a34a' : subtleSurface) : primaryButton, color: saveState === 'saving' || saveState === 'saved' ? (saveState === 'saved' ? '#fff' : tertiaryText) : '#fff' }}>
+              <button onClick={handleSave} disabled={saveState === 'saving' || saveState === 'saved'} className="rounded-full px-5 py-2 text-sm font-semibold transition-colors" style={{ background: saveState === 'saving' || saveState === 'saved' ? (saveState === 'saved' ? '#16a34a' : subtleSurface) : primaryButton, color: saveState === 'saving' || saveState === 'saved' ? (saveState === 'saved' ? '#fff' : tertiaryText) : '#fff' }}>
                 {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : 'Save Settings'}
               </button>
             </div>

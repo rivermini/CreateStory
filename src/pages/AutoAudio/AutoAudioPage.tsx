@@ -287,15 +287,15 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
   const needsConfig = !configLoading && (!config?.main_be_api_base_url || !config?.main_be_user_id);
   const statusLabel = session?.status ? session.status.charAt(0).toUpperCase() + session.status.slice(1) : 'Idle';
 
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const pageBackground = isDark ? '#191919' : '#f7f6f3';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const subtleSurface = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(55,53,47,0.03)';
-  const logSurface = isDark ? '#171717' : '#fbfaf8';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const pageBackground = 'var(--cs-page)';
+  const panelBorder = 'var(--cs-border)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const mutedSurface = 'var(--cs-surface-muted)';
+  const subtleSurface = 'var(--cs-surface-muted)';
+  const logSurface = 'var(--cs-surface-muted)';
 
   const buttonBase = 'inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed';
   const iconButtonBase = 'inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed';

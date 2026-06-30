@@ -45,18 +45,18 @@ export function DriveConfig({
   const isDark = themeMode === 'dark';
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.48)' : 'rgba(55,53,47,0.64)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.32)' : 'rgba(55,53,47,0.46)';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const subtleSurface = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.05)';
-  const inputBackground = isDark ? '#232323' : '#ffffff';
-  const inputBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.16)';
-  const primaryButton = '#2f80ed';
-  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const panelBorder = 'var(--cs-border)';
+  const subtleSurface = 'var(--cs-surface-muted)';
+  const inputBackground = 'var(--cs-surface-muted)';
+  const inputBorder = 'var(--cs-border)';
+  const primaryButton = 'var(--cs-primary)';
+  const panelBackground = 'var(--cs-surface-elevated)';
   const sectionClassName = 'rounded-lg border p-4 space-y-4';
-  const labelClassName = `block text-xs mb-1.5 ${isDark ? 'text-white/55' : 'text-[rgba(55,53,47,0.68)]'}`;
-  const fieldClassName = `w-full rounded-md border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent ${isDark ? 'text-white/90 placeholder:text-white/25' : 'text-[rgba(55,53,47,0.92)] placeholder:text-[rgba(55,53,47,0.35)]'}`;
+  const labelClassName = 'block text-xs mb-1.5 text-inherit opacity-75';
+  const fieldClassName = 'w-full rounded-md border px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-inherit placeholder:opacity-40';
 
   const handleJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

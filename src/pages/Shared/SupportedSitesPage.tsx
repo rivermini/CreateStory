@@ -36,18 +36,15 @@ export function SupportedSitesPage({ themeMode }: SupportedSitesPageProps) {
     features: SITE_FEATURES[site.config_name] || ['Chapter-based crawling'],
   }));
 
-  const pageBg = isDark
-    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
-    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
-
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const rowHover = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(55,53,47,0.04)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const statusBackground = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.06)';
+  const pageBg = 'var(--cs-page)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const panelBorder = 'var(--cs-border)';
+  const rowHover = 'var(--cs-surface-muted)';
+  const mutedSurface = 'var(--cs-surface-muted)';
+  const statusBackground = 'var(--cs-surface-muted)';
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBg }}>

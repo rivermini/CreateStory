@@ -16,6 +16,7 @@ import {
   type AuthUser,
 } from './api';
 import { Icon, appIcons } from './components/Shared/Icon';
+import { tokenStyle } from './components/Shared/design';
 import { type ThemeMode } from './types/theme';
 
 const LoginPage = lazy(() => import('./pages/Shared/LoginPage').then(m => ({ default: m.LoginPage })));
@@ -60,10 +61,10 @@ function usePrefersReducedMotion(): boolean {
 }
 
 function App() {
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeCookie() ?? 'dark');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readThemeCookie() ?? 'light');
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredAuthUser());
   const [authChecked, setAuthChecked] = useState(false);
-  const loginThemeMode: ThemeMode = 'dark';
+  const loginThemeMode: ThemeMode = 'light';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -188,6 +189,8 @@ function Shell({
         Skip to main content
       </a>
 
+
+
       {!isDashboard && (
         <Sidebar
           themeMode={themeMode}
@@ -207,27 +210,50 @@ function Shell({
       )}
 
       {!isDashboard && (
-      <header className={`fixed top-0 left-0 right-0 z-30 border-b safe-area-top lg:hidden ${themeMode === 'dark' ? 'border-white/10 bg-[#191919]' : 'border-black/10 bg-[#fbfbfa]'}`}>
+      <header
+        className="fixed top-0 left-0 right-0 z-30 border-b safe-area-top lg:hidden"
+        style={{
+          ...tokenStyle(themeMode),
+          background: 'var(--cs-surface-elevated)',
+          borderColor: 'var(--cs-border)',
+          boxShadow: 'var(--cs-shadow-soft)',
+          backdropFilter: 'blur(18px)',
+        }}
+      >
         <div className="flex items-center gap-2 px-3 py-2.5">
           <button
             onClick={() => setMobileSidebarOpen(true)}
-            className={`rounded-lg border p-2 transition-colors ${themeMode === 'dark' ? 'border-white/10 text-white/60 hover:bg-white/5 hover:text-white/88' : 'border-black/10 text-black/60 hover:bg-black/5 hover:text-black/88'}`}
+            className="cs-icon-button"
             title="Open menu"
           >
             <Icon icon={appIcons.menu} className="h-4.5 w-4.5" />
           </button>
-          <h1 className={`text-sm font-semibold tracking-[0.01em] ${themeMode === 'dark' ? 'text-white/92' : 'text-[#37352f]'}`}>
-            Novel Crawler
+          <h1 className="text-sm font-semibold tracking-[0.01em]" style={{ color: 'var(--cs-text)' }}>
+            CreateStory
           </h1>
-          <div className="ml-auto w-9" />
+          <button
+            type="button"
+            onClick={handleOpenSettings}
+            className="cs-icon-button ml-auto"
+            title="Open settings"
+            aria-label="Open settings"
+          >
+            <Icon icon={appIcons.settings} className="h-4 w-4" />
+          </button>
         </div>
       </header>
       )}
 
-      <div className={`min-h-screen ${prefersReducedMotion ? '' : 'transition-colors duration-300'} ${themeMode === 'dark' ? 'bg-[#050505]' : 'bg-white'}`}>
-        <div id="main-content" className={`${isDashboard ? 'pt-0 pl-0' : 'pt-14 lg:pt-0 pl-0 lg:pl-[248px]'} min-h-screen ${prefersReducedMotion ? '' : 'transition-all duration-300'}`}>
+      <div
+        className={`min-h-screen ${prefersReducedMotion ? '' : 'transition-colors duration-300'}`}
+        style={tokenStyle(themeMode)}
+      >
+        <div
+          id="main-content"
+          className={`cs-main-content ${isDashboard ? 'pt-0 pl-0' : 'pt-14 pl-0 lg:pt-6 lg:pl-[288px]'} min-h-screen ${prefersReducedMotion ? '' : 'transition-all duration-300'}`}
+        >
           <Suspense fallback={
-            <div className={`flex h-screen items-center justify-center ${themeMode === 'dark' ? 'bg-[#050505] text-white/45' : 'bg-white text-black/30'}`}>
+            <div className="flex h-screen items-center justify-center" style={{ background: 'var(--cs-page)', color: 'var(--cs-text-faint)' }}>
               Loading...
             </div>
           }>

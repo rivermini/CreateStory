@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import type { AuthUser } from '../../api';
 import { AppIcon } from './AppIcon';
-import { AccountMenu } from './AccountMenu';
 import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../../types/theme';
 import { navActive, NAV_SECTIONS } from '../../utils/navigation';
+import { getThemeTokens } from './design';
 
 interface SidebarProps {
     themeMode: ThemeMode;
@@ -39,94 +39,134 @@ export function Sidebar({
     onLogout,
 }: Readonly<SidebarProps>) {
     const location = useLocation();
-    const isDark = themeMode === 'dark';
+    const tokens = getThemeTokens(themeMode);
+    const isDark = tokens.isDark;
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-    const [accountOpen, setAccountOpen] = useState(false);
-
-    const asideBackground = isDark ? '#191919' : '#fbfbfa';
-    const asideBorder = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.08)';
-    const headerText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-    const mutedText = isDark ? 'rgba(255,255,255,0.42)' : 'rgba(55,53,47,0.58)';
-    const sectionText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.52)';
-    const itemText = isDark ? 'rgba(255,255,255,0.74)' : 'rgba(55,53,47,0.84)';
-    const itemMuted = isDark ? 'rgba(255,255,255,0.44)' : 'rgba(55,53,47,0.58)';
-    const hoverBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.08)';
-    const activeBackground = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
 
     const makeNavItem = (item: { to: string; label: string; iconKey: string }) => {
+        const resolvedIcon = NAV_ICONS[item.iconKey as keyof typeof NAV_ICONS] as keyof typeof appIcons;
         const active = navActive(location.pathname, item.to);
+
+        if (item.to === '/') {
+            return (
+                <Link
+                    key={item.to}
+                    to={item.to}
+                    className="group relative my-2 flex min-h-10 items-center justify-center gap-2 rounded-full border px-3 py-2 text-xs font-bold transition-all duration-150"
+                    style={{
+                        textDecoration: 'none',
+                        background: active ? tokens.colors.primary : tokens.colors.primarySoft,
+                        borderColor: active ? tokens.colors.primary : isDark ? 'rgba(255,91,0,0.25)' : 'rgba(255,91,0,0.18)',
+                        color: active ? '#ffffff' : tokens.colors.primary,
+                        boxShadow: active ? '0 12px 28px rgba(255,91,0,0.22)' : 'none',
+                    }}
+                >
+                    <span className="flex h-4.5 w-4.5 flex-shrink-0 items-center justify-center">
+                        <Icon icon={appIcons[resolvedIcon]} className="w-3.5 h-3.5" />
+                    </span>
+                    <span>{item.label}</span>
+                </Link>
+            );
+        }
+
         const hovered = hoveredItem === item.to;
-        const background = active ? activeBackground : hovered ? hoverBackground : 'transparent';
-        const color = active ? headerText : hovered ? itemText : itemMuted;
-        const iconKey = item.iconKey as keyof typeof NAV_ICONS;
-        const resolvedIcon = NAV_ICONS[iconKey] as keyof typeof appIcons;
+        const background = active ? tokens.colors.active : hovered ? tokens.colors.surfaceMuted : 'transparent';
+        const color = active ? tokens.colors.activeText : hovered ? tokens.colors.text : tokens.colors.textSoft;
+
+        let badgeText: string | null = null;
+        let badgeColor = 'transparent';
+        let badgeTextColor = tokens.colors.textMuted;
+
+        if (item.to === '/supported-sites') {
+            badgeText = '10+';
+            badgeColor = isDark ? 'rgba(52,211,153,0.12)' : 'rgba(21,128,61,0.08)';
+            badgeTextColor = isDark ? '#34d399' : '#15803d';
+        } else if (item.to === '/auto-audio') {
+            badgeText = 'AI';
+            badgeColor = isDark ? 'rgba(255,91,0,0.12)' : 'rgba(255,91,0,0.08)';
+            badgeTextColor = '#ff5b00';
+        } else if (item.to === '/drive-sync') {
+            badgeText = 'Cloud';
+            badgeColor = isDark ? 'rgba(59,130,246,0.12)' : 'rgba(29,78,216,0.08)';
+            badgeTextColor = isDark ? '#60a5fa' : '#1d4ed8';
+        }
 
         return (
             <Link
                 key={item.to}
                 to={item.to}
-                className="group relative flex items-center gap-2.5 rounded-md transition-colors duration-150"
+                className="group relative flex min-h-9 items-center gap-2 rounded-full px-3 py-2 transition-all duration-150"
                 style={{
                     textDecoration: 'none',
-                    padding: '6px 10px',
                     background,
+                    color,
                 }}
                 onMouseEnter={() => setHoveredItem(item.to)}
                 onMouseLeave={() => setHoveredItem(null)}
             >
                 <span
-                    className="flex h-5 w-5 items-center justify-center flex-shrink-0 transition-colors duration-150"
+                    className="flex h-5 w-5 flex-shrink-0 items-center justify-center transition-colors duration-150"
                     style={{ color }}
                 >
-                    <Icon icon={appIcons[resolvedIcon]} className="w-4 h-4" />
+                    <Icon icon={appIcons[resolvedIcon]} className="w-3.5 h-3.5" />
                 </span>
 
                 <span
-                    className="min-w-0 flex-1 truncate text-sm font-medium transition-colors duration-150"
+                    className="min-w-0 flex-1 whitespace-normal break-words text-xs font-semibold tracking-[0.01em] transition-colors duration-150"
                     style={{ color }}
                 >
                     {item.label}
                 </span>
+
+                {badgeText && (
+                    <span 
+                        className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none scale-90"
+                        style={{ background: badgeColor, color: badgeTextColor }}
+                    >
+                        {badgeText}
+                    </span>
+                )}
             </Link>
         );
     };
 
     return (
         <aside
-            className="hidden lg:flex flex-col fixed left-0 top-0 h-screen z-50 transition-colors duration-200"
+            className="hidden lg:flex fixed bottom-4 left-4 top-4 z-40 flex-col overflow-hidden rounded-[22px] border transition-colors duration-200"
             style={{
                 width: 248,
-                background: asideBackground,
-                borderRight: `1px solid ${asideBorder}`,
+                background: tokens.colors.surfaceElevated,
+                borderColor: tokens.colors.border,
+                boxShadow: tokens.shadows.soft,
+                backdropFilter: 'blur(18px)',
             }}
         >
             <div
-                className="flex items-center gap-3"
+                className="flex items-center gap-3 border-b"
                 style={{
                     padding: '14px 14px 12px',
+                    borderColor: tokens.colors.border,
                 }}
             >
                 <div
-                    className="flex h-8 w-8 items-center justify-center rounded-md overflow-hidden flex-shrink-0"
-                    style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(55,53,47,0.06)' }}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg"
                 >
                     <AppIcon size="md" className="flex-shrink-0" />
                 </div>
                 <div className="flex-1 min-w-0">
                     <h1
-                        className="text-sm font-semibold truncate"
-                        style={{ color: headerText }}
+                        className="text-sm font-semibold"
+                        style={{ color: tokens.colors.text }}
                     >
-                        Novel Crawler
+                        CreateStory
                     </h1>
-                    <p className="text-xs truncate" style={{ color: mutedText }}>
+                    <p className="text-xs" style={{ color: tokens.colors.textMuted }}>
                         Workspace
                     </p>
                 </div>
                 <button
                     type="button"
-                    className="flex h-8 w-8 items-center justify-center rounded-md flex-shrink-0 transition-colors duration-150"
-                    style={{ background: hoveredItem === '/settings' ? hoverBackground : 'transparent', color: mutedText }}
+                    className="cs-icon-button flex-shrink-0"
                     onClick={onOpenSettings}
                     onMouseEnter={() => setHoveredItem('/settings')}
                     onMouseLeave={() => setHoveredItem(null)}
@@ -139,18 +179,18 @@ export function Sidebar({
             <nav
                 className="flex-1 overflow-y-auto"
                 style={{
-                    padding: '4px 8px 16px',
+                    padding: '8px 8px 16px',
                 }}
             >
                 {NAV_SECTIONS.map((section) => (
-                    <div key={section.label} style={{ marginTop: 14 }}>
+                    <div key={section.label} style={{ marginTop: 12 }}>
                         <p
-                            className="px-2 pb-1 text-[11px] font-medium"
-                            style={{ color: sectionText }}
+                            className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.16em]"
+                            style={{ color: tokens.colors.textFaint }}
                         >
                             {section.label}
                         </p>
-                        <div className="space-y-0.5">
+                        <div className="space-y-1">
                             {section.items.map((item) => makeNavItem(item))}
                         </div>
                     </div>
@@ -158,18 +198,25 @@ export function Sidebar({
             </nav>
 
             <div
-                className="px-3 pb-3 pt-3"
-                style={{ borderTop: `1px solid ${asideBorder}` }}
+                className="border-t px-3 py-3"
+                style={{ borderColor: tokens.colors.border }}
             >
-                <AccountMenu
-                    authUser={authUser}
-                    isDark={isDark}
-                    isOpen={accountOpen}
-                    onToggle={() => setAccountOpen((open) => !open)}
-                    onClose={() => setAccountOpen(false)}
-                    onLogout={onLogout}
-                    placement="sidebar"
-                />
+                <div className="mb-2 min-w-0 rounded-2xl border px-3 py-2" style={{ borderColor: tokens.colors.border, background: tokens.colors.surfaceMuted }}>
+                    <p className="break-words text-[11px] font-semibold leading-4" style={{ color: tokens.colors.text }}>
+                        {authUser.email}
+                    </p>
+                    <p className="text-[10px] capitalize" style={{ color: tokens.colors.textMuted }}>
+                        {authUser.role}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={onLogout}
+                    className="cs-btn-logout flex w-full items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-semibold"
+                >
+                    <Icon icon={appIcons.logout} className="h-3.5 w-3.5" />
+                    Sign out
+                </button>
             </div>
         </aside>
     );

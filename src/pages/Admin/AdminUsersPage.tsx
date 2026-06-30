@@ -165,15 +165,13 @@ export function AdminUsersPanel({ themeMode, embedded = false }: AdminUsersPanel
     }
   };
 
-  const pageBackground = isDark
-    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
-    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const pageBackground = 'var(--cs-page)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const panelBorder = 'var(--cs-border)';
+  const mutedSurface = 'var(--cs-surface-muted)';
   const headerShell = embedded ? '' : 'mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8';
 
   if (!canUseAdminTools) {

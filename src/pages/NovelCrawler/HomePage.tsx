@@ -9,6 +9,8 @@ import { useNovelInfo } from '../../hooks/useNovelInfo';
 import { useSiteDetection } from '../../hooks/useSiteDetection';
 import type { ThemeMode } from '../../types/theme';
 
+
+
 interface HomePageProps {
   themeMode: ThemeMode;
 }
@@ -44,6 +46,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
   const [autoMaxChapters, setAutoMaxChapters] = useState(false);
   const [inkittCookieStatus, setInkittCookieStatus] = useState<InkittCookieStatusResponse | null>(null);
   const [isCheckingInkittCookies, setIsCheckingInkittCookies] = useState(false);
+
   const outputFormat = 'md' as const;
 
   useEffect(() => {
@@ -53,6 +56,8 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
         // ignore — gracefully degrade
       });
   }, []);
+
+
 
   useEffect(() => {
     getSettings()
@@ -232,26 +237,38 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
         <main className="space-y-4">
           <section
-            className="rounded-xl border px-4 py-4 sm:px-5"
-            style={{ background: panelBackground, borderColor: panelBorder }}
+            className="rounded-2xl border px-6 py-8 sm:px-8 relative overflow-hidden thesvg-hero-gradient thesvg-card"
+            style={{ borderColor: panelBorder }}
           >
-            <div className="space-y-2">
-              <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
-                Crawl
+            {/* Ambient floating design icons in the background */}
+            <div className="absolute right-10 top-1/2 -translate-y-1/2 opacity-[0.04] dark:opacity-[0.08] pointer-events-none hidden md:block">
+              <div className="flex gap-8 items-center">
+                <Icon icon={appIcons.sync} className="w-16 h-16 rotate-12" />
+                <Icon icon={appIcons.bookOpen} className="w-20 h-20 -rotate-6" />
+                <Icon icon={appIcons.autoAudio} className="w-16 h-16 rotate-45" />
               </div>
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" style={{ color: pageText }}>
-                New crawl
+            </div>
+
+            <div className="space-y-4 relative z-10">
+              <div className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold thesvg-badge-primary">
+                <Icon icon={appIcons.globe} className="h-3 w-3" />
+                <span>10+ sites supported</span>
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3.5xl max-w-2xl leading-[1.15]" style={{ color: isDark ? '#ffffff' : '#111111' }}>
+                Novel Crawler. Search. Copy. Ship.
               </h1>
-              <p className="max-w-3xl text-sm leading-5" style={{ color: secondaryText }}>
-                Paste a supported novel URL, review the detected metadata, and choose how many chapters to crawl.
+              <p className="max-w-xl text-sm leading-relaxed" style={{ color: secondaryText }}>
+                Paste a supported novel URL, retrieve chapter content, sync to Google Drive, or run automatic TTS audio generation instantly.
               </p>
             </div>
           </section>
 
+
+
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="flex flex-col gap-4">
               <section
-                className="space-y-4 rounded-xl border px-4 py-4 sm:px-5"
+                className="space-y-4 px-4 py-5 thesvg-card"
                 style={{ background: panelBackground, borderColor: panelBorder }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -370,7 +387,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
               </section>
 
               <section
-                className={`space-y-4 rounded-xl border px-4 py-4 sm:px-5 ${sectionDisabledClass}`}
+                className={`space-y-4 px-4 py-5 thesvg-card ${sectionDisabledClass}`}
                 style={{ background: panelBackground, borderColor: panelBorder }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -397,11 +414,11 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                   )}
                 </div>
 
-                <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: panelBorder, background: mutedSurface }}>
+                <div className="inline-flex rounded-full border p-0.5" style={{ borderColor: panelBorder, background: mutedSurface }}>
                   <button
                     onClick={() => setRangeMode('count')}
                     disabled={inputsLocked}
-                    className="rounded-md px-3 py-1.5 text-xs transition-colors"
+                    className="rounded-full px-3 py-1.5 text-xs transition-colors"
                     style={{
                       background: rangeMode === 'count' ? activeSurface : 'transparent',
                       color: rangeMode === 'count' ? pageText : secondaryText,
@@ -412,7 +429,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                   <button
                     onClick={() => setRangeMode('range')}
                     disabled={inputsLocked}
-                    className="rounded-md px-3 py-1.5 text-xs transition-colors"
+                    className="rounded-full px-3 py-1.5 text-xs transition-colors"
                     style={{
                       background: rangeMode === 'range' ? activeSurface : 'transparent',
                       color: rangeMode === 'range' ? pageText : secondaryText,
@@ -497,7 +514,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                     Format:
                   </span>
                   <span
-                    className="inline-flex items-center rounded-md px-3 py-1 text-sm font-medium"
+                    className="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium"
                     style={{ background: activeSurface, border: `1px solid ${panelBorder}`, color: pageText }}
                   >
                     MD
@@ -521,7 +538,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                 onClick={handleStart}
                 disabled={isStarting || !isValid || isWattpadOriginal}
                 title={isWattpadOriginal ? 'Crawling disabled — Wattpad Original' : undefined}
-                className="flex w-full items-center justify-center gap-2 rounded-md py-3.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed"
+                className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed"
                 style={{
                   background: isWattpadOriginal || isStarting || !isValid ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.14)') : accentSolid,
                   color: isWattpadOriginal || isStarting || !isValid ? secondaryText : (isDark ? '#111111' : '#ffffff'),
@@ -568,6 +585,43 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
               )}
             </div>
           </div>
+
+          <section className="space-y-4 pt-4 border-t" style={{ borderColor: panelBorder }}>
+            <div className="space-y-1">
+              <h3 className="text-xs font-bold uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
+                Supported Platforms & Sites
+              </h3>
+              <p className="text-xs" style={{ color: secondaryText }}>
+                Direct scraping is optimized for the following domains. Crawl chapters, bypass gates, and export to MD.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              {supportedSites.map((site) => {
+                const domain = site.base_url.replace('https://', '').replace('http://', '').replace('www.', '');
+                const cleanName = site.site_name;
+
+                return (
+                  <button
+                    key={site.config_name}
+                    onClick={() => {
+                      setInputUrl(site.base_url);
+                      detect(site.base_url);
+                      refresh(site.base_url);
+                    }}
+                    className="flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 hover:scale-[1.01] active:scale-99 transition-all text-xs font-semibold group"
+                    style={{ background: panelBackground, borderColor: panelBorder }}
+                  >
+                    <span className="group-hover:text-[#ff5b00] transition-colors" style={{ color: pageText }}>
+                      {cleanName}
+                    </span>
+                    <span className="text-[10px] opacity-60 font-normal" style={{ color: tertiaryText }}>
+                      ({domain})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         </main>
       </div>
     </div>

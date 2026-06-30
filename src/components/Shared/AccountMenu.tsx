@@ -10,7 +10,7 @@ interface AccountMenuProps {
   onToggle: () => void;
   onClose: () => void;
   onLogout: () => void;
-  placement?: 'floating' | 'sidebar';
+  placement?: 'floating' | 'sidebar' | 'topbar';
 }
 
 export function AccountMenu({
@@ -25,6 +25,7 @@ export function AccountMenu({
   const isAdmin = authUser.role === 'admin';
   const menuRef = useRef<HTMLDivElement>(null);
   const isSidebar = placement === 'sidebar';
+  const isTopbar = placement === 'topbar';
 
   useEffect(() => {
     if (!isOpen) return;
@@ -47,13 +48,19 @@ export function AccountMenu({
     };
   }, [isOpen, onClose]);
 
-  const wrapperClassName = isSidebar ? 'relative' : 'fixed right-4 top-3 z-[70]';
+  const wrapperClassName = isSidebar || isTopbar ? 'relative' : 'fixed right-4 top-3 z-[70]';
   const buttonClassName = isSidebar
     ? `group flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-colors ${
         isDark
           ? 'border-white/[0.08] bg-[#202020] text-slate-200 hover:bg-[#262626]'
           : 'border-[rgba(55,53,47,0.12)] bg-white text-[#37352f] hover:bg-[#f7f6f3]'
       }`
+    : isTopbar
+      ? `group relative inline-flex h-9 items-center gap-2 rounded-full border px-2.5 transition-all ${
+          isDark
+            ? 'border-white/[0.09] bg-white/[0.05] text-slate-100 hover:bg-white/[0.08]'
+            : 'border-black/10 bg-white text-[#111111] shadow-sm hover:bg-[#f7f6f3]'
+        }`
     : `group relative inline-flex h-10 items-center gap-2 rounded-xl border px-2.5 transition-all ${
         isDark
           ? 'border-white/[0.08] bg-slate-950/80 text-slate-200 hover:bg-slate-900'
@@ -66,6 +73,12 @@ export function AccountMenu({
           ? 'border-white/[0.08] bg-[#191919] text-slate-200'
           : 'border-[rgba(55,53,47,0.12)] bg-[#fbfbfa] text-[#37352f]'
       }`
+    : isTopbar
+      ? `absolute right-0 top-[calc(100%+10px)] w-72 rounded-2xl border p-2 shadow-2xl ${
+          isDark
+            ? 'border-white/[0.08] bg-[#161616]/95 text-slate-200'
+            : 'border-black/10 bg-white/95 text-slate-800'
+        }`
     : `absolute right-0 mt-2 w-72 rounded-xl border p-3 shadow-2xl ${
         isDark
           ? 'border-white/[0.08] bg-slate-950/95 text-slate-200'

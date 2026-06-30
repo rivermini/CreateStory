@@ -450,17 +450,15 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
     }
   };
 
-  const pageBg = isDark
-    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
-    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const selectedSurface = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,17,0.05)';
-  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(17,17,17,0.08)';
+  const pageBg = 'var(--cs-page)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const panelBorder = 'var(--cs-border)';
+  const mutedSurface = 'var(--cs-surface-muted)';
+  const selectedSurface = 'var(--cs-primary-soft)';
+  const activeSurface = 'var(--cs-primary-soft)';
 
   const statusOptions: Array<{ value: typeof filter; label: string; color?: string; bg?: string }> = [
     { value: 'all', label: `All (${filteredCounts.all})` },

@@ -132,19 +132,17 @@ export function BedReadPage({ themeMode }: BedReadPageProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
 
-  const pageBackground = isDark
-    ? 'linear-gradient(180deg, #0f0f10 0%, #121214 100%)'
-    : 'linear-gradient(180deg, #f2f2f0 0%, #ebebe8 100%)';
-  const panelBackground = isDark ? '#171718' : 'rgba(255,255,255,0.9)';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(24,24,27,0.1)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#18181b';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.62)' : 'rgba(24,24,27,0.68)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(24,24,27,0.46)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(24,24,27,0.045)';
-  const selectedSurface = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(24,24,27,0.08)';
-  const tagSurface = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(24,24,27,0.06)';
-  const strongSurface = isDark ? '#f5f5f5' : '#18181b';
-  const strongText = isDark ? '#18181b' : '#fafafa';
+  const pageBackground = 'var(--cs-page)';
+  const panelBackground = 'var(--cs-surface-elevated)';
+  const panelBorder = 'var(--cs-border)';
+  const pageText = 'var(--cs-text)';
+  const secondaryText = 'var(--cs-text-soft)';
+  const tertiaryText = 'var(--cs-text-faint)';
+  const mutedSurface = 'var(--cs-surface-muted)';
+  const selectedSurface = 'var(--cs-primary-soft)';
+  const tagSurface = 'var(--cs-surface-muted)';
+  const strongSurface = 'var(--cs-active)';
+  const strongText = 'var(--cs-active-text)';
 
   const fetchStoriesPage = async (sort: typeof sortBy) => {
     setStoriesLoading(true);
