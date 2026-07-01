@@ -1,4 +1,4 @@
-"""Short-lived, single-use download tickets."""
+"""Short-lived download tickets."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ _tickets: dict[str, "DownloadTicket"] = {}
 
 _RESULT_DOWNLOAD = re.compile(
     r"^/api/results/(?:download-all|download-all-combined|download-combined-all|"
+    r"goodnovel-batch/[0-9a-f]{8}/download|"
     r"[0-9a-f]{8}/(?:download|download-all))$"
 )
 _BEDREAD_DOWNLOAD = re.compile(r"^/api/bedread/jobs/[0-9a-f]{8}/(?:download|zip)$")
@@ -96,8 +97,11 @@ def create_download_ticket(
 @router.get("/api/download/{token}", response_model=None)
 async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse:
     with _tickets_lock:
-        ticket = _tickets.pop(token, None)
-    if ticket is None or ticket.expires_at <= time.monotonic():
+        ticket = _tickets.get(token)
+        if ticket is not None and ticket.expires_at <= time.monotonic():
+            _tickets.pop(token, None)
+            ticket = None
+    if ticket is None:
         raise HTTPException(status_code=404, detail="Download ticket is invalid or expired.")
 
     identity_token = set_request_identity(ticket.user_id, ticket.role)

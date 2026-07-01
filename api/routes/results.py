@@ -62,6 +62,12 @@ async def download_combined_all() -> StreamingResponse:
     return await _proxy_download("/api/results/download-all-combined")
 
 
+@router.get("/goodnovel-batch/{batch_id}/download")
+async def download_goodnovel_batch(batch_id: str) -> StreamingResponse:
+    """Zip the grouped combined files for a GoodNovel batch."""
+    return await _proxy_download(f"/api/results/goodnovel-batch/{batch_id}/download")
+
+
 @router.get("/{crawl_id}/download-all")
 async def download_all_files(crawl_id: str) -> StreamingResponse:
     """Zip all output files from a crawl session."""

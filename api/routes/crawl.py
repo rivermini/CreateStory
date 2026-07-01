@@ -81,6 +81,45 @@ async def check_goodnovel_cookies(request: dict | None = Body(default=None)) -> 
     return await _forward_request("POST", "/api/crawl/goodnovel-cookies/status", json_body=request or {})
 
 
+@router.post("/goodnovel-batch/scan", dependencies=[Depends(require_job_creation_rate)])
+async def start_goodnovel_batch_scan(request: dict = Body(...)) -> JSONResponse:
+    """Start a GoodNovel title scan batch."""
+    return await _forward_request("POST", "/api/crawl/goodnovel-batch/scan", json_body=request)
+
+
+@router.get("/goodnovel-batch")
+async def list_goodnovel_batches() -> JSONResponse:
+    """Return GoodNovel batch history."""
+    return await _forward_request("GET", "/api/crawl/goodnovel-batch")
+
+
+@router.get("/goodnovel-batch/{batch_id}")
+async def get_goodnovel_batch_status(batch_id: str) -> JSONResponse:
+    """Return GoodNovel batch status."""
+    return await _forward_request("GET", f"/api/crawl/goodnovel-batch/{batch_id}")
+
+
+@router.get("/goodnovel-batch/{batch_id}/rows")
+async def list_goodnovel_batch_rows(
+    batch_id: str,
+    offset: int = Query(default=0),
+    limit: int = Query(default=100),
+    status: str = Query(default="all"),
+) -> JSONResponse:
+    """Return a paged slice of GoodNovel batch rows."""
+    return await _forward_request(
+        "GET",
+        f"/api/crawl/goodnovel-batch/{batch_id}/rows",
+        params={"offset": offset, "limit": limit, "status": status},
+    )
+
+
+@router.post("/goodnovel-batch/{batch_id}/crawl", dependencies=[Depends(require_job_creation_rate)])
+async def start_goodnovel_batch_crawl(batch_id: str, request: dict = Body(...)) -> JSONResponse:
+    """Start crawling found stories in a GoodNovel batch."""
+    return await _forward_request("POST", f"/api/crawl/goodnovel-batch/{batch_id}/crawl", json_body=request)
+
+
 @router.get("/stream")
 async def crawl_stream(crawl_id: str = Query(...)) -> StreamingResponse:
     """Server-Sent Events stream for live crawl progress."""
