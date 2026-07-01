@@ -42,6 +42,10 @@ export function getDownloadAllCombinedUrl(): string {
   return `${BASE_URL}/api/results/download-combined-all`;
 }
 
+export function getGoodnovelBatchDownloadUrl(batchId: string): string {
+  return `${BASE_URL}/api/results/goodnovel-batch/${encodeURIComponent(batchId)}/download`;
+}
+
 export async function listAllResults(): Promise<CrawlSessionSummary[]> {
   return apiFetch<CrawlSessionSummary[]>('/api/results');
 }

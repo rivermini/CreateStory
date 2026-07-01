@@ -17,6 +17,7 @@ type NavItem = { to: string; label: string; iconKey: string };
 
 const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/': 'add',
+    '/goodnovel-batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread': 'bookOpen',
     '/bedread/jobs': 'audioJobs',

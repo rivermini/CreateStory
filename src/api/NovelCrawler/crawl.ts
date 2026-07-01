@@ -9,6 +9,10 @@ import type {
   ScribbleHubCookieStatusResponse,
   GoodNovelCookieUpdateResponse,
   GoodNovelCookieStatusResponse,
+  GoodNovelBatchCrawlRequest,
+  GoodNovelBatchRowsResponse,
+  GoodNovelBatchScanRequest,
+  GoodNovelBatchSummary,
   CrawlStatusWithLogs,
   ProgressUpdate,
   ActiveCrawl,
@@ -83,6 +87,51 @@ export async function checkGoodnovelCookies(storyUrl?: string): Promise<GoodNove
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ story_url: storyUrl }),
+    timeout: 60000,
+  });
+}
+
+export async function startGoodnovelBatchScan(
+  request: GoodNovelBatchScanRequest,
+): Promise<GoodNovelBatchSummary> {
+  return apiFetch<GoodNovelBatchSummary>('/api/crawl/goodnovel-batch/scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    timeout: 60000,
+  });
+}
+
+export async function listGoodnovelBatches(): Promise<GoodNovelBatchSummary[]> {
+  return apiFetch<GoodNovelBatchSummary[]>('/api/crawl/goodnovel-batch');
+}
+
+export async function getGoodnovelBatchStatus(batchId: string): Promise<GoodNovelBatchSummary> {
+  return apiFetch<GoodNovelBatchSummary>(`/api/crawl/goodnovel-batch/${encodeURIComponent(batchId)}`);
+}
+
+export async function getGoodnovelBatchRows(
+  batchId: string,
+  options: { offset?: number; limit?: number; status?: string } = {},
+): Promise<GoodNovelBatchRowsResponse> {
+  const params = new URLSearchParams({
+    offset: String(options.offset ?? 0),
+    limit: String(options.limit ?? 100),
+    status: options.status ?? 'all',
+  });
+  return apiFetch<GoodNovelBatchRowsResponse>(
+    `/api/crawl/goodnovel-batch/${encodeURIComponent(batchId)}/rows?${params.toString()}`
+  );
+}
+
+export async function startGoodnovelBatchCrawl(
+  batchId: string,
+  request: GoodNovelBatchCrawlRequest,
+): Promise<GoodNovelBatchSummary> {
+  return apiFetch<GoodNovelBatchSummary>(`/api/crawl/goodnovel-batch/${encodeURIComponent(batchId)}/crawl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
     timeout: 60000,
   });
 }

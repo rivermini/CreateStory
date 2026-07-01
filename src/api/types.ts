@@ -163,6 +163,89 @@ export interface GoodNovelCookieStatusResponse {
   extra_unlocked?: number | null;
 }
 
+export type GoodNovelBatchPhase = 'scanning' | 'scan_completed' | 'crawling' | 'completed' | 'failed';
+export type GoodNovelBatchRowStatus = 'pending' | 'found' | 'not_found' | 'ambiguous' | 'error';
+export type GoodNovelBatchCrawlStatus = 'pending' | 'queued' | 'crawling' | 'completed' | 'failed' | 'skipped';
+export type GoodNovelBatchSplitMode = 'stories_per_folder' | 'folder_count';
+
+export interface GoodNovelBatchSummary {
+  batch_id: string;
+  batch_name: string;
+  phase: GoodNovelBatchPhase;
+  total_titles: number;
+  scanned_count: number;
+  found_count: number;
+  not_found_count: number;
+  ambiguous_count: number;
+  scan_error_count: number;
+  crawl_total: number;
+  crawled_count: number;
+  crawl_failed_count: number;
+  crawl_skipped_count: number;
+  download_ready: boolean;
+  error_message: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  scan_concurrency: number;
+  crawl_concurrency: number;
+  split_mode: GoodNovelBatchSplitMode;
+  stories_per_folder: number;
+  folder_count: number | null;
+  log_lines: string[];
+}
+
+export interface GoodNovelBatchCandidate {
+  title: string;
+  author: string;
+  url: string;
+  book_id: string;
+  score: number;
+}
+
+export interface GoodNovelBatchRow {
+  index: number;
+  input_title: string;
+  status: GoodNovelBatchRowStatus;
+  matched_title: string;
+  author: string;
+  url: string;
+  book_id: string;
+  score: number;
+  total_chapters: number | null;
+  free_chapters: number | null;
+  paid_chapters: number | null;
+  crawled_chapters: number;
+  crawl_status: GoodNovelBatchCrawlStatus;
+  output_file: string;
+  folder_path: string;
+  error: string;
+  candidates: GoodNovelBatchCandidate[];
+}
+
+export interface GoodNovelBatchRowsResponse {
+  batch: GoodNovelBatchSummary;
+  items: GoodNovelBatchRow[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface GoodNovelBatchScanRequest {
+  titles_text: string;
+  delimiter?: string;
+  scan_concurrency?: number;
+  batch_name?: string;
+}
+
+export interface GoodNovelBatchCrawlRequest {
+  split_mode: GoodNovelBatchSplitMode;
+  stories_per_folder: number;
+  folder_count?: number | null;
+  crawl_concurrency: number;
+  request_delay_seconds: number;
+}
+
 export interface ProgressUpdate {
   chapters_crawled: number;
   chapters_total: number;

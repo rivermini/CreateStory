@@ -16,6 +16,7 @@ interface SidebarProps {
 
 const NAV_ICONS = {
     '/': 'add',
+    '/goodnovel-batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread': 'bookOpen',
     '/bedread/jobs': 'audioJobs',
