@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -94,6 +95,21 @@ class GoodNovelCookieStatusResponse(BaseModel):
     readable_without_login: int | None = None
     total: int | None = None
     extra_unlocked: int | None = None
+
+
+class GoodNovelBatchScanRequest(BaseModel):
+    titles_text: str = Field(..., min_length=1, description="Story titles separated by the configured delimiter.")
+    delimiter: str = Field(default=";", max_length=16, description="Delimiter between titles. Use ';' or 'newline'.")
+    scan_concurrency: int = Field(default=4, ge=1, le=8)
+    batch_name: str | None = Field(default=None, max_length=160, description="Optional label shown in batch history.")
+
+
+class GoodNovelBatchCrawlRequest(BaseModel):
+    split_mode: Literal["stories_per_folder", "folder_count"] = Field(default="stories_per_folder")
+    stories_per_folder: int = Field(default=100, ge=1, le=1000)
+    folder_count: int | None = Field(default=None, ge=1, le=10000)
+    crawl_concurrency: int = Field(default=3, ge=1, le=8)
+    request_delay_seconds: float = Field(default=0.15, ge=0, le=5)
 
 
 @router.post("/start", response_model=CrawlStartResponse)
@@ -227,6 +243,105 @@ async def check_goodnovel_cookies(request: GoodNovelCookieStatusRequest, http_re
         result.get("tested_url"),
     )
     return GoodNovelCookieStatusResponse(**result)
+
+
+def _require_goodnovel_batch_owner(batch_id: str, request: Request):
+    from api.services.goodnovel_batch_service import get_goodnovel_batch_service
+
+    service = get_goodnovel_batch_service()
+    try:
+        service.require_owner(
+            batch_id=batch_id,
+            user_id=getattr(request.state, "create_story_user_id", None),
+            role=getattr(request.state, "create_story_role", None),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return service
+
+
+@router.post("/goodnovel-batch/scan")
+async def start_goodnovel_batch_scan(
+    request: GoodNovelBatchScanRequest,
+    http_request: Request,
+) -> dict:
+    """Start a GoodNovel title scan job for semicolon/newline separated story titles."""
+    from api.services.goodnovel_batch_service import get_goodnovel_batch_service
+
+    service = get_goodnovel_batch_service()
+    try:
+        state = service.start_scan(
+            titles_text=request.titles_text,
+            delimiter=request.delimiter,
+            scan_concurrency=request.scan_concurrency,
+            created_by_user_id=current_owner(http_request),
+            batch_name=request.batch_name or "",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.get("/goodnovel-batch")
+async def list_goodnovel_batches(request: Request) -> list[dict]:
+    """Return GoodNovel batch history for the current user."""
+    from api.services.goodnovel_batch_service import get_goodnovel_batch_service
+
+    service = get_goodnovel_batch_service()
+    return service.list_batches(
+        user_id=getattr(request.state, "create_story_user_id", None),
+        role=getattr(request.state, "create_story_role", None),
+    )
+
+
+@router.get("/goodnovel-batch/{batch_id}")
+async def get_goodnovel_batch_status(batch_id: str, request: Request) -> dict:
+    """Return scan/crawl summary for a GoodNovel batch."""
+    service = _require_goodnovel_batch_owner(batch_id, request)
+    try:
+        return service.get_status(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/goodnovel-batch/{batch_id}/rows")
+async def list_goodnovel_batch_rows(
+    batch_id: str,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    status: str = Query(default="all"),
+) -> dict:
+    """Return a lazy page of GoodNovel batch title rows."""
+    service = _require_goodnovel_batch_owner(batch_id, request)
+    try:
+        return service.list_rows(batch_id, offset=offset, limit=limit, status_filter=status)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/goodnovel-batch/{batch_id}/crawl")
+async def start_goodnovel_batch_crawl(
+    batch_id: str,
+    request: GoodNovelBatchCrawlRequest,
+    http_request: Request,
+) -> dict:
+    """Start crawling free GoodNovel chapters for found rows in a scanned batch."""
+    service = _require_goodnovel_batch_owner(batch_id, http_request)
+    try:
+        state = service.start_crawl(
+            batch_id=batch_id,
+            split_mode=request.split_mode,
+            stories_per_folder=request.stories_per_folder,
+            folder_count=request.folder_count,
+            crawl_concurrency=request.crawl_concurrency,
+            request_delay_seconds=request.request_delay_seconds,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
 
 
 @router.post("/start-batch", response_model=list[CrawlStartResponse])

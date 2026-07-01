@@ -32,6 +32,8 @@ import threading
 import time
 import urllib.parse
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
+from html import unescape
 from typing import Any, Optional
 
 try:
@@ -101,6 +103,16 @@ class GoodNovelChapterContent:
     is_locked: bool
     price: int
     preview_content: str
+
+
+@dataclass(frozen=True)
+class GoodNovelSearchResult:
+    title: str
+    author: str
+    url: str
+    book_id: str
+    score: float
+    description: str = ""
 
 
 class GoodNovelApiClient:
@@ -222,6 +234,25 @@ class GoodNovelApiClient:
 
         raise GoodNovelApiError(str(last_error) if last_error else "GoodNovel API request failed")
 
+    def _get_text(self, url: str, referer: str | None = None) -> str:
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": referer or self.BASE_URL + "/",
+        }
+        last_error: Exception | None = None
+
+        for attempt in range(self.retries + 1):
+            try:
+                resp = self._session().get(url, headers=headers, timeout=self.timeout)
+                resp.raise_for_status()
+                return str(resp.text)
+            except Exception as exc:
+                last_error = exc
+                if attempt < self.retries:
+                    time.sleep(0.35 * (attempt + 1))
+
+        raise GoodNovelApiError(str(last_error) if last_error else "GoodNovel page request failed")
+
     # -- URL parsing -------------------------------------------------------
 
     def book_id_from_url(self, url_or_id: str) -> str:
@@ -318,6 +349,22 @@ class GoodNovelApiClient:
             preview_content=preview,
         )
 
+    def search_stories(self, title: str, limit: int = 5) -> list[GoodNovelSearchResult]:
+        """Search GoodNovel's SEO search page and return likely story matches.
+
+        The public JSON API is great once a ``bookId`` is known, but title search is
+        exposed by the regular web search page. It is server-rendered enough for us
+        to parse stable ``/book/<slug>_<bookId>`` links without a browser.
+        """
+        query = (title or "").strip()
+        if not query:
+            return []
+
+        url = f"{self.BASE_URL}/search/{urllib.parse.quote(query)}"
+        html = self._get_text(url, referer=self.BASE_URL + "/search")
+        results = self._parse_search_results(html, query)
+        return results[: max(1, limit)]
+
     # -- Composite resolvers ----------------------------------------------
 
     def resolve_story(self, url_or_id: str) -> GoodNovelStory:
@@ -345,6 +392,24 @@ class GoodNovelApiClient:
         total = self._to_int(detail.get("chapterCount"), None)
         title = str(detail.get("bookName") or "") or None
         return title, self.metadata_from_detail(detail, total_chapters=total)
+
+    @classmethod
+    def best_search_match(
+        cls,
+        query: str,
+        results: list[GoodNovelSearchResult],
+        min_score: float = 0.96,
+    ) -> GoodNovelSearchResult | None:
+        if not results:
+            return None
+        best = max(results, key=lambda item: item.score)
+        if best.score >= min_score:
+            return best
+        normalized_query = cls._normalize_title(query)
+        for item in results:
+            if cls._normalize_title(item.title) == normalized_query:
+                return item
+        return None
 
     def metadata_from_detail(self, detail: dict[str, Any], total_chapters: Optional[int]) -> dict[str, Any]:
         author = detail.get("pseudonym") or detail.get("authorName")
@@ -395,6 +460,115 @@ class GoodNovelApiClient:
                     records.extend(c for c in value if isinstance(c, dict))
                     break
         return records
+
+    @classmethod
+    def _parse_search_results(cls, html: str, query: str) -> list[GoodNovelSearchResult]:
+        try:
+            from bs4 import BeautifulSoup
+        except Exception as exc:  # pragma: no cover - dependency is declared
+            raise GoodNovelApiError("BeautifulSoup is required for GoodNovel search parsing") from exc
+
+        soup = BeautifulSoup(html, "html.parser")
+        seen: set[str] = set()
+        results: list[GoodNovelSearchResult] = []
+
+        for card in soup.select("[class*='search-book-'], .history-box"):
+            anchor = card.select_one("a[href^='/book/'], a[href*='goodnovel.com/book/']")
+            if not anchor:
+                continue
+            href = str(anchor.get("href") or "").strip()
+            absolute = urllib.parse.urljoin(cls.BASE_URL, href)
+            if absolute in seen:
+                continue
+
+            title_node = card.select_one(".book-title, h2, img[alt]")
+            title = ""
+            if title_node:
+                if title_node.name == "img":
+                    title = str(title_node.get("alt") or "")
+                else:
+                    title = title_node.get_text(" ", strip=True)
+            if not title:
+                image = card.select_one("img[alt]")
+                title = str(image.get("alt") or "") if image else ""
+            title = cls._clean_search_text(title)
+            if not title:
+                continue
+
+            author_node = card.select_one(".author")
+            author = cls._clean_search_text(author_node.get_text(" ", strip=True)) if author_node else ""
+            desc_node = card.select_one(".book-desc")
+            description = cls._clean_search_text(desc_node.get_text(" ", strip=True)) if desc_node else ""
+            book_match = _BOOK_ID_RE.search(absolute)
+            book_id = book_match.group(1) if book_match else ""
+
+            seen.add(absolute)
+            results.append(GoodNovelSearchResult(
+                title=title,
+                author=author,
+                url=absolute,
+                book_id=book_id,
+                score=cls._title_score(query, title),
+                description=description,
+            ))
+
+        if results:
+            return sorted(results, key=lambda item: item.score, reverse=True)
+
+        # Fallback: schema snippets often contain "url":".../book/..." entries
+        # even if GoodNovel changes visible class names.
+        for match in re.finditer(r"https?://www\.goodnovel\.com/book/[^\"'<>\s]+", html):
+            absolute = unescape(match.group(0))
+            if absolute in seen:
+                continue
+            seen.add(absolute)
+            slug = cls._slug_title_from_url(absolute)
+            book_match = _BOOK_ID_RE.search(absolute)
+            book_id = book_match.group(1) if book_match else ""
+            results.append(GoodNovelSearchResult(
+                title=slug,
+                author="",
+                url=absolute,
+                book_id=book_id,
+                score=cls._title_score(query, slug),
+            ))
+        return sorted(results, key=lambda item: item.score, reverse=True)
+
+    @staticmethod
+    def _slug_title_from_url(url: str) -> str:
+        match = _SLUG_RE.search(url)
+        if not match:
+            return ""
+        return re.sub(r"[-_]+", " ", match.group(1)).strip()
+
+    @classmethod
+    def _title_score(cls, query: str, title: str) -> float:
+        left = cls._normalize_title(query)
+        right = cls._normalize_title(title)
+        if not left or not right:
+            return 0.0
+        if left == right:
+            return 1.0
+        return SequenceMatcher(None, left, right).ratio()
+
+    @staticmethod
+    def _normalize_title(value: str) -> str:
+        text = unescape(value or "").lower()
+        text = text.replace("&", " and ")
+        text = re.sub(r"['’`]", "", text)
+        text = re.sub(r"[^a-z0-9]+", " ", text)
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def _squash_spaces(value: str) -> str:
+        return re.sub(r"\s+", " ", value or "").strip()
+
+    @classmethod
+    def _clean_search_text(cls, value: str) -> str:
+        text = unescape(cls._squash_spaces(value))
+        if "<" in text and ">" in text:
+            text = re.sub(r"<[^>]+>", " ", text)
+        return cls._squash_spaces(text)
 
     @staticmethod
     def _slug_from_detail(detail: dict[str, Any]) -> str:

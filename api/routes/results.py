@@ -222,6 +222,29 @@ async def download_all_combined(request: Request) -> FileResponse:
     return _zip_file_response(files, "all_combined.zip")
 
 
+@router.get("/goodnovel-batch/{batch_id}/download")
+async def download_goodnovel_batch(batch_id: str, request: Request) -> FileResponse:
+    """Zip the grouped combined files for a completed GoodNovel batch."""
+    from api.services.goodnovel_batch_service import get_goodnovel_batch_service
+
+    service = get_goodnovel_batch_service()
+    try:
+        service.require_owner(
+            batch_id=batch_id,
+            user_id=getattr(request.state, "create_story_user_id", None),
+            role=getattr(request.state, "create_story_role", None),
+        )
+        _state, files = service.get_download_files(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return _zip_file_response(files, f"goodnovel_batch_{batch_id}.zip")
+
+
 @router.get("/{crawl_id}/download-all")
 async def download_all_files(crawl_id: str, request: Request) -> FileResponse:
     """Zip all output files from a crawl session and stream as a single download."""
