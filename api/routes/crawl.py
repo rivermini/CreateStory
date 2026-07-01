@@ -124,25 +124,22 @@ async def start_crawl(request: CrawlRequest, http_request: Request) -> CrawlStar
         if paywall_blocked:
             return paywall_blocked
 
-    from api.services.crawler_service import CrawlCapacityError, get_crawl_service
+    from api.services.crawler_service import get_crawl_service
 
     service = get_crawl_service()
-    try:
-        crawl_id = service.start_crawl(
-            spider_name=request.spider_name,
-            site_name=request.site_name,
-            novel=request.novel,
-            limit=request.limit,
-            output_format=request.output_format,
-            chapter_range=request.chapter_range,
-            novel_name=request.novel_name,
-            completed=request.completed,
-            combine_chapters=request.combine_chapters,
-            source_url=request.source_url,
-            created_by_user_id=current_owner(http_request),
-        )
-    except CrawlCapacityError as exc:
-        raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
+    crawl_id = service.start_crawl(
+        spider_name=request.spider_name,
+        site_name=request.site_name,
+        novel=request.novel,
+        limit=request.limit,
+        output_format=request.output_format,
+        chapter_range=request.chapter_range,
+        novel_name=request.novel_name,
+        completed=request.completed,
+        combine_chapters=request.combine_chapters,
+        source_url=request.source_url,
+        created_by_user_id=current_owner(http_request),
+    )
     logger.info("Crawl started: %s", crawl_id)
     return CrawlStartResponse(crawl_id=crawl_id, status="running")
 
@@ -352,7 +349,7 @@ async def start_batch_crawl(requests: list[CrawlRequest], http_request: Request)
     Each request in the list is started in parallel. Returns a list of crawl_id+status
     for every submitted entry (including entries that are paywalled — returned with status='blocked').
     """
-    from api.services.crawler_service import CrawlCapacityError, get_crawl_service
+    from api.services.crawler_service import get_crawl_service
 
     if not requests or len(requests) > MAX_CRAWL_BATCH:
         raise HTTPException(
@@ -370,22 +367,19 @@ async def start_batch_crawl(requests: list[CrawlRequest], http_request: Request)
                 results.append(blocked)
                 continue
 
-        try:
-            crawl_id = service.start_crawl(
-                spider_name=request.spider_name,
-                site_name=request.site_name,
-                novel=request.novel,
-                limit=request.limit,
-                output_format=request.output_format,
-                chapter_range=request.chapter_range,
-                novel_name=request.novel_name,
-                completed=request.completed,
-                combine_chapters=request.combine_chapters,
-                source_url=request.source_url,
-                created_by_user_id=current_owner(http_request),
-            )
-        except CrawlCapacityError as exc:
-            raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": "30"}) from exc
+        crawl_id = service.start_crawl(
+            spider_name=request.spider_name,
+            site_name=request.site_name,
+            novel=request.novel,
+            limit=request.limit,
+            output_format=request.output_format,
+            chapter_range=request.chapter_range,
+            novel_name=request.novel_name,
+            completed=request.completed,
+            combine_chapters=request.combine_chapters,
+            source_url=request.source_url,
+            created_by_user_id=current_owner(http_request),
+        )
         logger.info("Batch crawl started: %s", crawl_id)
         results.append(CrawlStartResponse(crawl_id=crawl_id, status="running"))
 

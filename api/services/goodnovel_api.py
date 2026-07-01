@@ -360,9 +360,27 @@ class GoodNovelApiClient:
         if not query:
             return []
 
-        url = f"{self.BASE_URL}/search/{urllib.parse.quote(query)}"
-        html = self._get_text(url, referer=self.BASE_URL + "/search")
-        results = self._parse_search_results(html, query)
+        merged: dict[str, GoodNovelSearchResult] = {}
+        for search_query in self._search_query_variants(query):
+            url = f"{self.BASE_URL}/results?q={urllib.parse.quote(search_query)}"
+            html = self._get_text(url, referer=self.BASE_URL + "/results")
+            for result in self._parse_search_results(html, query):
+                key = result.book_id or result.url
+                existing = merged.get(key)
+                if existing is None or result.score > existing.score:
+                    merged[key] = result
+
+            results = sorted(merged.values(), key=lambda item: item.score, reverse=True)
+            if self.best_search_match(query, results, min_score=0.96):
+                return results[: max(1, limit)]
+
+        if not merged:
+            url = f"{self.BASE_URL}/search/{urllib.parse.quote(query)}"
+            html = self._get_text(url, referer=self.BASE_URL + "/search")
+            for result in self._parse_search_results(html, query):
+                merged[result.book_id or result.url] = result
+
+        results = sorted(merged.values(), key=lambda item: item.score, reverse=True)
         return results[: max(1, limit)]
 
     # -- Composite resolvers ----------------------------------------------
@@ -558,6 +576,25 @@ class GoodNovelApiClient:
         text = re.sub(r"['’`]", "", text)
         text = re.sub(r"[^a-z0-9]+", " ", text)
         return re.sub(r"\s+", " ", text).strip()
+
+    @classmethod
+    def _search_query_variants(cls, query: str) -> list[str]:
+        variants: list[str] = []
+        seen: set[str] = set()
+
+        def add(value: str) -> None:
+            cleaned = cls._squash_spaces(value)
+            key = cleaned.lower()
+            if cleaned and key not in seen:
+                variants.append(cleaned)
+                seen.add(key)
+
+        normalized_apostrophes = re.sub(r"[\u2018\u2019\u00b4`]", "'", query or "")
+        add(normalized_apostrophes)
+        add(re.sub(r"\b([A-Za-z0-9]+)'s\b", r"\1", normalized_apostrophes, flags=re.IGNORECASE))
+        add(re.sub(r"'", "", normalized_apostrophes))
+        add(re.sub(r"[^A-Za-z0-9&]+", " ", normalized_apostrophes.replace("&", " and ")))
+        return variants
 
     @staticmethod
     def _squash_spaces(value: str) -> str:

@@ -22,12 +22,6 @@ from api.repositories.crawl_repository import CrawlOutputRepository, CrawlSessio
 from utils.sanitize import sanitize_filename
 
 logger = logging.getLogger(__name__)
-MAX_ACTIVE_CRAWLS_PER_USER = int(os.getenv("MAX_ACTIVE_CRAWLS_PER_USER", "2"))
-MAX_ACTIVE_CRAWLS_GLOBAL = int(os.getenv("MAX_ACTIVE_CRAWLS_GLOBAL", "4"))
-
-
-class CrawlCapacityError(RuntimeError):
-    """Raised when crawl admission limits have been reached."""
 
 
 def _get_wdm_cached_driver() -> str | None:
@@ -347,14 +341,6 @@ class CrawlService:
         progress.add_log(f"[CMD] {' '.join(scrapy_cmd)}", "info")
 
         with self._lock:
-            running = [session for session in self._sessions.values() if session.status == "running"]
-            owner_running = [
-                session for session in running if session.created_by_user_id == created_by_user_id
-            ]
-            if len(running) >= MAX_ACTIVE_CRAWLS_GLOBAL:
-                raise CrawlCapacityError("Global crawl capacity reached.")
-            if created_by_user_id and len(owner_running) >= MAX_ACTIVE_CRAWLS_PER_USER:
-                raise CrawlCapacityError("Per-user crawl capacity reached.")
             self._sessions[crawl_id] = progress
             self._cancel_flags[crawl_id] = False
 
