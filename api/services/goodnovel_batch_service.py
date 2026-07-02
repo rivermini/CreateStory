@@ -204,7 +204,7 @@ class GoodNovelBatchService:
             states = [
                 state
                 for state in self._batches.values()
-                if role == "admin" or (state.created_by_user_id and state.created_by_user_id == user_id)
+                if role in {"admin", "operator"} or (state.created_by_user_id and state.created_by_user_id == user_id)
             ]
             summaries = [self._summary_locked(state) for state in states]
         return sorted(summaries, key=lambda item: item.get("created_at") or "", reverse=True)
@@ -236,7 +236,7 @@ class GoodNovelBatchService:
         with self._lock:
             state = self._get_state_locked(batch_id)
             owner = state.created_by_user_id
-        if role == "admin":
+        if role in {"admin", "operator"}:
             return
         if owner and user_id and owner == user_id:
             return

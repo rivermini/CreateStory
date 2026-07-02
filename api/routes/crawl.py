@@ -263,6 +263,7 @@ async def start_goodnovel_batch_scan(
     http_request: Request,
 ) -> dict:
     """Start a GoodNovel title scan job for semicolon/newline separated story titles."""
+    require_operator_identity(http_request)
     from api.services.goodnovel_batch_service import get_goodnovel_batch_service
 
     service = get_goodnovel_batch_service()
@@ -324,6 +325,7 @@ async def start_goodnovel_batch_crawl(
     http_request: Request,
 ) -> dict:
     """Start crawling free GoodNovel chapters for found rows in a scanned batch."""
+    require_operator_identity(http_request)
     service = _require_goodnovel_batch_owner(batch_id, http_request)
     try:
         state = service.start_crawl(
