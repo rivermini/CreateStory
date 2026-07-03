@@ -104,7 +104,7 @@ def _fetch_novelworm_chapters(story_url: str, timeout: int = 30) -> tuple[list[C
         story = client.resolve_story(story_url)
     except Exception as exc:
         logger.warning("[novelworm] API chapter list failed for story page: %s", exc)
-        return [], f"NovelWorm API request failed: {exc}", None, None
+        return [], "NovelWorm API request failed.", None, None
 
     entries = [
         ChapterEntry(chapter_number=ref.chapter_number, title=ref.title, url=ref.url)
@@ -304,7 +304,8 @@ def _fetch_wattpad_chapters(story_url: str, timeout: int = 30) -> tuple[list[Cha
         if resp.status_code != 200:
             return [], f"Wattpad API returned HTTP {resp.status_code}", None
     except Exception as exc:
-        return [], f"Wattpad API request failed: {exc}", None
+        logger.warning("[wattpad] chapter list fetch failed: %s", exc)
+        return [], "Wattpad API request failed.", None
 
     try:
         data = resp.json()
@@ -376,7 +377,8 @@ def _fetch_inkitt_chapters(story_url: str, timeout: int = 30) -> tuple[list[Chap
 
         resp = session.get(story_url, timeout=timeout)
     except Exception as exc:
-        return [], f"Inkitt request failed: {exc}", None, None
+        logger.warning("[inkitt] chapter list fetch failed: %s", exc)
+        return [], "Inkitt request failed.", None, None
 
     if resp.status_code != 200:
         if resp.status_code == 404:
@@ -462,7 +464,7 @@ def _fetch_jobnib_chapters(story_url: str, timeout: int = 60) -> tuple[list[Chap
         links = spider._collect_chapter_links(soup, story_url)
     except Exception as exc:
         logger.warning("[jobnib] Chapter list fetch failed: %s", exc)
-        return [], f"Jobnib chapter list failed: {exc}", None, None
+        return [], "Jobnib chapter list failed.", None, None
 
     entries = [
         ChapterEntry(
@@ -532,7 +534,7 @@ def _fetch_scribblehub_chapters(story_url: str, timeout: int = 75) -> tuple[list
             )
     except Exception as exc:
         logger.warning("[scribblehub] Chapter list fetch failed: %s", exc)
-        return [], f"ScribbleHub chapter list failed: {exc}", None, None
+        return [], "ScribbleHub chapter list failed.", None, None
     finally:
         if spider is not None and getattr(spider, "_browser", None) is not None:
             try:
@@ -569,7 +571,7 @@ def _fetch_novellunar_chapters(story_url: str, timeout: int = 30) -> tuple[list[
         story_title = spider._extract_story_title(soup)
     except Exception as exc:
         logger.warning("[novellunar] Chapter list fetch failed: %s", exc)
-        return [], f"Novellunar chapter list failed: {exc}", None, None
+        return [], "Novellunar chapter list failed.", None, None
 
     def chapter_exists(number: int) -> bool:
         try:
@@ -612,7 +614,7 @@ def _fetch_goodnovel_chapters(story_url: str, timeout: int = 30) -> tuple[list[C
         story = client.resolve_story(story_url)
     except Exception as exc:
         logger.warning("[goodnovel] API chapter list failed for story page: %s", exc)
-        return [], f"GoodNovel API request failed: {exc}", None, None, {}
+        return [], "GoodNovel API request failed.", None, None, {}
 
     entries = [
         ChapterEntry(
