@@ -85,7 +85,7 @@ async def get_sync_status(_user=Depends(require_active_user)) -> JSONResponse:
 
 
 @router.get("/config")
-async def get_sync_config(
+def get_sync_config(
     db: Annotated[Session, Depends(get_db)],
     _user=Depends(require_active_user),
 ) -> JSONResponse:
@@ -158,7 +158,7 @@ async def update_sync_config(
 
 
 @router.get("/config/url", response_model=DriveSyncUrlResponse)
-async def get_main_be_url(
+def get_main_be_url(
     db: Annotated[Session, Depends(get_db)],
     _user=Depends(require_active_user),
 ) -> JSONResponse:

@@ -61,7 +61,7 @@ async def upload_credentials(
 
 
 @router.get("/credentials/exists")
-async def check_credentials_exists(
+def check_credentials_exists(
     filename: str,
     db: Annotated[Session, Depends(get_db)],
     _user=Depends(require_active_user),

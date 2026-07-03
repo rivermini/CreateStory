@@ -73,7 +73,7 @@ def _save_settings(db: Session, data: dict) -> None:
 
 
 @router.get("", response_model=SettingsResponse)
-async def get_settings(
+def get_settings(
     db: Annotated[Session, Depends(get_db)],
     _user=Depends(require_active_user),
 ) -> SettingsResponse:
