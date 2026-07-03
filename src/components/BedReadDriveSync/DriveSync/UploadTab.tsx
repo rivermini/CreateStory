@@ -4,7 +4,7 @@ import {
   type DriveFolderEntry,
 } from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
-import { StatusBadge, EmptyState } from './SyncTabShared';
+import { StatusBadge, EmptyState, LoadingAppIcon } from './SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';
 
 interface UploadTabProps {
@@ -32,7 +32,7 @@ export function UploadTab({
 }: UploadTabProps) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
-  const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uploaded'>('all');
+  const [filterSection, setFilterSection] = useState<'all' | 'ready' | 'invalid' | 'uploaded' | 'notReady'>('all');
 
   const query = search.toLowerCase().trim();
 
@@ -57,6 +57,15 @@ export function UploadTab({
         folder.display_name.toLowerCase().includes(query) ||
         folder.name.toLowerCase().includes(query),
     ) ?? [];
+  const filteredNotReady =
+    (data?.not_ready ?? []).filter(
+      (folder) =>
+        !query ||
+        folder.display_name.toLowerCase().includes(query) ||
+        folder.name.toLowerCase().includes(query),
+    ) ?? [];
+  const filteredTotal = filteredUploadable.length + filteredInvalid.length + filteredAlready.length + filteredNotReady.length;
+  const hasSearch = search.trim().length > 0;
 
   const validCount = filteredUploadable.length;
   const allDone =
@@ -68,6 +77,7 @@ export function UploadTab({
   const invalidLabel = `Invalid (${filteredInvalid.length})`;
   const readyLabel = `Ready to Upload (${validCount})`;
   const alreadyLabel = `Already on Server (${filteredAlready.length})`;
+  const notReadyLabel = `Not DONE_ (${filteredNotReady.length})`;
 
   const panelBackground = isDark ? '#202020' : '#ffffff';
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
@@ -127,7 +137,7 @@ export function UploadTab({
           >
             {loading ? (
               <>
-                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                <LoadingAppIcon isDark={isDark} color="currentColor" />
                 Scanning...
               </>
             ) : (
@@ -152,7 +162,7 @@ export function UploadTab({
             >
               {isUploadingAny ? (
                 <>
-                  <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                  <LoadingAppIcon isDark={isDark} color="currentColor" />
                   Uploading ({uploadingCount})
                 </>
               ) : allDone ? (
@@ -195,7 +205,7 @@ export function UploadTab({
         >
           <FilterChip
             label="All"
-            count={filteredUploadable.length + filteredInvalid.length + filteredAlready.length}
+            count={filteredTotal}
             active={filterSection === 'all'}
             onClick={() => setFilterSection('all')}
             isDark={isDark}
@@ -216,6 +226,15 @@ export function UploadTab({
             active={filterSection === 'invalid'}
             onClick={() => setFilterSection('invalid')}
             variant="red"
+            isDark={isDark}
+            panelBorder={panelBorder}
+          />
+          <FilterChip
+            label="Not DONE_"
+            count={filteredNotReady.length}
+            active={filterSection === 'notReady'}
+            onClick={() => setFilterSection('notReady')}
+            variant="amber"
             isDark={isDark}
             panelBorder={panelBorder}
           />
@@ -251,6 +270,12 @@ export function UploadTab({
             <div className="flex items-center gap-1.5">
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" style={{ color: '#f87171' }} />
               {filteredInvalid.length} invalid
+            </div>
+          )}
+          {filteredNotReady.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Icon icon={appIcons.info} className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
+              {filteredNotReady.length} not DONE_
             </div>
           )}
           {successCount > 0 && (
@@ -304,12 +329,11 @@ export function UploadTab({
 
         {loading && (
           <div className="flex h-full w-full flex-col items-center justify-center py-16">
-            <div
-              className="mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-              style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}
-            >
-              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: '#d97706' }} />
-            </div>
+            <LoadingAppIcon
+              isDark={isDark}
+              color="#d97706"
+              size="lg"
+            />
             <p className="text-sm" style={{ color: secondaryText }}>
               Scanning your Drive folders...
             </p>
@@ -367,6 +391,23 @@ export function UploadTab({
               </div>
             )}
 
+            {filteredNotReady.length > 0 && (
+              <div className="mb-4">
+                <SectionHeader
+                  label={notReadyLabel}
+                  color="#f59e0b"
+                  icon={<Icon icon={appIcons.info} className="h-4 w-4" style={{ color: '#f59e0b' }} />}
+                  panelBorder={panelBorder}
+                  secondaryText={secondaryText}
+                />
+                <div className="space-y-2">
+                  {filteredNotReady.map((folder) => (
+                    <NotReadyUploadCard key={folder.id} folder={folder} isDark={isDark} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {filteredAlready.length > 0 && (
               <div>
                 <SectionHeader
@@ -384,6 +425,24 @@ export function UploadTab({
               </div>
             )}
           </>
+        )}
+
+        {data && filterSection === 'all' && filteredTotal === 0 && (
+          <EmptyState
+            isDark={isDark}
+            message={
+              hasSearch
+                ? `No DONE_ upload folder matches "${search.trim()}". Check Upload only scans DONE_ folders; rename ING_ or INCOMPLETE_ folders to DONE_ when they are ready.`
+                : 'No DONE_ upload folders found.'
+            }
+            icon={
+              <Icon
+                icon={appIcons.search}
+                className="h-8 w-8"
+                style={{ color: tertiaryText }}
+              />
+            }
+          />
         )}
 
         {data && filterSection === 'ready' && validCount > 0 && (
@@ -416,6 +475,14 @@ export function UploadTab({
           </div>
         )}
 
+        {data && filterSection === 'notReady' && filteredNotReady.length > 0 && (
+          <div className="space-y-2">
+            {filteredNotReady.map((folder) => (
+              <NotReadyUploadCard key={folder.id} folder={folder} isDark={isDark} />
+            ))}
+          </div>
+        )}
+
         {data && filterSection === 'uploaded' && filteredAlready.length > 0 && (
           <div className="space-y-2">
             {filteredAlready.map((folder) => (
@@ -427,6 +494,7 @@ export function UploadTab({
         {data &&
           ((filterSection === 'ready' && validCount === 0) ||
             (filterSection === 'invalid' && filteredInvalid.length === 0) ||
+            (filterSection === 'notReady' && filteredNotReady.length === 0) ||
             (filterSection === 'uploaded' && filteredAlready.length === 0)) && (
             <div className="py-8 text-center" style={{ color: secondaryText }}>
               <Icon icon={appIcons.checkCircle} className="mx-auto mb-2 h-8 w-8" style={{ color: tertiaryText }} />
@@ -570,7 +638,7 @@ function UploadCard({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {isUploading && <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" style={{ color: '#d97706' }} />}
+        {isUploading && <LoadingAppIcon isDark={isDark} color="#d97706" />}
         {isSuccess && (
           <div className="flex items-center gap-1 text-xs" style={{ color: isDark ? '#34d399' : '#059669' }}>
             <Icon icon={appIcons.check} className="h-4 w-4" />
@@ -660,6 +728,42 @@ function formatUploadValidationMessage(message: string): string {
   }
 
   return message;
+}
+
+function NotReadyUploadCard({
+  folder,
+  isDark,
+}: {
+  readonly folder: DriveFolderEntry;
+  readonly isDark: boolean;
+}) {
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const prefix = folder.prefix || 'UNKNOWN';
+
+  return (
+    <div
+      className="flex items-start gap-3 rounded-xl border px-4 py-3"
+      style={{ background: mutedSurface, borderColor: panelBorder }}
+    >
+      <Icon icon={appIcons.info} className="mt-1 h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
+      <div className="min-w-0 flex-1">
+        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
+          {folder.display_name}
+        </p>
+        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
+          {folder.name}
+        </p>
+        <p className="mt-1 text-xs leading-5" style={{ color: '#b45309' }}>
+          Not ready for upload. Check Upload only uploads <span className="font-mono">DONE_</span> folders; rename this
+          <span className="font-mono"> {prefix}_</span> folder to <span className="font-mono">DONE_</span> when ready.
+        </p>
+      </div>
+      <StatusBadge prefix={prefix} isDark={isDark} />
+    </div>
+  );
 }
 
 function AlreadyCard({

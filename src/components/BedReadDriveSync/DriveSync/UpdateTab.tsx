@@ -9,7 +9,7 @@ import {
   type DriveFileContentResponse,
 } from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
-import { ValidationErrorBadge, EmptyState } from './SyncTabShared';
+import { ValidationErrorBadge, EmptyState, LoadingAppIcon } from './SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';
 
 interface UpdateTabProps {
@@ -273,7 +273,7 @@ export function UpdateTab({
           >
             {loading ? (
               <>
-                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                <LoadingAppIcon isDark={isDark} color="currentColor" />
                 Scanning...
               </>
             ) : (
@@ -310,7 +310,7 @@ export function UpdateTab({
             >
               {isUpdatingAny ? (
                 <>
-                  <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                  <LoadingAppIcon isDark={isDark} color="currentColor" />
                   Updating ({updatingCount})
                 </>
               ) : (
@@ -463,12 +463,11 @@ export function UpdateTab({
 
         {loading && (
           <div className="flex h-full w-full flex-col items-center justify-center py-16">
-            <div
-              className="mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-              style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}
-            >
-              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: '#d97706' }} />
-            </div>
+            <LoadingAppIcon
+              isDark={isDark}
+              color="#d97706"
+              size="lg"
+            />
             <p className="text-sm" style={{ color: secondaryText }}>
               Scanning Drive for updates...
             </p>
@@ -900,7 +899,7 @@ function UpdatableEntryCard({
             />
           </div>
 
-          {isUpdating && <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin text-indigo-400" />}
+          {isUpdating && <LoadingAppIcon isDark={isDark} color="#818cf8" />}
           {isSuccess && (
             <div className="flex items-center gap-1 text-xs" style={{ color: isDark ? '#34d399' : '#059669' }}>
               <Icon icon={appIcons.check} className="h-4 w-4" />

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { type CheckUpdatedResponse, type CoverUpdateEntry } from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
-import { EmptyState } from '../DriveSync/SyncTabShared';
+import { EmptyState, LoadingAppIcon } from '../DriveSync/SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';
 
 function formatLastUpdated(value: string) {
@@ -134,7 +134,11 @@ export function CheckUpdatedBannerTab({
               opacity: bulkUploading || loading || availableUpdateEntries.length === 0 ? 0.65 : 1,
             }}
           >
-            <Icon icon={bulkUploading ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${bulkUploading ? 'animate-spin' : ''}`} />
+            {bulkUploading ? (
+              <LoadingAppIcon isDark={isDark} color="currentColor" />
+            ) : (
+              <Icon icon={appIcons.uploadFile} className="h-4 w-4" />
+            )}
             Update All ({availableUpdateEntries.length})
           </button>
           <button
@@ -150,7 +154,7 @@ export function CheckUpdatedBannerTab({
           >
             {loading ? (
               <>
-                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                <LoadingAppIcon isDark={isDark} color="currentColor" />
                 Loading...
               </>
             ) : (
@@ -213,9 +217,11 @@ export function CheckUpdatedBannerTab({
 
         {loading && (
           <div className="flex h-full w-full flex-col items-center justify-center py-16">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}>
-              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#fcd34d' : '#b45309' }} />
-            </div>
+            <LoadingAppIcon
+              isDark={isDark}
+              color={isDark ? '#fcd34d' : '#b45309'}
+              size="lg"
+            />
             <p className="text-sm" style={{ color: secondaryText }}>
               Loading banner update history...
             </p>
@@ -340,7 +346,7 @@ function HistoryEntryCard({
             </button>
           ) : isUploading ? (
             <button className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium opacity-65" style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}>
-              <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+              <LoadingAppIcon isDark={isDark} color="currentColor" />
               Uploading...
             </button>
           ) : isUpdated ? (

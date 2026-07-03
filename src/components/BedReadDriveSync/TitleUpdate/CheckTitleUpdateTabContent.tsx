@@ -5,7 +5,7 @@ import {
   type TitleFolderStatus,
 } from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
-import { EmptyState } from '../DriveSync/SyncTabShared';
+import { EmptyState, LoadingAppIcon } from '../DriveSync/SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';
 
 // ---------------------------------------------------------------------------
@@ -143,7 +143,11 @@ export function CheckTitleUpdateTabContent({
                 : undefined
             }
           >
-            <Icon icon={batchUpdating ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${batchUpdating ? 'animate-spin' : ''}`} />
+            {batchUpdating ? (
+              <LoadingAppIcon isDark={isDark} color="currentColor" />
+            ) : (
+              <Icon icon={appIcons.uploadFile} className="h-4 w-4" />
+            )}
             Update All ({data?.can_update.length ?? 0} folders, 2 at a time)
           </button>
           <button
@@ -159,7 +163,7 @@ export function CheckTitleUpdateTabContent({
           >
             {loading ? (
               <>
-                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                <LoadingAppIcon isDark={isDark} color="currentColor" />
                 Scanning...
               </>
             ) : (
@@ -244,9 +248,11 @@ export function CheckTitleUpdateTabContent({
 
         {loading && (
           <div className="flex h-full w-full flex-col items-center justify-center py-16">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}>
-              <Icon icon={appIcons.spinner} className="h-8 w-8 animate-spin" style={{ color: isDark ? '#ff7c33' : '#ff5b00' }} />
-            </div>
+            <LoadingAppIcon
+              isDark={isDark}
+              color={isDark ? '#ff7c33' : '#ff5b00'}
+              size="lg"
+            />
             <p className="text-sm" style={{ color: secondaryText }}>
               Scanning DONE_/EXTENDED_ folders and comparing titles...
             </p>
@@ -594,7 +600,7 @@ function FolderCard({
               className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium opacity-65"
               style={{ background: mutedSurface, borderColor, color: secondaryText }}
             >
-              <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+              <LoadingAppIcon isDark={isDark} color="currentColor" />
               Updating…
             </button>
           ) : entry.folder_status === 'all_match' ? (
@@ -656,7 +662,7 @@ function FolderCard({
         <div className="mt-3">
           {renderLoading ? (
             <div className="flex items-center gap-2 py-4">
-              <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" style={{ color: '#10b981' }} />
+              <LoadingAppIcon isDark={isDark} color="#10b981" />
               <span className="text-sm" style={{ color: mutedText }}>
                 Loading chapter details…
               </span>

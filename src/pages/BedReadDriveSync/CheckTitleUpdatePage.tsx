@@ -10,6 +10,7 @@ import {
 } from '../../api/BedReadDriveSync';
 import { CheckTitleUpdateTabs } from '../../components/BedReadDriveSync/TitleUpdate/CheckTitleUpdateTabs';
 import { Icon, appIcons } from '../../components/Shared/Icon';
+import { LoadingAppIcon } from '../../components/BedReadDriveSync/DriveSync/SyncTabShared';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 import { showToast } from '../../components/Shared/Toast';
 import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
@@ -248,7 +249,7 @@ export function CheckTitleUpdatePage({ themeMode }: CheckTitleUpdatePageProps) {
               className="flex items-center justify-center gap-3 rounded-2xl border p-8"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
-              <Icon icon={appIcons.spinner} className="h-6 w-6 animate-spin" style={{ color: secondaryText }} />
+              <LoadingAppIcon isDark={isDark} color={secondaryText} />
               <span className="text-sm" style={{ color: secondaryText }}>
                 Loading Drive Sync...
               </span>

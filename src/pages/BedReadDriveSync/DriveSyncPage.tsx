@@ -16,6 +16,7 @@ import {
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 import { StorySyncTabs, type StorySyncTab } from '../../components/BedReadDriveSync/DriveSync/StorySyncTabs';
+import { LoadingAppIcon } from '../../components/BedReadDriveSync/DriveSync/SyncTabShared';
 import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
 import type { ThemeMode } from '../../types/theme';
 
@@ -454,7 +455,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               className="flex items-center justify-center gap-3 rounded-2xl border p-8"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
-              <Icon icon={appIcons.spinner} className="h-6 w-6 animate-spin" style={{ color: secondaryText }} />
+              <LoadingAppIcon isDark={isDark} color={secondaryText} />
               <span className="text-sm" style={{ color: secondaryText }}>
                 Loading Drive Sync...
               </span>

@@ -11,6 +11,7 @@ import {
   type ContentUpdateStoryRef,
 } from '../../api/BedReadDriveSync';
 import { Icon, appIcons } from '../../components/Shared/Icon';
+import { LoadingAppIcon } from '../../components/BedReadDriveSync/DriveSync/SyncTabShared';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 import { showToast } from '../../components/Shared/Toast';
 import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
@@ -224,7 +225,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
               className="flex items-center justify-center gap-3 rounded-2xl border p-8"
               style={{ background: panelBackground, borderColor: panelBorder }}
             >
-              <Icon icon={appIcons.spinner} className="h-6 w-6 animate-spin" style={{ color: secondaryText }} />
+              <LoadingAppIcon isDark={isDark} color={secondaryText} />
               <span className="text-sm" style={{ color: secondaryText }}>
                 Loading Drive Sync...
               </span>
@@ -296,7 +297,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                     >
                       {checking ? (
                         <>
-                          <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                          <LoadingAppIcon isDark={isDark} color="currentColor" />
                           Checking...
                         </>
                       ) : (
@@ -321,16 +322,11 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
                   className="flex flex-col items-center justify-center rounded-2xl border p-8"
                   style={{ background: panelBackground, borderColor: panelBorder }}
                 >
-                  <div
-                    className="mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-                    style={{ background: mutedSurface, border: `1px solid ${panelBorder}` }}
-                  >
-                    <Icon
-                      icon={appIcons.spinner}
-                      className="h-8 w-8 animate-spin"
-                      style={{ color: isDark ? '#ff7c33' : '#ff5b00' }}
-                    />
-                  </div>
+                  <LoadingAppIcon
+                    isDark={isDark}
+                    color={isDark ? '#ff7c33' : '#ff5b00'}
+                    size="lg"
+                  />
                   <p className="text-sm" style={{ color: secondaryText }}>
                     {isMultiFolder ? `Checking ${parsedFolders.length} folders...` : 'Checking folder and loading chapter files...'}
                   </p>
@@ -560,7 +556,7 @@ function MultiFolderPanel(props: {
           >
             {isBatchUpdating ? (
               <>
-                <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                <LoadingAppIcon isDark={isDark} color="currentColor" />
                 Updating...
               </>
             ) : (
@@ -662,7 +658,7 @@ function MultiFolderPanel(props: {
                   </div>
                   <div className="flex items-center gap-2 self-start lg:self-center">
                     {isUpdatingFolder && folder.found && (
-                      <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" style={{ color: secondaryText }} />
+                      <LoadingAppIcon isDark={isDark} color={secondaryText} />
                     )}
                   </div>
                 </div>
@@ -789,7 +785,7 @@ function ChapterRow(props: Readonly<{
             >
               {isUpdating ? (
                 <>
-                  <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
+                  <LoadingAppIcon isDark={isDark} color="currentColor" />
                   Updating...
                 </>
               ) : (
