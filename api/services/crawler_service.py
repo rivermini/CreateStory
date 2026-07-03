@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import queue
 import re
 import signal
 import subprocess
@@ -126,6 +127,25 @@ _TOTAL_RE = re.compile(r"found (?P<total>\d+) chapter links.*target=[^(]+\((?P<c
 _ERROR_RE = re.compile(r"(?i)\b(error|exception|failed|traceback|critical)\b", re.IGNORECASE)
 _WARNING_RE = re.compile(r"(?i)\b(warning|retry|retrying)\b", re.IGNORECASE)
 _MD_CHAPTER_HEADER_RE = re.compile(r"^(?P<filename>.+?_chapter_(?P<number>\d+)\.md):\s*(?P<title>.*)$")
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    """Read a positive int from the environment, falling back to *default*."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw.strip())
+    except (ValueError, AttributeError):
+        return default
+    return value if value > 0 else default
+
+
+# Hard limits so a silent/hung spider (stuck Cloudflare challenge, dead network,
+# frozen chromedriver) can't block forever holding a Chromium subprocess. Both
+# are overridable via env vars.
+MAX_CRAWL_SECONDS = _env_positive_int("MAX_CRAWL_SECONDS", 2700)      # 45 min wall-clock cap
+IDLE_STDOUT_SECONDS = _env_positive_int("IDLE_STDOUT_SECONDS", 600)   # 10 min no-output cap
 
 
 def chapter_record_from_output_file(filepath: Path, chapter_number: int) -> dict:
@@ -356,6 +376,58 @@ class CrawlService:
 
         return crawl_id
 
+    def _terminate_process(self, process: subprocess.Popen) -> None:
+        """Best-effort kill of the crawl subprocess AND its children.
+
+        A crawl spawns chromedriver/chrome grandchildren. On Windows os.killpg
+        does not exist and a Ctrl event only reliably reaches the direct child's
+        group, so we escalate to ``taskkill /F /T`` to tear down the whole tree.
+        On POSIX the child runs in its own session, so we signal the process
+        group with SIGTERM then SIGKILL.
+        """
+        if process.poll() is not None:
+            return
+        try:
+            if sys.platform == "win32":
+                try:
+                    os.kill(process.pid, signal.CTRL_BREAK_EVENT)
+                except (ProcessLookupError, OSError):
+                    pass
+                try:
+                    process.wait(timeout=5)
+                    return
+                except subprocess.TimeoutExpired:
+                    pass
+                # Force-kill the whole process tree (child + chromedriver + chrome).
+                try:
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                except Exception:
+                    pass
+            else:
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
+                try:
+                    process.wait(timeout=5)
+                    return
+                except subprocess.TimeoutExpired:
+                    pass
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+        finally:
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+
     def _run_subprocess_thread(self, crawl_id: str, cmd: list[str], cwd: str, env: dict[str, str]) -> None:
         with self._lock:
             progress = self._sessions.get(crawl_id)
@@ -378,41 +450,54 @@ class CrawlService:
             )
             progress.add_log(f"[PID] {process.pid}", "debug")
 
-            saw_output = False
-            for raw_line in process.stdout:
-                line = raw_line.decode("utf-8", errors="replace").rstrip("\n\r")
+            # Read stdout on a dedicated thread so the main loop never blocks on a
+            # silent/hung spider. The main loop polls the queue with a 1s timeout,
+            # so the cancel flag and the wall-clock/idle deadlines are re-checked
+            # roughly every second regardless of whether the subprocess emits output.
+            line_queue: queue.Queue = queue.Queue()
 
+            def _reader() -> None:
+                try:
+                    for raw_line in process.stdout:
+                        line_queue.put(raw_line.decode("utf-8", errors="replace").rstrip("\n\r"))
+                except Exception:
+                    pass
+                finally:
+                    line_queue.put(None)  # sentinel: stdout closed (EOF)
+
+            reader_thread = Thread(target=_reader, daemon=True)
+            reader_thread.start()
+
+            start_monotonic = time.monotonic()
+            last_output_monotonic = time.monotonic()
+            saw_output = False
+
+            while True:
+                got_line = False
+                try:
+                    line = line_queue.get(timeout=1.0)
+                    got_line = True
+                except queue.Empty:
+                    pass
+
+                if got_line:
+                    if line is None:
+                        break  # EOF: stdout closed, process finishing — reap + finalize below
+                    last_output_monotonic = time.monotonic()
+                    if line.strip():
+                        saw_output = True
+                    self._parse_line(crawl_id, line)
+                    if line.strip() and time.time() - self._last_persist_at > 5:
+                        self._persist_index()
+                        self._last_persist_at = time.time()
+
+                # These checks run every iteration (on both new output and idle
+                # ticks) so a hung OR flooding spider is always bounded.
                 with self._lock:
                     cancel = self._cancel_flags.get(crawl_id, False)
-
                 if cancel:
                     progress.add_log("[CANCEL] Terminating subprocess...", "warning")
-                    if sys.platform == "win32":
-                        # On Windows: Ctrl+C/Break events work with process groups created
-                        # via CREATE_NEW_PROCESS_GROUP. We only send them to the direct child
-                        # process since os.killpg does not exist.
-                        try:
-                            os.kill(process.pid, signal.CTRL_C_EVENT)
-                        except (ProcessLookupError, OSError):
-                            pass
-                    else:
-                        try:
-                            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                        except (ProcessLookupError, OSError):
-                            pass
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        if sys.platform == "win32":
-                            try:
-                                os.kill(process.pid, signal.CTRL_BREAK_EVENT)
-                            except (ProcessLookupError, OSError):
-                                pass
-                        else:
-                            try:
-                                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                            except (ProcessLookupError, OSError):
-                                pass
+                    self._terminate_process(process)
                     with self._lock:
                         progress.status = "cancelled"
                         progress.finished_at = self._now()
@@ -420,13 +505,34 @@ class CrawlService:
                     self._persist_index()
                     return
 
-                if line.strip():
-                    saw_output = True
-                self._parse_line(crawl_id, line)
-                if line.strip() and time.time() - self._last_persist_at > 5:
+                elapsed = time.monotonic() - start_monotonic
+                idle = time.monotonic() - last_output_monotonic
+                if elapsed > MAX_CRAWL_SECONDS:
+                    progress.add_log(
+                        f"[TIMEOUT] Max runtime {MAX_CRAWL_SECONDS}s exceeded; killing crawl.", "error"
+                    )
+                    self._terminate_process(process)
+                    with self._lock:
+                        progress.status = "failed"
+                        progress.error_message = f"Crawl exceeded max runtime of {MAX_CRAWL_SECONDS}s"
+                        progress.finished_at = self._now()
+                    logger.warning("Crawl %s killed: max runtime %ss exceeded.", crawl_id, MAX_CRAWL_SECONDS)
                     self._persist_index()
-                    self._last_persist_at = time.time()
+                    return
+                if idle > IDLE_STDOUT_SECONDS:
+                    progress.add_log(
+                        f"[TIMEOUT] No output for {IDLE_STDOUT_SECONDS}s; killing stalled crawl.", "error"
+                    )
+                    self._terminate_process(process)
+                    with self._lock:
+                        progress.status = "failed"
+                        progress.error_message = f"Crawl stalled: no output for {IDLE_STDOUT_SECONDS}s"
+                        progress.finished_at = self._now()
+                    logger.warning("Crawl %s killed: idle stdout timeout %ss.", crawl_id, IDLE_STDOUT_SECONDS)
+                    self._persist_index()
+                    return
 
+            # Reached only once stdout has closed (EOF) — reap and finalize.
             try:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
