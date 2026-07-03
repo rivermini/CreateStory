@@ -102,6 +102,7 @@ class JobnibSpider(BaseSpider):
         self._browser: _JobnibBrowser | None = None
         self._seen_lock = threading.Lock()
         self._browser_lock = threading.Lock()
+        self._abort_event = threading.Event()
 
     async def start(self):
         start_url = self._normalize_url(self.start_urls[0])
@@ -163,23 +164,27 @@ class JobnibSpider(BaseSpider):
                 chapter_ref = futures[future]
                 try:
                     chapter = future.result()
-                except CloseSpider:
+                except CloseSpider as exc:
+                    self._abort_event.set()
                     for pending in futures:
                         pending.cancel()
-                    raise
+                    reason = self._close_spider_reason(exc) or f"[jobnib] Failed while crawling chapter {chapter_ref.get('chapter_number')}."
+                    self.logger.error("[jobnib] Stopping crawl while crawling chapter %s: %s", chapter_ref.get("chapter_number"), reason)
+                    raise CloseSpider(reason) from exc
                 except Exception as exc:
+                    self._abort_event.set()
                     for pending in futures:
                         pending.cancel()
-                    raise CloseSpider(
-                        f"[jobnib] Failed while crawling chapter {chapter_ref.get('chapter_number')}: {exc}"
-                    ) from exc
+                    reason = f"[jobnib] Failed while crawling chapter {chapter_ref.get('chapter_number')}: {exc}"
+                    self.logger.error(reason)
+                    raise CloseSpider(reason) from exc
 
                 if chapter is None:
                     continue
                 self._log_crawled_chapter(chapter)
                 yield chapter
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            executor.shutdown(wait=True, cancel_futures=True)
 
     def _float_setting(self, raw: Any, fallback: Any, default: float) -> float:
         value = raw if raw is not None else fallback
@@ -206,6 +211,14 @@ class JobnibSpider(BaseSpider):
             chapter.chapter_number,
             chapter.title or "(untitled)",
         )
+
+    def _close_spider_reason(self, exc: CloseSpider) -> str:
+        reason = getattr(exc, "reason", None)
+        if reason:
+            return str(reason)
+        if exc.args:
+            return str(exc.args[0])
+        return ""
 
     def build_selector_config(self, config: dict) -> SelectorConfig:
         selectors = config.get("selectors", {})
@@ -255,6 +268,9 @@ class JobnibSpider(BaseSpider):
         return resp.text
 
     def _crawl_chapter(self, chapter_ref: dict[str, Any], include_metadata: bool) -> Chapter | None:
+        if self._abort_event.is_set():
+            return None
+
         chapter_url = self._normalize_url(chapter_ref["url"])
         with self._seen_lock:
             if chapter_url in self._seen_urls:
@@ -282,11 +298,13 @@ class JobnibSpider(BaseSpider):
         word_count = len(cleaned_content.split())
 
         if status != "complete" or word_count < 500:
-            raise CloseSpider(
-                "[jobnib] Could not unlock full chapter content. "
-                "Jobnib protects chapter segments behind Cloudflare/Turnstile AJAX. "
-                "Open the chapter in the visible crawler browser and complete the site verification, then retry."
+            reason = (
+                f"[jobnib/{chapter_number}] Could not unlock full chapter content "
+                f"(status={status}, words={word_count}). "
+                "Jobnib is still returning preview-only or bot-detected chapter segments."
             )
+            self.logger.error("%s URL=%s", reason, chapter_url)
+            raise CloseSpider(reason)
 
         if word_count < 1000:
             self.logger.warning(
@@ -316,8 +334,20 @@ class JobnibSpider(BaseSpider):
             self.logger.info("[jobnib] AJAX unlock returned %s content; falling back to browser.", status)
         except Exception as exc:
             self.logger.info("[jobnib] AJAX unlock failed for %s: %s; falling back to browser.", chapter_url, exc)
+        if self._abort_event.is_set():
+            raise CloseSpider("[jobnib] Crawl aborted before browser unlock could start.")
         with self._browser_lock:
-            return self._get_browser().unlock_chapter(chapter_url, timeout=90)
+            if self._abort_event.is_set():
+                raise CloseSpider("[jobnib] Crawl aborted before browser unlock could start.")
+            unlocked = self._get_browser().unlock_chapter(chapter_url, timeout=90)
+        content, status = self._extract_visible_chapter_content(BeautifulSoup(unlocked, "html.parser"))
+        self.logger.info(
+            "[jobnib] Browser unlock returned %s content (%d words) for %s.",
+            status,
+            len(clean_chapter_content(content, self._promo_patterns).split()),
+            chapter_url,
+        )
+        return unlocked
 
     def _fetch_chapter_segments_with_requests(self, chapter_url: str, shell_html: str) -> str:
         import requests
@@ -786,11 +816,18 @@ class _JobnibBrowser:
         self._profile_dir = Path(os.getenv("JOBNIB_CHROME_PROFILE", Path(tempfile.gettempdir()) / "jobnib_crawler_profile"))
         self._cookie_file = Path(__file__).parent.parent / "handlers" / "selenium_cookies_jobnib_com.json"
         self._persist_cookies = True
+        self._chromedriver_path: str | None = None
         atexit.register(self.close)
 
     def fetch_page(self, url: str, timeout: int = 60) -> str:
         driver = self._driver_or_start()
-        driver.get(url)
+        self._set_page_load_timeout(timeout)
+        try:
+            driver.get(url)
+        except Exception as exc:
+            if not self._is_timeout_error(exc):
+                raise
+            self.logger.warning("[jobnib] Browser page load timed out for %s; continuing with current DOM.", url)
         self._wait_for_page(timeout)
         self._dismiss_overlays()
         self._save_cookies()
@@ -798,19 +835,28 @@ class _JobnibBrowser:
 
     def unlock_chapter(self, url: str, timeout: int = 90) -> str:
         driver = self._driver_or_start()
-        driver.get(url)
+        self._set_page_load_timeout(timeout)
+        try:
+            driver.get(url)
+        except Exception as exc:
+            if not self._is_timeout_error(exc):
+                raise
+            self.logger.warning("[jobnib] Browser page load timed out for %s; continuing with current DOM.", url)
         self._wait_for_page(timeout)
         self._dismiss_overlays()
 
         post_id = self._post_id()
         if not post_id:
+            self.logger.warning("[jobnib] Browser page has no Jobnib post id after navigation. %s", self._page_state())
             return driver.page_source
 
         self._click_start(post_id)
-        self._wait_for_segment(post_id, 1, timeout=timeout / 2)
+        if not self._wait_for_segment(post_id, 1, timeout=timeout / 2):
+            self.logger.warning("[jobnib] Browser did not unlock segment 1 for post %s. %s", post_id, self._page_state())
         self._dismiss_overlays()
         self._click_next(post_id)
-        self._wait_for_segment(post_id, 2, timeout=timeout / 2)
+        if not self._wait_for_segment(post_id, 2, timeout=timeout / 2):
+            self.logger.warning("[jobnib] Browser did not unlock segment 2 for post %s. %s", post_id, self._page_state())
         self._dismiss_overlays()
         self._save_cookies()
         return driver.page_source
@@ -900,11 +946,11 @@ class _JobnibBrowser:
 
         if use_uc and uc is not None:
             try:
-                self._driver = uc.Chrome(options=options, headless=headless, use_subprocess=True)
+                self._driver = self._start_undetected_driver(uc, options, headless)
             except Exception as exc:
-                if not headless:
-                    raise
-                self.logger.warning("[jobnib] undetected Chrome failed in headless mode (%s); retrying with Selenium.", exc)
+                self.logger.warning("[jobnib] undetected Chrome failed (%s); retrying with Selenium.", exc)
+                if isinstance(exc, TimeoutError):
+                    self._rotate_profile_dir(options, prefix="jobnib_crawler_selenium_profile")
                 use_uc = False
 
         if not use_uc:
@@ -928,6 +974,100 @@ class _JobnibBrowser:
         if self._persist_cookies:
             self._inject_cookies()
         return self._driver
+
+    def _start_undetected_driver(self, uc: Any, options: Any, headless: bool) -> Any:
+        chrome_major = self._chrome_major_version()
+        uc_kwargs: dict[str, Any] = {
+            "options": options,
+            "headless": headless,
+            "use_subprocess": True,
+        }
+        if chrome_major:
+            uc_kwargs["version_main"] = chrome_major
+            self.logger.info("[jobnib] Using ChromeDriver major %s for installed Chrome.", chrome_major)
+
+        timeout = self._positive_int_env("JOBNIB_UC_STARTUP_TIMEOUT", 25)
+        result: list[tuple[str, Any]] = []
+        abandoned = threading.Event()
+
+        def _launch() -> None:
+            try:
+                driver = uc.Chrome(**uc_kwargs)
+                if abandoned.is_set():
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+                    return
+                result.append(("driver", driver))
+            except Exception as exc:
+                if not abandoned.is_set():
+                    result.append(("error", exc))
+
+        thread = threading.Thread(target=_launch, name="jobnib-uc-start", daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+        if thread.is_alive():
+            abandoned.set()
+            raise TimeoutError(f"undetected-chromedriver did not finish startup within {timeout}s")
+        if not result:
+            raise RuntimeError("undetected-chromedriver startup ended without returning a driver")
+        kind, value = result[0]
+        if kind == "error":
+            raise value
+        return value
+
+    def _rotate_profile_dir(self, options: Any, prefix: str) -> None:
+        self._profile_dir = Path(tempfile.mkdtemp(prefix=f"{prefix}_{os.getpid()}_"))
+        self._replace_chrome_argument(options, "--user-data-dir=", f"--user-data-dir={self._profile_dir}")
+        self.logger.info("[jobnib] Retrying browser startup with fresh profile %s.", self._profile_dir)
+
+    def _replace_chrome_argument(self, options: Any, prefix: str, replacement: str) -> None:
+        arguments = getattr(options, "arguments", None)
+        if isinstance(arguments, list):
+            for index, argument in enumerate(arguments):
+                if isinstance(argument, str) and argument.startswith(prefix):
+                    arguments[index] = replacement
+                    return
+        options.add_argument(replacement)
+
+    def _positive_int_env(self, name: str, default: int) -> int:
+        raw = os.environ.get(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw.strip())
+        except (AttributeError, ValueError):
+            return default
+        return value if value > 0 else default
+
+    def _set_page_load_timeout(self, timeout: int) -> None:
+        try:
+            self._driver.set_page_load_timeout(max(15, int(timeout)))
+        except Exception:
+            pass
+
+    def _is_timeout_error(self, exc: Exception) -> bool:
+        text = f"{type(exc).__name__}: {exc}".lower()
+        return "timeout" in text or "timed out" in text
+
+    def _is_driver_connection_error(self, exc: Exception) -> bool:
+        text = f"{type(exc).__name__}: {exc}".lower()
+        return any(
+            fragment in text
+            for fragment in (
+                "connection refused",
+                "remote disconnected",
+                "failed to establish a new connection",
+                "invalid session id",
+                "chrome not reachable",
+                "disconnected",
+            )
+        )
+
+    def _short_error(self, exc: Exception) -> str:
+        text = f"{type(exc).__name__}: {exc}".replace("\n", " ").strip()
+        return text[:500]
 
     def _env_flag(self, name: str) -> bool | None:
         value = os.environ.get(name)
@@ -984,17 +1124,20 @@ class _JobnibBrowser:
             return explicit
         return not headless
 
-    def _wait_for_page(self, timeout: int) -> None:
+    def _wait_for_page(self, timeout: int) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
                 title = self._driver.title or ""
                 has_entry = self._driver.execute_script("return !!document.querySelector('.entry-content, .seriestucon')")
                 if "Just a moment" not in title and has_entry:
-                    return
-            except Exception:
-                pass
+                    return True
+            except Exception as exc:
+                if self._is_driver_connection_error(exc):
+                    raise RuntimeError(f"Jobnib browser session died while waiting for page: {self._short_error(exc)}") from exc
             time.sleep(0.5)
+        self.logger.warning("[jobnib] Browser did not reach a chapter/story DOM within %ds. %s", timeout, self._page_state())
+        return False
 
     def _click_start(self, post_id: str) -> None:
         try:
@@ -1052,10 +1195,32 @@ class _JobnibBrowser:
                 )
                 if int(length or 0) > 100:
                     return True
-            except Exception:
-                pass
+            except Exception as exc:
+                if self._is_driver_connection_error(exc):
+                    raise RuntimeError(f"Jobnib browser session died while waiting for segment {segment}: {self._short_error(exc)}") from exc
             time.sleep(0.5)
         return False
+
+    def _page_state(self) -> str:
+        try:
+            title = self._driver.title or ""
+            current_url = self._driver.current_url or ""
+            state = self._driver.execute_script(
+                """
+                return {
+                  hasEntry: !!document.querySelector('.entry-content'),
+                  hasSeries: !!document.querySelector('.seriestucon'),
+                  hasPost: !!document.querySelector('article[id^="post-"]'),
+                  hasTurnstile: !!document.querySelector('[class*="turnstile"], iframe[src*="turnstile"], iframe[src*="cloudflare"]'),
+                  hasPreview: !!document.querySelector('[id^="jn-pre-"]'),
+                  segmentCount: document.querySelectorAll('[id^="jn-content-"]').length,
+                  bodyLength: (document.body && document.body.innerText || '').length
+                };
+                """
+            )
+            return f"title={title!r} url={current_url!r} state={state}"
+        except Exception as exc:
+            return f"browser state unavailable: {self._short_error(exc)}"
 
     def _post_id(self) -> str:
         try:
@@ -1143,18 +1308,108 @@ class _JobnibBrowser:
             self.logger.debug("[jobnib] Could not save cookies: %s", exc)
 
     def _resolve_chromedriver(self) -> str | None:
+        if self._chromedriver_path:
+            return self._chromedriver_path
+
         if os.environ.get("CHROMEDRIVER_PATH"):
-            return os.environ["CHROMEDRIVER_PATH"]
+            driver_path = os.environ["CHROMEDRIVER_PATH"]
+            if self._driver_matches_installed_chrome(driver_path):
+                return self._cache_chromedriver(driver_path)
+            self.logger.warning("[jobnib] CHROMEDRIVER_PATH points to an incompatible ChromeDriver; trying auto-resolution.")
+
         found = shutil.which("chromedriver")
-        if found:
-            return found
+        if found and self._driver_matches_installed_chrome(found):
+            return self._cache_chromedriver(found)
+
+        for candidate in ("/usr/bin/chromedriver", "/usr/local/bin/chromedriver"):
+            if Path(candidate).exists() and self._driver_matches_installed_chrome(candidate):
+                return self._cache_chromedriver(candidate)
+
         try:
             from webdriver_manager.chrome import ChromeDriverManager
+            from webdriver_manager.core.os_manager import ChromeType
 
-            return ChromeDriverManager().install()
+            chrome_type = ChromeType.CHROMIUM if os.name != "nt" else ChromeType.GOOGLE
+            driver_path = ChromeDriverManager(chrome_type=chrome_type).install()
+            if self._driver_matches_installed_chrome(driver_path):
+                return self._cache_chromedriver(driver_path)
+            self.logger.warning("[jobnib] webdriver-manager returned an incompatible ChromeDriver; falling back to Selenium Manager.")
         except Exception as exc:
             self.logger.warning("[jobnib] webdriver-manager failed (%s); falling back to Selenium Manager.", exc)
+        return None
+
+    def _cache_chromedriver(self, driver_path: str) -> str:
+        self._chromedriver_path = driver_path
+        return driver_path
+
+    def _driver_matches_installed_chrome(self, driver_path: str) -> bool:
+        chrome_major = self._chrome_major_version()
+        driver_major = self._chromedriver_major_version(driver_path)
+        if not chrome_major or not driver_major:
+            return True
+        if chrome_major == driver_major:
+            return True
+        self.logger.info(
+            "[jobnib] Ignoring ChromeDriver %s because driver major %s does not match Chrome major %s.",
+            driver_path,
+            driver_major,
+            chrome_major,
+        )
+        return False
+
+    def _chromedriver_major_version(self, driver_path: str) -> int | None:
+        return self._extract_major_version(self._run_version_command([driver_path, "--version"]))
+
+    def _chrome_major_version(self) -> int | None:
+        explicit = os.environ.get("JOBNIB_CHROME_VERSION_MAIN")
+        if explicit:
+            try:
+                return int(explicit.strip())
+            except ValueError:
+                self.logger.warning("[jobnib] Ignoring invalid JOBNIB_CHROME_VERSION_MAIN=%r.", explicit)
+
+        candidates: list[str] = []
+        chrome_bin = os.environ.get("CHROME_BIN")
+        if chrome_bin:
+            candidates.append(chrome_bin)
+        candidates.extend([
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+        ])
+        for name in ("chrome", "chrome.exe", "google-chrome", "chromium", "chromium-browser"):
+            found = shutil.which(name)
+            if found:
+                candidates.append(found)
+
+        seen: set[str] = set()
+        for candidate in candidates:
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            if not Path(candidate).exists() and shutil.which(candidate) is None:
+                continue
+            major = self._extract_major_version(self._run_version_command([candidate, "--version"]))
+            if major:
+                return major
+        return None
+
+    def _extract_major_version(self, text: str) -> int | None:
+        match = re.search(r"(\d+)(?:\.\d+){1,3}", text or "")
+        if not match:
             return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+
+    def _run_version_command(self, command: list[str]) -> str:
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+        except Exception:
+            return ""
+        return f"{result.stdout}\n{result.stderr}"
 
     def close(self) -> None:
         if self._driver is not None:

@@ -46,6 +46,38 @@ def _resolves_to_blocked_ip(host: str) -> bool:
     return False
 
 
+def validate_external_url(
+    value: Optional[str],
+    allowed_suffixes: tuple[str, ...] = (),
+    field_name: str = "url",
+) -> Optional[str]:
+    """Validate a user-supplied full URL that the crawler will fetch server-side.
+
+    Blocks SSRF: rejects http(s)-scheme URLs whose host is (or resolves to) an
+    internal/loopback address, and — when ``allowed_suffixes`` is given — pins the
+    host to a known site domain (or its subdomains). ``None``/blank is passed
+    through unchanged so the endpoint's own default-URL logic still applies.
+    """
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    parts = urlsplit(stripped)
+    if parts.scheme not in _ALLOWED_URL_SCHEMES:
+        raise ValueError(f"{field_name} must use http or https")
+    host = parts.hostname
+    if not host:
+        raise ValueError(f"{field_name} must include a host")
+    if _resolves_to_blocked_ip(host):
+        raise ValueError(f"{field_name} points to a disallowed internal/loopback address")
+    if allowed_suffixes:
+        host_l = host.lower()
+        if not any(host_l == suffix or host_l.endswith("." + suffix) for suffix in allowed_suffixes):
+            raise ValueError(f"{field_name} host is not an allowed site for this check")
+    return value
+
+
 class CrawlRequest(BaseModel):
     spider_name: str = Field(..., description="Scrapy spider name, e.g. 'wattpad'")
     site_name: str = Field(..., description="Human-readable site name, e.g. 'Wattpad'")
