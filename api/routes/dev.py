@@ -179,7 +179,9 @@ async def clear_backend_data(
     _admin=Depends(require_admin),
 ) -> ClearBackendDataResponse:
     """Clear development runtime state while preserving admin/user accounts.
-    Only available when DEV_MODE=true."""
+    Only available when DEV_MODE=true, and never when ENVIRONMENT=production."""
+    if os.environ.get("ENVIRONMENT", "development").lower() in ("production", "prod"):
+        raise HTTPException(status_code=404, detail="Not found")
     if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
         raise HTTPException(status_code=404, detail="Not found")
     if req.confirmation != CONFIRMATION_TEXT:

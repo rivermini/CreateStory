@@ -132,7 +132,10 @@ app.include_router(downloads.router)
 app.include_router(internal.router)
 app.include_router(admin.router)
 app.include_router(settings.router)
-app.include_router(dev.router)
+# Dev-only destructive routes (factory reset): never expose them in production,
+# regardless of DEV_MODE.
+if os.environ.get("ENVIRONMENT", "development").lower() not in ("production", "prod"):
+    app.include_router(dev.router)
 app.include_router(sites.router)
 app.include_router(crawl.router)
 app.include_router(results.router)
