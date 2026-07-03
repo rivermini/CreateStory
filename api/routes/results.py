@@ -1,6 +1,7 @@
 """Results routes — list output files, preview, download, and combine."""
 
 import json
+import logging
 import os
 import re
 import tempfile
@@ -18,6 +19,8 @@ from api.services.crawler_service import chapter_record_from_output_file, get_cr
 from api.services.file_service import CrawlPathError, get_file_service
 from api.service_auth import require_owner
 from utils.sanitize import sanitize_filename
+
+logger = logging.getLogger(__name__)
 
 
 class DeleteRequest(BaseModel):
@@ -349,7 +352,8 @@ async def get_file_content(crawl_id: str, filename: str, request: Request) -> di
         with open(filepath, "r", encoding="utf-8") as fh:
             content = fh.read()
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read file: {exc}")
+        logger.exception("Failed to read file")
+        raise HTTPException(status_code=500, detail="Failed to read file.")
 
     return {"content": content}
 
@@ -406,7 +410,8 @@ async def combine_chapters(crawl_id: str, request: Request) -> dict:
         with open(md_path, "w", encoding="utf-8") as fh:
             fh.write(md_text)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write combined Markdown: {exc}")
+        logger.exception("Failed to write combined Markdown")
+        raise HTTPException(status_code=500, detail="Failed to write combined Markdown.")
 
     combined_name = f"{sanitize_filename(base_name)}_combined_{crawl_id}.json"
     combined_path = output_dir / combined_name
@@ -419,7 +424,8 @@ async def combine_chapters(crawl_id: str, request: Request) -> dict:
         with open(combined_path, "w", encoding="utf-8") as fh:
             json.dump(combined_payload, fh, ensure_ascii=False, indent=2)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write combined JSON: {exc}")
+        logger.exception("Failed to write combined JSON")
+        raise HTTPException(status_code=500, detail="Failed to write combined JSON.")
 
     try:
         size_bytes = md_path.stat().st_size
@@ -477,7 +483,8 @@ async def get_combined_result(crawl_id: str, request: Request) -> dict:
         with open(md_path, "r", encoding="utf-8") as fh:
             md_content = fh.read()
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read combined Markdown: {exc}")
+        logger.exception("Failed to read combined Markdown")
+        raise HTTPException(status_code=500, detail="Failed to read combined Markdown.")
 
     try:
         size_bytes = md_path.stat().st_size

@@ -795,7 +795,7 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
             warning = f"Chapter listing is not supported for '{site_info.site_name}'"
     except Exception as exc:
         logger.exception("[chapters] Unexpected error fetching chapter list for %s", story_url)
-        warning = f"Failed to fetch chapter list: {exc}"
+        warning = "Failed to fetch chapter list."
         chapters = []
 
     if not chapters:
