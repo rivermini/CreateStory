@@ -20,3 +20,17 @@ env/
 .idea/
 .vscode/
 *.swp
+
+# Secrets & credentials — never commit
+.env
+.env.*
+!.env.example
+credentials/
+*.pem
+*.p12
+*.pfx
+*.key
+*cookie*.json
+*cookies*.json
+*credentials*.json
+*service-account*.json

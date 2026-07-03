@@ -249,7 +249,7 @@ def start_batch_generate(
         ) from exc
     except Exception as exc:
         logger.exception("Failed to start batch job")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Failed to start batch job.") from exc
 
     return BatchGenerateResponse(
         batch_id=batch_id,
