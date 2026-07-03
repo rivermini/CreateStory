@@ -189,6 +189,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if not any(request.url.path.startswith(p) for p in self._DOCS_PATHS):
             response.headers["Content-Security-Policy"] = self._CSP_PROD if is_prod else self._CSP_DEV
         return response
