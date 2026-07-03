@@ -131,7 +131,7 @@ def list_all_jobs(request: Request) -> list[dict]:
     jobs = service.list_jobs()
     role = getattr(request.state, "create_story_role", None)
     owner_id = current_owner(request)
-    if role == "admin":
+    if role in ("admin", "operator"):
         return jobs
     return [job for job in jobs if job.get("created_by_user_id") == owner_id]
 

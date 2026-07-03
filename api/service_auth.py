@@ -46,7 +46,7 @@ def current_owner(request: Request) -> str | None:
 def require_owner(request: Request, owner_id: str | None) -> None:
     role = getattr(request.state, "create_story_role", None)
     user_id = current_owner(request)
-    if role == "admin":
+    if role in ("admin", "operator"):
         return
     if owner_id and owner_id == user_id:
         return

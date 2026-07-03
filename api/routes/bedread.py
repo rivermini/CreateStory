@@ -259,26 +259,32 @@ def start_batch_generate(
 
 
 @router.get("/jobs/{batch_id}")
-def get_batch_status(batch_id: str) -> dict:
+def get_batch_status(batch_id: str, request: Request) -> dict:
     """Return current state of a batch job including per-chapter progress.
 
-    Read-only and visible to every user (mutations still enforce ownership).
+    Owner-scoped: operator/admin (and trusted services) may read any job;
+    other users only their own.
     """
     service = get_bedread_service()
     job = service.get_batch_job(batch_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Batch job '{batch_id}' not found.")
+    require_owner(request, job.get("created_by_user_id"))
     return job
 
 
 @router.get("/jobs")
-def list_all_batch_jobs() -> list[dict]:
-    """Return all batch jobs for the management page — visible to every user.
-
-    Jobs are read-only for non-owners; cancel/remove still enforce ownership.
+def list_all_batch_jobs(request: Request) -> list[dict]:
+    """Return batch jobs for the management page. Operator/admin see every
+    job; other users see only their own.
     """
     service = get_bedread_service()
-    return service.list_batch_jobs()
+    jobs = service.list_batch_jobs()
+    role = getattr(request.state, "create_story_role", None)
+    if role in ("admin", "operator"):
+        return jobs
+    owner_id = current_owner(request)
+    return [job for job in jobs if job.get("created_by_user_id") == owner_id]
 
 
 @router.delete("/jobs/{batch_id}")
