@@ -220,6 +220,17 @@ class JobnibSpider(BaseSpider):
             return str(exc.args[0])
         return ""
 
+    def _allow_partial_chapters(self) -> bool:
+        value = os.environ.get("JOBNIB_ALLOW_PARTIAL", "true").strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    def _partial_min_words(self) -> int:
+        raw = os.environ.get("JOBNIB_PARTIAL_MIN_WORDS", "1")
+        try:
+            return max(1, int(raw.strip()))
+        except (AttributeError, ValueError):
+            return 1
+
     def build_selector_config(self, config: dict) -> SelectorConfig:
         selectors = config.get("selectors", {})
         return SelectorConfig(
@@ -297,7 +308,14 @@ class JobnibSpider(BaseSpider):
         cleaned_content = clean_chapter_content(content, self._promo_patterns)
         word_count = len(cleaned_content.split())
 
-        if status != "complete" or word_count < 500:
+        partial_min_words = self._partial_min_words()
+        if status == "partial" and self._allow_partial_chapters() and word_count >= partial_min_words:
+            self.logger.warning(
+                "[jobnib/%d] Saving partial chapter content (%d words); a later protected segment stayed locked.",
+                chapter_number,
+                word_count,
+            )
+        elif status != "complete" or word_count < 500:
             reason = (
                 f"[jobnib/{chapter_number}] Could not unlock full chapter content "
                 f"(status={status}, words={word_count}). "
@@ -326,20 +344,47 @@ class JobnibSpider(BaseSpider):
         )
 
     def _fetch_unlocked_chapter_html(self, chapter_url: str, shell_html: str) -> str:
-        try:
-            unlocked = self._fetch_chapter_segments_with_requests(chapter_url, shell_html)
-            content, status = self._extract_visible_chapter_content(BeautifulSoup(unlocked, "html.parser"))
-            if status == "complete" and len(content.split()) >= 500:
-                return unlocked
-            self.logger.info("[jobnib] AJAX unlock returned %s content; falling back to browser.", status)
-        except Exception as exc:
-            self.logger.info("[jobnib] AJAX unlock failed for %s: %s; falling back to browser.", chapter_url, exc)
+        ajax_errors: list[str] = []
+        for attempt in range(1, 4):
+            try:
+                attempt_shell = shell_html if attempt == 1 else self._fetch_page_html_with_requests(chapter_url)
+                unlocked = self._fetch_chapter_segments_with_requests(chapter_url, attempt_shell)
+                content, status = self._extract_visible_chapter_content(BeautifulSoup(unlocked, "html.parser"))
+                word_count = len(clean_chapter_content(content, self._promo_patterns).split())
+                if status == "complete" and word_count >= 500:
+                    return unlocked
+                if status == "partial" and self._allow_partial_chapters() and word_count >= self._partial_min_words():
+                    self.logger.info(
+                        "[jobnib] AJAX unlock returned partial content (%d words); keeping unlocked segment 1.",
+                        word_count,
+                    )
+                    return unlocked
+                self.logger.info(
+                    "[jobnib] AJAX unlock returned %s content (%d words) on attempt %d; minimum is %d.",
+                    status,
+                    word_count,
+                    attempt,
+                    self._partial_min_words(),
+                )
+            except Exception as exc:
+                ajax_errors.append(str(exc))
+                self.logger.info("[jobnib] AJAX unlock attempt %d failed for %s: %s", attempt, chapter_url, exc)
+                time.sleep(0.5 * attempt)
+
+        self.logger.info(
+            "[jobnib] AJAX unlock failed for %s after %d attempt(s): %s; falling back to browser.",
+            chapter_url,
+            len(ajax_errors),
+            "; ".join(ajax_errors[-2:]) if ajax_errors else "no usable content",
+        )
         if self._abort_event.is_set():
             raise CloseSpider("[jobnib] Crawl aborted before browser unlock could start.")
+        post_id, _ = self._extract_jobnib_post_and_nonce(shell_html)
+        unlock_script = self._extract_jobnib_unlock_script(shell_html, post_id)
         with self._browser_lock:
             if self._abort_event.is_set():
                 raise CloseSpider("[jobnib] Crawl aborted before browser unlock could start.")
-            unlocked = self._get_browser().unlock_chapter(chapter_url, timeout=90)
+            unlocked = self._get_browser().unlock_chapter(chapter_url, timeout=90, unlock_script=unlock_script)
         content, status = self._extract_visible_chapter_content(BeautifulSoup(unlocked, "html.parser"))
         self.logger.info(
             "[jobnib] Browser unlock returned %s content (%d words) for %s.",
@@ -395,37 +440,45 @@ class JobnibSpider(BaseSpider):
             headers=ajax_headers,
             proxies=proxies,
         )
-        if not next_nonce:
-            raise ValueError("missing segment 2 nonce")
+        segment_html = {1: seg1_data["data"].get("content", "")}
+        try:
+            if not next_nonce:
+                raise ValueError("missing segment 2 nonce")
 
-        seg2_resp = session.post(
-            ajax_url,
-            data={
-                "action": "jobnib_load",
-                "post_id": post_id,
-                "segment": "2",
-                "nonce": next_nonce,
-                "cf_token": self._synthetic_turnstile_token(),
-            },
-            headers={
-                **ajax_headers,
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            timeout=30,
-            proxies=proxies,
-        )
-        seg2_resp.raise_for_status()
-        seg2_data = seg2_resp.json()
-        if not seg2_data.get("success") or not isinstance(seg2_data.get("data"), dict):
-            raise ValueError(f"segment 2 rejected: {seg2_data.get('data')}")
+            seg2_resp = session.post(
+                ajax_url,
+                data={
+                    "action": "jobnib_load",
+                    "post_id": post_id,
+                    "segment": "2",
+                    "nonce": next_nonce,
+                    "cf_token": self._synthetic_turnstile_token(),
+                },
+                headers={
+                    **ajax_headers,
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                timeout=30,
+                proxies=proxies,
+            )
+            seg2_resp.raise_for_status()
+            seg2_data = seg2_resp.json()
+            if not seg2_data.get("success") or not isinstance(seg2_data.get("data"), dict):
+                raise ValueError(f"segment 2 rejected: {seg2_data.get('data')}")
+            segment_html[2] = seg2_data["data"].get("content", "")
+        except Exception as exc:
+            if not self._allow_partial_chapters():
+                raise
+            self.logger.warning(
+                "[jobnib] Segment 2 stayed locked for post %s (%s); keeping segment 1 only.",
+                post_id,
+                exc,
+            )
 
         return self._merge_segment_html(
             shell_html=shell_html,
             post_id=post_id,
-            segment_html={
-                1: seg1_data["data"].get("content", ""),
-                2: seg2_data["data"].get("content", ""),
-            },
+            segment_html=segment_html,
         )
 
     def _fetch_segment_nonce(
@@ -468,6 +521,16 @@ class JobnibSpider(BaseSpider):
             if article:
                 post_id = re.sub(r"\D+", "", article.get("id", ""))
         return post_id, nonce
+
+    def _extract_jobnib_unlock_script(self, html: str, post_id: str) -> str:
+        if not post_id:
+            return ""
+        soup = BeautifulSoup(html, "html.parser")
+        for script in soup.find_all("script"):
+            text = script.string or script.get_text() or ""
+            if f"jnStart{post_id}" in text and "jobnib_load" in text:
+                return str(text)
+        return ""
 
     def _merge_segment_html(self, shell_html: str, post_id: str, segment_html: dict[int, str]) -> str:
         soup = BeautifulSoup(shell_html, "html.parser")
@@ -833,7 +896,7 @@ class _JobnibBrowser:
         self._save_cookies()
         return driver.page_source
 
-    def unlock_chapter(self, url: str, timeout: int = 90) -> str:
+    def unlock_chapter(self, url: str, timeout: int = 90, unlock_script: str = "") -> str:
         driver = self._driver_or_start()
         self._set_page_load_timeout(timeout)
         try:
@@ -850,6 +913,7 @@ class _JobnibBrowser:
             self.logger.warning("[jobnib] Browser page has no Jobnib post id after navigation. %s", self._page_state())
             return driver.page_source
 
+        self._ensure_unlock_script(post_id, unlock_script=unlock_script)
         self._click_start(post_id)
         if not self._wait_for_segment(post_id, 1, timeout=timeout / 2):
             self.logger.warning("[jobnib] Browser did not unlock segment 1 for post %s. %s", post_id, self._page_state())
@@ -1139,30 +1203,100 @@ class _JobnibBrowser:
         self.logger.warning("[jobnib] Browser did not reach a chapter/story DOM within %ds. %s", timeout, self._page_state())
         return False
 
+    def _ensure_unlock_script(self, post_id: str, unlock_script: str = "") -> None:
+        try:
+            has_start = self._driver.execute_script(
+                "return typeof window['jnStart' + arguments[0]] === 'function';",
+                post_id,
+            )
+            if has_start:
+                return
+
+            scripts = self._driver.execute_script(
+                """
+                return Array.from(document.scripts)
+                  .filter(function(script) {
+                    return (script.textContent || '').indexOf('jnStart' + arguments[0]) >= 0;
+                  })
+                  .map(function(script) { return script.textContent || ''; });
+                """,
+                post_id,
+            )
+        except Exception as exc:
+            self.logger.debug("[jobnib] Could not inspect delayed unlock scripts for post %s: %s", post_id, exc)
+            scripts = []
+
+        if not scripts:
+            if unlock_script:
+                self.logger.info("[jobnib] Using unlock script captured from raw chapter HTML for post %s.", post_id)
+                scripts = [unlock_script]
+            else:
+                self.logger.warning("[jobnib] No delayed Jobnib unlock script found for post %s. %s", post_id, self._page_state())
+                return
+
+        script = str(scripts[0])
+        script = script.replace(
+            "function tsPass(t){",
+            "function tsPass(t){window.__jobnibTurnstileToken=(t||'');",
+        )
+        script = script.replace(
+            "function tsErr(){",
+            "function tsErr(){window.__jobnibTurnstileError=(Array.from(arguments).map(String).join(',')||'error');",
+        )
+
+        try:
+            self._driver.execute_script("window.__cfRLUnblockHandlers = true;")
+            script_error = self._driver.execute_script(
+                """
+                try {
+                  (0, eval)(arguments[0]);
+                  return '';
+                } catch (err) {
+                  return String((err && (err.stack || err.message)) || err);
+                }
+                """,
+                script,
+            )
+            if script_error:
+                raise RuntimeError(str(script_error))
+            time.sleep(0.8)
+            has_start = self._driver.execute_script(
+                "return typeof window['jnStart' + arguments[0]] === 'function';",
+                post_id,
+            )
+            if has_start:
+                self.logger.info("[jobnib] Activated delayed unlock script for post %s.", post_id)
+            else:
+                self.logger.warning("[jobnib] Delayed unlock script executed but start function is still missing for post %s.", post_id)
+        except Exception as exc:
+            self.logger.warning("[jobnib] Could not activate delayed unlock script for post %s: %s", post_id, self._short_error(exc))
+
     def _click_start(self, post_id: str) -> None:
         try:
-            self._driver.execute_script(
+            handled = self._driver.execute_script(
                 "window.__cfRLUnblockHandlers = true; "
                 "var fn = window['jnStart' + arguments[0]]; "
                 "if (typeof fn === 'function') { fn(); return true; } "
                 "return false;",
                 post_id,
             )
-            return
+            if handled:
+                return
         except Exception as exc:
             self.logger.debug("[jobnib] Direct start call failed for post %s: %s", post_id, exc)
         self._click_selector(f"#jn-btn-{post_id}-1")
 
     def _click_next(self, post_id: str) -> None:
         try:
-            self._driver.execute_script(
+            handled = self._driver.execute_script(
                 "window.__cfRLUnblockHandlers = true; "
                 "var fn = window['jnNext' + arguments[0]]; "
                 "if (typeof fn === 'function') { fn(1); return true; } "
                 "return false;",
                 post_id,
             )
-            return
+            if handled:
+                return
         except Exception as exc:
             self.logger.debug("[jobnib] Direct next call failed for post %s: %s", post_id, exc)
         self._click_selector(f"#jn-next-{post_id}-1")
@@ -1189,6 +1323,15 @@ class _JobnibBrowser:
         while time.monotonic() < deadline:
             self._dismiss_overlays()
             try:
+                if segment == 2:
+                    turnstile_error = self._driver.execute_script("return window.__jobnibTurnstileError || '';")
+                    if turnstile_error:
+                        self.logger.warning(
+                            "[jobnib] Turnstile failed while unlocking segment 2 for post %s: %s",
+                            post_id,
+                            turnstile_error,
+                        )
+                        return False
                 length = self._driver.execute_script(
                     "var el=document.querySelector(arguments[0]); return el ? (el.innerText || '').length : 0;",
                     selector,
