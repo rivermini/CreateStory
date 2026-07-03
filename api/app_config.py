@@ -72,5 +72,9 @@ def _int_env(name: str, default: int) -> int:
 
 
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRES = timedelta(minutes=_int_env("JWT_ACCESS_TOKEN_MINUTES", 30))
+# Short access-token lifetime bounds the post-logout window (logout already
+# revokes the refresh token; the FE auto-refreshes on 401, so this is
+# transparent). Disable/role changes are already immediate via a per-request
+# DB re-check in get_current_user (L8).
+ACCESS_TOKEN_EXPIRES = timedelta(minutes=_int_env("JWT_ACCESS_TOKEN_MINUTES", 15))
 REFRESH_TOKEN_EXPIRES = timedelta(days=_int_env("JWT_REFRESH_TOKEN_DAYS", 14))
