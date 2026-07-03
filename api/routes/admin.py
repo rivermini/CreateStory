@@ -31,14 +31,14 @@ class AdminUserResponse(BaseModel):
 
 class UserCreateRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=12, max_length=128)
     role: UserRole = "viewer"
     is_active: bool = True
 
 
 class UserUpdateRequest(BaseModel):
     email: EmailStr | None = None
-    password: str | None = Field(default=None, min_length=8, max_length=128)
+    password: str | None = Field(default=None, min_length=12, max_length=128)
     role: UserRole | None = None
     is_active: bool | None = None
 
