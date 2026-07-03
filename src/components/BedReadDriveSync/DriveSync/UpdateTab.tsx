@@ -1000,13 +1000,17 @@ function InvalidEntryCard({
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const folderValidationErrors = entry.folder.validation_errors ?? [];
+  const validationErrors = folderValidationErrors.length > 0
+    ? folderValidationErrors
+    : [inferInvalidUpdateReason(entry)];
 
   return (
     <div
-      className="flex items-center gap-3 rounded-xl border px-4 py-3"
+      className="flex items-start gap-3 rounded-xl border px-4 py-3"
       style={{ background: mutedSurface, borderColor: panelBorder }}
     >
-      <Icon icon={appIcons.error} className="h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
+      <Icon icon={appIcons.error} className="mt-1 h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
       <div className="min-w-0 flex-1">
         <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {entry.folder.display_name}
@@ -1023,12 +1027,30 @@ function InvalidEntryCard({
             Drive: <span className="font-semibold" style={{ color: pageText }}>{entry.folder.extended_chapter_count ?? 0}</span>
           </span>
         </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {validationErrors.map((error, index) => (
+            <ValidationErrorBadge key={`${error}-${index}`} error={error} isDark={isDark} />
+          ))}
+        </div>
       </div>
-      {entry.server_story.title && (
-        <ValidationErrorBadge error={entry.server_story.title} isDark={isDark} />
-      )}
     </div>
   );
+}
+
+function inferInvalidUpdateReason(entry: UpdatableStoryEntry): string {
+  const serverChapter = entry.server_story.maxChapter ?? 0;
+  const driveChapter = entry.folder.extended_chapter_count ?? 0;
+
+  if (driveChapter < serverChapter) {
+    return `DRIVE_BEHIND_SERVER: Drive has ${driveChapter} chapter${driveChapter === 1 ? '' : 's'}, but server has ${serverChapter}.`;
+  }
+  if (driveChapter === serverChapter) {
+    return `NO_NEW_CHAPTERS: Drive and server both have ${serverChapter} chapter${serverChapter === 1 ? '' : 's'}.`;
+  }
+  if (driveChapter > serverChapter) {
+    return `INVALID_UPDATE: Drive has ${driveChapter} chapters and server has ${serverChapter}, but this folder did not pass update validation.`;
+  }
+  return 'INVALID_UPDATE: This folder did not pass update validation.';
 }
 
 function UpToDateCard({
