@@ -23,11 +23,17 @@ from api.routes.drive_sync import (
     title_update,
 )
 
+# Diagnostic GET endpoints that expose full Drive listings — operator/admin only.
+_DRIVE_DEBUG_SUFFIXES = ("/folders/all", "/chapter-breakdown")
+
+
 def require_drive_access(
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and current_user.role not in {"operator", "admin"}:
+    is_write = request.method in {"POST", "PUT", "PATCH", "DELETE"}
+    is_debug_listing = any(request.url.path.endswith(s) for s in _DRIVE_DEBUG_SUFFIXES)
+    if (is_write or is_debug_listing) and current_user.role not in {"operator", "admin"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator or admin role required.")
     return current_user
 
