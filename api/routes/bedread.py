@@ -1,14 +1,20 @@
-"""BedRead routes — proxy to BedReadVoices."""
+"""BedRead job routes — proxy to BedReadVoices.
+
+Only the audio-generation JOB endpoints remain: they back the "Audio Jobs"
+monitor, which lists batch jobs (including auto-mode batches produced by the
+Auto Audio feature) with per-chapter download / zip. The manual story
+browse/search/generate proxy was removed with the retired manual BedRead page
+(that path was also where the spoofable inbound x-user-id was forwarded).
+"""
 
 from __future__ import annotations
 
 import os
-from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Header, Query, Response
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.auth import require_active_user, require_job_creation_rate, require_operator
+from api.auth import require_active_user, require_operator
 from api.proxy import json_proxy, streaming_proxy
 
 router = APIRouter(prefix="/api/bedread", tags=["BedRead"])
@@ -39,58 +45,6 @@ async def _proxy_delete(path: str) -> JSONResponse:
 
 async def _proxy_stream(path: str, timeout: float = 300.0) -> StreamingResponse | JSONResponse:
     return await streaming_proxy("GET", f"{_bv_url()}{path}", timeout=timeout)
-
-
-@router.get("/stories", dependencies=_AUTH)
-async def list_stories() -> JSONResponse:
-    return await _proxy_get("/api/bedread/stories")
-
-
-@router.get("/stories/search", dependencies=_AUTH)
-async def search_stories(
-    keyword: Optional[str] = Query(None),
-    categories: Optional[str] = Query(None),
-    status: Optional[str] = Query("all"),
-    sort: Optional[str] = Query("release_date"),
-    minchapters: Optional[int] = Query(None),
-    publishedWithin: Optional[int] = Query(None),
-    page: int = Query(1),
-    limit: int = Query(20),
-) -> JSONResponse:
-    params = {
-        "keyword": keyword,
-        "categories": categories,
-        "status": status,
-        "sort": sort,
-        "minchapters": minchapters,
-        "publishedWithin": publishedWithin,
-        "page": page,
-        "limit": limit,
-    }
-    params = {k: v for k, v in params.items() if v is not None}
-    return await _proxy_get("/api/bedread/stories/search", params=params)
-
-
-@router.get("/stories/{story_id}/chapters", dependencies=_AUTH)
-async def get_story_chapters(
-    story_id: str,
-    x_user_id: Optional[str] = Header(None, alias="x-user-id"),
-) -> JSONResponse:
-    headers = {}
-    if x_user_id:
-        headers["x-user-id"] = x_user_id
-    return await _proxy_get(f"/api/bedread/stories/{story_id}/chapters", headers=headers)
-
-
-@router.post("/generate", dependencies=[*_AUTH, Depends(require_job_creation_rate)])
-async def start_batch_generate(
-    request: dict = Body(...),
-    x_user_id: Optional[str] = Header(None, alias="x-user-id"),
-) -> JSONResponse:
-    headers = {}
-    if x_user_id:
-        headers["x-user-id"] = x_user_id
-    return await _proxy_post("/api/bedread/generate", json_body=request, headers=headers)
 
 
 @router.get("/jobs/{batch_id}", dependencies=_AUTH)
