@@ -203,8 +203,9 @@ export function UpdateTab({
   const noUpdateLabel = `Up-to-Date (${filteredNoUpdate.length})`;
   const noServerLabel = `No Server Match (${filteredNoServerMatch.length})`;
   const emptyLabel = `Empty EXTENDED (${filteredEmptyExtended.length})`;
-  const noDriveLabel = `No Drive Folder (${filteredNoDriveFolder.length})`;
-  const isUpdatingAny = updatingIds.size > 0;
+  const noDriveLabel = `Missing EXTENDED_ Folder (${filteredNoDriveFolder.length})`;
+  const updatingCount = updatingIds.size;
+  const isUpdatingAny = updatingCount > 0;
   const successCount = Array.from(updateResults.values()).filter((result) => result.success).length;
   const failedCount = Array.from(updateResults.values()).filter((result) => !result.success).length;
 
@@ -310,7 +311,7 @@ export function UpdateTab({
               {isUpdatingAny ? (
                 <>
                   <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
-                  Updating ({isUpdatingAny})
+                  Updating ({updatingCount})
                 </>
               ) : (
                 <>
@@ -385,7 +386,7 @@ export function UpdateTab({
           )}
           {filteredNoDriveFolder.length > 0 && (
             <FilterChip
-              label="No Drive Folder"
+              label="Missing EXTENDED_"
               count={filteredNoDriveFolder.length}
               active={filterSection === 'noDriveFolder'}
               variant="red"
@@ -1133,20 +1134,25 @@ function ServerOnlyCard({
 }) {
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
 
   return (
     <div
-      className="flex items-center gap-3 rounded-xl border px-4 py-3"
+      className="flex items-start gap-3 rounded-xl border px-4 py-3"
       style={{ background: mutedSurface, borderColor: panelBorder }}
     >
-      <Icon icon={appIcons.info} className="h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
+      <Icon icon={appIcons.info} className="mt-1 h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium" style={{ color: pageText }}>
           {entry.server_story.title}
         </p>
-        <p className="truncate text-xs" style={{ color: '#f87171' }}>
-          No Drive folder
+        <p className="mt-1 text-xs font-semibold" style={{ color: '#f87171' }}>
+          Missing EXTENDED_ Drive folder
+        </p>
+        <p className="mt-1 text-xs leading-5" style={{ color: secondaryText }}>
+          Update checks only scan Drive folders whose name starts with <span className="font-mono">EXTENDED_</span>.
+          Create or rename the matching folder so its story title matches this server story.
         </p>
       </div>
     </div>

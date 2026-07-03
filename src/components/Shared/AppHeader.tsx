@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import type { AuthUser } from '../../api';
 import type { ThemeMode } from '../../types/theme';
-import { NAV_SECTIONS, navActive } from '../../utils/navigation';
+import { getVisibleNavSections, navActive } from '../../utils/navigation';
 import { AccountMenu } from './AccountMenu';
 import { AppIcon } from './AppIcon';
 import { Icon, appIcons } from './Icon';
@@ -35,12 +35,12 @@ export function AppHeader({
   const [accountOpen, setAccountOpen] = useState(false);
 
   const currentItem = useMemo(() => {
-    for (const section of NAV_SECTIONS) {
+    for (const section of getVisibleNavSections(authUser.role)) {
       const match = section.items.find((item) => navActive(location.pathname, item.to));
       if (match) return match;
     }
     return null;
-  }, [location.pathname]);
+  }, [authUser.role, location.pathname]);
 
   return (
     <header className="cs-topbar hidden lg:flex">

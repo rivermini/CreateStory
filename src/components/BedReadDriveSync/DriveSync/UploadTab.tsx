@@ -61,7 +61,8 @@ export function UploadTab({
   const validCount = filteredUploadable.length;
   const allDone =
     validCount > 0 && filteredUploadable.every((folder) => uploadResults.get(folder.id)?.success);
-  const isUploadingAny = uploadingIds.size > 0;
+  const uploadingCount = uploadingIds.size;
+  const isUploadingAny = uploadingCount > 0;
   const successCount = Array.from(uploadResults.values()).filter((result) => result.success).length;
   const failedCount = Array.from(uploadResults.values()).filter((result) => !result.success).length;
   const invalidLabel = `Invalid (${filteredInvalid.length})`;
@@ -132,7 +133,7 @@ export function UploadTab({
             ) : (
               <>
                 <Icon icon={appIcons.search} className="h-4 w-4" />
-                Scan Drive
+                Check Upload
               </>
             )}
           </button>
@@ -152,7 +153,7 @@ export function UploadTab({
               {isUploadingAny ? (
                 <>
                   <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
-                  Uploading ({isUploadingAny})
+                  Uploading ({uploadingCount})
                 </>
               ) : allDone ? (
                 <>
@@ -234,12 +235,10 @@ export function UploadTab({
           className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs"
           style={{ background: mutedSurface, color: secondaryText }}
         >
-          {data.drive_folders.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <Icon icon={appIcons.check} className="h-3.5 w-3.5" style={{ color: isDark ? '#34d399' : '#059669' }} />
-              {data.drive_folders.length} DONE_
-            </div>
-          )}
+          <div className="flex items-center gap-1.5">
+            <Icon icon={appIcons.check} className="h-3.5 w-3.5" style={{ color: isDark ? '#34d399' : '#059669' }} />
+            {data.drive_folders.length} DONE_ folders scanned
+          </div>
           <div className="flex items-center gap-1.5">
             <Icon icon={appIcons.add} className="h-3.5 w-3.5" style={{ color: '#d97706' }} />
             {validCount} ready to upload
@@ -273,7 +272,7 @@ export function UploadTab({
         {!loading && !data && (
           <EmptyState
             isDark={isDark}
-            message="Click 'Scan Drive' to check for stories ready to upload to your Google Drive."
+            message="Click 'Check Upload' to scan DONE_ folders that are ready to upload."
             icon={
               <Icon
                 icon={appIcons.shield}
@@ -282,6 +281,25 @@ export function UploadTab({
               />
             }
           />
+        )}
+
+        {data && !loading && data.drive_folders.length === 0 && (
+          <div
+            className="mb-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-xs"
+            style={{
+              background: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.05)',
+              borderColor: isDark ? 'rgba(245,158,11,0.22)' : 'rgba(245,158,11,0.18)',
+              color: secondaryText,
+            }}
+          >
+            <Icon icon={appIcons.info} className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#d97706' }} />
+            <p className="leading-5">
+              Check Upload only scans Drive folders whose name starts with <span className="font-mono">DONE_</span>.
+              Rename completed story folders to <span className="font-mono">DONE_status_source - Story Title</span>, using
+              <span className="font-mono"> _nw</span>, <span className="font-mono">_gd</span>,
+              <span className="font-mono"> _wp</span>, or <span className="font-mono">_ink</span> before uploading.
+            </p>
+          </div>
         )}
 
         {loading && (
@@ -595,13 +613,14 @@ function InvalidUploadCard({
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
   const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
   const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  const validationMessages = getUploadValidationMessages(folder);
 
   return (
     <div
-      className="flex items-center gap-3 rounded-xl border px-4 py-3"
+      className="flex items-start gap-3 rounded-xl border px-4 py-3"
       style={{ background: mutedSurface, borderColor: panelBorder }}
     >
-      <Icon icon={appIcons.error} className="h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
+      <Icon icon={appIcons.error} className="mt-1 h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
       <div className="min-w-0 flex-1">
         <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
           {folder.display_name}
@@ -609,15 +628,38 @@ function InvalidUploadCard({
         <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
           {folder.name}
         </p>
-        {folder.validation_errors.map((err, i) => (
-          <p key={i} className={`mt-${i === 0 ? '1' : '0.5'} truncate text-xs`} style={{ color: '#f87171' }}>
-            {err}
+        {validationMessages.map((message, i) => (
+          <p key={i} className={`${i === 0 ? 'mt-1' : 'mt-0.5'} text-xs leading-5`} style={{ color: '#f87171' }}>
+            {message}
           </p>
         ))}
       </div>
       <StatusBadge prefix="ERROR" isDark={isDark} />
     </div>
   );
+}
+
+function getUploadValidationMessages(folder: DriveFolderEntry): string[] {
+  if (!folder.validation_errors.length) {
+    return [
+      'Invalid DONE_ upload folder. Expected format: DONE_status_source - Story Title, with source _nw, _gd, _wp, or _ink.',
+    ];
+  }
+
+  return folder.validation_errors.map(formatUploadValidationMessage);
+}
+
+function formatUploadValidationMessage(message: string): string {
+  const unrecognizedSource = message.match(/UNRECOGNIZED SOURCE:\s*'([^']+)'/i);
+  if (unrecognizedSource) {
+    return `Unrecognized source token '${unrecognizedSource[1]}'. Upload folders must be named DONE_status_source - Story Title, using _nw, _gd, _wp, or _ink.`;
+  }
+
+  if (/MISSING SOURCE/i.test(message)) {
+    return 'Missing source token. Upload folders must be named DONE_status_source - Story Title, using _nw, _gd, _wp, or _ink.';
+  }
+
+  return message;
 }
 
 function AlreadyCard({

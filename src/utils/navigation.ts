@@ -9,13 +9,16 @@ export function navActive(locationPath: string, expect: string): boolean {
     return locationPath === expect || locationPath.startsWith(expect + '/') || locationPath.startsWith(expect + '?');
 }
 
-interface NavItem {
+type NavRole = 'admin' | 'operator' | 'viewer';
+
+export interface NavItem {
     to: string;
     label: string;
     iconKey: string;
+    adminOnly?: boolean;
 }
 
-interface NavSection {
+export interface NavSection {
     label: string;
     items: NavItem[];
 }
@@ -51,10 +54,22 @@ const NAV_ITEMS_SYSTEM: NavItem[] = [
     { to: '/supported-sites', label: 'Supported Sites', iconKey: '/supported-sites' },
 ];
 
+const NAV_ITEMS_ADMIN: NavItem[] = [
+    { to: '/dashboard', label: 'Dashboard', iconKey: '/dashboard', adminOnly: true },
+];
+
 export const NAV_SECTIONS: NavSection[] = [
     { label: 'Novel Crawler', items: NAV_ITEMS_CRAWL },
     { label: 'Audio', items: NAV_ITEMS_AUDIO },
     { label: 'DriveSync', items: NAV_ITEMS_BEDREADS },
     { label: 'Auto Audio', items: NAV_ITEMS_AUTO_AUDIO },
     { label: 'System', items: NAV_ITEMS_SYSTEM },
+    { label: 'Admin', items: NAV_ITEMS_ADMIN },
 ];
+
+export function getVisibleNavSections(role: NavRole): NavSection[] {
+    return NAV_SECTIONS.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !item.adminOnly || role === 'admin'),
+    })).filter((section) => section.items.length > 0);
+}

@@ -205,6 +205,7 @@ function Shell({
         <MobileSidebar
           themeMode={themeMode}
           onOpenSettings={handleOpenSettings}
+          authUser={authUser}
           isOpen={mobileSidebarOpen}
           onClose={() => setMobileSidebarOpen(false)}
         />

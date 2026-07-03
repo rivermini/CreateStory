@@ -4,7 +4,7 @@ import type { AuthUser } from '../../api';
 import { AppIcon } from './AppIcon';
 import { Icon, appIcons } from './Icon';
 import type { ThemeMode } from '../../types/theme';
-import { navActive, NAV_SECTIONS } from '../../utils/navigation';
+import { getVisibleNavSections, navActive } from '../../utils/navigation';
 import { getThemeTokens } from './design';
 
 interface SidebarProps {
@@ -31,6 +31,7 @@ const NAV_ICONS = {
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
     '/supported-sites': 'supportedSites',
+    '/dashboard': 'dashboardUsers',
 } as const;
 
 export function Sidebar({
@@ -43,6 +44,7 @@ export function Sidebar({
     const tokens = getThemeTokens(themeMode);
     const isDark = tokens.isDark;
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+    const navSections = getVisibleNavSections(authUser.role);
 
     const makeNavItem = (item: { to: string; label: string; iconKey: string }) => {
         const resolvedIcon = NAV_ICONS[item.iconKey as keyof typeof NAV_ICONS] as keyof typeof appIcons;
@@ -183,7 +185,7 @@ export function Sidebar({
                     padding: '8px 8px 16px',
                 }}
             >
-                {NAV_SECTIONS.map((section) => (
+                {navSections.map((section) => (
                     <div key={section.label} style={{ marginTop: 12 }}>
                         <p
                             className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.16em]"

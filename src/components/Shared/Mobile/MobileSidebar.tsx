@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
+import type { AuthUser } from '../../../api';
 import { AppIcon } from '../AppIcon';
 import { Icon, appIcons } from '../Icon';
 import type { ThemeMode } from '../../../types/theme';
-import { navActive, NAV_SECTIONS } from '../../../utils/navigation';
+import { getVisibleNavSections, navActive } from '../../../utils/navigation';
 import { getThemeTokens } from '../design';
 
 interface MobileSidebarProps {
     themeMode: ThemeMode;
     onOpenSettings: () => void;
+    authUser: AuthUser;
     isOpen: boolean;
     onClose: () => void;
 }
@@ -32,11 +34,13 @@ const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
     '/supported-sites': 'supportedSites',
+    '/dashboard': 'dashboardUsers',
 };
 
 export function MobileSidebar({
     themeMode,
     onOpenSettings,
+    authUser,
     isOpen,
     onClose,
 }: Readonly<MobileSidebarProps>) {
@@ -44,6 +48,7 @@ export function MobileSidebar({
     const tokens = getThemeTokens(themeMode);
     const isDark = tokens.isDark;
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+    const navSections = getVisibleNavSections(authUser.role);
 
     const makeNavItem = (item: NavItem) => {
         const iconKey = NAV_ICONS_MOBILE[item.iconKey] ?? 'add';
@@ -197,7 +202,7 @@ export function MobileSidebar({
                         padding: '4px 8px 16px',
                     }}
                 >
-                    {NAV_SECTIONS.map((section) => (
+                    {navSections.map((section) => (
                         <div key={section.label} style={{ marginTop: 14 }}>
                             <p
                                 className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.16em]"
