@@ -421,7 +421,6 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ open: boolean; ids: string[] }>({ open: false, ids: [] });
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const pollingCancelledRef = useRef(false);
 
   const loadHistory = async () => {
     setLoading(true);
@@ -461,15 +460,17 @@ export function AutoAudioHistoryPage({ themeMode }: AutoAudioHistoryPageProps) {
   useEffect(() => {
     const hasRunning = sessions.some((session) => session.status === 'running' || session.status === 'paused' || session.status === 'stopping');
     if (!hasRunning) return;
+    let cancelled = false;
     const interval = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
       try {
         const data = await getAutoAudioHistory();
-        if (!pollingCancelledRef.current) setSessions(data);
+        if (!cancelled) setSessions(data);
       } catch {
         // ignore polling errors
       }
     }, 10000);
-    return () => { pollingCancelledRef.current = true; clearInterval(interval); };
+    return () => { cancelled = true; clearInterval(interval); };
   }, [sessions]);
 
   const dateCutoff = specificDate ? (() => {

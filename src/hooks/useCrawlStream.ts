@@ -61,6 +61,11 @@ export function useCrawlStream(crawlId: string | null): UseCrawlStreamResult {
         completedCallbackRef.current(crawlId ?? '');
       }
 
+      // Stop the 2s poll once the crawl reaches a terminal state.
+      if (terminalStatuses.includes(data.progress.status)) {
+        stopPolling();
+      }
+
       // Update log lines - keep last 200
       if (data.log_lines && data.log_lines.length > 0) {
         setLogLines((prev) => {

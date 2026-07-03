@@ -323,7 +323,9 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSessions();
-    const interval = setInterval(fetchSessions, 3000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchSessions();
+    }, 3000);
     return () => clearInterval(interval);
   }, [fetchSessions]);
 

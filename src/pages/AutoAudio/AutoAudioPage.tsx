@@ -163,7 +163,9 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
       }
     };
     poll();
-    const t = setInterval(poll, isLive ? 2000 : 5000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') poll();
+    }, isLive ? 2000 : 5000);
     return () => {
       cancelled = true;
       clearInterval(t);
@@ -865,14 +867,14 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                   {session.stories_missing_audio.map((story) => (
                     <div
                       key={story.storyId}
-                      className="flex items-center justify-between rounded-xl border px-3 py-2.5"
-                      style={{ background: subtleSurface, borderColor: panelBorder }}
+                      className="flex items-center justify-between rounded-full border px-5 py-2"
+                      style={{ borderColor: panelBorder }}
                     >
                       <span className="mr-3 flex-1 truncate text-sm font-medium" style={{ color: pageText }}>
                         {story.title}
                       </span>
                       <span
-                        className="shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold tabular-nums"
+                        className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tabular-nums"
                         style={{ background: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.12)', color: isDark ? '#fcd34d' : '#b45309' }}
                       >
                         {story.missingCount}
@@ -915,8 +917,8 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                       return (
                         <div
                           key={result.story_id}
-                          className="flex items-start justify-between rounded-xl border px-3 py-2.5"
-                          style={{ background: subtleSurface, borderColor: panelBorder }}
+                          className="flex items-start justify-between rounded-full border px-5 py-2.5"
+                          style={{ borderColor: panelBorder }}
                         >
                           <div className="mr-3 min-w-0 flex-1">
                             <p className="truncate text-sm font-medium" style={{ color: pageText }}>
@@ -938,9 +940,10 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                             )}
                           </div>
                           {result._processing ? (
-                            <span
-                              className="h-5 w-5 shrink-0 rounded-full border-2 border-t-transparent animate-spin"
-                              style={{ borderColor: `${runningAccent}40`, borderTopColor: runningAccent }}
+                            <Icon
+                              icon={appIcons.spinner}
+                              className="h-5 w-5 shrink-0 animate-spin"
+                              style={{ color: runningAccent }}
                             />
                           ) : result.chapters_uploaded > 0 ? (
                             <span

@@ -374,7 +374,9 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
   }, [fetchJobs]);
 
   useEffect(() => {
-    const interval = setInterval(fetchJobs, 1000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchJobs();
+    }, 1000);
     return () => clearInterval(interval);
   }, [fetchJobs]);
 
