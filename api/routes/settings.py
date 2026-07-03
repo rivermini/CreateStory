@@ -75,12 +75,11 @@ def _save_settings(db: Session, data: dict) -> None:
 @router.get("", response_model=SettingsResponse)
 async def get_settings(
     db: Annotated[Session, Depends(get_db)],
-    client: Annotated[httpx.AsyncClient, Depends(get_shared_http_client)],
     _user=Depends(require_active_user),
 ) -> SettingsResponse:
-    """Return current shared settings."""
+    """Return current shared settings. Read-only — no upstream propagation
+    (that happens on PUT only)."""
     data = _load_settings(db)
-    await _propagate_tts_concurrency(data.get("tts_concurrency"), client)
     return SettingsResponse(**data)
 
 
