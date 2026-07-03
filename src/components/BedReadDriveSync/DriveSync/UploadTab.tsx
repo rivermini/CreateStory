@@ -154,9 +154,9 @@ export function UploadTab({
               disabled={isUploadingAny || allDone}
               className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
               style={{
-                background: allDone ? mutedSurface : '#d97706',
-                borderColor: allDone ? panelBorder : '#d97706',
-                color: allDone ? secondaryText : '#ffffff',
+                background: isUploadingAny || allDone ? mutedSurface : '#d97706',
+                borderColor: isUploadingAny || allDone ? panelBorder : '#d97706',
+                color: isUploadingAny || allDone ? secondaryText : '#ffffff',
                 opacity: isUploadingAny ? 0.65 : 1,
               }}
             >

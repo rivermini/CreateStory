@@ -59,6 +59,7 @@ export function MobileSettingsPage({
     const isDark = themeMode === 'dark';
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [errorBannerVisible, setErrorBannerVisible] = useState(false);
     const [activeCategory, setActiveCategory] = useState<SettingsCategory | null>(null);
     const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
 
@@ -158,6 +159,22 @@ export function MobileSettingsPage({
         document.body.style.overflow = 'hidden';
         return () => { document.body.style.overflow = ''; };
     }, []);
+
+    useEffect(() => {
+        if (!error) {
+            setErrorBannerVisible(false);
+            return;
+        }
+
+        setErrorBannerVisible(true);
+        const fadeTimer = globalThis.setTimeout(() => setErrorBannerVisible(false), 3500);
+        const clearTimer = globalThis.setTimeout(() => setError(''), 3900);
+
+        return () => {
+            globalThis.clearTimeout(fadeTimer);
+            globalThis.clearTimeout(clearTimer);
+        };
+    }, [error]);
 
     // Load Drive Sync config
     useEffect(() => {
@@ -1091,7 +1108,7 @@ export function MobileSettingsPage({
                 /* Category content */
                 <div className="flex-1 overflow-y-auto px-4 py-4">
                     {error && (
-                        <div className="mb-3 rounded-xl border px-4 py-3 text-sm" style={{ borderColor: isDark ? 'rgba(220,38,38,0.3)' : 'rgba(220,38,38,0.2)', background: isDark ? 'rgba(220,38,38,0.08)' : 'rgba(254,242,242,0.95)', color: isDark ? 'rgb(252,165,165)' : 'rgb(185,28,28)' }}>
+                        <div className="mb-3 rounded-xl border px-4 py-3 text-sm transition-opacity duration-300" style={{ opacity: errorBannerVisible ? 1 : 0, borderColor: isDark ? 'rgba(220,38,38,0.3)' : 'rgba(220,38,38,0.2)', background: isDark ? 'rgba(220,38,38,0.08)' : 'rgba(254,242,242,0.95)', color: isDark ? 'rgb(252,165,165)' : 'rgb(185,28,28)' }}>
                             {error}
                         </div>
                     )}

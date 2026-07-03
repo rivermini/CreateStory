@@ -75,6 +75,7 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState('');
+  const [errorBannerVisible, setErrorBannerVisible] = useState(false);
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance');
 
   const [localTheme, setLocalTheme] = useState<'light' | 'dark'>(themeMode === 'dark' ? 'dark' : 'light');
@@ -191,6 +192,22 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   }, []);
 
   const handleClose = onClose;
+
+  useEffect(() => {
+    if (!error) {
+      setErrorBannerVisible(false);
+      return;
+    }
+
+    setErrorBannerVisible(true);
+    const fadeTimer = globalThis.setTimeout(() => setErrorBannerVisible(false), 3500);
+    const clearTimer = globalThis.setTimeout(() => setError(''), 3900);
+
+    return () => {
+      globalThis.clearTimeout(fadeTimer);
+      globalThis.clearTimeout(clearTimer);
+    };
+  }, [error]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1065,7 +1082,7 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
             </div>
 
             {error && (
-              <div className="mx-4 mt-4 rounded-lg border px-4 py-3 text-sm md:mx-5" style={{ borderColor: isDark ? 'rgba(248,113,113,0.28)' : 'rgba(220,38,38,0.2)', background: isDark ? 'rgba(127,29,29,0.18)' : 'rgba(254,242,242,0.95)', color: isDark ? 'rgb(252 165 165)' : 'rgb(185 28 28)' }}>
+              <div className="mx-4 mt-4 rounded-lg border px-4 py-3 text-sm transition-opacity duration-300 md:mx-5" style={{ opacity: errorBannerVisible ? 1 : 0, borderColor: isDark ? 'rgba(248,113,113,0.28)' : 'rgba(220,38,38,0.2)', background: isDark ? 'rgba(127,29,29,0.18)' : 'rgba(254,242,242,0.95)', color: isDark ? 'rgb(252 165 165)' : 'rgb(185 28 28)' }}>
                 {error}
               </div>
             )}
