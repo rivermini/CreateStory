@@ -18,7 +18,6 @@ const NAV_ICONS = {
     '/': 'add',
     '/goodnovel-batch': 'batch',
     '/results/all': 'crawlHistory',
-    '/bedread': 'bookOpen',
     '/bedread/jobs': 'audioJobs',
     '/drive-sync': 'sync',
     '/drive-sync/history': 'syncHistory',

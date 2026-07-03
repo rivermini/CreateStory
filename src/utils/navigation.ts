@@ -3,7 +3,6 @@ export function navActive(locationPath: string, expect: string): boolean {
         return locationPath.startsWith('/results');
     }
     if (expect === '/') return locationPath === '/';
-    if (expect === '/bedread' && locationPath.startsWith('/bedread/')) return false;
     if (expect === '/drive-sync' && locationPath.startsWith('/drive-sync/')) return false;
     if (expect === '/auto-audio' && locationPath.startsWith('/auto-audio/')) return false;
     return locationPath === expect || locationPath.startsWith(expect + '/') || locationPath.startsWith(expect + '?');
@@ -30,7 +29,6 @@ const NAV_ITEMS_CRAWL: NavItem[] = [
 ];
 
 const NAV_ITEMS_AUDIO: NavItem[] = [
-    { to: '/bedread', label: 'BedReads', iconKey: '/bedread' },
     { to: '/bedread/jobs', label: 'Audio Jobs', iconKey: '/bedread/jobs' },
 ];
 

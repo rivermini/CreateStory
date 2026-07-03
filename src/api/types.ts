@@ -561,6 +561,7 @@ export interface CheckUploadableResponse {
   uploadable: DriveFolderEntry[];
   already_on_server: DriveFolderEntry[];
   invalid: DriveFolderEntry[];
+  not_ready?: DriveFolderEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,43 +1017,8 @@ export interface SpeakResponse {
 }
 
 // ---------------------------------------------------------------------------
-// BedRead — Novel TTS Reader
+// BedRead audio jobs — "Audio Jobs" monitor (incl. Auto Audio batches)
 // ---------------------------------------------------------------------------
-
-export interface BedReadStory {
-  storyId: string;
-  title: string;
-  author: string;
-  chapterCount: number;
-  coverUrl?: string | null;
-  description?: string | null;
-  tags: string[];
-}
-
-export interface BedReadStorySearchParams {
-  keyword?: string;
-  categories?: string[];
-  status?: 'all' | 'ongoing' | 'completed';
-  sort?: 'release_date' | 'popular' | 'recently_updated' | 'recently_added';
-  minChapters?: number;
-  publishedWithin?: number;
-  page?: number;
-  limit?: number;
-}
-
-export interface BedReadStorySearchResponse {
-  stories: BedReadStory[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
-export interface BedReadChapter {
-  chapterNumber: number;
-  title: string;
-  plainContent?: string | null;
-}
 
 export interface BatchJobChapter {
   chapter_number: number;
@@ -1081,23 +1047,6 @@ export interface BatchJob {
   chapters: BatchJobChapter[];
   queue_position?: number;
   from_auto_mode?: boolean;
-}
-
-export interface BatchGenerateRequest {
-  story_id: string;
-  story_title: string;
-  chapter_start?: number;
-  chapter_end?: number | null;
-  voice?: string;
-  lang?: string;
-  speed?: number;
-  format?: string;
-}
-
-export interface BatchGenerateResponse {
-  batch_id: string;
-  status: string;
-  total_chapters: number;
 }
 
 // ---------------------------------------------------------------------------

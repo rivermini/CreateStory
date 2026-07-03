@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   cancelBatchJob,
   getChapterAudioUrl,
@@ -335,7 +334,6 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
   const isDark = themeMode === 'dark';
   const PAGE_SIZE = 15;
   const INITIAL_VISIBLE_COUNT = PAGE_SIZE;
-  const navigate = useNavigate();
   const [jobs, setJobs] = useState<BatchJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -739,13 +737,6 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
                 >
                   {isLoading ? 'Refreshing…' : 'Refresh'}
                 </button>
-                <button
-                  onClick={() => navigate('/bedread')}
-                  className="rounded-md border px-3 py-2 text-sm transition-colors"
-                  style={{ borderColor: panelBorder, background: mutedSurface, color: secondaryText }}
-                >
-                  New job
-                </button>
               </div>
             </div>
 
@@ -893,16 +884,9 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
               className="rounded-2xl border px-5 py-12 text-sm sm:px-6"
               style={{ background: panelBackground, borderColor: panelBorder, color: secondaryText }}
             >
-              {filter === 'all' ? (
-                <>
-                  No BedRead jobs yet.{' '}
-                  <button onClick={() => navigate('/bedread')} className="underline">
-                    Start your first TTS job
-                  </button>
-                </>
-              ) : (
-                `No ${filter} jobs.`
-              )}
+              {filter === 'all'
+                ? 'No audio jobs yet. Jobs appear here when Auto Audio generates audio.'
+                : `No ${filter} jobs.`}
             </section>
           )}
 

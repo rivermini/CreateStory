@@ -25,7 +25,6 @@ const GoodNovelBatchPage = lazy(() => import('./pages/NovelCrawler/GoodNovelBatc
 const CrawlPage = lazy(() => import('./pages/NovelCrawler/CrawlPage').then(m => ({ default: m.CrawlPage })));
 const ResultPage = lazy(() => import('./pages/NovelCrawler/ResultPage').then(m => ({ default: m.ResultPage })));
 const CrawlHistory = lazy(() => import('./pages/NovelCrawler/CrawlHistoryPage').then(m => ({ default: m.default })));
-const BedReadPage = lazy(() => import('./pages/BedReadVoices/BedReadPage').then(m => ({ default: m.BedReadPage })));
 const BedReadJobsPage = lazy(() => import('./pages/BedReadVoices/BedReadJobsPage').then(m => ({ default: m.default })));
 const DriveSyncPage = lazy(() => import('./pages/BedReadDriveSync/DriveSyncPage').then(m => ({ default: m.DriveSyncPage })));
 const DriveSyncHistoryPage = lazy(() => import('./pages/BedReadDriveSync/DriveSyncHistoryPage').then(m => ({ default: m.DriveSyncHistoryPage })));
@@ -265,7 +264,6 @@ function Shell({
               <Route path="/crawl" element={<CrawlPage themeMode={themeMode}  />} />
               <Route path="/results" element={<ResultPage themeMode={themeMode} />} />
               <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} />} />
-              <Route path="/bedread" element={<BedReadPage themeMode={themeMode} />} />
               <Route path="/bedread/jobs" element={<BedReadJobsPage themeMode={themeMode} />} />
               <Route path="/drive-sync" element={<DriveSyncPage themeMode={themeMode}  />} />
               <Route path="/drive-sync/content-update" element={<ChapterContentUpdatePage themeMode={themeMode}  />} />

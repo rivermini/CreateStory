@@ -18,7 +18,6 @@ interface AppHeaderProps {
 
 const QUICK_MODULES = [
   { label: 'Crawler', to: '/', icon: 'crawl' },
-  { label: 'BedReads', to: '/bedread', icon: 'bookOpen' },
   { label: 'Drive', to: '/drive-sync', icon: 'sync' },
   { label: 'Audio', to: '/auto-audio', icon: 'autoAudio' },
 ] as const;
