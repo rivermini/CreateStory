@@ -90,7 +90,7 @@ router = APIRouter(tags=["Drive Sync"])
 @router.get("/check-uploadable", response_model=CheckUploadableResponse, tags=["Drive Sync"])
 async def check_uploadable() -> CheckUploadableResponse:
     """
-    Cross-reference Drive folders (DONE_/ING_/INCOMPLETE_) with the main BE's
+    Cross-reference Drive DONE_ folders with the main BE's
     story list. Returns which Drive folders are not yet on the server (uploadable).
     """
     service = get_drive_sync_service()
@@ -125,9 +125,15 @@ async def check_uploadable() -> CheckUploadableResponse:
 
         if not is_valid:
             if raw_token:
-                folder["validation_errors"].append(f"UNRECOGNIZED SOURCE: '{raw_token}' — try _nw, _gd, _wp, or _ink")
+                folder["validation_errors"].append(
+                    f"UNRECOGNIZED SOURCE: '{raw_token}' - upload folders must be named "
+                    "DONE_{status}_{source} - {title}; use _nw, _gd, _wp, or _ink."
+                )
             else:
-                folder["validation_errors"].append("MISSING SOURCE — needs format: DONE_{status}_{source} - {title}")
+                folder["validation_errors"].append(
+                    "MISSING SOURCE - upload folders must be named DONE_{status}_{source} - {title}; "
+                    "source must be _nw, _gd, _wp, or _ink."
+                )
             invalid.append(DriveFolderEntry(**folder))
             continue
 
@@ -225,6 +231,22 @@ async def check_updatable() -> CheckUpdatableResponse:
             except Exception as exc:
                 logger.warning("Skipping malformed drive folder: %s", exc)
 
+    extended_titles_lower = {_normalize(f.get("display_name", "")) for f in extended_folders}
+    no_drive_title_keys: list[str] = []
+    seen_no_drive_titles: set[str] = set()
+    for folder in drive_folders_raw:
+        title_lower = _normalize(folder.get("display_name", ""))
+        if (
+            not title_lower
+            or folder.get("prefix") == "EXTENDED"
+            or title_lower in extended_titles_lower
+            or title_lower not in server_by_title
+            or title_lower in seen_no_drive_titles
+        ):
+            continue
+        seen_no_drive_titles.add(title_lower)
+        no_drive_title_keys.append(title_lower)
+
     extended_ids = [f["id"] for f in matched_extended_folders]
 
     try:
@@ -242,8 +264,16 @@ async def check_updatable() -> CheckUpdatableResponse:
 
     last_updated_by_name = await _get_last_update_times(
         service,
-        [f.get("display_name", "") for f in matched_extended_folders],
+        [f.get("display_name", "") for f in matched_extended_folders]
+        + [server_by_title[title].title for title in no_drive_title_keys],
     )
+    no_drive_folder = [
+        ServerOnlyStoryEntry(
+            server_story=server_by_title[title],
+            last_updated=last_updated_by_name.get(server_by_title[title].title),
+        )
+        for title in no_drive_title_keys
+    ]
 
     updatable = []
     updatable_folder_ids: list[str] = []
@@ -370,7 +400,7 @@ async def check_updatable() -> CheckUpdatableResponse:
         no_server_match=no_server_match,
         empty_extended=empty_extended,
         invalid=invalid,
-        no_drive_folder=[],
+        no_drive_folder=no_drive_folder,
     )
 
 

@@ -7,6 +7,7 @@ import logging
 import ssl
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
@@ -801,19 +802,22 @@ class DriveAPIMixin:
         folder_ids = list(folder_ids)
 
         chapters_sub: dict[str, tuple[str, str]] = {}
+        folder_id_set = set(folder_ids)
+        max_chunk_workers = max(1, min(_DRIVE_CALL_CONCURRENCY, (len(folder_ids) + _CHUNK_SIZE - 1) // _CHUNK_SIZE))
 
-        for chunk_start in range(0, len(folder_ids), _CHUNK_SIZE):
-            chunk = folder_ids[chunk_start: chunk_start + _CHUNK_SIZE]
+        def _list_chapter_subfolders_for_chunk(chunk: list[str]) -> list[dict]:
+            worker_drive_service = self._build_drive_service()
             parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
             q = (
                 f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
                 "and name='chapters-extended' and trashed=false"
             )
+            files: list[dict] = []
             page_token = None
             while True:
                 _pt = page_token
                 def _call() -> dict:
-                    return drive_service.files().list(
+                    return worker_drive_service.files().list(
                         q=q,
                         fields="files(id, name, parents),nextPageToken",
                         pageSize=_CHECK_BATCH_PAGE_SIZE,
@@ -823,14 +827,21 @@ class DriveAPIMixin:
                     response = self._retry_drive_call(_call)
                 except (ssl.SSLError, TimeoutError):
                     break
-                for f in response.get("files", []):
-                    for parent in f.get("parents", []):
-                        if parent in folder_ids:
-                            chapters_sub[f["id"]] = (parent, f.get("name", ""))
-                            break
+                files.extend(response.get("files", []))
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     break
+            return files
+
+        folder_chunks = [folder_ids[start: start + _CHUNK_SIZE] for start in range(0, len(folder_ids), _CHUNK_SIZE)]
+        with ThreadPoolExecutor(max_workers=max_chunk_workers, thread_name_prefix="drive-check-subfolders") as executor:
+            futures = [executor.submit(_list_chapter_subfolders_for_chunk, chunk) for chunk in folder_chunks]
+            for future in as_completed(futures):
+                for f in future.result():
+                    for parent in f.get("parents", []):
+                        if parent in folder_id_set:
+                            chapters_sub[f["id"]] = (parent, f.get("name", ""))
+                            break
 
         if not chapters_sub:
             dupe_result = {fid: (False, []) for fid in folder_ids}
@@ -844,15 +855,19 @@ class DriveAPIMixin:
 
         files_by_sub: dict[str, list[dict]] = {sid: [] for sid in chapters_sub}
         sub_ids = list(chapters_sub)
-        for chunk_start in range(0, len(sub_ids), _CHUNK_SIZE):
-            chunk = sub_ids[chunk_start: chunk_start + _CHUNK_SIZE]
+        sub_id_set = set(sub_ids)
+        max_file_workers = max(1, min(_DRIVE_CALL_CONCURRENCY, (len(sub_ids) + _CHUNK_SIZE - 1) // _CHUNK_SIZE))
+
+        def _list_md_files_for_chunk(chunk: list[str]) -> list[dict]:
+            worker_drive_service = self._build_drive_service()
             parents_clause = " or ".join(f'"{sid}" in parents' for sid in chunk)
             q = f"({parents_clause}) and name contains '.md' and trashed=false"
+            files: list[dict] = []
             page_token = None
             while True:
                 _pt = page_token
                 def _call() -> dict:
-                    return drive_service.files().list(
+                    return worker_drive_service.files().list(
                         q=q,
                         fields="files(id, name, parents),nextPageToken",
                         pageSize=_CHECK_BATCH_PAGE_SIZE,
@@ -863,23 +878,32 @@ class DriveAPIMixin:
                 except (ssl.SSLError, TimeoutError):
                     break
                 for f in response.get("files", []):
-                    if not f.get("name", "").lower().endswith(".md"):
-                        continue
-                    for parent in f.get("parents", []):
-                        if parent in files_by_sub:
-                            files_by_sub[parent].append(f)
-                            break
+                    if f.get("name", "").lower().endswith(".md"):
+                        files.append(f)
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     break
+            return files
+
+        sub_chunks = [sub_ids[start: start + _CHUNK_SIZE] for start in range(0, len(sub_ids), _CHUNK_SIZE)]
+        with ThreadPoolExecutor(max_workers=max_file_workers, thread_name_prefix="drive-check-md-files") as executor:
+            futures = [executor.submit(_list_md_files_for_chunk, chunk) for chunk in sub_chunks]
+            for future in as_completed(futures):
+                for f in future.result():
+                    for parent in f.get("parents", []):
+                        if parent in sub_id_set:
+                            files_by_sub[parent].append(f)
+                            break
+
+        subfolders_by_folder: dict[str, list[tuple[str, str]]] = {}
+        for sub_id, (story_id, sub_name) in chapters_sub.items():
+            subfolders_by_folder.setdefault(story_id, []).append((sub_id, sub_name))
 
         for folder_id in folder_ids:
             indices: list[int] = []
             ext_count = 0
             indices_extended: list[tuple[int, str]] = []
-            for sub_id, (story_id, sub_name) in chapters_sub.items():
-                if story_id != folder_id:
-                    continue
+            for sub_id, sub_name in subfolders_by_folder.get(folder_id, []):
                 files = files_by_sub.get(sub_id, [])
                 if sub_name == "chapters-extended":
                     ext_count = sum(1 for f in files if _is_chapter_file(f.get("name", "")))
@@ -937,19 +961,22 @@ class DriveAPIMixin:
             return (has_free, has_tags)
 
         _CHUNK_SIZE = _CHECK_BATCH_CHUNK_SIZE
+        folder_ids = list(folder_ids)
+        folder_id_set = set(folder_ids)
 
-        for chunk_start in range(0, len(folder_ids), _CHUNK_SIZE):
-            chunk = folder_ids[chunk_start: chunk_start + _CHUNK_SIZE]
+        def _list_free_tag_files_for_chunk(chunk: list[str]) -> list[dict]:
+            worker_drive_service = self._build_drive_service()
             parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
             q = (
                 f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
                 "and (name='free.md' or name='tags.md') and trashed=false"
             )
+            files: list[dict] = []
             page_token = None
             while True:
                 _pt = page_token
                 def _call() -> dict:
-                    return drive_service.files().list(
+                    return worker_drive_service.files().list(
                         q=q,
                         fields="files(id, name, parents),nextPageToken",
                         pageSize=_CHECK_BATCH_PAGE_SIZE,
@@ -959,17 +986,25 @@ class DriveAPIMixin:
                     response = self._retry_drive_call(_call)
                 except (ssl.SSLError, TimeoutError):
                     break
-                for f in response.get("files", []):
+                files.extend(response.get("files", []))
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
+            return files
+
+        chunks = [folder_ids[start: start + _CHUNK_SIZE] for start in range(0, len(folder_ids), _CHUNK_SIZE)]
+        max_workers = max(1, min(_DRIVE_CALL_CONCURRENCY, len(chunks)))
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="drive-check-free-tags") as executor:
+            futures = [executor.submit(_list_free_tag_files_for_chunk, chunk) for chunk in chunks]
+            for future in as_completed(futures):
+                for f in future.result():
                     for parent in f.get("parents", []):
-                        if parent in folder_ids:
+                        if parent in folder_id_set:
                             fname = f.get("name", "").lower()
                             if fname == "free.md":
                                 has_free[parent] = True
                             elif fname == "tags.md":
                                 has_tags[parent] = True
-                page_token = response.get("nextPageToken")
-                if not page_token:
-                    break
 
         return (has_free, has_tags)
 
