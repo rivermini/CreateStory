@@ -141,7 +141,7 @@ def get_history(request: Request) -> list[AutoAudioHistoryEntry]:
     sessions = service.get_history()
     role = getattr(request.state, "create_story_role", None)
     owner_id = current_owner(request)
-    if role != "admin":
+    if role not in ("admin", "operator"):
         sessions = [s for s in sessions if s.get("created_by_user_id") == owner_id]
     entries = []
     for s in sessions:

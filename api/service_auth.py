@@ -16,7 +16,14 @@ def internal_service_headers() -> dict[str, str]:
     token = _load_service_token()
     if not token:
         raise RuntimeError("INTERNAL_SERVICE_TOKEN is not configured.")
-    return {"Authorization": f"Bearer {token}"}
+    # AutoAudio is a trusted internal service acting on system-created batches
+    # (which have no per-user owner). Identify as admin so the BedReadVoices
+    # owner checks (require_owner) authorise its batch management/download calls;
+    # otherwise they fail closed (404) with no identity present.
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-CreateStory-Role": "admin",
+    }
 
 
 def _load_service_token() -> str:
