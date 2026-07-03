@@ -79,11 +79,7 @@ export function Sidebar({
         let badgeColor = 'transparent';
         let badgeTextColor = tokens.colors.textMuted;
 
-        if (item.to === '/supported-sites') {
-            badgeText = '10+';
-            badgeColor = isDark ? 'rgba(52,211,153,0.12)' : 'rgba(21,128,61,0.08)';
-            badgeTextColor = isDark ? '#34d399' : '#15803d';
-        } else if (item.to === '/auto-audio') {
+        if (item.to === '/auto-audio') {
             badgeText = 'AI';
             badgeColor = isDark ? 'rgba(255,91,0,0.12)' : 'rgba(255,91,0,0.08)';
             badgeTextColor = '#ff5b00';
