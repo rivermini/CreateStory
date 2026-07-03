@@ -33,6 +33,25 @@ class BatchPoller:
         completed_indices: set[int] = set()
 
         while True:
+            # Honor a pause request: suspend polling here so no further chapters
+            # are discovered, downloaded, or uploaded until the user resumes.
+            # request_stop() also releases this wait (wait_while_paused -> False),
+            # so a pause-then-stop can't deadlock. Paused time is excluded from the
+            # idle / wall-clock timeouts below so a long pause won't falsely time out.
+            if session._paused:
+                pause_started = time.time()
+                session.add_log(
+                    4, "Paused — batch polling suspended until resume", level="info"
+                )
+                session.wait_while_paused()
+                paused_for = time.time() - pause_started
+                start += paused_for
+                last_progress += paused_for
+                if not session._stopping:
+                    session.add_log(
+                        4, "Resumed — continuing batch polling", level="info"
+                    )
+
             now = time.time()
             if now - last_progress >= idle_timeout_seconds:
                 session.add_log(
