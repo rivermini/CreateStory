@@ -8,7 +8,11 @@ import httpx
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
-from api.middleware import get_shared_http_client
+from api.middleware import (
+    get_shared_http_client,
+    get_shared_stream_http_client,
+    get_stream_semaphore,
+)
 from api.service_client import current_request_id
 
 _SAFE_RESPONSE_HEADERS = {
@@ -83,6 +87,14 @@ async def json_proxy(
     return JSONResponse(status_code=response.status_code, content=body)
 
 
+async def _close_stream(response: "httpx.Response", sem) -> None:
+    """Close the upstream stream and release its concurrency slot."""
+    try:
+        await response.aclose()
+    finally:
+        sem.release()
+
+
 async def streaming_proxy(
     method: str,
     url: str,
@@ -91,31 +103,45 @@ async def streaming_proxy(
     headers: dict[str, str] | None = None,
     timeout: float = 300.0,
 ) -> StreamingResponse | JSONResponse:
-    client = get_shared_http_client()
-    request = client.build_request(method, url, params=params, headers=headers)
-    request.extensions["timeout"] = httpx.Timeout(timeout).as_dict()
+    # Use the dedicated stream pool + a concurrency cap so long downloads/SSE
+    # can't starve the JSON proxy pool (P2).
+    sem = get_stream_semaphore()
+    if sem.locked():
+        return JSONResponse(status_code=503, content=_error_body("Too many concurrent downloads, try again shortly.", "too_many_streams"))
+    await sem.acquire()
+    released = False
     try:
-        response = await client.send(request, stream=True)
-    except httpx.TimeoutException:
-        return JSONResponse(status_code=504, content=_error_body("Upstream request timed out.", "upstream_timeout"))
-    except httpx.RequestError:
-        return JSONResponse(status_code=502, content=_error_body("Upstream service is unavailable.", "upstream_unavailable"))
+        client = get_shared_stream_http_client()
+        request = client.build_request(method, url, params=params, headers=headers)
+        request.extensions["timeout"] = httpx.Timeout(timeout).as_dict()
+        try:
+            response = await client.send(request, stream=True)
+        except httpx.TimeoutException:
+            return JSONResponse(status_code=504, content=_error_body("Upstream request timed out.", "upstream_timeout"))
+        except httpx.RequestError:
+            return JSONResponse(status_code=502, content=_error_body("Upstream service is unavailable.", "upstream_unavailable"))
 
-    if response.status_code >= 400:
-        await response.aread()
-        result = _upstream_error(response)
-        await response.aclose()
-        return result
+        if response.status_code >= 400:
+            await response.aread()
+            result = _upstream_error(response)
+            await response.aclose()
+            return result
 
-    response_headers = {
-        key: value
-        for key, value in response.headers.items()
-        if key.lower() in _SAFE_RESPONSE_HEADERS
-    }
-    return StreamingResponse(
-        response.aiter_bytes(),
-        status_code=response.status_code,
-        media_type=response.headers.get("content-type", "application/octet-stream"),
-        headers=response_headers,
-        background=BackgroundTask(response.aclose),
-    )
+        response_headers = {
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() in _SAFE_RESPONSE_HEADERS
+        }
+        stream_response = StreamingResponse(
+            response.aiter_bytes(),
+            status_code=response.status_code,
+            media_type=response.headers.get("content-type", "application/octet-stream"),
+            headers=response_headers,
+            background=BackgroundTask(_close_stream, response, sem),
+        )
+        # Ownership of the slot passes to the background task (released on close).
+        released = True
+        return stream_response
+    finally:
+        if not released:
+            sem.release()

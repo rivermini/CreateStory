@@ -29,6 +29,11 @@ MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 
 
 # Module-level shared client — initialized in lifespan, closed on shutdown.
 _shared_client: httpx.AsyncClient | None = None
+# Dedicated client + concurrency cap for long-lived streams (SSE / audio & zip
+# downloads) so they cannot starve the JSON proxy pool.
+_shared_stream_client: httpx.AsyncClient | None = None
+_STREAM_MAX_CONCURRENT = int(os.getenv("STREAM_MAX_CONCURRENT", "24"))
+_stream_semaphore: "asyncio.Semaphore | None" = None
 
 
 # ── Retry transport ──────────────────────────────────────────────────────────────
@@ -108,9 +113,22 @@ def get_shared_http_client() -> httpx.AsyncClient:
     return _shared_client
 
 
+def get_shared_stream_http_client() -> httpx.AsyncClient:
+    """Return the dedicated client for long-lived streaming proxies."""
+    if _shared_stream_client is None:
+        raise RuntimeError("Shared stream HTTP client not initialised.")
+    return _shared_stream_client
+
+
+def get_stream_semaphore() -> "asyncio.Semaphore":
+    if _stream_semaphore is None:
+        raise RuntimeError("Stream semaphore not initialised.")
+    return _stream_semaphore
+
+
 def init_shared_http_client() -> None:
     """Create the module-level ``httpx.AsyncClient`` (call from lifespan startup)."""
-    global _shared_client
+    global _shared_client, _shared_stream_client, _stream_semaphore
     if _shared_client is not None:
         return
     _shared_client = httpx.AsyncClient(
@@ -119,16 +137,27 @@ def init_shared_http_client() -> None:
         transport=_RetryTransport(),
         event_hooks={"request": [inject_service_headers]},
     )
-    logger.info("Shared httpx.AsyncClient initialised.")
+    # Separate pool for long-lived streams so a burst can't starve JSON calls.
+    _shared_stream_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(300.0, connect=10.0),
+        limits=httpx.Limits(max_connections=_STREAM_MAX_CONCURRENT, max_keepalive_connections=0),
+        transport=_RetryTransport(),
+        event_hooks={"request": [inject_service_headers]},
+    )
+    _stream_semaphore = asyncio.Semaphore(_STREAM_MAX_CONCURRENT)
+    logger.info("Shared httpx clients initialised (json + stream, stream cap=%d).", _STREAM_MAX_CONCURRENT)
 
 
 async def close_shared_http_client() -> None:
     """Close the shared ``httpx.AsyncClient`` (call from lifespan shutdown)."""
-    global _shared_client
+    global _shared_client, _shared_stream_client
     if _shared_client is not None:
         await _shared_client.aclose()
         _shared_client = None
-        logger.info("Shared httpx.AsyncClient closed.")
+    if _shared_stream_client is not None:
+        await _shared_stream_client.aclose()
+        _shared_stream_client = None
+    logger.info("Shared httpx clients closed.")
 
 
 # ── Security-headers middleware ────────────────────────────────────────────────
