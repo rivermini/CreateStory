@@ -855,6 +855,9 @@ class TTSService:
                 job.output_filename = safe_name
                 job.progress_pct = 100
                 job.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Audio is written; drop the source chapter text so completed jobs
+                # don't retain it in memory or the DB (L5 — memory + privacy).
+                job.text = ""
                 self._persist_job(job)
 
                 logger.info("Worker %d job %s completed: %s", worker_id, job_id, merged_path)
