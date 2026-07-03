@@ -35,6 +35,18 @@ from api.services.drive_service._paths import (
 _DRIVE_SCOPES = ("https://www.googleapis.com/auth/drive",)
 
 
+def _q_id(value: str) -> str:
+    """Escape a value for safe interpolation into a Google Drive ``q`` string
+    literal (single- or double-quoted).
+
+    Drive query literals are delimited by ' or ", with backslash the escape
+    char. A crafted id containing a quote could otherwise break out of the
+    literal and alter the query (the service account has full-Drive scope).
+    Real Drive ids are ``[A-Za-z0-9_-]`` so this is a no-op for valid input.
+    """
+    return value.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
+
+
 class DriveAPIMixin:
     """
     Mix-in providing Google Drive API integration.
@@ -175,7 +187,7 @@ class DriveAPIMixin:
         while True:
             _pt = page_token
             _q = (
-                f"'{folder_id}' in parents and "
+                f"'{_q_id(folder_id)}' in parents and "
                 f"mimeType='application/vnd.google-apps.folder' and "
                 f"name contains 'chapters-extended' and trashed=false"
             )
@@ -214,7 +226,7 @@ class DriveAPIMixin:
             try:
                 response = self._retry_drive_call(
                     lambda: drive_service.files().list(
-                        q=f"'{subfolder_id}' in parents and name contains '.md' and trashed=false",
+                        q=f"'{_q_id(subfolder_id)}' in parents and name contains '.md' and trashed=false",
                         fields="files(id, name, parents),nextPageToken",
                         pageSize=500,
                         pageToken=_pt,
@@ -298,7 +310,7 @@ class DriveAPIMixin:
             _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
-                    q=f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+                    q=f"'{_q_id(parent_id)}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
                     fields="files(id, name, modifiedTime),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
@@ -320,7 +332,7 @@ class DriveAPIMixin:
             _pt = page_token
             def _call() -> dict:
                 return drive_service.files().list(
-                    q=f"'{folder_id}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false",
+                    q=f"'{_q_id(folder_id)}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false",
                     fields="files(id, name, modifiedTime),nextPageToken",
                     pageSize=500,
                     pageToken=_pt,
@@ -375,9 +387,9 @@ class DriveAPIMixin:
             # Drive `parents in (id1, id2, ...)` — each ID wrapped in single quotes
             # with backslashes for any single quotes inside (rare for Drive IDs).
             parents_clause = " or ".join(
-                f"'{pid}' in parents" for pid in batch
+                f"'{_q_id(pid)}' in parents" for pid in batch
             )
-            name_escaped = subfolder_name.replace("'", "\\'")
+            name_escaped = _q_id(subfolder_name)
             query = (
                 f"mimeType='application/vnd.google-apps.folder' "
                 f"and name='{name_escaped}' and trashed=false and "
@@ -452,7 +464,7 @@ class DriveAPIMixin:
         for start in range(0, len(uncached_ids), batch_size):
             batch = uncached_ids[start : start + batch_size]
             parents_clause = " or ".join(
-                f"'{fid}' in parents" for fid in batch
+                f"'{_q_id(fid)}' in parents" for fid in batch
             )
             query = f"trashed=false and ({parents_clause})"
             page_token: Optional[str] = None
@@ -584,7 +596,7 @@ class DriveAPIMixin:
         if not folder_ids:
             return []
 
-        parents_clause = " or ".join(f'"{fid}" in parents' for fid in folder_ids)
+        parents_clause = " or ".join(f'"{_q_id(fid)}" in parents' for fid in folder_ids)
         chapters_sub: dict[str, str] = {}
         page_token: Optional[str] = None
         while True:
@@ -620,7 +632,7 @@ class DriveAPIMixin:
         all_parent_ids = list(chapters_sub.keys())
         if not all_parent_ids:
             return [None for _ in folder_ids]
-        all_parents_clause = " or ".join(f'"{pid}" in parents' for pid in all_parent_ids)
+        all_parents_clause = " or ".join(f'"{_q_id(pid)}" in parents' for pid in all_parent_ids)
 
         files_by_parent: dict[str, list[dict]] = {pid: [] for pid in all_parent_ids}
         page_token = None
@@ -669,7 +681,7 @@ class DriveAPIMixin:
         if not folder_ids:
             return []
 
-        parents_clause = " or ".join(f'"{fid}" in parents' for fid in folder_ids)
+        parents_clause = " or ".join(f'"{_q_id(fid)}" in parents' for fid in folder_ids)
         extended_map: dict[str, str] = {}
         page_token: Optional[str] = None
         while True:
@@ -699,7 +711,7 @@ class DriveAPIMixin:
         if not ext_ids:
             return [None] * len(folder_ids)
 
-        ext_clause = " or ".join(f'"{eid}" in parents' for eid in ext_ids)
+        ext_clause = " or ".join(f'"{_q_id(eid)}" in parents' for eid in ext_ids)
         files_by_ext: dict[str, list[dict]] = {eid: [] for eid in ext_ids}
         page_token = None
         while True:
@@ -807,7 +819,7 @@ class DriveAPIMixin:
 
         def _list_chapter_subfolders_for_chunk(chunk: list[str]) -> list[dict]:
             worker_drive_service = self._build_drive_service()
-            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            parents_clause = " or ".join(f'"{_q_id(fid)}" in parents' for fid in chunk)
             q = (
                 f"({parents_clause}) and mimeType='application/vnd.google-apps.folder' "
                 "and name='chapters-extended' and trashed=false"
@@ -860,7 +872,7 @@ class DriveAPIMixin:
 
         def _list_md_files_for_chunk(chunk: list[str]) -> list[dict]:
             worker_drive_service = self._build_drive_service()
-            parents_clause = " or ".join(f'"{sid}" in parents' for sid in chunk)
+            parents_clause = " or ".join(f'"{_q_id(sid)}" in parents' for sid in chunk)
             q = f"({parents_clause}) and name contains '.md' and trashed=false"
             files: list[dict] = []
             page_token = None
@@ -966,7 +978,7 @@ class DriveAPIMixin:
 
         def _list_free_tag_files_for_chunk(chunk: list[str]) -> list[dict]:
             worker_drive_service = self._build_drive_service()
-            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            parents_clause = " or ".join(f'"{_q_id(fid)}" in parents' for fid in chunk)
             q = (
                 f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
                 "and (name='free.md' or name='tags.md') and trashed=false"
@@ -1028,7 +1040,7 @@ class DriveAPIMixin:
 
         for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
             chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
-            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            parents_clause = " or ".join(f'"{_q_id(fid)}" in parents' for fid in chunk)
             for candidate in candidates:
                 query = (
                     f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
@@ -1095,7 +1107,7 @@ class DriveAPIMixin:
 
         for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
             chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
-            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            parents_clause = " or ".join(f'"{_q_id(fid)}" in parents' for fid in chunk)
             for candidate in candidates:
                 query = (
                     f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
@@ -1167,7 +1179,7 @@ class DriveAPIMixin:
 
         for chunk_start in range(0, len(folder_ids), _CHECK_BATCH_CHUNK_SIZE):
             chunk = folder_ids[chunk_start: chunk_start + _CHECK_BATCH_CHUNK_SIZE]
-            parents_clause = " or ".join(f'"{fid}" in parents' for fid in chunk)
+            parents_clause = " or ".join(f'"{_q_id(fid)}" in parents' for fid in chunk)
             for candidate in candidates:
                 query = (
                     f"({parents_clause}) and mimeType!='application/vnd.google-apps.folder' "
