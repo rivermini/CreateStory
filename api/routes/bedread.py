@@ -88,7 +88,7 @@ def list_stories() -> list[StoryInfo]:
         raw = service.fetch_stories()
     except Exception as exc:
         logger.exception("Failed to fetch stories from external API")
-        raise HTTPException(status_code=502, detail=f"External API error: {exc}")
+        raise HTTPException(status_code=502, detail="Upstream service error.")
 
     stories = [
         StoryInfo(
@@ -135,7 +135,7 @@ def search_stories(
         )
     except Exception as exc:
         logger.exception("Failed to search stories from external API")
-        raise HTTPException(status_code=502, detail=f"External API error: {exc}")
+        raise HTTPException(status_code=502, detail="Upstream service error.")
 
     stories = [
         StoryInfo(
@@ -171,7 +171,7 @@ def get_story_chapters(
         raw = service.fetch_chapters(story_id, user_id=x_user_id)
     except Exception as exc:
         logger.exception("Failed to fetch chapters for story %s", story_id)
-        raise HTTPException(status_code=502, detail=f"External API error: {exc}")
+        raise HTTPException(status_code=502, detail="Upstream service error.")
 
     chapters = [
         ChapterInfo(
