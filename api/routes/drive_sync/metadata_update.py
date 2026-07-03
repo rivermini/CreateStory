@@ -186,7 +186,8 @@ async def check_all() -> MetadataCheckAllResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Metadata check failed: {exc}")
+        logger.exception("Metadata check failed")
+        raise HTTPException(status_code=500, detail="Metadata check failed.")
 
     def _make_entry(d: dict) -> MetadataUpdateEntry:
         server_data = d.get("server", {})
@@ -335,7 +336,8 @@ async def get_metadata_difference_detail(folder_id: str, story_id: str, field: s
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Metadata detail failed: {exc}")
+        logger.exception("Metadata detail failed")
+        raise HTTPException(status_code=500, detail="Metadata detail failed.")
 
     return MetadataFieldDetailResponse(
         field=detail.get("field", field),

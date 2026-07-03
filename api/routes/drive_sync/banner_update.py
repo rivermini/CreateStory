@@ -67,7 +67,8 @@ async def check_all(banner_filename: str = "banner1.jpg") -> CheckAllResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Banner check failed: {exc}")
+        logger.exception("Banner check failed")
+        raise HTTPException(status_code=500, detail="Banner check failed.")
 
     summary = (
         f"[CHECK_ALL] banner-update done: banner_filename={banner_filename!r} "
@@ -113,7 +114,8 @@ async def check_updated() -> CheckUpdatedResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to load history: {exc}")
+        logger.exception("Failed to load history")
+        raise HTTPException(status_code=500, detail="Failed to load history.")
 
     def make_entry(d: dict) -> BannerUpdateStatus:
         # The history row from the repository uses the cover-shaped field name
@@ -169,7 +171,8 @@ async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "b
     try:
         success, result = await asyncio.to_thread(_do_upload)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Banner upload failed: {exc}")
+        logger.exception("Banner upload failed")
+        raise HTTPException(status_code=500, detail="Banner upload failed.")
 
     if success:
         service._record_banner_update(

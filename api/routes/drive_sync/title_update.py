@@ -127,7 +127,8 @@ async def check_all() -> CheckAllTitleResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Title check failed: {exc}")
+        logger.exception("Title check failed")
+        raise HTTPException(status_code=500, detail="Title check failed.")
 
     return CheckAllTitleResponse(
         can_update=[_to_folder_entry(d) for d in result.get("can_update", [])],
@@ -151,7 +152,8 @@ async def get_folder_detail(folder_id: str) -> TitleFolderEntry:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Title detail failed: {exc}")
+        logger.exception("Title detail failed")
+        raise HTTPException(status_code=500, detail="Title detail failed.")
 
     return _to_folder_entry(result)
 
@@ -174,7 +176,8 @@ async def update_chapter_title(story_id: str, folder_id: str, chapter_number: in
     except RuntimeError as exc:
         return TitleUpdateChapterResponse(success=False, message=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Chapter title update failed: {exc}")
+        logger.exception("Chapter title update failed")
+        raise HTTPException(status_code=500, detail="Chapter title update failed.")
 
     chapter = TitleChapterEntry(
         chapter_number=result.get("chapter_number", chapter_number),
@@ -212,7 +215,8 @@ async def update_folder_titles(story_id: str, folder_id: str) -> TitleFolderUpda
             failed_count=0,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Folder title update failed: {exc}")
+        logger.exception("Folder title update failed")
+        raise HTTPException(status_code=500, detail="Folder title update failed.")
 
     return TitleFolderUpdateResult(
         folder_id=folder_id,
@@ -252,7 +256,8 @@ async def batch_update(body: BatchTitleUpdateRequest) -> BatchTitleUpdateRespons
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Batch title update failed: {exc}")
+        logger.exception("Batch title update failed")
+        raise HTTPException(status_code=500, detail="Batch title update failed.")
 
     return BatchTitleUpdateResponse(
         results=[

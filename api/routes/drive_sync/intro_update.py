@@ -67,7 +67,8 @@ async def check_all(intro_filename: str = "intro1.jpg") -> CheckAllIntroResponse
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Intro check failed: {exc}")
+        logger.exception("Intro check failed")
+        raise HTTPException(status_code=500, detail="Intro check failed.")
 
     summary = (
         f"[CHECK_ALL] intro-update done: intro_filename={intro_filename!r} "
@@ -113,7 +114,8 @@ async def check_updated() -> CheckUpdatedIntroResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to load history: {exc}")
+        logger.exception("Failed to load history")
+        raise HTTPException(status_code=500, detail="Failed to load history.")
 
     def make_entry(d: dict) -> IntroUpdateStatus:
         return IntroUpdateStatus(
@@ -166,7 +168,8 @@ async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "int
     try:
         success, result = await asyncio.to_thread(_do_upload)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Intro upload failed: {exc}")
+        logger.exception("Intro upload failed")
+        raise HTTPException(status_code=500, detail="Intro upload failed.")
 
     if success:
         service._record_intro_update(

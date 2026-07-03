@@ -1,12 +1,15 @@
 """Dashboard analytics endpoints for drive sync."""
 
 import asyncio
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
 from api.services.drive_service import get_drive_sync_service
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Drive Sync"])
 
@@ -51,4 +54,5 @@ async def get_stories_needing_update(
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch stories needing update: {exc}")
+        logger.exception("Failed to fetch stories needing update")
+        raise HTTPException(status_code=500, detail="Failed to fetch stories needing update.")

@@ -67,7 +67,8 @@ async def check_all(cover_filename: str = "cover1.jpg") -> CheckAllResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Cover check failed: {exc}")
+        logger.exception("Cover check failed")
+        raise HTTPException(status_code=500, detail="Cover check failed.")
 
     summary = (
         f"[CHECK_ALL] cover-update done: cover_filename={cover_filename!r} "
@@ -113,7 +114,8 @@ async def check_updated() -> CheckUpdatedResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to load history: {exc}")
+        logger.exception("Failed to load history")
+        raise HTTPException(status_code=500, detail="Failed to load history.")
 
     def make_entry(d: dict) -> CoverUpdateStatus:
         return CoverUpdateStatus(
@@ -166,7 +168,8 @@ async def upload_cover(folder_id: str, story_id: str, cover_filename: str = "cov
     try:
         success, result = await asyncio.to_thread(_do_upload)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Cover upload failed: {exc}")
+        logger.exception("Cover upload failed")
+        raise HTTPException(status_code=500, detail="Cover upload failed.")
 
     if success:
         service._record_cover_update(

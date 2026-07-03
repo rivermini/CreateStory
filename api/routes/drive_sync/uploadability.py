@@ -252,7 +252,8 @@ async def check_updatable() -> CheckUpdatableResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to list folders: {exc}")
+        logger.exception("Failed to list folders")
+        raise HTTPException(status_code=500, detail="Failed to list folders.")
 
     extended_folders = [f for f in drive_folders_raw if f.get("prefix") == "EXTENDED"]
 
@@ -299,10 +300,12 @@ async def check_updatable() -> CheckUpdatableResponse:
             extended_ids,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {exc}")
+        logger.exception("Batch chapter check failed")
+        raise HTTPException(status_code=500, detail="Batch chapter check failed.")
 
     if isinstance(chapter_check_result, Exception):
-        raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {chapter_check_result}")
+        logger.error("Batch chapter check failed", exc_info=chapter_check_result)
+        raise HTTPException(status_code=500, detail="Batch chapter check failed.")
     dup_check_results, ext_count_by_folder_id, _, _, format_errors, _, ext_indices = chapter_check_result
 
     last_updated_by_name = await _get_last_update_times(
@@ -556,10 +559,12 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         free_tag_task = asyncio.to_thread(_run_free_tag_batch_check, service, matched_ids)
         chapter_check_result, free_tag_result = await asyncio.gather(chapter_check_task, free_tag_task, return_exceptions=True)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {exc}")
+        logger.exception("Batch chapter check failed")
+        raise HTTPException(status_code=500, detail="Batch chapter check failed.")
 
     if isinstance(chapter_check_result, Exception):
-        raise HTTPException(status_code=500, detail=f"Batch chapter check failed: {chapter_check_result}")
+        logger.error("Batch chapter check failed", exc_info=chapter_check_result)
+        raise HTTPException(status_code=500, detail="Batch chapter check failed.")
     dup_check_results, ext_count_by_folder_id, _, _, format_errors, _, ext_indices = chapter_check_result
 
     if isinstance(free_tag_result, Exception):
@@ -961,7 +966,8 @@ async def search_content_update_story(keyword: str) -> ContentUpdateSearchRespon
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Story search failed: {exc}")
+        logger.exception("Story search failed")
+        raise HTTPException(status_code=500, detail="Story search failed.")
 
     stories = [ContentUpdateStoryRef(**story) for story in stories_raw]
     target = service._normalize_story_title(keyword)
@@ -991,7 +997,8 @@ async def inspect_content_update_folder(folder_name: str) -> ContentUpdateScanRe
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Folder check failed: {exc}")
+        logger.exception("Folder check failed")
+        raise HTTPException(status_code=500, detail="Folder check failed.")
 
 
 @router.get("/content-update/scan/{story_id}", response_model=ContentUpdateScanResponse, tags=["Drive Sync"])
@@ -1007,7 +1014,8 @@ async def scan_content_update_story(story_id: str) -> ContentUpdateScanResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Update scan failed: {exc}")
+        logger.exception("Update scan failed")
+        raise HTTPException(status_code=500, detail="Update scan failed.")
 
 
 @router.post("/content-update/update-chapter", response_model=ContentUpdateChapterResponse, tags=["Drive Sync"])
@@ -1069,7 +1077,8 @@ async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUp
     except RuntimeError as exc:
         return ContentUpdateChapterResponse(success=False, message=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Chapter update failed: {exc}")
+        logger.exception("Chapter update failed")
+        raise HTTPException(status_code=500, detail="Chapter update failed.")
 
 
 # ---------------------------------------------------------------------------
@@ -1121,7 +1130,8 @@ async def batch_inspect_content_folders(body: BatchContentUpdateRequest) -> Batc
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Batch inspect failed: {exc}")
+        logger.exception("Batch inspect failed")
+        raise HTTPException(status_code=500, detail="Batch inspect failed.")
 
 
 @router.post("/content-update/batch-update", response_model=BatchContentUpdateResponse, tags=["Drive Sync"])
@@ -1142,4 +1152,5 @@ async def batch_update_content_folders(body: BatchContentUpdateRequest) -> Batch
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Batch update failed: {exc}")
+        logger.exception("Batch update failed")
+        raise HTTPException(status_code=500, detail="Batch update failed.")
