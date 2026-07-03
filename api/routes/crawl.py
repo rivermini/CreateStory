@@ -318,6 +318,20 @@ async def list_goodnovel_batch_rows(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.delete("/goodnovel-batch/{batch_id}")
+async def delete_goodnovel_batch(batch_id: str, http_request: Request) -> dict:
+    """Delete a completed GoodNovel batch history entry and generated output files."""
+    require_operator_identity(http_request)
+    service = _require_goodnovel_batch_owner(batch_id, http_request)
+    try:
+        service.delete_batch(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"deleted": True, "batch_id": batch_id}
+
+
 @router.post("/goodnovel-batch/{batch_id}/crawl")
 async def start_goodnovel_batch_crawl(
     batch_id: str,
