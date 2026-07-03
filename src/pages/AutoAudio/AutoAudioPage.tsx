@@ -440,7 +440,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                         setShowStartConfirm(false);
                       }
                     }}
-                    className="relative rounded-xl border px-4 py-3 text-left transition-colors"
+                    className="relative rounded-xl border px-6 py-3 text-left transition-colors"
                     style={{
                       background: isSelected ? phaseSoft : 'transparent',
                       borderColor: isSelected ? phaseColor : 'transparent',
@@ -917,7 +917,7 @@ export function AutoAudioPage({ themeMode }: AutoAudioPageProps) {
                       return (
                         <div
                           key={result.story_id}
-                          className="flex items-start justify-between rounded-full border px-5 py-2.5"
+                          className="flex items-center justify-between rounded-full border px-5 py-2.5"
                           style={{ borderColor: panelBorder }}
                         >
                           <div className="mr-3 min-w-0 flex-1">

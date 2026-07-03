@@ -914,10 +914,8 @@ body {
 }
 
 .cs-main-content section.border,
-.cs-main-content div.border,
 .cs-main-content article.border,
-.cs-main-content section[class*='rounded-'],
-.cs-main-content div[class*='rounded-'],
+.cs-main-content .cs-surface,
 .cs-main-content .thesvg-card {
   border-radius: 22px !important;
   border-color: var(--cs-border) !important;
