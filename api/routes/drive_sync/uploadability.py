@@ -83,6 +83,38 @@ def _normalize(s: str) -> str:
     return s.strip().lower()
 
 
+def _wrong_update_prefix_message(folder: dict) -> str:
+    prefix = folder.get("prefix") or "UNKNOWN"
+    return (
+        f"WRONG_PREFIX: Found {prefix}_ Drive folder, but chapter updates require EXTENDED_. "
+        "Rename this folder to start with EXTENDED_ before checking updates."
+    )
+
+
+def _wrong_prefix_update_entry(
+    folder: dict,
+    server_story: ServerStoryRef,
+    last_updated: Optional[str] = None,
+) -> Optional[UpdatableStoryEntry]:
+    payload = dict(folder)
+    payload["is_valid_format"] = False
+    payload["validation_errors"] = [_wrong_update_prefix_message(folder)]
+    try:
+        entry = DriveFolderEntry(**payload)
+    except Exception as exc:
+        logger.warning("Skipping malformed wrong-prefix drive folder: %s", exc)
+        return None
+    return UpdatableStoryEntry(
+        folder=entry,
+        server_story=server_story,
+        free_chapters_count=None,
+        tags=None,
+        has_free_md=False,
+        has_tags_md=False,
+        last_updated=last_updated,
+    )
+
+
 router = APIRouter(tags=["Drive Sync"])
 
 
@@ -104,12 +136,25 @@ async def check_uploadable() -> CheckUploadableResponse:
 
     uploadable_prefixes = {"DONE"}
     candidate_folders = [f for f in drive_folders_raw if f.get("prefix") in uploadable_prefixes]
+    not_ready_folders = [f for f in drive_folders_raw if f.get("prefix") not in uploadable_prefixes]
     server_titles = {_normalize(s["title"]) for s in server_stories}
 
     uploadable = []
     already_on_server = []
     invalid = []
+    not_ready = []
     validation_candidates: list[dict] = []
+
+    for folder in not_ready_folders:
+        folder["is_valid_format"] = False
+        folder["validation_errors"] = [
+            f"NOT_READY_FOR_UPLOAD: Found {folder.get('prefix') or 'UNKNOWN'}_ Drive folder. "
+            "Check Upload only uploads DONE_ folders. Rename it to DONE_ when the story is ready to upload."
+        ]
+        try:
+            not_ready.append(DriveFolderEntry(**folder))
+        except Exception as exc:
+            logger.warning("Skipping malformed non-DONE drive folder: %s", exc)
 
     for folder in candidate_folders:
         is_valid, raw_token, recognized = _is_valid_upload_format(folder.get("name", ""))
@@ -187,6 +232,7 @@ async def check_uploadable() -> CheckUploadableResponse:
         uploadable=uploadable,
         already_on_server=already_on_server,
         invalid=invalid,
+        not_ready=not_ready,
     )
 
 
@@ -232,8 +278,7 @@ async def check_updatable() -> CheckUpdatableResponse:
                 logger.warning("Skipping malformed drive folder: %s", exc)
 
     extended_titles_lower = {_normalize(f.get("display_name", "")) for f in extended_folders}
-    no_drive_title_keys: list[str] = []
-    seen_no_drive_titles: set[str] = set()
+    wrong_prefix_folders: list[dict] = []
     for folder in drive_folders_raw:
         title_lower = _normalize(folder.get("display_name", ""))
         if (
@@ -241,11 +286,9 @@ async def check_updatable() -> CheckUpdatableResponse:
             or folder.get("prefix") == "EXTENDED"
             or title_lower in extended_titles_lower
             or title_lower not in server_by_title
-            or title_lower in seen_no_drive_titles
         ):
             continue
-        seen_no_drive_titles.add(title_lower)
-        no_drive_title_keys.append(title_lower)
+        wrong_prefix_folders.append(folder)
 
     extended_ids = [f["id"] for f in matched_extended_folders]
 
@@ -265,20 +308,23 @@ async def check_updatable() -> CheckUpdatableResponse:
     last_updated_by_name = await _get_last_update_times(
         service,
         [f.get("display_name", "") for f in matched_extended_folders]
-        + [server_by_title[title].title for title in no_drive_title_keys],
+        + [server_by_title[_normalize(f.get("display_name", ""))].title for f in wrong_prefix_folders],
     )
-    no_drive_folder = [
-        ServerOnlyStoryEntry(
-            server_story=server_by_title[title],
-            last_updated=last_updated_by_name.get(server_by_title[title].title),
-        )
-        for title in no_drive_title_keys
-    ]
 
     updatable = []
     updatable_folder_ids: list[str] = []
     no_update_needed = []
     invalid = []
+    for folder in wrong_prefix_folders:
+        title_lower = _normalize(folder.get("display_name", ""))
+        server_story = server_by_title[title_lower]
+        wrong_prefix_entry = _wrong_prefix_update_entry(
+            folder,
+            server_story,
+            last_updated_by_name.get(server_story.title),
+        )
+        if wrong_prefix_entry is not None:
+            invalid.append(wrong_prefix_entry)
     empty_extended = []
     pending_updatable: list[tuple[dict, DriveFolderEntry, ServerStoryRef, list[int], str | None]] = []
     for folder in matched_extended_folders:
@@ -400,7 +446,7 @@ async def check_updatable() -> CheckUpdatableResponse:
         no_server_match=no_server_match,
         empty_extended=empty_extended,
         invalid=invalid,
-        no_drive_folder=no_drive_folder,
+        no_drive_folder=[],
     )
 
 
@@ -441,22 +487,49 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
                 maxChapter=s.get("maxChapter") or 0,
             )
 
+    extended_titles_lower = {
+        _normalize(f.get("display_name", ""))
+        for f in drive_folders_raw
+        if f.get("prefix") == "EXTENDED"
+    }
+    wrong_prefix_by_title: dict[str, list[dict]] = {}
+    for folder in drive_folders_raw:
+        title = _normalize(folder.get("display_name", ""))
+        if (
+            title
+            and title in reader_titles_lower
+            and title in server_by_title
+            and title not in extended_titles_lower
+            and folder.get("prefix") != "EXTENDED"
+        ):
+            wrong_prefix_by_title.setdefault(title, []).append(folder)
+
     matched_extended_folders = [
         f for f in drive_folders_raw
         if f.get("prefix") == "EXTENDED" and _normalize(f.get("display_name", "")) in reader_titles_lower
     ]
 
     if not matched_extended_folders:
-        # Still detect no_drive_folder by comparing all reader titles against all EXTENDED_ folders
-        extended_display_names_lower = {_normalize(f.get("display_name", "")) for f in drive_folders_raw if f.get("prefix") == "EXTENDED"}
+        # Still separate missing folders from matching folders that have the wrong prefix.
         no_drive_folder: list[ServerOnlyStoryEntry] = []
+        invalid: list[UpdatableStoryEntry] = []
         last_updated_by_title = await _get_last_update_times(
             service,
             [s.get("title", "") for s in reader_stories],
         )
+        for title, folders in wrong_prefix_by_title.items():
+            server_ref = server_by_title[title]
+            for folder in folders:
+                wrong_prefix_entry = _wrong_prefix_update_entry(
+                    folder,
+                    server_ref,
+                    last_updated_by_title.get(server_ref.title),
+                )
+                if wrong_prefix_entry is not None:
+                    invalid.append(wrong_prefix_entry)
         for s in reader_stories:
             title = _normalize(s.get("title", ""))
-            if title and title not in extended_display_names_lower:
+            if title and title not in extended_titles_lower and title not in wrong_prefix_by_title:
                 server_ref = server_by_title.get(title)
                 if server_ref:
                     last_updated = last_updated_by_title.get(server_ref.title)
@@ -468,7 +541,7 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
             no_update_needed=[],
             no_server_match=[],
             empty_extended=[],
-            invalid=[],
+            invalid=invalid,
             no_drive_folder=no_drive_folder,
         )
 
@@ -508,6 +581,16 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
     empty_extended: list[DriveFolderEntry] = []
     no_drive_folder: list[ServerOnlyStoryEntry] = []
     matched_folder_titles_lower = {_normalize(f.get("display_name", "")) for f in matched_extended_folders}
+    for title, folders in wrong_prefix_by_title.items():
+        server_story = server_by_title[title]
+        for folder in folders:
+            wrong_prefix_entry = _wrong_prefix_update_entry(
+                folder,
+                server_story,
+                last_updated_by_name.get(server_story.title),
+            )
+            if wrong_prefix_entry is not None:
+                invalid.append(wrong_prefix_entry)
 
     for folder in matched_extended_folders:
         folder_id = folder["id"]
@@ -615,7 +698,7 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
 
     for s in reader_stories:
         title = _normalize(s.get("title", ""))
-        if title in reader_titles_lower and title not in matched_folder_titles_lower:
+        if title in reader_titles_lower and title not in matched_folder_titles_lower and title not in wrong_prefix_by_title:
             server_ref = server_by_title.get(title)
             if server_ref:
                 last_updated = last_updated_by_name.get(server_ref.title)
@@ -679,6 +762,16 @@ async def check_updatable_reader_finished_debug() -> CheckUpdatableDebugResponse
     ext_names = [f.get("name", "") for f in extended_folders]
     ext_display = [f.get("display_name", "") for f in extended_folders]
     ext_display_norm = [_normalize(d) for d in ext_display]
+    wrong_prefix_by_title: dict[str, list[dict]] = {}
+    for folder in drive_folders_raw:
+        norm = _normalize(folder.get("display_name", ""))
+        if (
+            norm
+            and norm in reader_titles_normalized
+            and norm not in ext_display_norm
+            and folder.get("prefix") != "EXTENDED"
+        ):
+            wrong_prefix_by_title.setdefault(norm, []).append(folder)
 
     matched = [d for d in ext_display_norm if d in reader_titles_normalized]
 
@@ -686,6 +779,15 @@ async def check_updatable_reader_finished_debug() -> CheckUpdatableDebugResponse
     for title, norm in zip(reader_titles, reader_titles_normalized):
         if norm in matched:
             no_drive_folder_reason[title] = "MATCHED"
+        elif norm in wrong_prefix_by_title:
+            folders = wrong_prefix_by_title[norm]
+            folder_summary = ", ".join(
+                f"{folder.get('prefix') or 'UNKNOWN'}_ name={repr(folder.get('name', ''))}"
+                for folder in folders
+            )
+            no_drive_folder_reason[title] = (
+                f"WRONG_PREFIX: found {folder_summary}; update checks require EXTENDED_."
+            )
         else:
             similar = [d for d in ext_display if _normalize(d)[:10] == norm[:10]]
             if similar:

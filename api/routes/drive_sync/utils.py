@@ -99,6 +99,7 @@ class CheckUploadableResponse(BaseModel):
     uploadable: list[DriveFolderEntry]
     already_on_server: list[DriveFolderEntry]
     invalid: list[DriveFolderEntry] = []
+    not_ready: list[DriveFolderEntry] = []
 
 
 class UpdatableStoryEntry(BaseModel):
