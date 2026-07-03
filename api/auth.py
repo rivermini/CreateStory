@@ -100,11 +100,10 @@ async def require_operator(current_user: Annotated[User, Depends(get_current_use
     return current_user
 
 
-async def require_job_creation_rate(
-    current_user: Annotated[User, Depends(require_operator)],
-) -> User:
+def enforce_job_rate(user_id: str) -> None:
+    """Sliding-window rate check shared by job-creation routes and the
+    expensive drive-sync / results writes."""
     now = time.monotonic()
-    user_id = str(current_user.id)
     with _job_rate_lock:
         window = _job_rate_windows[user_id]
         while window and now - window[0] >= _JOB_RATE_WINDOW_SECONDS:
@@ -117,6 +116,12 @@ async def require_job_creation_rate(
                 headers={"Retry-After": str(retry_after)},
             )
         window.append(now)
+
+
+async def require_job_creation_rate(
+    current_user: Annotated[User, Depends(require_operator)],
+) -> User:
+    enforce_job_rate(str(current_user.id))
     return current_user
 
 

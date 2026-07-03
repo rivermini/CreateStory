@@ -58,7 +58,7 @@ async def update_auto_scan(request: UpdateAutoScanRequest) -> AutoScanStateRespo
     return AutoScanStateResponse(**data)
 
 
-@router.post("/auto-scan/run-now", response_model=StartSessionResponse, dependencies=[Depends(require_operator)])
+@router.post("/auto-scan/run-now", response_model=StartSessionResponse, dependencies=[Depends(require_job_creation_rate)])
 async def run_auto_scan_now() -> StartSessionResponse:
     """Trigger a one-off full-library scan immediately, regardless of the toggle."""
     service = get_auto_audio_service()

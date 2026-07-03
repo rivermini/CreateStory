@@ -7,7 +7,7 @@ import os
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.auth import require_active_user, require_operator
+from api.auth import require_active_user, require_job_creation_rate, require_operator
 from api.proxy import json_proxy, streaming_proxy
 
 router = APIRouter(prefix="/api/results", tags=["Results"], dependencies=[Depends(require_active_user)])
@@ -50,7 +50,7 @@ async def download_all_combined() -> StreamingResponse:
     return await _proxy_download("/api/results/download-all-combined")
 
 
-@router.post("/delete", dependencies=[Depends(require_operator)])
+@router.post("/delete", dependencies=[Depends(require_job_creation_rate)])
 async def delete_crawl_sessions(request: dict) -> JSONResponse:
     """Delete one or more crawl sessions."""
     return await _proxy_post("/api/results/delete", json_body=request)
@@ -98,7 +98,7 @@ async def get_file_content(crawl_id: str, filename: str = Query(...)) -> JSONRes
     return await _proxy_get(f"/api/results/{crawl_id}/content", params={"filename": filename})
 
 
-@router.post("/{crawl_id}/combine", dependencies=[Depends(require_operator)])
+@router.post("/{crawl_id}/combine", dependencies=[Depends(require_job_creation_rate)])
 async def combine_chapters(crawl_id: str) -> JSONResponse:
     """Merge all individual chapter JSON files into a single combined file."""
     return await _proxy_post(f"/api/results/{crawl_id}/combine")
