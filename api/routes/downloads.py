@@ -97,11 +97,8 @@ def create_download_ticket(
 @router.get("/api/download/{token}", response_model=None)
 async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse:
     with _tickets_lock:
-        ticket = _tickets.get(token)
-        if ticket is not None and ticket.expires_at <= time.monotonic():
-            _tickets.pop(token, None)
-            ticket = None
-    if ticket is None:
+        ticket = _tickets.pop(token, None)  # single-use: consume on redeem
+    if ticket is None or ticket.expires_at <= time.monotonic():
         raise HTTPException(status_code=404, detail="Download ticket is invalid or expired.")
 
     identity_token = set_request_identity(ticket.user_id, ticket.role)
