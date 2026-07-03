@@ -124,6 +124,13 @@ export async function getGoodnovelBatchRows(
   );
 }
 
+export async function removeGoodnovelBatch(batchId: string): Promise<{ deleted: boolean; batch_id: string }> {
+  return apiFetch<{ deleted: boolean; batch_id: string }>(
+    `/api/crawl/goodnovel-batch/${encodeURIComponent(batchId)}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function startGoodnovelBatchCrawl(
   batchId: string,
   request: GoodNovelBatchCrawlRequest,

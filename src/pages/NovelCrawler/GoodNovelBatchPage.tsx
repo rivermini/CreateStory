@@ -4,6 +4,7 @@ import {
   getGoodnovelBatchStatus,
   getGoodnovelBatchDownloadUrl,
   listGoodnovelBatches,
+  removeGoodnovelBatch,
   startGoodnovelBatchCrawl,
   startGoodnovelBatchScan,
   type GoodNovelBatchRow,
@@ -53,6 +54,8 @@ export function GoodNovelBatchPage({ themeMode }: GoodNovelBatchPageProps) {
   const [requestDelaySeconds, setRequestDelaySeconds] = useState(0.15);
   const [batchHistory, setBatchHistory] = useState<GoodNovelBatchSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<GoodNovelBatchSummary | null>(null);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
   const titleCount = useMemo(
     () => countTitles(titlesText, delimiter),
@@ -197,6 +200,40 @@ export function GoodNovelBatchPage({ themeMode }: GoodNovelBatchPageProps) {
     setError('');
   };
 
+  const handleRequestDelete = (batch: GoodNovelBatchSummary) => {
+    if (isActiveBatch(batch)) {
+      setError('Wait for the GoodNovel batch to finish before deleting it.');
+      return;
+    }
+    setDeleteConfirmation(batch);
+    setError('');
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmation) return;
+    const deletingId = deleteConfirmation.batch_id;
+    setIsDeletingBatch(true);
+    setError('');
+    try {
+      await removeGoodnovelBatch(deletingId);
+      setBatchHistory((items) => items.filter((item) => item.batch_id !== deletingId));
+      if (batchId === deletingId) {
+        setBatchId('');
+        setSummary(null);
+        setRows([]);
+        setRowTotal(0);
+        sessionStorage.removeItem('goodnovel_batch_id');
+      }
+      setDeleteConfirmation(null);
+      fetchHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete GoodNovel batch history.');
+      setDeleteConfirmation(null);
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
+
   const pageBg = 'var(--cs-page)';
   const panelBg = 'var(--cs-surface-elevated)';
   const panelBorder = 'var(--cs-border)';
@@ -208,6 +245,39 @@ export function GoodNovelBatchPage({ themeMode }: GoodNovelBatchPageProps) {
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBg }}>
+      {deleteConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-lg border p-5" style={{ background: panelBg, borderColor: panelBorder }}>
+            <h3 className="text-lg font-semibold" style={{ color: text }}>
+              Delete batch history
+            </h3>
+            <p className="mt-2 text-sm leading-6" style={{ color: soft }}>
+              Delete "{deleteConfirmation.batch_name || deleteConfirmation.batch_id}" and its generated output files? This action cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmation(null)}
+                disabled={isDeletingBatch}
+                className="rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60"
+                style={{ borderColor: panelBorder, background: muted, color: text }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingBatch}
+                className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: '#dc2626' }}
+              >
+                {isDeletingBatch && <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />}
+                {isDeletingBatch ? 'Deleting' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
         <main className="space-y-4">
           <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
@@ -257,7 +327,7 @@ export function GoodNovelBatchPage({ themeMode }: GoodNovelBatchPageProps) {
             {batchHistory.length > 0 ? (
               <div className="mt-4 overflow-hidden rounded-md border" style={{ borderColor: panelBorder }}>
                 <div
-                  className="hidden grid-cols-[minmax(220px,1fr)_118px_86px_86px_86px] border-b px-3 py-2 text-xs font-medium md:grid"
+                  className="hidden grid-cols-[minmax(220px,1fr)_118px_86px_86px_86px_74px] border-b px-3 py-2 text-xs font-medium md:grid"
                   style={{ borderColor: panelBorder, background: muted, color: faint }}
                 >
                   <span>Batch</span>
@@ -265,15 +335,15 @@ export function GoodNovelBatchPage({ themeMode }: GoodNovelBatchPageProps) {
                   <span>Titles</span>
                   <span>Links</span>
                   <span>Files</span>
+                  <span className="text-right">Actions</span>
                 </div>
                 {batchHistory.slice(0, 12).map((batch, index) => {
                   const selected = batch.batch_id === batchId;
+                  const deleteDisabled = isActiveBatch(batch) || isDeletingBatch;
                   return (
-                    <button
+                    <div
                       key={batch.batch_id}
-                      type="button"
-                      onClick={() => handleSelectBatch(batch)}
-                      className="grid w-full gap-2 px-3 py-3 text-left transition-colors md:grid-cols-[minmax(220px,1fr)_118px_86px_86px_86px] md:items-center"
+                      className="grid w-full gap-2 px-3 py-3 transition-colors md:grid-cols-[minmax(220px,1fr)_118px_86px_86px_86px_74px] md:items-center"
                       style={{
                         borderTop: index === 0 ? 'none' : `1px solid ${panelBorder}`,
                         borderLeft: selected ? '3px solid var(--cs-primary)' : '3px solid transparent',
@@ -281,19 +351,38 @@ export function GoodNovelBatchPage({ themeMode }: GoodNovelBatchPageProps) {
                         color: text,
                       }}
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{batch.batch_name || batch.batch_id}</p>
-                        <p className="mt-1 text-xs" style={{ color: soft }}>
-                          {batch.created_at} - {batch.batch_id}
-                        </p>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectBatch(batch)}
+                        className="grid w-full gap-2 text-left md:contents"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{batch.batch_name || batch.batch_id}</p>
+                          <p className="mt-1 text-xs" style={{ color: soft }}>
+                            {batch.created_at} - {batch.batch_id}
+                          </p>
+                        </div>
+                        <span className="w-fit rounded border px-2 py-1 text-xs font-medium" style={{ borderColor: panelBorder, background: muted, color: soft }}>
+                          {phaseLabel(batch.phase)}
+                        </span>
+                        <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.total_titles.toLocaleString()}</span>
+                        <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.crawl_total.toLocaleString()}</span>
+                        <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.crawled_count.toLocaleString()}</span>
+                      </button>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleRequestDelete(batch)}
+                          disabled={deleteDisabled}
+                          title={isActiveBatch(batch) ? 'Batch is still running' : 'Delete batch history'}
+                          aria-label={`Delete ${batch.batch_name || batch.batch_id}`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-md border disabled:cursor-not-allowed disabled:opacity-45"
+                          style={{ borderColor: panelBorder, background: muted, color: isActiveBatch(batch) ? faint : '#dc2626' }}
+                        >
+                          <Icon icon={appIcons.delete} className="h-4 w-4" />
+                        </button>
                       </div>
-                      <span className="w-fit rounded border px-2 py-1 text-xs font-medium" style={{ borderColor: panelBorder, background: muted, color: soft }}>
-                        {phaseLabel(batch.phase)}
-                      </span>
-                      <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.total_titles.toLocaleString()}</span>
-                      <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.crawl_total.toLocaleString()}</span>
-                      <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.crawled_count.toLocaleString()}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -714,6 +803,10 @@ function phaseLabel(phase: GoodNovelBatchSummary['phase']): string {
     failed: 'Failed',
   };
   return labels[phase] ?? phase;
+}
+
+function isActiveBatch(batch: GoodNovelBatchSummary): boolean {
+  return batch.phase === 'scanning' || batch.phase === 'crawling';
 }
 
 function clampNumber(value: number, min: number, max: number): number {
