@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   server: {
-    allowedHosts: ['createstory.online', 'www.createstory.online'],
+    // Dev server only (npm run dev / preview). `true` accepts any Host so it stays
+    // domain-agnostic if you ever run dev behind a tunnel; the built bundle served
+    // by nginx does not use this. Production is unaffected.
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

@@ -1,6 +1,23 @@
 // Core API client infrastructure. All fetch() calls go through here.
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+// API base URL. In deployed environments the API is SAME-ORIGIN: the frontend
+// nginx reverse-proxies /api to the gateway, so ONE build works everywhere and a
+// single Cloudflare Access login covers both the UI and the API (no CORS, no
+// service token, gateway never exposed on its own public hostname).
+//   deployed (any host)   -> "" (relative: /api/... is proxied by nginx)
+//   localhost / 127.0.0.1 -> http://localhost:8000 (Vite dev talks to the gateway)
+// A build-time VITE_API_BASE_URL still overrides, if you ever need to pin it.
+function resolveApiBaseUrl(): string {
+  const override = import.meta.env.VITE_API_BASE_URL as string | undefined;
+  if (override) return override.replace(/\/+$/, '');
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  if (host === 'localhost' || host === '127.0.0.1' || host === '') {
+    return 'http://localhost:8000';
+  }
+  return '';
+}
+
+const BASE_URL = resolveApiBaseUrl();
 
 export const FIXED_JSON_PREFIX = 'db://external_credentials/';
 
