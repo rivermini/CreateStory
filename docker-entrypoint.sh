@@ -14,7 +14,7 @@ mkdir -p /app/output/auto_audio_logs
 
 # chown requires CAP_CHOWN — try it, but ignore failures on restricted hosts.
 chown -R appuser:appuser /app/output 2>/dev/null || \
-    chmod -R 777 /app/output 2>/dev/null || true
+    chmod -R u+rwX,g+rwX /app/output 2>/dev/null || true
 
 # Drop privileges and exec the command as appuser.
 if command -v gosu >/dev/null 2>&1; then
