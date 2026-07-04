@@ -152,16 +152,7 @@ def root() -> dict:
 
 @app.get("/api", tags=["Health"])
 def api_info() -> dict:
-    return {
-        "title": "FastAPIServer — API Gateway",
-        "version": "1.0.0",
-        "features": ["crawling", "drive-sync", "tts", "bedread", "auto-audio"],
-        "docs_url": "/docs",
-        "redoc_url": "/redoc",
-        "downstream_services": {
-            "NovelCrawler": "http://localhost:8002",
-            "BedReadVoices": "http://localhost:8001",
-            "AutoAudio": "http://localhost:8004",
-            "BedReadDriveSync": "http://localhost:8003",
-        },
-    }
+    # Intentionally minimal: this endpoint is unauthenticated (it doubles as the
+    # container healthcheck target), so it must not advertise internal service
+    # names/ports or docs paths to anonymous callers.
+    return {"status": "ok", "service": "FastAPIServer", "version": "1.0.0"}

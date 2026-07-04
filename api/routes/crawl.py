@@ -114,6 +114,12 @@ async def list_goodnovel_batch_rows(
     )
 
 
+@router.delete("/goodnovel-batch/{batch_id}", dependencies=[Depends(require_operator)])
+async def delete_goodnovel_batch(batch_id: str) -> JSONResponse:
+    """Delete a GoodNovel batch history entry."""
+    return await _forward_request("DELETE", f"/api/crawl/goodnovel-batch/{batch_id}")
+
+
 @router.post("/goodnovel-batch/{batch_id}/crawl", dependencies=[Depends(require_job_creation_rate)])
 async def start_goodnovel_batch_crawl(batch_id: str, request: dict = Body(...)) -> JSONResponse:
     """Start crawling found stories in a GoodNovel batch."""
