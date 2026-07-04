@@ -88,6 +88,35 @@ class SiteRegistry:
 
         return None
 
+    def match_url_safe(self, url: str) -> Optional[MatchedSite]:
+        """Like :meth:`match_url`, but only returns a match when the URL's REAL
+        host (parsed with urlsplit, rejecting embedded credentials) maps to the
+        same site and is not an internal/loopback address.
+
+        Guards the detect/chapters fetch paths against SSRF: :meth:`match_url`'s
+        regex ``https?://([^/:]+)`` stops at ``:``, so ``http://site.com:@127.0.0.1/``
+        would otherwise match the site while ``requests`` connects to 127.0.0.1.
+        """
+        from urllib.parse import urlsplit
+
+        from api.models.crawl_request import _resolves_to_blocked_ip
+
+        match = self.match_url(url)
+        if match is None:
+            return None
+        parts = urlsplit(url)
+        if parts.username or parts.password:
+            return None
+        host = (parts.hostname or "").lower()
+        if not host:
+            return None
+        real = self.match_url(f"https://{host}/")
+        if real is None or real.config_name != match.config_name:
+            return None
+        if _resolves_to_blocked_ip(host):
+            return None
+        return match
+
     def known_domains(self) -> list[str]:
         return list(self._domains.keys())
 

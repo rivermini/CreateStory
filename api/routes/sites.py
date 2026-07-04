@@ -730,7 +730,7 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
         )
 
     service = get_site_service()
-    site_info = service._registry.match_url(url)
+    site_info = service._registry.match_url_safe(url)
 
     if is_chapter_url(url) and (site_info is None or site_info.config_name != "scribblehub"):
         return ChapterListResponse(

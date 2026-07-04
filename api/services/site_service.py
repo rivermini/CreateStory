@@ -312,7 +312,7 @@ class SiteService:
         if not url.startswith(("http://", "https://")):
             return SiteDetectResponse(valid=False, message="URL must start with http:// or https://.")
 
-        site_info = self._registry.match_url(url)
+        site_info = self._registry.match_url_safe(url)
 
         if site_info is None:
             known = ", ".join(self._registry.known_domains())
