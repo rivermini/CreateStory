@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sse_starlette.sse import EventSourceResponse
 
 from api.models.crawl_request import (
@@ -15,6 +15,7 @@ from api.models.crawl_request import (
     CrawlRequest,
     CrawlStartResponse,
     ProgressUpdate,
+    validate_external_url,
 )
 from api.routes.crawl_stream import crawl_event_generator
 from api.service_auth import current_owner, require_admin_identity, require_owner, require_operator_identity
@@ -37,6 +38,11 @@ class InkittCookieUpdateResponse(BaseModel):
 
 class InkittCookieStatusRequest(BaseModel):
     story_url: str | None = Field(default=None, description="Optional Inkitt story/chapter URL to test against.")
+
+    @field_validator("story_url")
+    @classmethod
+    def _validate_story_url(cls, value: str | None) -> str | None:
+        return validate_external_url(value, ("inkitt.com",), field_name="story_url")
 
 
 class InkittCookieStatusResponse(BaseModel):
@@ -61,6 +67,11 @@ class ScribbleHubCookieUpdateResponse(BaseModel):
 class ScribbleHubCookieStatusRequest(BaseModel):
     story_url: str | None = Field(default=None, description="Optional ScribbleHub story/chapter URL to test against.")
 
+    @field_validator("story_url")
+    @classmethod
+    def _validate_story_url(cls, value: str | None) -> str | None:
+        return validate_external_url(value, ("scribblehub.com",), field_name="story_url")
+
 
 class ScribbleHubCookieStatusResponse(BaseModel):
     valid: bool | None
@@ -83,6 +94,11 @@ class GoodNovelCookieUpdateResponse(BaseModel):
 
 class GoodNovelCookieStatusRequest(BaseModel):
     story_url: str | None = Field(default=None, description="Optional GoodNovel book URL to verify how many chapters the cookies unlock.")
+
+    @field_validator("story_url")
+    @classmethod
+    def _validate_story_url(cls, value: str | None) -> str | None:
+        return validate_external_url(value, ("goodnovel.com",), field_name="story_url")
 
 
 class GoodNovelCookieStatusResponse(BaseModel):
@@ -316,6 +332,20 @@ async def list_goodnovel_batch_rows(
         return service.list_rows(batch_id, offset=offset, limit=limit, status_filter=status)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/goodnovel-batch/{batch_id}")
+async def delete_goodnovel_batch(batch_id: str, http_request: Request) -> dict:
+    """Delete a completed GoodNovel batch history entry and generated output files."""
+    require_operator_identity(http_request)
+    service = _require_goodnovel_batch_owner(batch_id, http_request)
+    try:
+        service.delete_batch(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"deleted": True, "batch_id": batch_id}
 
 
 @router.post("/goodnovel-batch/{batch_id}/crawl")

@@ -230,6 +230,42 @@ class GoodNovelBatchService:
                 "limit": limit,
             }
 
+    def delete_batch(self, batch_id: str) -> bool:
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            if state.phase in {"scanning", "crawling"}:
+                raise ValueError("Active GoodNovel batches cannot be deleted. Wait for the batch to finish first.")
+
+            output_dirs = [
+                (self._batch_root / batch_id).resolve(),
+            ]
+            if state.output_dir:
+                output_dirs.append(Path(state.output_dir).resolve())
+
+            unique_dirs: list[Path] = []
+            seen: set[Path] = set()
+            for output_dir in output_dirs:
+                if output_dir in seen:
+                    continue
+                seen.add(output_dir)
+                if output_dir == self._batch_root or not output_dir.is_relative_to(self._batch_root):
+                    raise ValueError("Batch output path escapes the batch root.")
+                unique_dirs.append(output_dir)
+
+            for output_dir in unique_dirs:
+                if not output_dir.exists():
+                    continue
+                if output_dir.is_symlink():
+                    raise ValueError("Refusing to delete a symlinked batch output path.")
+                if output_dir.is_dir():
+                    shutil.rmtree(output_dir)
+                else:
+                    output_dir.unlink()
+
+            self._batches.pop(batch_id, None)
+            self._persist_locked(force=True)
+            return True
+
     def require_owner(self, batch_id: str, user_id: str | None, role: str | None) -> None:
         from fastapi import HTTPException
 
