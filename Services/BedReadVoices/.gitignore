@@ -1,0 +1,36 @@
+# Kokoro model files (download separately)
+api/models/kokoro-v1.0.onnx
+api/models/voices-v1.0.bin
+
+# TTS output
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Secrets & credentials — never commit
+.env
+.env.*
+!.env.example
+credentials/
+*.pem
+*.p12
+*.pfx
+*.key
+*cookie*.json
+*cookies*.json
+*credentials*.json
+*service-account*.json
