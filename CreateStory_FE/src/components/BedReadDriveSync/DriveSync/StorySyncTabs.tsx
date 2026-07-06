@@ -1,0 +1,327 @@
+import { useState } from 'react';
+import {
+  type UpdatableStoryEntry,
+  type CheckUploadableResponse,
+  type CheckUpdatableResponse,
+  type DriveFolderEntry,
+  type StoriesNeedingUpdateEntry,
+  type ServerOnlyStoryEntry,
+} from '../../../api';
+import { BatchConfirmDialog } from '../../Shared/BatchConfirmDialog';
+import { Icon, appIcons } from '../../Shared/Icon';
+import { UpdateTab } from './UpdateTab';
+import { UploadTab } from './UploadTab';
+import type { ThemeMode } from '../../../types/theme';
+
+export type StorySyncTab = 'uploadable' | 'updatable';
+
+export interface StorySyncTabsProps {
+  readonly activeTab: StorySyncTab;
+  readonly onTabChange: (tab: StorySyncTab) => void;
+  readonly themeMode: ThemeMode;
+  readonly uploadableData: CheckUploadableResponse | null;
+  readonly uploadableLoading: boolean;
+  readonly uploadableError: string;
+  readonly uploadResults: Map<string, { success: boolean; message: string }>;
+  readonly uploadingIds: Set<string>;
+  readonly onCheckUploadable: () => void;
+  readonly onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
+  readonly onUploadAll: () => void;
+  readonly updatableData: CheckUpdatableResponse | null;
+  readonly updatableLoading: boolean;
+  readonly updatableError: string;
+  readonly updateResults: Map<string, { success: boolean; message: string }>;
+  readonly updatingIds: Set<string>;
+  readonly onCheckUpdatable: () => void;
+  readonly onCheckReaderFinished: () => void;
+  readonly onUpdateSingle: (entry: UpdatableStoryEntry, chaptersCount?: number) => Promise<string>;
+  readonly onUpdateAll: (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>, newErrors?: Map<string, string>) => void;
+  readonly updatableInvalid: UpdatableStoryEntry[];
+  readonly updatableNoServerMatch?: DriveFolderEntry[];
+  readonly updatableEmptyExtended?: DriveFolderEntry[];
+  readonly storiesNeedingUpdate?: StoriesNeedingUpdateEntry[];
+  readonly noDriveFolder?: ServerOnlyStoryEntry[];
+}
+
+export function StorySyncTabs({
+  activeTab,
+  onTabChange,
+  themeMode,
+  uploadableData,
+  uploadableLoading,
+  uploadableError,
+  uploadResults,
+  uploadingIds,
+  onCheckUploadable,
+  onUploadSingle,
+  onUploadAll,
+  updatableData,
+  updatableLoading,
+  updatableError,
+  updateResults,
+  updatingIds,
+  onCheckUpdatable,
+  onCheckReaderFinished,
+  onUpdateSingle,
+  onUpdateAll,
+  updatableInvalid,
+  updatableNoServerMatch,
+  updatableEmptyExtended,
+  storiesNeedingUpdate,
+  noDriveFolder,
+}: StorySyncTabsProps) {
+  const isDark = themeMode === 'dark';
+
+  const [showUploadConfirm, setShowUploadConfirm] = useState(false);
+  const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
+  const [chapterErrors, setChapterErrors] = useState(false);
+  const [pendingChapterErrors, setPendingChapterErrors] = useState<Map<string, string>>(new Map());
+  const [pendingUpdateEntries, setPendingUpdateEntries] = useState<UpdatableStoryEntry[]>([]);
+  const [pendingChapterInputs, setPendingChapterInputs] = useState<Map<string, number>>(new Map());
+
+  const uploadableCount = uploadableData?.uploadable.length ?? 0;
+  const updatableCount = updatableData?.updatable.length ?? 0;
+
+  const panelBackground = isDark ? '#202020' : '#ffffff';
+  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
+  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+
+  const handleUploadAll = () => {
+    setShowUploadConfirm(false);
+    onUploadAll();
+  };
+
+  const handleUpdateAll = () => {
+    if (chapterErrors) return;
+    setShowUpdateConfirm(false);
+    setChapterErrors(false);
+    onUpdateAll(pendingUpdateEntries, pendingChapterInputs);
+  };
+
+  return (
+    <>
+      <BatchConfirmDialog
+        isOpen={showUploadConfirm}
+        title="Upload All Stories"
+        message={`You are about to upload ${uploadableCount} stories to Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of files.`}
+        itemCount={uploadableCount}
+        confirmText="Start Upload"
+        isDark={isDark}
+        onConfirm={handleUploadAll}
+        onCancel={() => setShowUploadConfirm(false)}
+      />
+
+      <BatchConfirmDialog
+        isOpen={showUpdateConfirm}
+        title="Update All Stories"
+        message={
+          chapterErrors
+            ? `Cannot update: there are chapter count validation errors that must be resolved first. Please fix the errors in the Update tab before proceeding.`
+            : `You are about to update ${pendingUpdateEntries.length} stories with new chapters from Google Drive. This operation will run in the background and may take a significant amount of time depending on the number and size of updates.`
+        }
+        itemCount={pendingUpdateEntries.length}
+        confirmText="Start Update"
+        isDark={isDark}
+        disabled={chapterErrors}
+        validationMessage={
+          pendingChapterErrors.size > 0
+            ? `${pendingChapterErrors.size} story(ies) exceed their available chapter count. Please fix these before updating.`
+            : undefined
+        }
+        onConfirm={handleUpdateAll}
+        onCancel={() => {
+          setShowUpdateConfirm(false);
+          setPendingChapterErrors(new Map());
+        }}
+      />
+
+      <div
+        className="overflow-hidden rounded-2xl border"
+        style={{ background: panelBackground, borderColor: panelBorder }}
+      >
+        <div className="flex">
+          <button
+            onClick={() => onTabChange('uploadable')}
+            className="relative flex flex-1 items-center justify-center gap-2.5 px-4 py-4 text-sm font-semibold transition-colors"
+            style={{
+              color:
+                activeTab === 'uploadable'
+                  ? isDark
+                    ? '#ff7c33'
+                    : '#ff5b00'
+                  : isDark
+                    ? 'rgba(255,255,255,0.5)'
+                    : 'rgba(55,53,47,0.55)',
+              background:
+                activeTab === 'uploadable'
+                  ? isDark
+                    ? 'rgba(255, 91, 0, 0.10)'
+                    : 'rgba(255, 91, 0, 0.06)'
+                  : 'transparent',
+            }}
+          >
+            <Icon icon={appIcons.uploadFile} className="h-5 w-5" />
+            <span>Upload to Drive</span>
+            {uploadableCount > 0 ? (
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                style={{
+                  background:
+                    activeTab === 'uploadable'
+                      ? isDark
+                        ? 'rgba(255, 91, 0, 0.14)'
+                        : 'rgba(255, 91, 0, 0.10)'
+                      : mutedSurface,
+                  borderColor:
+                    activeTab === 'uploadable'
+                      ? isDark
+                        ? 'rgba(255, 91, 0, 0.24)'
+                        : 'rgba(255, 91, 0, 0.18)'
+                      : panelBorder,
+                  color:
+                    activeTab === 'uploadable'
+                      ? isDark
+                        ? '#ff7c33'
+                        : '#ff5b00'
+                      : isDark
+                        ? 'rgba(255,255,255,0.5)'
+                        : 'rgba(55,53,47,0.55)',
+                }}
+              >
+                {uploadableCount}
+              </span>
+            ) : uploadableData ? (
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs"
+                style={{ background: mutedSurface, borderColor: panelBorder, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }}
+              >
+                0
+              </span>
+            ) : null}
+            {activeTab === 'uploadable' && (
+              <div
+                className="absolute bottom-0 left-0 right-0 h-0.5"
+                style={{ background: 'linear-gradient(90deg, #ff5b00, #ff7c33)' }}
+              />
+            )}
+          </button>
+
+          <div style={{ width: '1px', background: panelBorder }} />
+
+          <button
+            onClick={() => onTabChange('updatable')}
+            className="relative flex flex-1 items-center justify-center gap-2.5 px-4 py-4 text-sm font-semibold transition-colors"
+            style={{
+              color:
+                activeTab === 'updatable'
+                  ? isDark
+                    ? '#ff7c33'
+                    : '#ff5b00'
+                  : isDark
+                    ? 'rgba(255,255,255,0.5)'
+                    : 'rgba(55,53,47,0.55)',
+              background:
+                activeTab === 'updatable'
+                  ? isDark
+                    ? 'rgba(255, 91, 0, 0.10)'
+                    : 'rgba(255, 91, 0, 0.06)'
+                  : 'transparent',
+            }}
+          >
+            <Icon icon={appIcons.trends} className="h-5 w-5" />
+            <span>Update Chapters</span>
+            {updatableCount > 0 ? (
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs font-medium"
+                style={{
+                  background:
+                    activeTab === 'updatable'
+                      ? isDark
+                        ? 'rgba(255, 91, 0, 0.14)'
+                        : 'rgba(255, 91, 0, 0.10)'
+                      : mutedSurface,
+                  borderColor:
+                    activeTab === 'updatable'
+                      ? isDark
+                        ? 'rgba(255, 91, 0, 0.24)'
+                        : 'rgba(255, 91, 0, 0.18)'
+                      : panelBorder,
+                  color:
+                    activeTab === 'updatable'
+                      ? isDark
+                        ? '#ff7c33'
+                        : '#ff5b00'
+                      : isDark
+                        ? 'rgba(255,255,255,0.5)'
+                        : 'rgba(55,53,47,0.55)',
+                }}
+              >
+                {updatableCount}
+              </span>
+            ) : updatableData ? (
+              <span
+                className="rounded-md border px-2 py-0.5 text-xs"
+                style={{ background: mutedSurface, borderColor: panelBorder, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }}
+              >
+                0
+              </span>
+            ) : null}
+            {activeTab === 'updatable' && (
+              <div
+                className="absolute bottom-0 left-0 right-0 h-0.5"
+                style={{ background: 'linear-gradient(90deg, #ff5b00, #ff7c33)' }}
+              />
+            )}
+          </button>
+        </div>
+
+        <div className="h-[calc(100vh-280px)] overflow-y-auto sm:min-h-[500px] sm:max-h-[calc(100vh-280px)]">
+          {activeTab === 'uploadable' && (
+            <UploadTab
+              data={uploadableData}
+              loading={uploadableLoading}
+              error={uploadableError}
+              uploadResults={uploadResults}
+              uploadingIds={uploadingIds}
+              onCheck={onCheckUploadable}
+              onUploadSingle={onUploadSingle}
+              onRequestUploadAll={() => setShowUploadConfirm(true)}
+              themeMode={themeMode}
+            />
+          )}
+          {activeTab === 'updatable' && (
+            <UpdateTab
+              data={updatableData}
+              loading={updatableLoading}
+              error={updatableError}
+              updateResults={updateResults}
+              updatingIds={updatingIds}
+              onCheck={onCheckUpdatable}
+              onCheckReaderFinished={onCheckReaderFinished}
+              onUpdateSingle={onUpdateSingle}
+              onRequestUpdateAll={(
+                entries: UpdatableStoryEntry[],
+                chapterInputs: ReadonlyMap<string, number>,
+                newErrors?: Map<string, string>,
+              ) => {
+                setPendingUpdateEntries(entries);
+                setPendingChapterInputs(new Map(chapterInputs));
+                setPendingChapterErrors(newErrors ?? new Map());
+                setChapterErrors(!!newErrors && newErrors.size > 0);
+                setShowUpdateConfirm(true);
+              }}
+              hasChapterErrors={chapterErrors}
+              onChapterErrorsChange={setChapterErrors}
+              invalid={updatableInvalid}
+              noServerMatch={updatableNoServerMatch}
+              emptyExtended={updatableEmptyExtended}
+              storiesNeedingUpdate={storiesNeedingUpdate}
+              noDriveFolder={noDriveFolder}
+              themeMode={themeMode}
+            />
+          )}
+        </div>
+      </div>
+    </>
+  );
+}

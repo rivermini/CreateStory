@@ -1,0 +1,87 @@
+name: Frontend CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "vitest.config.ts"
+      - "index.html"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "vitest.config.ts"
+      - "index.html"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Required frontend checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Full-history secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Block committed credential artifacts
+        shell: bash
+        run: |
+          forbidden="$(
+            git ls-files |
+            grep -Ei '(^|/)\.env($|\.((development|production|local|test|staging)(\..*)?|.*local)$)|(^|/).*(cookies?|service-account|credentials).*\.(json|txt)$|(^|/).*(private[-_]?key|id_rsa|id_dsa|id_ecdsa|id_ed25519)(\..*)?$|(^|/).*\.(pem|p12|pfx)$' || true
+          )"
+          if [ -n "$forbidden" ]; then
+            echo "Forbidden credential artifact(s) are tracked:"
+            echo "$forbidden"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Production build
+        run: npm run build

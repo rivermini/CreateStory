@@ -1,0 +1,1043 @@
+/* css(unknownAtRules) disable next-line */
+/* stylelint-disable */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+/* .css(unknownAtRules) disable next-line */
+/* .css(unknownAtRules) disable next-line */
+/* .css(unknownAtRules) disable next-line */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body,
+#root,
+button,
+input,
+textarea,
+select {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* css(unknownAtRules) disable-next-line */
+body {
+  background-color: #fcfbf9 !important;
+  color: #1f1f1e;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overscroll-behavior-y: contain;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html[data-theme='dark'] body {
+  background-color: #070707 !important;
+  color: #f1f5f9 !important;
+}
+
+html[data-theme='dark'] .theme-toggle {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme='dark'] .theme-toggle__button {
+  color: #94a3b8 !important;
+}
+
+html[data-theme='dark'] .theme-toggle__button:hover {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+html[data-theme='dark'] .theme-toggle__button.bg-indigo-600 {
+  color: #ffffff !important;
+}
+
+html[data-theme='dark'] .bg-white,
+html[data-theme='dark'] .bg-gray-50 {
+  background-color: #0d0d0d !important;
+}
+
+html[data-theme='dark'] .bg-gray-100 {
+  background-color: #161616 !important;
+}
+
+html[data-theme='dark'] .bg-gray-200 {
+  background-color: #222222 !important;
+}
+
+html[data-theme='dark'] .bg-gray-50\/70,
+html[data-theme='dark'] .bg-gray-100\/50,
+html[data-theme='dark'] .bg-gray-50\/50 {
+  background-color: rgba(13, 13, 13, 0.92) !important;
+}
+
+html[data-theme='dark'] .border-gray-200,
+html[data-theme='dark'] .border-gray-300 {
+  border-color: #1f1f1f !important;
+}
+
+html[data-theme='dark'] .border-gray-400 {
+  border-color: #2d2d2d !important;
+}
+
+html[data-theme='dark'] .hover\:bg-gray-50:hover,
+html[data-theme='dark'] .hover\:bg-gray-100:hover {
+  background-color: #1f1f1f !important;
+}
+
+html[data-theme='dark'] .text-gray-900,
+html[data-theme='dark'] .text-gray-800,
+html[data-theme='dark'] .text-gray-700 {
+  color: #f1f5f9 !important;
+}
+
+html[data-theme='dark'] .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
+html[data-theme='dark'] .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+html[data-theme='dark'] .text-gray-400 {
+  color: #64748b !important;
+}
+
+html[data-theme='dark'] .text-indigo-600,
+html[data-theme='dark'] .text-indigo-700 {
+  color: #818cf8 !important;
+}
+
+html[data-theme='dark'] .text-emerald-600,
+html[data-theme='dark'] .text-emerald-700 {
+  color: #34d399 !important;
+}
+
+html[data-theme='dark'] .text-red-600,
+html[data-theme='dark'] .text-red-700 {
+  color: #f87171 !important;
+}
+
+html[data-theme='dark'] .text-amber-600,
+html[data-theme='dark'] .text-amber-700 {
+  color: #fbbf24 !important;
+}
+
+html[data-theme='dark'] .hover\:text-gray-700:hover,
+html[data-theme='dark'] .hover\:text-gray-800:hover {
+  color: #f1f5f9 !important;
+}
+
+/* SonarQube css:S7924 – dark theme color choices intentionally match the dark background palette */
+html[data-theme='dark'] .header-nav-btn--active {
+  background-color: rgba(99, 102, 241, 0.2) !important;
+  border-color: #6366f1 !important;
+  /* stylelint-disable-line */
+  color: #c7d2fe !important;
+}
+
+html[data-theme='dark'] .header-nav-btn--active:hover {
+  background-color: rgba(99, 102, 241, 0.3) !important;
+  /* stylelint-disable-line */
+  color: #e0e7ff !important;
+}
+
+html[data-theme='dark'] .bg-indigo-50,
+html[data-theme='dark'] .bg-indigo-100 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+html[data-theme='dark'] .border-indigo-200,
+html[data-theme='dark'] .border-indigo-300 {
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+html[data-theme='dark'] .bg-indigo-600 {
+  background-color: #4f46e5 !important;
+}
+
+html[data-theme='dark'] .hover\:bg-indigo-500:hover {
+  background-color: #4338ca !important;
+}
+
+html[data-theme='dark'] .text-indigo-600,
+html[data-theme='dark'] .hover\:text-indigo-700:hover {
+  color: #818cf8 !important;
+}
+
+html[data-theme='dark'] .bg-emerald-600,
+html[data-theme='dark'] .hover\:bg-emerald-500:hover {
+  background-color: #10b981 !important;
+}
+
+html[data-theme='dark'] .text-emerald-600,
+html[data-theme='dark'] .hover\:text-emerald-700:hover {
+  color: #34d399 !important;
+}
+
+html[data-theme='dark'] .bg-red-600,
+html[data-theme='dark'] .hover\:bg-red-500:hover {
+  background-color: #ef4444 !important;
+}
+
+html[data-theme='dark'] .text-red-600,
+html[data-theme='dark'] .hover\:text-red-700:hover {
+  color: #f87171 !important;
+}
+
+html[data-theme='dark'] .bg-amber-600,
+html[data-theme='dark'] .hover\:bg-amber-500:hover {
+  background-color: #f59e0b !important;
+}
+
+html[data-theme='dark'] .text-amber-600,
+html[data-theme='dark'] .hover\:text-amber-700:hover {
+  color: #fbbf24 !important;
+}
+
+html[data-theme='dark'] .bg-cyan-600,
+html[data-theme='dark'] .hover\:bg-cyan-500:hover {
+  background-color: #0891b2 !important;
+}
+
+html[data-theme='dark'] .shadow-lg,
+html[data-theme='dark'] .shadow-xl {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* SonarQube css:S7924 – dark theme form colors are intentionally chosen for the dark background */
+html[data-theme='dark'] input,
+html[data-theme='dark'] textarea,
+html[data-theme='dark'] select {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  /* stylelint-disable-line */
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html[data-theme='dark'] input:focus,
+html[data-theme='dark'] textarea:focus,
+html[data-theme='dark'] select:focus {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  /* stylelint-disable-line */
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+  outline: none !important;
+  caret-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+html[data-theme='dark'] input::placeholder,
+html[data-theme='dark'] textarea::placeholder {
+  color: rgba(255, 255, 255, 0.34) !important;
+}
+
+/* ── Additional opacity background variants for dark mode ── */
+
+html[data-theme='dark'] .bg-gray-50\/20,
+html[data-theme='dark'] .bg-gray-50\/30,
+html[data-theme='dark'] .bg-gray-50\/40,
+html[data-theme='dark'] .bg-gray-50\/50,
+html[data-theme='dark'] .bg-gray-50\/60,
+html[data-theme='dark'] .bg-gray-50\/70,
+html[data-theme='dark'] .bg-gray-50\/80 {
+  background-color: rgba(15, 23, 42, 0.92) !important;
+}
+
+html[data-theme='dark'] .bg-gray-100\/40,
+html[data-theme='dark'] .bg-gray-100\/50,
+html[data-theme='dark'] .bg-gray-100\/60,
+html[data-theme='dark'] .bg-gray-100\/70 {
+  background-color: rgba(30, 41, 59, 0.92) !important;
+}
+
+html[data-theme='dark'] .bg-gray-200\/40,
+html[data-theme='dark'] .bg-gray-200\/50 {
+  background-color: rgba(51, 65, 85, 0.8) !important;
+}
+
+html[data-theme='dark'] .bg-white\/20,
+html[data-theme='dark'] .bg-white\/30,
+html[data-theme='dark'] .bg-white\/40,
+html[data-theme='dark'] .bg-white\/50,
+html[data-theme='dark'] .bg-white\/60 {
+  background-color: rgba(15, 23, 42, 0.5) !important;
+}
+
+html[data-theme='dark'] .bg-indigo-50\/30,
+html[data-theme='dark'] .bg-indigo-50\/40,
+html[data-theme='dark'] .bg-indigo-50\/50 {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+html[data-theme='dark'] .bg-amber-50\/30,
+html[data-theme='dark'] .bg-amber-50\/40 {
+  background-color: rgba(217, 119, 6, 0.15) !important;
+}
+
+html[data-theme='dark'] .bg-emerald-50\/30 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+}
+
+html[data-theme='dark'] .bg-red-50\/30,
+html[data-theme='dark'] .bg-red-50\/40 {
+  background-color: rgba(220, 38, 38, 0.15) !important;
+}
+
+html[data-theme='dark'] .bg-purple-50\/30 {
+  background-color: rgba(139, 92, 246, 0.15) !important;
+}
+
+html[data-theme='dark'] .bg-black\/50 {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ── Additional opacity border variants ── */
+
+html[data-theme='dark'] .border-gray-200\/30,
+html[data-theme='dark'] .border-gray-200\/40,
+html[data-theme='dark'] .border-gray-200\/50,
+html[data-theme='dark'] .border-gray-200\/60 {
+  border-color: rgba(51, 65, 85, 0.75) !important;
+}
+
+html[data-theme='dark'] .border-gray-300\/30,
+html[data-theme='dark'] .border-gray-300\/40 {
+  border-color: rgba(51, 65, 85, 0.5) !important;
+}
+
+html[data-theme='dark'] .border-indigo-200\/30,
+html[data-theme='dark'] .border-indigo-200\/40 {
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+html[data-theme='dark'] .border-indigo-300\/30,
+html[data-theme='dark'] .border-indigo-300\/40,
+html[data-theme='dark'] .border-indigo-300\/50 {
+  border-color: rgba(129, 140, 248, 0.35) !important;
+}
+
+html[data-theme='dark'] .border-indigo-400\/30 {
+  border-color: rgba(129, 140, 248, 0.25) !important;
+}
+
+html[data-theme='dark'] .border-red-200 {
+  border-color: rgba(252, 165, 165, 0.3) !important;
+}
+
+html[data-theme='dark'] .border-red-200\/30,
+html[data-theme='dark'] .border-red-200\/40,
+html[data-theme='dark'] .border-red-200\/50,
+html[data-theme='dark'] .border-red-200\/60 {
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+html[data-theme='dark'] .border-amber-200\/30 {
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+html[data-theme='dark'] .border-emerald-200\/30,
+html[data-theme='dark'] .border-emerald-200\/40 {
+  border-color: rgba(52, 211, 153, 0.35) !important;
+}
+
+/* ── Additional text color variants ── */
+
+html[data-theme='dark'] .text-indigo-200\/80 {
+  color: #a5b4fc !important;
+}
+
+html[data-theme='dark'] .text-indigo-300\/80 {
+  color: #a5b4fc !important;
+}
+
+/* ── Gradient overrides ── */
+
+html[data-theme='dark'] .from-indigo-50 {
+  --tw-gradient-from: rgba(99, 102, 241, 0.08) !important;
+  --tw-gradient-to: rgba(99, 102, 241, 0) !important;
+}
+
+/* ── Additional hover background variants ── */
+
+html[data-theme='dark'] .hover\:bg-indigo-50\/10:hover {
+  background-color: rgba(99, 102, 241, 0.08) !important;
+}
+
+/* ── Safe area insets for mobile devices ── */
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Mobile touch optimization ── */
+
+@media (hover: none) {
+
+  /* Disable hover states on touch devices */
+  .hover\:bg-gray-50:hover,
+  .hover\:bg-gray-100:hover,
+  .hover\:bg-indigo-50:hover {
+    background-color: inherit;
+  }
+}
+
+/* Counter-clockwise spin (override for all spinner icons) */
+.animate-spin-ccw {
+  animation: spin-ccw 1s linear infinite;
+}
+
+@keyframes spin-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+/* ── thesvg.org Premium Design Classes ── */
+.thesvg-hero-gradient {
+  background: linear-gradient(135deg, rgba(255, 91, 0, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+}
+html[data-theme='dark'] .thesvg-hero-gradient {
+  background: linear-gradient(135deg, rgba(255, 91, 0, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%);
+}
+
+.thesvg-card {
+  border-radius: 1.25rem; /* rounded-2xl */
+  border-width: 1px;
+  border-style: solid;
+  transition: all 0.2s ease-in-out;
+}
+html[data-theme='dark'] .thesvg-card {
+  border-color: rgba(255, 255, 255, 0.06);
+  background-color: #0d0d0d;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+}
+html[data-theme='light'] .thesvg-card,
+:root:not([data-theme='dark']) .thesvg-card {
+  border-color: rgba(15, 23, 42, 0.08);
+  background-color: #ffffff;
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.04);
+}
+
+.thesvg-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  transition: all 0.15s ease;
+}
+
+.thesvg-badge-primary {
+  background-color: rgba(255, 91, 0, 0.1);
+  color: #ff5b00;
+}
+html[data-theme='dark'] .thesvg-badge-primary {
+  background-color: rgba(255, 91, 0, 0.15);
+  color: #ff7c33;
+}
+
+.thesvg-btn-primary {
+  background-color: #ff5b00;
+  color: #ffffff;
+  font-weight: 600;
+  transition: all 0.2s ease-in-out;
+}
+.thesvg-btn-primary:hover {
+  background-color: #e04f00;
+  transform: translateY(-1px);
+}
+.thesvg-btn-primary:active {
+  transform: translateY(0);
+}
+
+/* CreateStory theSVG-inspired redesign system */
+:root {
+  --cs-page: #f7f6f3;
+  --cs-page-soft: #fbfbfa;
+  --cs-surface: rgba(255, 255, 255, 0.88);
+  --cs-surface-elevated: rgba(255, 255, 255, 0.96);
+  --cs-surface-muted: rgba(17, 17, 17, 0.045);
+  --cs-border: rgba(17, 17, 17, 0.09);
+  --cs-border-strong: rgba(17, 17, 17, 0.16);
+  --cs-text: #111111;
+  --cs-text-soft: rgba(17, 17, 17, 0.68);
+  --cs-text-muted: rgba(17, 17, 17, 0.52);
+  --cs-text-faint: rgba(17, 17, 17, 0.34);
+  --cs-primary: #ff5b00;
+  --cs-primary-soft: rgba(255, 91, 0, 0.09);
+  --cs-active: #111111;
+  --cs-active-text: #ffffff;
+  --cs-danger: #dc2626;
+  --cs-success: #16a34a;
+  --cs-warning: #f59e0b;
+  --cs-shadow-soft: 0 18px 44px rgba(17, 17, 17, 0.06);
+  --cs-shadow-floating: 0 24px 70px rgba(17, 17, 17, 0.10);
+  --cs-shadow-modal: 0 30px 90px rgba(17, 17, 17, 0.18);
+}
+
+html[data-theme='dark'] {
+  --cs-page: #080808;
+  --cs-page-soft: #101010;
+  --cs-surface: rgba(20, 20, 19, 0.92);
+  --cs-surface-elevated: rgba(27, 27, 26, 0.96);
+  --cs-surface-muted: rgba(255, 255, 255, 0.06);
+  --cs-border: rgba(255, 255, 255, 0.08);
+  --cs-border-strong: rgba(255, 255, 255, 0.16);
+  --cs-text: rgba(255, 255, 255, 0.94);
+  --cs-text-soft: rgba(255, 255, 255, 0.68);
+  --cs-text-muted: rgba(255, 255, 255, 0.48);
+  --cs-text-faint: rgba(255, 255, 255, 0.32);
+  --cs-primary-soft: rgba(255, 91, 0, 0.14);
+  --cs-active: #f5f5f1;
+  --cs-active-text: #111111;
+  --cs-shadow-soft: 0 18px 44px rgba(0, 0, 0, 0.34);
+  --cs-shadow-floating: 0 24px 70px rgba(0, 0, 0, 0.48);
+  --cs-shadow-modal: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+body {
+  background: var(--cs-page) !important;
+  color: var(--cs-text);
+}
+
+.cs-page-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 78% 6%, rgba(255, 91, 0, 0.08), transparent 28rem),
+    var(--cs-page);
+}
+
+.cs-topbar {
+  position: fixed;
+  top: 14px;
+  left: 54px;
+  right: 54px;
+  z-index: 60;
+  min-height: 50px;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--cs-border);
+  border-radius: 999px;
+  background: var(--cs-surface-elevated);
+  box-shadow: var(--cs-shadow-soft);
+  padding: 8px 12px;
+  backdrop-filter: blur(22px);
+}
+
+.cs-topbar__brand,
+.cs-topbar__actions,
+.cs-topbar__modules,
+.cs-route-search,
+.cs-module-chip,
+.cs-submit-chip,
+.cs-button,
+.cs-toolbar {
+  display: flex;
+  align-items: center;
+}
+
+.cs-topbar__brand {
+  min-width: 190px;
+  gap: 10px;
+}
+
+.cs-topbar__logo {
+  display: inline-flex;
+  height: 34px;
+  width: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--cs-border);
+  border-radius: 10px;
+  background: var(--cs-surface-muted);
+}
+
+.cs-topbar__name {
+  color: var(--cs-text);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.cs-topbar__caption {
+  margin-top: 2px;
+  color: var(--cs-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cs-topbar__modules {
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.cs-module-chip {
+  gap: 6px;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--cs-text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.cs-module-chip:hover {
+  background: var(--cs-surface-muted);
+  color: var(--cs-text);
+}
+
+.cs-module-chip--active {
+  background: var(--cs-active);
+  color: var(--cs-active-text);
+}
+
+.cs-route-search {
+  min-width: 240px;
+  max-width: 520px;
+  flex: 1;
+  gap: 9px;
+  height: 36px;
+  border: 1px solid var(--cs-border);
+  border-radius: 999px;
+  background: var(--cs-page-soft);
+  color: var(--cs-text-muted);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.cs-route-search kbd {
+  min-width: 20px;
+  border: 1px solid var(--cs-border);
+  border-radius: 6px;
+  background: var(--cs-surface-elevated);
+  color: var(--cs-text-faint);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+
+.cs-topbar__actions {
+  gap: 8px;
+}
+
+.cs-submit-chip {
+  gap: 7px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cs-primary);
+  color: #ffffff;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 12px 30px rgba(255, 91, 0, 0.26);
+}
+
+.cs-icon-button {
+  display: inline-flex;
+  min-height: 36px;
+  min-width: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--cs-border);
+  border-radius: 999px;
+  background: var(--cs-surface-elevated);
+  color: var(--cs-text-soft);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.cs-icon-button:hover {
+  border-color: var(--cs-border-strong);
+  background: var(--cs-surface-muted);
+  color: var(--cs-text);
+}
+
+.cs-page-header {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid var(--cs-border);
+  border-radius: 24px;
+  background: var(--cs-surface-elevated);
+  box-shadow: var(--cs-shadow-soft);
+  padding: 22px 24px;
+}
+
+.cs-eyebrow {
+  color: var(--cs-text-faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.cs-page-title {
+  margin-top: 6px;
+  font-size: clamp(24px, 3vw, 38px);
+  font-weight: 850;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.cs-page-description {
+  margin-top: 8px;
+  max-width: 720px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.cs-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cs-surface {
+  border: 1px solid var(--cs-border);
+  border-radius: 18px;
+  background: var(--cs-surface-elevated);
+  box-shadow: var(--cs-shadow-soft);
+}
+
+.cs-surface--interactive {
+  transition: border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.cs-surface--interactive:hover {
+  border-color: rgba(255, 91, 0, 0.28);
+  transform: translateY(-1px);
+  box-shadow: var(--cs-shadow-floating);
+}
+
+.cs-button {
+  min-height: 38px;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--cs-border);
+  border-radius: 999px;
+  background: var(--cs-surface-elevated);
+  color: var(--cs-text);
+  padding: 0 15px;
+  font-size: 13px;
+  font-weight: 800;
+  transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+
+.cs-button--primary {
+  border-color: var(--cs-primary);
+  background: var(--cs-primary);
+  color: #ffffff;
+  box-shadow: 0 12px 30px rgba(255, 91, 0, 0.22);
+}
+
+.cs-button--active {
+  border-color: var(--cs-active);
+  background: var(--cs-active);
+  color: var(--cs-active-text);
+}
+
+.cs-button--danger {
+  border-color: rgba(220, 38, 38, 0.24);
+  color: var(--cs-danger);
+}
+
+.cs-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+  transform: none;
+}
+
+.cs-pill-tabs,
+.cs-toolbar {
+  gap: 6px;
+  border: 1px solid var(--cs-border);
+  border-radius: 999px;
+  background: var(--cs-surface-muted);
+  padding: 4px;
+}
+
+.cs-pill-tab {
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cs-text-soft);
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cs-pill-tab--active {
+  background: var(--cs-active);
+  color: var(--cs-active-text);
+}
+
+.cs-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  border: 1px solid var(--cs-border);
+  border-radius: 999px;
+  background: var(--cs-surface-muted);
+  color: var(--cs-text-soft);
+  padding: 0 9px;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.cs-status-badge--primary {
+  border-color: rgba(255, 91, 0, 0.22);
+  background: var(--cs-primary-soft);
+  color: var(--cs-primary);
+}
+
+.cs-status-badge--success {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: rgba(22, 163, 74, 0.08);
+  color: var(--cs-success);
+}
+
+.cs-status-badge--danger {
+  border-color: rgba(220, 38, 38, 0.24);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--cs-danger);
+}
+
+.cs-status-badge--warning {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.10);
+  color: var(--cs-warning);
+}
+
+.cs-input,
+.cs-main-content input,
+.cs-main-content textarea,
+.cs-main-content select {
+  border-color: var(--cs-border) !important;
+  border-radius: 12px !important;
+  background: var(--cs-surface-elevated) !important;
+  color: var(--cs-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.cs-input:focus,
+.cs-main-content input:focus,
+.cs-main-content textarea:focus,
+.cs-main-content select:focus {
+  border-color: rgba(255, 91, 0, 0.35) !important;
+  box-shadow: 0 0 0 3px rgba(255, 91, 0, 0.10) !important;
+}
+
+.cs-table-shell {
+  overflow-x: auto;
+  border: 1px solid var(--cs-border);
+  border-radius: 18px;
+  background: var(--cs-surface-elevated);
+  box-shadow: var(--cs-shadow-soft);
+}
+
+.cs-empty-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px dashed var(--cs-border-strong);
+  border-radius: 18px;
+  background: var(--cs-surface-muted);
+  padding: 18px;
+  color: var(--cs-text-soft);
+}
+
+.cs-empty-state__icon {
+  display: inline-flex;
+  height: 36px;
+  width: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--cs-border);
+  border-radius: 12px;
+  background: var(--cs-surface-elevated);
+}
+
+.cs-empty-state__title {
+  color: var(--cs-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.cs-empty-state__description {
+  margin-top: 3px;
+  color: var(--cs-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cs-main-content {
+  background:
+    radial-gradient(circle at 80% 10%, rgba(255, 91, 0, 0.05), transparent 32rem),
+    radial-gradient(circle at 20% 80%, rgba(139, 92, 246, 0.03), transparent 32rem),
+    var(--cs-page) !important;
+}
+
+.cs-main-content main,
+.cs-main-content .mx-auto {
+  color: var(--cs-text);
+}
+
+.cs-main-content section.border,
+.cs-main-content article.border,
+.cs-main-content .cs-surface,
+.cs-main-content .thesvg-card {
+  border-radius: 22px !important;
+  border-color: var(--cs-border) !important;
+  background: var(--cs-surface-elevated) !important;
+  box-shadow: var(--cs-shadow-soft) !important;
+  backdrop-filter: blur(12px);
+}
+
+.cs-main-content .thesvg-hero-gradient {
+  background:
+    radial-gradient(circle at 85% 25%, rgba(255, 91, 0, 0.16), transparent 19rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 241, 0.86)) !important;
+}
+
+html[data-theme='dark'] .cs-main-content .thesvg-hero-gradient {
+  background:
+    radial-gradient(circle at 85% 25%, rgba(255, 91, 0, 0.16), transparent 19rem),
+    linear-gradient(135deg, rgba(22, 22, 21, 0.96), rgba(34, 25, 17, 0.86)) !important;
+}
+
+.cs-main-content button:not(.cs-icon-button):not(.cs-pill-tab):not(.cs-module-chip),
+.cs-main-content a[role='button'] {
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.cs-main-content button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.cs-main-content table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.cs-main-content thead {
+  background: var(--cs-surface-muted) !important;
+}
+
+.cs-main-content th,
+.cs-main-content td {
+  border-color: var(--cs-border) !important;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.cs-main-content code,
+.cs-main-content pre,
+.cs-main-content .font-mono {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.cs-main-content .truncate {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1023px) {
+  .cs-page-header {
+    flex-direction: column;
+    border-radius: 18px;
+    padding: 18px;
+  }
+
+  .cs-page-title {
+    font-size: 26px;
+  }
+}
+
+/* ── Unified Symmetrical border-radius for components ── */
+.cs-main-content input,
+.cs-main-content textarea,
+.cs-main-content select,
+.cs-main-content input[class*='rounded-'],
+.cs-main-content textarea[class*='rounded-'],
+.cs-main-content select[class*='rounded-'] {
+  border-radius: 12px !important;
+}
+
+.cs-main-content button[class*='rounded-']:not(.cs-icon-button):not(.thesvg-card),
+.cs-main-content a[role='button'][class*='rounded-']:not(.cs-icon-button):not(.thesvg-card) {
+  border-radius: 9999px !important;
+}
+
+.cs-main-content .inline-flex.rounded-md,
+.cs-main-content span[class*='rounded-md'],
+.cs-main-content button.rounded-md {
+  /* Override small pills/labels/icon buttons to have rounded-lg style */
+  border-radius: 8px !important;
+}
+
+/* Red hover state for sidebar Sign Out button */
+.cs-btn-logout {
+  background: var(--cs-surface-elevated);
+  border: 1px solid var(--cs-border);
+  color: var(--cs-text-soft);
+  transition: all 0.2s ease-in-out;
+}
+.cs-btn-logout:hover {
+  background: rgba(220, 38, 38, 0.08) !important;
+  border-color: rgba(220, 38, 38, 0.28) !important;
+  color: #dc2626 !important;
+}
+html[data-theme='dark'] .cs-btn-logout:hover {
+  background: rgba(248, 113, 113, 0.12) !important;
+  border-color: rgba(248, 113, 113, 0.32) !important;
+  color: #f87171 !important;
+}
+
+/* Force cursor pointer globally on all buttons, tabs, interactive elements */
+button,
+a,
+[role="button"],
+.cs-pill-tab,
+.cs-module-chip,
+.cs-submit-chip,
+.thesvg-card,
+.cs-btn-primary,
+.cs-logout-btn,
+input[type="submit"],
+select {
+  cursor: pointer !important;
+}
