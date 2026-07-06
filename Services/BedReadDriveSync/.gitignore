@@ -1,0 +1,23 @@
+# Data files (created at runtime)
+data/
+*.json
+
+# Credentials
+credentials/
+*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.env
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
