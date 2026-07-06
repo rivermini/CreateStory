@@ -22,6 +22,16 @@ miscellaneous/
 .purged/
 cloudflared.exe
 
+# Large local model artifacts. Keep these in the external CreateStoryModels repo.
+CreateStoryModels/
+Services/BedReadVoices/api/models/*.onnx
+Services/BedReadVoices/api/models/*.bin
+*.safetensors
+*.ckpt
+*.gguf
+*.pth
+*.pt
+
 # Build artifacts
 node_modules/
 dist/

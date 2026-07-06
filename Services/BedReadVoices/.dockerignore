@@ -6,3 +6,7 @@ __pycache__/
 venv/
 .env
 output/
+
+# Model files are mounted at runtime from the external CreateStoryModels folder.
+api/models/*.onnx
+api/models/*.bin

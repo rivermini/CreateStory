@@ -144,6 +144,9 @@ services:
       - database_url
       - internal_service_token
     volumes:
+      # Kokoro model files live outside this repo by default:
+      # ../../CreateStoryModels from Services/ resolves to a sibling of CreateStory/.
+      - ${KOKORO_MODELS_DIR:-../../CreateStoryModels}:/app/api/models:ro
       - bedread_voices_output:/app/output
     networks:
       - services
