@@ -4,10 +4,10 @@ import { checkInkittCookies, getSettings, listSites, startCrawl } from '../../ap
 import type { InkittCookieStatusResponse, SiteInfoResponse } from '../../api';
 import { NovelInfoPanel } from '../../components/NovelCrawler/NovelInfoPanel';
 import { Icon, appIcons } from '../../components/Shared/Icon';
-import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useNovelInfo } from '../../hooks/useNovelInfo';
 import { useSiteDetection } from '../../hooks/useSiteDetection';
 import type { ThemeMode } from '../../types/theme';
+import { PageShell, PageHeader } from '../../components/Shared/Primitives';
 
 
 
@@ -79,54 +79,42 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
     const retryUrl = searchParams.get('retryUrl');
     const retryRangeFrom = searchParams.get('retryFrom');
     const retryRangeTo = searchParams.get('retryTo');
-    const retryLimit = searchParams.get('retryLimit');
-
     if (retryUrl) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing input state from URL params on mount
       setInputUrl(retryUrl);
       detect(retryUrl);
       refresh(retryUrl);
+      if (retryRangeFrom && retryRangeTo) {
+        setRangeMode('range');
+        setRangeFrom(Number(retryRangeFrom));
+        setRangeTo(Number(retryRangeTo));
+      }
+      setSearchParams({}, { replace: true });
     }
-    if (retryRangeFrom && retryRangeTo) {
-      setRangeMode('range');
-      setRangeFrom(Number.parseInt(retryRangeFrom) || 1);
-      setRangeTo(Number.parseInt(retryRangeTo) || 10);
-    } else if (retryLimit) {
-      setRangeMode('count');
-      setToChapter(Number.parseInt(retryLimit) || 10);
-    }
-
-    if (retryUrl || retryRangeFrom || retryRangeTo || retryLimit) {
-      setSearchParams({});
-    }
-  }, [detect, refresh, searchParams, setSearchParams]);
+  }, []);
 
   useEffect(() => {
-    if (!autoMaxChapters || !totalChapterCount || totalChapterCount <= 0) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing chapter cap to discovered total is the intentional purpose of this effect
-    setToChapter(totalChapterCount);
-    setRangeTo(totalChapterCount);
-  }, [autoMaxChapters, totalChapterCount]);
+    if (!autoMaxChapters || !isValid || totalChapterCount == null || totalChapterCount <= 0) return;
+    if (rangeMode === 'count') {
+      setToChapter(totalChapterCount);
+    } else {
+      setRangeTo(totalChapterCount);
+    }
+  }, [autoMaxChapters, isValid, totalChapterCount, rangeMode]);
 
   useEffect(() => {
-    if (siteInfo?.config_name !== 'inkitt' || !isValid || !inputUrl.trim()) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting state when site/input changes is the intended purpose of this effect
-      setInkittCookieStatus(null);
-      setIsCheckingInkittCookies(false);
-      return;
-    }
-
+    if (!isInkitt) return;
     let cancelled = false;
+
     setIsCheckingInkittCookies(true);
-    setInkittCookieStatus(null);
-    checkInkittCookies(inputUrl)
-      .then((status) => {
-        if (!cancelled) setInkittCookieStatus(status);
+
+    checkInkittCookies()
+      .then((response) => {
+        if (!cancelled) setInkittCookieStatus(response);
       })
       .catch((err) => {
         if (!cancelled) {
           setInkittCookieStatus({
-            valid: false,
+            valid: null,
             reason: 'request_failed',
             message: err instanceof Error ? err.message : 'Could not test saved Inkitt cookies.',
             cookie_count: 0,
@@ -156,15 +144,6 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
   // so we never block the whole crawl for them.
   const isWattpadOriginal = siteInfo?.config_name === 'wattpad' && novelMetadata?.is_paywalled === true;
 
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const activeSurface = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(55,53,47,0.1)';
-  const accentSolid = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
-  const accentText = isDark ? 'rgba(255,255,255,0.92)' : '#111111';
   const sectionDisabledClass = inputsLocked ? 'opacity-60' : '';
 
   const handleRangeToChange = (value: number) => {
@@ -230,53 +209,26 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
   };
 
   return (
-    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`}>
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
-        <main className="space-y-4">
-          <section
-            className="rounded-2xl border px-6 py-8 sm:px-8 relative overflow-hidden thesvg-hero-gradient thesvg-card"
-            style={{ borderColor: panelBorder }}
-          >
-            {/* Ambient floating design icons in the background */}
-            <div className="absolute right-10 top-1/2 -translate-y-1/2 opacity-[0.04] dark:opacity-[0.08] pointer-events-none hidden md:block">
-              <div className="flex gap-8 items-center">
-                <Icon icon={appIcons.sync} className="w-16 h-16 rotate-12" />
-                <Icon icon={appIcons.bookOpen} className="w-20 h-20 -rotate-6" />
-                <Icon icon={appIcons.autoAudio} className="w-16 h-16 rotate-45" />
-              </div>
-            </div>
-
-            <div className="space-y-4 relative z-10">
-              <div className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold thesvg-badge-primary">
-                <Icon icon={appIcons.globe} className="h-3 w-3" />
-                <span>10+ sites supported</span>
-              </div>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3.5xl max-w-2xl leading-[1.15]" style={{ color: isDark ? '#ffffff' : '#111111' }}>
-                Novel Crawler. Search. Copy. Ship.
-              </h1>
-              <p className="max-w-xl text-sm leading-relaxed" style={{ color: secondaryText }}>
-                Paste a supported novel URL, retrieve chapter content, sync to Google Drive, or run automatic TTS audio generation instantly.
-              </p>
-            </div>
-          </section>
-
-
-
-          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="flex flex-col gap-4">
-              <section
-                className="space-y-4 px-4 py-5 thesvg-card"
-                style={{ background: panelBackground, borderColor: panelBorder }}
-              >
+    <PageShell themeMode={themeMode}>
+      <div className="flex w-full flex-col px-4 py-6 sm:px-6 lg:px-8">
+        <main className="space-y-6">
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+            {/* ── Left Column: Crawl Info (order-2 on mobile, order-1 on desktop) ── */}
+            <div className="order-2 lg:order-1 flex flex-col gap-6">
+              {/* Step 1: URL Input */}
+              <PageHeader
+                themeMode={themeMode}
+                eyebrow="Crawler"
+                title="Novel Crawler"
+                description="Paste a supported novel URL, retrieve chapter content, sync to Google Drive, or run automatic TTS audio generation.">
+              </PageHeader>
+              <section className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <StepBadge number={1} isDark={isDark} />
-                      <h2 className="text-base font-semibold" style={{ color: pageText }}>
-                        Paste a novel URL
-                      </h2>
-                    </div>
-                    <p className="text-xs" style={{ color: secondaryText }}>
+                    <h2 className="text-sm font-semibold text-[var(--cs-text)]">
+                      Paste a novel URL
+                    </h2>
+                    <p className="text-xs text-[var(--cs-text-muted)]">
                       {supportedSites.length > 0
                         ? `Supported: ${supportedSites.map((site) => site.base_url.replace('https://', '').replace('http://', '')).join(', ')}`
                         : 'Supported: wattpad.com'}
@@ -285,7 +237,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="url-input" className="block text-sm" style={{ color: secondaryText }}>
+                  <label htmlFor="url-input" className="block text-xs font-medium text-[var(--cs-text-soft)]">
                     Novel URL
                   </label>
                   <div className="relative">
@@ -295,38 +247,25 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                       value={inputUrl}
                       onChange={(event) => handleUrlChange(event.target.value)}
                       placeholder="https://www.wattpad.com/... or https://www.inkitt.com/... or https://www.novelworm.com/..."
-                      className="w-full rounded-md border px-4 py-3 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20"
-                      style={{
-                        background: mutedSurface,
-                        borderColor: panelBorder,
-                        color: pageText,
-                      }}
+                      className="w-full rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-4 py-3 text-sm text-[var(--cs-text)] outline-none transition placeholder:text-[var(--cs-text-faint)] focus:border-[var(--cs-primary)] focus:ring-2 focus:ring-[var(--cs-primary)]/20"
                     />
                     {isLoading && (
                       <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                        <Icon icon={appIcons.spinner} className="h-5 w-5 animate-spin" style={{ color: accentText }} />
+                        <Icon icon={appIcons.spinner} className="h-5 w-5 animate-spin text-[var(--cs-text-soft)]" />
                       </div>
                     )}
                   </div>
                 </div>
 
                 {isValid && siteInfo && (
-                  <div
-                    className="rounded-lg border px-3 py-3"
-                    style={{
-                      background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.04)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)',
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Icon icon={appIcons.checkCircle} className="h-4 w-4" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }} />
-                      <span className="font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.92)' : '#111111' }}>
-                        {siteInfo.site_name}
-                      </span>
-                      {storyTitle && <span style={{ color: secondaryText }}>— {storyTitle}</span>}
-                    </div>
+                  <div className="flex items-center gap-2 rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-3 py-2.5">
+                    <Icon icon={appIcons.checkCircle} className="h-4 w-4 shrink-0 text-[var(--cs-success)]" />
+                    <span className="text-sm font-medium text-[var(--cs-text)]">
+                      {siteInfo.site_name}
+                    </span>
+                    {storyTitle && <span className="text-sm text-[var(--cs-text-soft)]">— {storyTitle}</span>}
                     {siteInfo.config_name === 'wattpad' && resolvedUrl && (
-                      <p className="ml-7 mt-2 text-xs" style={{ color: secondaryText }}>
+                      <span className="ml-auto text-xs text-[var(--cs-text-muted)]">
                         {inputUrl.includes('/character')
                           ? 'Character page'
                           : inputUrl.includes('/prologue')
@@ -337,18 +276,19 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                         → Chapter 1
                         {slug && (
                           <span>
-                            {' '}(ID: <code style={{ color: accentText }}>{slug}</code>)
+                            {' '}(ID: <code className="text-[var(--cs-text)]">{slug}</code>)
                           </span>
                         )}
-                      </p>
+                      </span>
                     )}
                   </div>
                 )}
 
                 {error && (
-                  <FeedbackBox tone="error" isDark={isDark} icon={appIcons.info}>
+                  <div className="flex items-center gap-2.5 rounded-lg border px-4 py-3 text-sm" style={{ background: 'rgba(220, 38, 38, 0.08)', borderColor: 'rgba(220, 38, 38, 0.16)', color: 'var(--cs-danger)' }}>
+                    <Icon icon={appIcons.info} className="h-4 w-4 shrink-0" />
                     {error}
-                  </FeedbackBox>
+                  </div>
                 )}
 
                 {isInkitt && (
@@ -373,7 +313,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                             : inkittCookieStatus?.message || 'Could not test saved Inkitt cookies.'}
                         </p>
                         {!isCheckingInkittCookies && inkittCookieStatus?.valid !== true && inkittCookieStatus?.reason !== "not_found" && (
-                          <p className="mt-1 text-xs" style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(55,53,47,0.6)' }}>
+                          <p className="mt-1 text-xs text-[var(--cs-text-muted)]">
                             Update Inkitt cookies in Settings before crawling login-gated chapters.
                           </p>
                         )}
@@ -383,54 +323,42 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                 )}
               </section>
 
-              <section
-                className={`space-y-4 px-4 py-5 thesvg-card ${sectionDisabledClass}`}
-                style={{ background: panelBackground, borderColor: panelBorder }}
-              >
+              {/* Step 2: Chapter Range */}
+              <section className={`space-y-4 ${sectionDisabledClass}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <StepBadge number={2} isDark={isDark} />
-                      <h2 className="text-base font-semibold" style={{ color: pageText }}>
-                        Chapter range
-                      </h2>
-                    </div>
-                    <p className="text-sm" style={{ color: secondaryText }}>
+                    <h2 className="text-sm font-semibold text-[var(--cs-text)]">
+                      Chapter range
+                    </h2>
+                    <p className="text-xs text-[var(--cs-text-muted)]">
                       {inputsLocked ? 'Paste a novel URL first' : 'Set which chapters to crawl'}
                     </p>
                   </div>
                   {totalChapterCount != null && (
-                    <div className="rounded-lg border px-2.5 py-1.5 text-right" style={{ borderColor: panelBorder, background: mutedSurface }}>
-                      <p className="text-sm font-semibold" style={{ color: pageText }}>
+                    <div className="rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-2.5 py-1.5 text-right">
+                      <p className="text-sm font-semibold text-[var(--cs-text)]">
                         {totalChapterCount.toLocaleString()}
                       </p>
-                      <p className="text-[10px]" style={{ color: tertiaryText }}>
+                      <p className="text-[10px] text-[var(--cs-text-faint)]">
                         {chapterCapWord} chapters
                       </p>
                     </div>
                   )}
                 </div>
 
-                <div className="inline-flex rounded-full border p-0.5" style={{ borderColor: panelBorder, background: mutedSurface }}>
+                {/* Count / Range toggle — flat tabs */}
+                <div className="inline-flex rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] p-0.5">
                   <button
                     onClick={() => setRangeMode('count')}
                     disabled={inputsLocked}
-                    className="rounded-full px-3 py-1.5 text-xs transition-colors"
-                    style={{
-                      background: rangeMode === 'count' ? activeSurface : 'transparent',
-                      color: rangeMode === 'count' ? pageText : secondaryText,
-                    }}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${rangeMode === 'count' ? 'bg-[var(--cs-surface-elevated)] text-[var(--cs-text)] shadow-sm' : 'text-[var(--cs-text-muted)] hover:text-[var(--cs-text-soft)]'}`}
                   >
                     Count
                   </button>
                   <button
                     onClick={() => setRangeMode('range')}
                     disabled={inputsLocked}
-                    className="rounded-full px-3 py-1.5 text-xs transition-colors"
-                    style={{
-                      background: rangeMode === 'range' ? activeSurface : 'transparent',
-                      color: rangeMode === 'range' ? pageText : secondaryText,
-                    }}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${rangeMode === 'range' ? 'bg-[var(--cs-surface-elevated)] text-[var(--cs-text)] shadow-sm' : 'text-[var(--cs-text-muted)] hover:text-[var(--cs-text-soft)]'}`}
                   >
                     Range
                   </button>
@@ -438,10 +366,10 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
 
                 {rangeMode === 'count' ? (
                   <div className="max-w-[220px]">
-                    <label className="mb-2 block text-sm" style={{ color: secondaryText }}>
+                    <label className="mb-2 block text-xs font-medium text-[var(--cs-text-soft)]">
                       Max chapters to crawl
                       {totalChapterCount != null && (
-                        <span style={{ color: tertiaryText }}> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
+                        <span className="text-[var(--cs-text-faint)]"> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
                       )}
                     </label>
                     <div className="relative">
@@ -452,11 +380,10 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                         value={toChapter}
                         disabled={inputsLocked}
                         onChange={(event) => handleToChapterChange(Number.parseInt(event.target.value) || 1)}
-                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
-                        style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
+                        className="w-full rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-3 py-2.5 text-sm text-[var(--cs-text)] outline-none transition focus:border-[var(--cs-primary)] focus:ring-2 focus:ring-[var(--cs-primary)]/20 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                       {totalChapterCount != null && (
-                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm" style={{ color: secondaryText }}>
+                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-[var(--cs-text-muted)]">
                           / {totalChapterCount.toLocaleString()}
                         </span>
                       )}
@@ -465,10 +392,10 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                 ) : (
                   <div className="flex w-full max-w-md items-end gap-3">
                     <div className="min-w-0 flex-1">
-                      <label className="mb-2 block text-sm" style={{ color: secondaryText }}>
+                      <label className="mb-2 block text-xs font-medium text-[var(--cs-text-soft)]">
                         From chapter
                         {totalChapterCount != null && (
-                          <span style={{ color: tertiaryText }}> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
+                          <span className="text-[var(--cs-text-faint)]"> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
                         )}
                       </label>
                       <input
@@ -478,18 +405,17 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                         value={rangeFrom}
                         disabled={inputsLocked}
                         onChange={(event) => handleRangeFromChange(Number.parseInt(event.target.value) || 1)}
-                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
-                        style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
+                        className="w-full rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-3 py-2.5 text-sm text-[var(--cs-text)] outline-none transition focus:border-[var(--cs-primary)] focus:ring-2 focus:ring-[var(--cs-primary)]/20 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                     </div>
-                    <span className="pb-3" style={{ color: secondaryText }}>
+                    <span className="pb-3 text-[var(--cs-text-muted)]">
                       to
                     </span>
                     <div className="flex-1">
-                      <label className="mb-2 block text-sm" style={{ color: secondaryText }}>
+                      <label className="mb-2 block text-xs font-medium text-[var(--cs-text-soft)]">
                         To chapter
                         {totalChapterCount != null && (
-                          <span style={{ color: tertiaryText }}> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
+                          <span className="text-[var(--cs-text-faint)]"> ({chapterCapWord}: {totalChapterCount.toLocaleString()})</span>
                         )}
                       </label>
                       <input
@@ -499,174 +425,118 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
                         value={rangeTo}
                         disabled={inputsLocked}
                         onChange={(event) => handleRangeToChange(Number.parseInt(event.target.value) || rangeFrom)}
-                        className="w-full rounded-md border px-3 py-2.5 text-sm outline-none transition focus:border-white/30 focus:ring-2 focus:ring-white/20 disabled:cursor-not-allowed"
-                        style={{ background: mutedSurface, borderColor: panelBorder, color: pageText }}
+                        className="w-full rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-3 py-2.5 text-sm text-[var(--cs-text)] outline-none transition focus:border-[var(--cs-primary)] focus:ring-2 focus:ring-[var(--cs-primary)]/20 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                     </div>
                   </div>
                 )}
 
                 <div className="flex items-center gap-3">
-                  <span className="text-sm" style={{ color: secondaryText }}>
+                  <span className="text-xs text-[var(--cs-text-muted)]">
                     Format:
                   </span>
-                  <span
-                    className="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium"
-                    style={{ background: activeSurface, border: `1px solid ${panelBorder}`, color: pageText }}
-                  >
+                  <span className="inline-flex items-center rounded-md border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-2.5 py-1 text-xs font-semibold text-[var(--cs-text)]">
                     MD
                   </span>
                 </div>
 
                 {rangeMode === 'range' && !inputsLocked && (
-                  <p className="text-sm" style={{ color: secondaryText }}>
+                  <p className="text-xs text-[var(--cs-text-muted)]">
                     Will crawl chapters {rangeFrom}–{rangeTo} ({rangeTotal.toLocaleString()} total)
                   </p>
                 )}
               </section>
 
               {startError && (
-                <FeedbackBox tone="error" isDark={isDark} icon={appIcons.info}>
+                <div className="flex items-center gap-2.5 rounded-lg border px-4 py-3 text-sm" style={{ background: 'rgba(220, 38, 38, 0.08)', borderColor: 'rgba(220, 38, 38, 0.16)', color: 'var(--cs-danger)' }}>
+                  <Icon icon={appIcons.info} className="h-4 w-4 shrink-0" />
                   {startError}
-                </FeedbackBox>
+                </div>
               )}
 
               <button
                 onClick={handleStart}
                 disabled={isStarting || !isValid || isWattpadOriginal}
                 title={isWattpadOriginal ? 'Crawling disabled — Wattpad Original' : undefined}
-                className="flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed"
-                style={{
-                  background: isWattpadOriginal || isStarting || !isValid ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.14)') : accentSolid,
-                  color: isWattpadOriginal || isStarting || !isValid ? secondaryText : (isDark ? '#111111' : '#ffffff'),
-                  opacity: isStarting ? 0.7 : 1,
-                }}
+                className="flex w-full max-w-xs items-center justify-center gap-2 rounded-lg border border-[var(--cs-active)] bg-[var(--cs-active)] py-3 text-sm font-semibold text-[var(--cs-active-text)] transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isStarting ? (
                   <>
-                    <Icon icon={appIcons.spinner} className="h-5 w-5 animate-spin" />
+                    <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />
                     Starting crawl...
                   </>
                 ) : (
                   <>
-                    <Icon icon={appIcons.trends} className="h-5 w-5" />
+                    <Icon icon={appIcons.trends} className="h-4 w-4" />
                     Start crawl
                   </>
                 )}
               </button>
+
+              {/* Supported Sites */}
+              <section className="space-y-3 border-t border-[var(--cs-border)] pt-5">
+                <div className="space-y-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--cs-text-muted)]">
+                    Supported Platforms & Sites
+                  </h3>
+                  <p className="text-xs text-[var(--cs-text-soft)]">
+                    Direct scraping is optimized for the following domains. Crawl chapters, bypass gates, and export to MD.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {supportedSites.map((site) => {
+                    const domain = site.base_url.replace('https://', '').replace('http://', '').replace('www.', '');
+                    const cleanName = site.site_name;
+
+                    return (
+                      <button
+                        key={site.config_name}
+                        onClick={() => {
+                          setInputUrl(site.base_url);
+                          detect(site.base_url);
+                          refresh(site.base_url);
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg border border-[var(--cs-border)] bg-[var(--cs-surface)] px-3 py-1.5 text-xs font-medium text-[var(--cs-text)] transition-colors hover:bg-[var(--cs-surface-muted)] hover:text-[var(--cs-primary)]"
+                      >
+                        <span>{cleanName}</span>
+                        <span className="text-[10px] text-[var(--cs-text-faint)]">
+                          ({domain})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
 
-            <div className="space-y-4 lg:sticky lg:top-6">
+            {/* ── Right Column: Novel Info Panel (order-1 on mobile, order-2 on desktop) ── */}
+            <div className="order-1 lg:order-2 space-y-4 lg:sticky lg:top-6">
               {isValid && (
-                <div className="rounded-2xl border" style={{ background: panelBackground, borderColor: panelBorder }}>
-                  <NovelInfoPanel
-                    storyTitle={panelTitle || storyTitle}
-                    siteName={siteInfo?.site_name || null}
-                    chapters={chapters}
-                    chapterCount={chapterCount}
-                    totalChapterCount={totalChapterCount}
-                    isLoading={isLoadingChapters}
-                    isDetecting={isLoading}
-                    error={chaptersError}
-                    warning={warning}
-                    isChapterUrl={isChapterUrl}
-                    novelMetadata={novelMetadata}
-                    onCrawlNovel={handleCrawlNovel}
-                    crawlBlocked={isWattpadOriginal}
-                    freeChapterCount={freeChapterCount}
-                    paidChapterCount={paidChapterCount}
-                    authenticated={authenticated}
-                    isDark={isDark}
-                  />
-                </div>
+                <NovelInfoPanel
+                  storyTitle={panelTitle || storyTitle}
+                  siteName={siteInfo?.site_name || null}
+                  chapters={chapters}
+                  chapterCount={chapterCount}
+                  totalChapterCount={totalChapterCount}
+                  isLoading={isLoadingChapters}
+                  isDetecting={isLoading}
+                  error={chaptersError}
+                  warning={warning}
+                  isChapterUrl={isChapterUrl}
+                  novelMetadata={novelMetadata}
+                  onCrawlNovel={handleCrawlNovel}
+                  crawlBlocked={isWattpadOriginal}
+                  freeChapterCount={freeChapterCount}
+                  paidChapterCount={paidChapterCount}
+                  authenticated={authenticated}
+                  isDark={isDark}
+                />
               )}
             </div>
           </div>
-
-          <section className="space-y-4 pt-4 border-t" style={{ borderColor: panelBorder }}>
-            <div className="space-y-1">
-              <h3 className="text-xs font-bold uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
-                Supported Platforms & Sites
-              </h3>
-              <p className="text-xs" style={{ color: secondaryText }}>
-                Direct scraping is optimized for the following domains. Crawl chapters, bypass gates, and export to MD.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              {supportedSites.map((site) => {
-                const domain = site.base_url.replace('https://', '').replace('http://', '').replace('www.', '');
-                const cleanName = site.site_name;
-
-                return (
-                  <button
-                    key={site.config_name}
-                    onClick={() => {
-                      setInputUrl(site.base_url);
-                      detect(site.base_url);
-                      refresh(site.base_url);
-                    }}
-                    className="flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 hover:scale-[1.01] active:scale-99 transition-all text-xs font-semibold group"
-                    style={{ background: panelBackground, borderColor: panelBorder }}
-                  >
-                    <span className="group-hover:text-[#ff5b00] transition-colors" style={{ color: pageText }}>
-                      {cleanName}
-                    </span>
-                    <span className="text-[10px] opacity-60 font-normal" style={{ color: tertiaryText }}>
-                      ({domain})
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
         </main>
       </div>
-    </div>
-  );
-}
-
-function StepBadge({ number, isDark }: Readonly<{ number: number; isDark: boolean }>) {
-  return (
-    <span
-      className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-semibold"
-      style={{
-        background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(17,17,17,0.08)',
-        color: isDark ? 'rgba(255,255,255,0.92)' : '#111111',
-      }}
-    >
-      {number}
-    </span>
-  );
-}
-
-function FeedbackBox({
-  tone,
-  isDark,
-  icon,
-  children,
-}: Readonly<{
-  tone: 'error';
-  isDark: boolean;
-  icon: IconDefinition;
-  children: React.ReactNode;
-}>) {
-  const style = tone === 'error'
-    ? {
-        background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
-        borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
-        color: isDark ? '#f87171' : '#dc2626',
-      }
-    : {
-        background: 'transparent',
-        borderColor: 'transparent',
-        color: isDark ? '#f87171' : '#dc2626',
-      };
-
-  return (
-    <div className="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm" style={style}>
-      <Icon icon={icon} className="h-5 w-5 shrink-0" />
-      {children}
-    </div>
+    </PageShell>
   );
 }
 

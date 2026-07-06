@@ -921,18 +921,6 @@ body {
   backdrop-filter: blur(12px);
 }
 
-.cs-main-content .thesvg-hero-gradient {
-  background:
-    radial-gradient(circle at 85% 25%, rgba(255, 91, 0, 0.16), transparent 19rem),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 241, 0.86)) !important;
-}
-
-html[data-theme='dark'] .cs-main-content .thesvg-hero-gradient {
-  background:
-    radial-gradient(circle at 85% 25%, rgba(255, 91, 0, 0.16), transparent 19rem),
-    linear-gradient(135deg, rgba(22, 22, 21, 0.96), rgba(34, 25, 17, 0.86)) !important;
-}
-
 .cs-main-content button:not(.cs-icon-button):not(.cs-pill-tab):not(.cs-module-chip),
 .cs-main-content a[role='button'] {
   transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease;
