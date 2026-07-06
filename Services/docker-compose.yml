@@ -146,7 +146,11 @@ services:
     volumes:
       # Kokoro model files live outside this repo as a local cache by default:
       # ../../CreateStoryModels from Services/ resolves to a sibling of CreateStory/.
-      - ${KOKORO_MODELS_DIR:-../../CreateStoryModels}:/app/api/models:ro
+      # Mount the two model FILES individually (not the whole dir) into api/models
+      # so the bind mount does not hide the Python package there (db_models.py,
+      # __init__.py) — the app reads api/models/kokoro-v1.0.onnx + voices-v1.0.bin.
+      - ${KOKORO_MODELS_DIR:-../../CreateStoryModels}/kokoro-v1.0.onnx:/app/api/models/kokoro-v1.0.onnx:ro
+      - ${KOKORO_MODELS_DIR:-../../CreateStoryModels}/voices-v1.0.bin:/app/api/models/voices-v1.0.bin:ro
       - bedread_voices_output:/app/output
     networks:
       - services

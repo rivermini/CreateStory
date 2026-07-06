@@ -293,10 +293,12 @@ class TTSService:
                 missing.append(str(voices_path))
             if missing:
                 raise FileNotFoundError(
-                    "Kokoro model files not found. "
-                    "Download them and set KOKORO_MODEL_PATH / KOKORO_VOICES_PATH in .env:\n"
-                    "  wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx -O api/models/kokoro-v1.0.onnx\n"
-                    "  wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin -O api/models/voices-v1.0.bin"
+                    "Kokoro model files not found. Fetch them from the CreateStory release "
+                    "(or set KOKORO_MODEL_PATH / KOKORO_VOICES_PATH in .env):\n"
+                    "  powershell scripts/download-models.ps1\n"
+                    "  # manual, from the CreateStory GitHub release:\n"
+                    "  #   https://github.com/hatrumtruong27/CreateStory/releases/download/models-v1.0/kokoro-v1.0.onnx -> api/models/\n"
+                    "  #   https://github.com/hatrumtruong27/CreateStory/releases/download/models-v1.0/voices-v1.0.bin  -> api/models/"
                 )
 
             from kokoro_onnx import Kokoro

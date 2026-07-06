@@ -65,16 +65,36 @@ FastAPIServer (port 8000)
 
 ### Download Kokoro Model Files
 
-```bash
-# Create the models directory
-mkdir -p api/models
+The two model files — `kokoro-v1.0.onnx` (~310 MB) and `voices-v1.0.bin` (~25 MB) — are too
+large to commit, so they are **not** in git. They are hosted as assets on the CreateStory GitHub
+Release tagged **`models-v1.0`**.
 
-# Download from the release page
-wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx -O api/models/kokoro-v1.0.onnx
-wget https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin -O api/models/voices-v1.0.bin
+**Easiest (works whether the repo is public or private):**
+
+```powershell
+# from Services/BedReadVoices
+powershell scripts/download-models.ps1
 ```
 
-Or download manually from [nazdridoy/kokoro-tts releases](https://github.com/nazdridoy/kokoro-tts/releases).
+**Manual — while the repo is public** (asset URLs are open, no auth needed):
+
+```bash
+mkdir -p api/models
+curl -L https://github.com/hatrumtruong27/CreateStory/releases/download/models-v1.0/kokoro-v1.0.onnx -o api/models/kokoro-v1.0.onnx
+curl -L https://github.com/hatrumtruong27/CreateStory/releases/download/models-v1.0/voices-v1.0.bin  -o api/models/voices-v1.0.bin
+```
+
+**Manual — after the repo goes private** (the URLs above return **404** without auth; use the GitHub CLI, which handles the token + redirect for you):
+
+```bash
+gh auth login            # once per machine
+gh release download models-v1.0 --repo hatrumtruong27/CreateStory \
+  --pattern "kokoro-v1.0.onnx" --pattern "voices-v1.0.bin" --dir api/models
+```
+
+> **Docker:** compose mounts the models read-only from `${KOKORO_MODELS_DIR:-../../CreateStoryModels}`
+> (default `D:\Developer\Nova\CreateStoryModels`), so populate that folder instead of `api/models`:
+> `powershell scripts/download-models.ps1 -OutDir D:\Developer\Nova\CreateStoryModels`.
 
 ---
 
@@ -208,7 +228,7 @@ POST /api/tts/speak
 
 ## Troubleshooting
 
-**TTS model files not found.** Download `kokoro-v1.0.onnx` and `voices-v1.0.bin` into `api/models/`. Set `KOKORO_MODEL_PATH` and `KOKORO_VOICES_PATH` in `.env` if using non-default paths.
+**TTS model files not found.** Run `scripts/download-models.ps1`, or download `kokoro-v1.0.onnx` and `voices-v1.0.bin` from the [CreateStory `models-v1.0` release](https://github.com/hatrumtruong27/CreateStory/releases/tag/models-v1.0) into `api/models/`. Set `KOKORO_MODEL_PATH` and `KOKORO_VOICES_PATH` in `.env` if using non-default paths.
 
 **CUDA not available.** Leave `ONNX_PROVIDER` empty to auto-detect. Falls back to CPU if CUDA is not installed.
 
