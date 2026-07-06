@@ -1,0 +1,560 @@
+"""Fast NovelWorm API client.
+
+NovelWorm renders its pages from SM4-encrypted JSON API responses.  Using these
+endpoints avoids Selenium page rendering and the old URL-probing binary search.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import threading
+import time
+import urllib.parse
+import unicodedata
+from collections import Counter
+from dataclasses import dataclass
+from typing import Any, Optional
+
+import requests
+from bs4 import BeautifulSoup
+
+from utils.sm4 import decrypt_ecb_hex
+from utils.proxy import requests_proxies
+
+
+class NovelWormApiError(RuntimeError):
+    """Raised when NovelWorm returns an unusable API response."""
+
+
+@dataclass(frozen=True)
+class NovelWormChapterRef:
+    id: str
+    book_id: str
+    position: int
+    index_num: int
+    chapter_number: int
+    title: str
+    index_link: str
+    url: str
+    is_vip: bool
+    unlock: bool
+
+
+@dataclass(frozen=True)
+class NovelWormStory:
+    slug: str
+    book_id: str
+    title: str
+    author: str
+    detail: dict[str, Any]
+    metadata: dict[str, Any]
+    chapters: list[NovelWormChapterRef]
+    start_index_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class NovelWormChapterContent:
+    ref: NovelWormChapterRef
+    title: str
+    content_html: str
+    api_data: dict[str, Any]
+
+
+class NovelWormApiClient:
+    BASE_URL = "https://www.novelworm.com"
+    CDN_BASE_URL = "https://cdn.novelworm.com"
+    SM4_KEY_HEX = "00112233445566778899AABBCCDDEEFF"
+
+    DEFAULT_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/136.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Authorization": "",
+        "Cache-Control": "no-cache",
+        "client": "web",
+        "Referer": BASE_URL + "/",
+    }
+
+    def __init__(self, timeout: int = 20, retries: int = 2) -> None:
+        self.timeout = timeout
+        self.retries = retries
+        self._thread_local = threading.local()
+
+    def _session(self) -> requests.Session:
+        session = getattr(self._thread_local, "session", None)
+        if session is None:
+            session = requests.Session()
+            session.headers.update(self.DEFAULT_HEADERS)
+            proxies = requests_proxies("novelworm")
+            if proxies:
+                session.proxies.update(proxies)
+            self._thread_local.session = session
+        return session
+
+    def _get_payload(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        url = urllib.parse.urljoin(self.BASE_URL, path)
+        last_error: Exception | None = None
+
+        for attempt in range(self.retries + 1):
+            try:
+                resp = self._session().get(url, params=params, timeout=self.timeout)
+                resp.raise_for_status()
+                payload = resp.json()
+                if not isinstance(payload, dict):
+                    raise NovelWormApiError(f"Unexpected NovelWorm payload type: {type(payload).__name__}")
+                if payload.get("code") not in (None, "200", 200):
+                    raise NovelWormApiError(payload.get("msg") or f"NovelWorm API returned code {payload.get('code')}")
+                return payload
+            except Exception as exc:
+                last_error = exc
+                if attempt < self.retries:
+                    time.sleep(0.35 * (attempt + 1))
+
+        raise NovelWormApiError(str(last_error) if last_error else "NovelWorm API request failed")
+
+    def _decrypt_data(self, payload: dict[str, Any]) -> Any:
+        encrypted = payload.get("data")
+        if encrypted is None or encrypted == "":
+            return encrypted
+        if not isinstance(encrypted, str):
+            return encrypted
+
+        try:
+            text = decrypt_ecb_hex(encrypted, self.SM4_KEY_HEX).decode("utf-8")
+        except Exception as exc:
+            raise NovelWormApiError(f"Failed to decrypt NovelWorm API response: {exc}") from exc
+
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return text
+
+    def _get_decrypted(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
+        return self._decrypt_data(self._get_payload(path, params=params))
+
+    def path_param_from_url(self, url_or_slug: str) -> str:
+        if url_or_slug.startswith(("http://", "https://")):
+            parsed = urllib.parse.urlparse(url_or_slug)
+            return parsed.path.strip("/")
+        return url_or_slug.strip().strip("/")
+
+    def story_slug_from_url(self, url_or_slug: str) -> str:
+        param = self.path_param_from_url(url_or_slug)
+        return urllib.parse.unquote(param.split("/", 1)[0]) if param else "unknown"
+
+    def match_url(self, url_or_slug: str) -> dict[str, Any]:
+        param = self.path_param_from_url(url_or_slug)
+        if not param:
+            raise NovelWormApiError("Missing NovelWorm story path")
+
+        last_error: Exception | None = None
+        for candidate in self._match_param_candidates(param):
+            try:
+                data = self._get_decrypted("/book/matchId", {"param": candidate})
+            except Exception as exc:
+                last_error = exc
+                continue
+            if isinstance(data, dict) and data.get("bookId"):
+                return data
+
+        if last_error:
+            raise NovelWormApiError(str(last_error))
+        raise NovelWormApiError("NovelWorm did not return a book id")
+
+    def get_book_detail(self, book_id: str) -> dict[str, Any]:
+        data = self._get_decrypted(f"/book/queryBookDetail/{book_id}")
+        if not isinstance(data, dict):
+            raise NovelWormApiError("NovelWorm book detail response was not an object")
+        return data
+
+    def get_index_list(self, book_id: str) -> list[NovelWormChapterRef]:
+        data = self._get_decrypted(
+            "/book/queryIndexList",
+            {
+                "curr": 1,
+                "limit": 8000,
+                "bookId": book_id,
+                "orderBy": "index_num asc",
+            },
+        )
+        if not isinstance(data, dict) or not isinstance(data.get("list"), list):
+            raise NovelWormApiError("NovelWorm chapter index response was not a list")
+
+        raw_items = sorted(data["list"], key=lambda item: self._to_int(item.get("indexNum"), 0))
+        parsed_numbers = [self._chapter_number_from_title(item.get("indexName") or "") for item in raw_items]
+        number_counts = Counter(num for num in parsed_numbers if num is not None)
+
+        refs: list[NovelWormChapterRef] = []
+        used_chapter_numbers: set[int] = set()
+        for position, item in enumerate(raw_items, start=1):
+            index_num = self._to_int(item.get("indexNum"), position)
+            parsed_number = parsed_numbers[position - 1]
+            chapter_number_candidate = (
+                parsed_number
+                if parsed_number is not None and number_counts[parsed_number] == 1
+                else position
+            )
+            chapter_number = chapter_number_candidate
+            while chapter_number in used_chapter_numbers:
+                chapter_number += 1
+            used_chapter_numbers.add(chapter_number)
+            index_link = str(item.get("indexLink") or "")
+            refs.append(
+                NovelWormChapterRef(
+                    id=str(item.get("id") or ""),
+                    book_id=str(item.get("bookId") or book_id),
+                    position=position,
+                    index_num=index_num,
+                    chapter_number=chapter_number,
+                    title=str(item.get("indexName") or f"Chapter {chapter_number}"),
+                    index_link=index_link,
+                    url=urllib.parse.urljoin(self.BASE_URL + "/", index_link),
+                    is_vip=str(item.get("isVip") or "0") == "1",
+                    unlock=bool(item.get("unlock")),
+                )
+            )
+
+        return [ref for ref in refs if ref.id]
+
+    def fetch_chapter(self, ref: NovelWormChapterRef) -> NovelWormChapterContent:
+        data = self._get_decrypted(
+            "/book/queryBookIndexAbout",
+            {"bookId": ref.book_id, "lastBookIndexId": ref.id},
+        )
+        if not isinstance(data, dict):
+            raise NovelWormApiError(f"NovelWorm chapter response was not an object for {ref.url}")
+
+        title = str(data.get("indexName") or ref.title or f"Chapter {ref.chapter_number}")
+        content_html = str(data.get("lastBookContent") or "")
+        if not content_html:
+            raise NovelWormApiError(f"NovelWorm returned empty content for {ref.url}")
+
+        return NovelWormChapterContent(ref=ref, title=title, content_html=content_html, api_data=data)
+
+    def resolve_story(self, url_or_slug: str) -> NovelWormStory:
+        match = self.match_url(url_or_slug)
+        book_id = str(match["bookId"])
+        detail = self.get_book_detail(book_id)
+        chapters = self.get_index_list(book_id)
+        slug = str(detail.get("link") or "") or self.story_slug_from_url(url_or_slug) or "unknown"
+        title = str(detail.get("bookName") or slug)
+        author = str(detail.get("authorName") or "")
+        metadata = self.metadata_from_detail(detail, total_chapters=len(chapters))
+
+        return NovelWormStory(
+            slug=slug,
+            book_id=book_id,
+            title=title,
+            author=author,
+            detail=detail,
+            metadata=metadata,
+            chapters=chapters,
+            start_index_id=str(match.get("indexId") or "") or None,
+        )
+
+    def resolve_metadata(self, url_or_slug: str) -> tuple[str | None, dict[str, Any]]:
+        match = self.match_url(url_or_slug)
+        book_id = str(match["bookId"])
+        detail = self.get_book_detail(book_id)
+        total_chapters: Optional[int] = None
+        try:
+            total_chapters = len(self.get_index_list(book_id))
+        except NovelWormApiError:
+            total_chapters = None
+        title = str(detail.get("bookName") or "") or None
+        return title, self.metadata_from_detail(detail, total_chapters=total_chapters)
+
+    def metadata_from_detail(self, detail: dict[str, Any], total_chapters: Optional[int]) -> dict[str, Any]:
+        cover_url = str(detail.get("picUrl") or "")
+        if cover_url.startswith("/"):
+            cover_url = urllib.parse.urljoin(self.CDN_BASE_URL, cover_url)
+
+        description = self.html_to_text(str(detail.get("bookDesc") or ""))
+        tags = self._split_tags(detail.get("tags")) or self._split_tags(detail.get("catName"))
+        language = detail.get("language")
+
+        metadata = {
+            "title": detail.get("bookName"),
+            "author": detail.get("authorName"),
+            "authors": [detail.get("authorName")] if detail.get("authorName") else None,
+            "cover_url": cover_url or None,
+            "description": description or None,
+            "views": self._to_int(detail.get("visitCount"), None),
+            "stars": self._to_int(detail.get("score"), None),
+            "comment_count": self._to_int(detail.get("commentCount"), None),
+            "num_parts": total_chapters or self._to_int(detail.get("indexNum"), None),
+            "language": {"name": language} if language else None,
+            "tags": tags,
+            "completed": self._completed_from_detail(detail),
+            "mature": None,
+            "is_paywalled": str(detail.get("isVip") or "0") == "1",
+        }
+        return {key: value for key, value in metadata.items() if value is not None}
+
+    @staticmethod
+    def html_to_text(html: str) -> str:
+        if not html:
+            return ""
+        soup = BeautifulSoup(html, "html.parser")
+        lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines()]
+        return "\n\n".join(line for line in lines if line)
+
+    def chapter_html_to_text(self, html: str, chapter_number: Optional[int] = None) -> str:
+        paragraphs = self.html_to_paragraphs(html)
+        return self.clean_chapter_text("\n\n".join(paragraphs), chapter_number=chapter_number)
+
+    def extract_chapter_heading(self, html: str) -> Optional[str]:
+        return self.extract_chapter_heading_from_text("\n\n".join(self.html_to_paragraphs(html)))
+
+    @classmethod
+    def extract_chapter_heading_from_text(cls, text: str) -> Optional[str]:
+        for paragraph in cls.text_to_paragraphs(text):
+            if cls._is_chapter_heading(paragraph):
+                return cls._strip_markdown_emphasis(paragraph)
+        return None
+
+    @classmethod
+    def clean_chapter_text(cls, text: str, chapter_number: Optional[int] = None) -> str:
+        paragraphs = cls.text_to_paragraphs(text)
+        if not paragraphs:
+            return ""
+
+        start = 0
+        found_body_start = False
+        for idx, paragraph in enumerate(paragraphs):
+            if cls._is_chapter_heading(paragraph):
+                start = idx + 1
+                found_body_start = True
+                break
+        if not found_body_start:
+            for idx, paragraph in enumerate(paragraphs):
+                if cls._is_title_marker(paragraph):
+                    start = idx + 1
+                    break
+
+        end = len(paragraphs)
+        found_tail_marker = False
+        for idx in range(start, len(paragraphs)):
+            if cls._is_tail_boilerplate(paragraphs[idx]):
+                end = idx
+                found_tail_marker = True
+                break
+
+        body = paragraphs[start:end]
+        while body and cls._is_refusal_placeholder(body[0]):
+            body.pop(0)
+
+        if found_tail_marker:
+            trimmed = 0
+            while body and trimmed < 4 and len(body) > 2 and cls._is_afterword_paragraph(body[-1]):
+                body.pop()
+                trimmed += 1
+
+        return "\n\n".join(
+            cls._strip_markdown_emphasis(p)
+            for p in body
+            if p.strip() and not cls._is_refusal_placeholder(p)
+        ).strip()
+
+    @staticmethod
+    def html_to_paragraphs(html: str) -> list[str]:
+        if not html:
+            return []
+        soup = BeautifulSoup(html, "html.parser")
+        paragraph_tags = soup.find_all("p")
+        paragraphs: list[str] = []
+
+        if paragraph_tags:
+            for tag in paragraph_tags:
+                if tag.find("p"):
+                    continue
+                text = tag.get_text(" ", strip=True)
+                if text:
+                    paragraphs.append(text)
+            return paragraphs
+
+        lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines()]
+        return [line for line in lines if line]
+
+    @staticmethod
+    def text_to_paragraphs(text: str) -> list[str]:
+        if not text:
+            return []
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        return [part.strip() for part in re.split(r"\n\s*\n+", normalized) if part.strip()]
+
+    @staticmethod
+    def _strip_markdown_emphasis(text: str) -> str:
+        stripped = text.strip()
+        while len(stripped) >= 4 and stripped.startswith("**") and stripped.endswith("**"):
+            stripped = stripped[2:-2].strip()
+        return stripped
+
+    @classmethod
+    def _is_chapter_heading(cls, text: str) -> bool:
+        normalized = cls._strip_markdown_emphasis(text)
+        return bool(re.match(r"^(?:chapter|chap\.?)\s*\d+\b(?:\s*[:：.\-–—].*)?$", normalized, re.IGNORECASE))
+
+    @classmethod
+    def _is_title_marker(cls, text: str) -> bool:
+        normalized = cls._strip_markdown_emphasis(text).strip()
+        return bool(re.match(r"^title\s*[:：]\s*\S", normalized, re.IGNORECASE))
+
+    @classmethod
+    def _is_refusal_placeholder(cls, text: str) -> bool:
+        lower = cls._strip_markdown_emphasis(text).strip().lower().replace("’", "'")
+        return bool(
+            lower
+            and "sorry" in lower
+            and (
+                "can't assist" in lower
+                or "cannot assist" in lower
+                or "can't help" in lower
+                or "cannot help" in lower
+            )
+        )
+
+    @classmethod
+    def _is_tail_boilerplate(cls, text: str) -> bool:
+        lower = cls._strip_markdown_emphasis(text).strip().lower()
+        if not lower:
+            return False
+        return (
+            lower.startswith("what to expect in")
+            or lower.startswith("in the next chapter")
+            or lower.startswith("in the upcoming chapter")
+            or lower.startswith("expect unexpected")
+            or lower in {"comments", "write comments", "share"}
+            or bool(re.match(r"^\d+\s*/\s*\d+$", lower))
+            or lower.startswith("readers can expect")
+            or lower.startswith("as the dust settles")
+            or lower.startswith("as the chapter closes")
+            or lower.startswith("as the chapter concludes")
+            or lower.startswith("as the chapter progresses")
+            or lower.startswith("as the chapter unfolds")
+            or lower.startswith("by the end of the chapter")
+            or lower.startswith("ultimately, the chapter")
+            or lower.startswith("this chapter")
+            or "readers can expect" in lower
+            or "leaving readers" in lower
+            or " is a passionate storyteller " in lower
+            or "storyteller known for" in lower
+            or "novels that keep readers hooked" in lower
+            or bool(re.match(r"^[a-z][a-z .'-]{2,80}\s+is\s+a\b.*\bwriter\b", lower))
+        )
+
+    @classmethod
+    def _is_afterword_paragraph(cls, text: str) -> bool:
+        lower = cls._strip_markdown_emphasis(text).strip().lower()
+        if not lower:
+            return False
+        if any(
+            marker in lower
+            for marker in (
+                " in the wake of the chaos",
+                "in this chapter",
+                "what lies ahead",
+                "stage is set",
+                "sets the stage",
+                "as the dust settles",
+            )
+        ):
+            return True
+        if "readers" in lower and (
+            "expect" in lower
+            or "left" in lower
+            or "leaving" in lower
+            or "wonder" in lower
+        ):
+            return True
+        if lower in {"-", "—", "--", "---"}:
+            return True
+        return lower.startswith(
+            (
+                "in this moment",
+                "in the whirlwind of emotions",
+                "in the chaotic aftermath",
+                "in the chaotic whirlwind",
+                "in the aftermath",
+                "in the suffocating silence",
+                "in that charged silence",
+                "in the wake of the chaos",
+                "as the door swung open",
+                "as the tension",
+                "as the tension in the room",
+                "yet, ",
+                "yet, as ",
+                "it all began with",
+                "the whirlwind of emotions",
+                "i hope they",
+                "as we waited",
+                "as the whirlwind of emotions",
+                "in that moment, i realized",
+                "in that instant, i realized",
+                "as the evening unfolded",
+                "as we settled into",
+                "yet, as the night wore on",
+                "as the night wore on",
+            )
+        )
+
+    @staticmethod
+    def _split_tags(value: Any) -> list[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if not value:
+            return []
+        return [part.strip() for part in re.split(r"[,;|]", str(value)) if part.strip()]
+
+    @staticmethod
+    def _chapter_number_from_title(title: str) -> Optional[int]:
+        match = re.search(r"\bchapter\s+(\d+)\b", title, flags=re.IGNORECASE)
+        return int(match.group(1)) if match else None
+
+    @staticmethod
+    def _to_int(value: Any, default: Optional[int] = 0) -> Optional[int]:
+        try:
+            if value is None or value == "":
+                return default
+            return int(float(str(value).replace(",", "")))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _match_param_candidates(param: str) -> list[str]:
+        candidates: list[str] = []
+
+        def add(value: str) -> None:
+            if value and value not in candidates:
+                candidates.append(value)
+
+        add(param)
+        current = param
+        for _ in range(3):
+            decoded = urllib.parse.unquote(current)
+            add(decoded)
+            if decoded == current:
+                break
+            current = decoded
+
+        for value in list(candidates):
+            normalized = unicodedata.normalize("NFC", value)
+            add(normalized)
+            add(unicodedata.normalize("NFKC", value))
+            add(urllib.parse.quote(normalized, safe="/-._~"))
+
+        return candidates
+
+    @staticmethod
+    def _completed_from_detail(detail: dict[str, Any]) -> Optional[bool]:
+        raw = str(detail.get("status") or detail.get("bookStatus") or "").strip().lower()
+        if raw in {"completed", "complete", "finished", "1", "2"}:
+            return True
+        if raw in {"ongoing", "serializing", "updating", "0"}:
+            return False
+        return None

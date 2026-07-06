@@ -1,0 +1,36 @@
+site_name: Jobnib
+base_url: https://jobnib.com
+
+mirror_domains:
+  - jobnib.com
+
+domains:
+  - jobnib.com
+  - www.jobnib.com
+
+rate_limit: 0.0
+concurrency: 6
+
+selectors:
+  novel_title: "h1.entry-title, .entry-title, h1"
+  chapter_list: ".eplister a, .chapter-list a, .epcheck a, a[href*='/book/'][href*='-chapter-']"
+  chapter_body: ".entry-content"
+  next_chapter: ".nav-next a, a[rel='next'], a:contains('Next')"
+  cover_image: ".thumb img, .bigcover img, .entry-content img, meta[property='og:image']"
+  author: ".author-content a, .author a, meta[name='author']"
+
+promo_patterns:
+  - "Part 1 of 2"
+  - "Part 2 of 2"
+  - "Tap to start reading"
+  - "Read Part 1 to unlock"
+  - "Start Reading"
+  - "Continue to Part"
+  - "Locked"
+  - "You have reached the end of this chapter"
+
+spider_settings:
+  DOWNLOAD_DELAY: 0.0
+  AUTOTHROTTLE_ENABLED: false
+  CONCURRENT_REQUESTS_PER_DOMAIN: 8
+  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"

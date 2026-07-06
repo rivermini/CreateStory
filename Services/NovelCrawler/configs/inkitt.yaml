@@ -1,0 +1,31 @@
+site_name: Inkitt
+base_url: https://www.inkitt.com
+
+mirror_domains:
+  - www.inkitt.com
+
+domains:
+  - www.inkitt.com
+  - inkitt.com
+
+story_url_pattern: "^https?://(?:www\\.)?inkitt\\.com/stories/\\d+"
+
+rate_limit: 1.5
+
+selectors:
+  novel_title: "h1"
+  chapter_list: "a[href*='/stories/'][href*='/chapters/']"
+  chapter_body: "article#story-text-container p[data-content], article#story-text-container p"
+  next_chapter: "a[href*='/chapters/']"
+  cover_image: "meta[property='og:image']"
+  author: "meta[name='author'], .author-link"
+
+promo_patterns:
+  - "How It Works"
+  - "Download the Inkitt app"
+  - "Write or Upload Story"
+
+spider_settings:
+  DOWNLOAD_DELAY: 1.5
+  AUTOTHROTTLE_ENABLED: true
+  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"

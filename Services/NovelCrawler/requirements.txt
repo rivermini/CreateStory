@@ -1,0 +1,28 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+httpx==0.27.2
+pydantic==2.11.0
+python-dotenv==1.0.1
+scrapy>=2.11.0
+selenium==4.25.0
+webdriver-manager==4.0.2
+undetected-chromedriver==3.5.5
+beautifulsoup4==4.12.3
+requests==2.32.3
+# GoodNovel's API is behind Akamai bot management, which blocks plain requests on
+# a TLS/JA3 fingerprint; curl_cffi impersonates Chrome's TLS fingerprint.
+curl_cffi>=0.7,<1.0
+PySocks==1.7.1
+charset_normalizer>=3.3.0,<3.4
+urllib3>=1.21.1,<3
+pyyaml==6.0.2
+sse-starlette==2.1.0
+lxml==6.1.0
+aiofiles==24.1.0
+SQLAlchemy>=2.0.0
+psycopg[binary]>=3.1.0
+alembic>=1.13.0
+
+# Dev/test dependencies
+pytest>=8.0.0
+pytest-mock>=3.12.0
