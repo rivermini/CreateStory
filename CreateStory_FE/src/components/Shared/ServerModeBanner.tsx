@@ -37,20 +37,19 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
   }
 
   const accent = VARIANT_ACCENT[variant];
+  const panelBackground = 'var(--cs-surface-elevated)';
   const panelBorder = 'var(--cs-border)';
   const pageText = 'var(--cs-text)';
   const secondaryText = 'var(--cs-text-soft)';
-  const mutedSurface = 'var(--cs-surface-muted)';
-  const iconBgAlpha = isDark ? '15' : '12';
-  const iconBorderAlpha = isDark ? '28' : '22';
-  const bannerBorderAlpha = isDark ? '22' : '16';
+  const iconBgAlpha = isDark ? '20' : '16';
+  const iconBorderAlpha = isDark ? '3d' : '2c';
 
   return (
     <div
-      className="rounded-xl border px-4 py-3"
+      className="rounded-2xl border px-4 py-3"
       style={{
-        background: mutedSurface,
-        borderColor: `${accent}${bannerBorderAlpha}`,
+        background: panelBackground,
+        borderColor: panelBorder,
       }}
     >
       <div className="flex items-start gap-3">
@@ -83,7 +82,7 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
           </p>
 
           {variant === 'production' && (
-            <p className="mt-1 text-xs" style={{ color: '#f59e0b' }}>
+            <p className="mt-1 text-xs" style={{ color: isDark ? '#fbbf24' : '#d97706' }}>
               <strong>Warning:</strong> Actions will affect real data. Please double-check before proceeding.
             </p>
           )}
@@ -96,8 +95,12 @@ export function ServerModeBanner({ serverUrl, isDark, isConfigLoading, isConfigV
           {(variant === 'error' || variant === 'token_invalid') && onConfigure && (
             <button
               onClick={onConfigure}
-              className="mt-2 rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors"
-              style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}
+              className="mt-2.5 rounded-lg border px-4 py-1.5 text-xs font-medium transition-colors hover:opacity-90"
+              style={{
+                background: isDark ? `${accent}1b` : `${accent}0d`,
+                borderColor: `${accent}${isDark ? '40' : '22'}`,
+                color: isDark ? '#ffffff' : accent,
+              }}
             >
               {variant === 'error' ? 'Configure Drive Sync' : 'Update Bearer Token'}
             </button>
