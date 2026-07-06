@@ -1,0 +1,9 @@
+secrets:
+  postgres_password:
+    file: ./.ci-secrets/postgres_password
+  database_url:
+    file: ./.ci-secrets/database_url
+  jwt_secret_key:
+    file: ./.ci-secrets/jwt_secret_key
+  internal_service_token:
+    file: ./.ci-secrets/internal_service_token

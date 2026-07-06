@@ -1,0 +1,379 @@
+# Shared log-rotation policy: cap each container's json-file logs so a chatty or
+# runaway service can't fill the host disk over weeks of uptime. Applied to every
+# service via `logging: *default-logging`.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: create-story-postgres
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    environment:
+      TZ: Asia/Bangkok
+      PGTZ: Asia/Bangkok
+      POSTGRES_DB: create_story
+      POSTGRES_USER: create_story
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - database
+      - database_host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U create_story -d create_story"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  fastapi_gateway:
+    image: services-fastapi-gateway:latest
+    build:
+      context: ./FastAPIServer
+      dockerfile: Dockerfile
+    container_name: create-story-fastapi-gateway
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    command: sh -c "alembic upgrade head && python main.py"
+    environment:
+      TZ: Asia/Bangkok
+      # Enables the admin-only Dev Cleanup endpoints (POST /api/dev/clear-data
+      # here, plus each worker's POST /api/dev/reset-state). Set DEV_MODE=false
+      # in the environment to disable.
+      DEV_MODE: ${DEV_MODE:-false}
+      # "production" hard-disables the dev factory-reset routes (regardless of
+      # DEV_MODE) and enables strict security headers (see api/middleware.py).
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_SECRET_KEY_FILE: /run/secrets/jwt_secret_key
+      INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
+      # Browser CORS allowlist. Only localhost (Vite dev) is needed: in deployed
+      # environments the SPA calls the API same-origin via the nginx /api proxy,
+      # so no public domain belongs here. Domain changes need NO edit to this.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      SERVICE_URLS_NovelCrawler: http://novel_crawler:8002
+      SERVICE_URLS_BedReadVoices: http://bedread_voices:8001
+      SERVICE_URLS_AutoAudio: http://auto_audio:8004
+      SERVICE_URLS_BedReadDriveSync: http://bedread_drive_sync:8003
+      SERVICE_URLS: '{"FastAPIServer":"http://fastapi_gateway:8000","NovelCrawler":"http://novel_crawler:8002","BedReadVoices":"http://bedread_voices:8001","AutoAudio":"http://auto_audio:8004","BedReadDriveSync":"http://bedread_drive_sync:8003"}'
+    secrets:
+      - database_url
+      - jwt_secret_key
+      - internal_service_token
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - edge
+      - services
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+      novel_crawler:
+        condition: service_healthy
+      bedread_voices:
+        condition: service_healthy
+      bedread_drive_sync:
+        condition: service_healthy
+      auto_audio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api', timeout=5)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  bedread_voices:
+    image: services-bedread-voices:latest
+    build:
+      context: ./BedReadVoices
+      dockerfile: Dockerfile
+    container_name: create-story-bedread-voices
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          # Generous ceiling: idle ~900 MiB (TTS models loaded); leaves room for
+          # audio synthesis + the queued-job window. Bump if a large auto-mode
+          # batch ever OOMs (auto mode drives this service).
+          memory: 4g
+    command: sh -c "alembic upgrade head && python main.py"
+    environment:
+      TZ: Asia/Bangkok
+      # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
+      DEV_MODE: ${DEV_MODE:-false}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
+      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
+      # Global TTS admission cap (jobs in queued+processing across all users).
+      # BedReadService now submits chapters in a window sized to the free slots,
+      # so a story with more chapters than this no longer loses its overflow —
+      # this is a soft buffer raised above the default 100 so large stories queue
+      # with less waiting. Each queued job holds its chapter text in memory, so
+      # keep it bounded.
+      MAX_QUEUED_JOBS_GLOBAL: ${MAX_QUEUED_JOBS_GLOBAL:-300}
+    secrets:
+      - database_url
+      - internal_service_token
+    volumes:
+      - bedread_voices_output:/app/output
+    networks:
+      - services
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api', timeout=5)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  novel_crawler:
+    image: services-novel-crawler:latest
+    build:
+      context: ./NovelCrawler
+      dockerfile: Dockerfile
+    container_name: create-story-novel-crawler
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          # Cap the process table so a crash-looping Chromium can't exhaust host
+          # PIDs and take down other services. Idle ~100 MiB.
+          pids: 512
+          memory: 2g
+    command: sh -c "alembic upgrade head && python main.py"
+    environment:
+      TZ: Asia/Bangkok
+      # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
+      DEV_MODE: ${DEV_MODE:-false}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
+      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
+      CHROME_BIN: /usr/bin/chromium
+      FLARESOLVERR_URL: http://flaresolverr:8191/v1
+    secrets:
+      - database_url
+      - internal_service_token
+    volumes:
+      - novel_crawler_output:/app/output
+    networks:
+      - services
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+      flaresolverr:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/api', timeout=5)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  flaresolverr:
+    # Pinned to the current release (tag + immutable digest) so a surprise
+    # upstream :latest push can't change crawl behavior between rebuilds.
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.0@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47
+    container_name: create-story-flaresolverr
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          # Runs a headless Chromium (idle ~160 MiB); cap memory growth and the
+          # process table (fork-storm protection).
+          pids: 512
+          memory: 1536m
+    environment:
+      TZ: Asia/Bangkok
+      LOG_LEVEL: info
+    networks:
+      - services
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8191/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  bedread_drive_sync:
+    image: services-bedread-drive-sync:latest
+    build:
+      context: ./BedReadDriveSync
+      dockerfile: Dockerfile
+    container_name: create-story-bedread-drive-sync
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          # 32 metadata workers + 32 concurrent downloads buffer in memory.
+          memory: 1536m
+    command: sh -c "alembic upgrade head && python main.py"
+    environment:
+      TZ: Asia/Bangkok
+      # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
+      DEV_MODE: ${DEV_MODE:-false}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
+      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
+      DRIVE_SYNC_METADATA_WORKERS: 32
+      DRIVE_SYNC_METADATA_DOWNLOAD_CONCURRENCY: 32
+    secrets:
+      - database_url
+      - internal_service_token
+    networks:
+      - services
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/api', timeout=5)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  auto_audio:
+    image: services-auto-audio:latest
+    build:
+      context: ./AutoAudio
+      dockerfile: Dockerfile
+    container_name: create-story-auto-audio
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    command: sh -c "alembic upgrade head && python -m uvicorn main:app --host 0.0.0.0 --port 8004"
+    environment:
+      TZ: Asia/Bangkok
+      # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
+      DEV_MODE: ${DEV_MODE:-false}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
+      SERVICE_URLS: '{"BedReadVoices":"http://bedread_voices:8001","BedReadDriveSync":"http://bedread_drive_sync:8003"}'
+    secrets:
+      - database_url
+      - internal_service_token
+    volumes:
+      - auto_audio_output:/app/output
+    networks:
+      - services
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bedread_voices:
+        condition: service_healthy
+      bedread_drive_sync:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/api', timeout=5)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  frontend:
+    # Pinned by digest so the served nginx can't silently change on rebuild.
+    image: nginx:alpine@sha256:20316569d8f81a160065d7d2a5eeffc7ca97d79022462ee255fd23fa103a6b5c
+    container_name: create-story-frontend
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+    ports:
+      - "127.0.0.1:5173:80"
+    volumes:
+      - ./frontend-dist:/usr/share/nginx/html:ro
+      - ./nginx-frontend.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - edge
+    healthcheck:
+      # 127.0.0.1 (not localhost): busybox wget resolves localhost to ::1 first,
+      # but nginx listens on IPv4 0.0.0.0:80 only -> would be "connection refused".
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+secrets:
+  postgres_password:
+    file: C:/ProgramData/CreateStory/secrets/postgres_password
+  database_url:
+    file: C:/ProgramData/CreateStory/secrets/database_url
+  jwt_secret_key:
+    file: C:/ProgramData/CreateStory/secrets/jwt_secret_key
+  internal_service_token:
+    file: C:/ProgramData/CreateStory/secrets/internal_service_token
+
+networks:
+  edge:
+    name: create-story-edge
+  services:
+    name: create-story-services
+  database:
+    name: create-story-database
+    internal: true
+  database_host:
+    name: create-story-database-host
+
+volumes:
+  postgres_data:
+  novel_crawler_output:
+  bedread_voices_output:
+  auto_audio_output:

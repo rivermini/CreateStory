@@ -1,0 +1,47 @@
+# Build artifacts
+node_modules/
+dist/
+frontend-dist/
+_export_temp/
+.ci-secrets/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Output folders
+output/
+Output/
+data/
+Data/
+
+# Large files / exports
+*.zip
+exports/
+
+# Misc
+.env
+.env.*
+!.env.example
+*.log
+cloudflared.exe
+*.pem
+*.p12
+*.pfx
+*.key
+*cookie*.json
+*cookies*.json
+*service-account*.json
+*credentials*.json
+
+# Purged / archived scripts & data (kept locally, never committed)
+.purged/
+
+# Upstream credential JSONs by literal name (the *cookie*/*credentials* globs miss these)
+inkitt.json
+goodnovel.json
+Production.json
+*drive-sync-*.json
+miscellaneous/
