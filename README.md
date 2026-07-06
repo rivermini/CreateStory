@@ -17,7 +17,14 @@ CreateStory/
 
 ## Kokoro Model Files
 
-The Kokoro TTS model files are large and must not be committed to this repository. Keep them in a separate folder or repository next to this monorepo:
+The upstream Kokoro project is maintained at `hexgrad/kokoro`, with model weights published through Hugging Face at `hexgrad/Kokoro-82M`. This app currently uses the ONNX runtime wrapper `kokoro-onnx`, so it still needs two ONNX model files available on disk at runtime:
+
+```text
+kokoro-v1.0.onnx
+voices-v1.0.bin
+```
+
+Do not commit those files to `CreateStory`. Keep them as a local model cache next to this monorepo:
 
 ```text
 D:\Developer\Nova\CreateStory\
@@ -26,7 +33,9 @@ D:\Developer\Nova\CreateStoryModels\
   voices-v1.0.bin
 ```
 
-Docker Compose mounts that external folder into `BedReadVoices` at runtime:
+`CreateStoryModels` does not need to be a Git repository. Download or update the model files from the upstream Kokoro/kokoro-onnx distribution when needed.
+
+Docker Compose mounts that local cache into `BedReadVoices` at runtime:
 
 ```text
 CreateStoryModels -> /app/api/models

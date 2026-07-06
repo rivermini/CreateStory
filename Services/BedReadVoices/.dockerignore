@@ -7,6 +7,6 @@ venv/
 .env
 output/
 
-# Model files are mounted at runtime from the external CreateStoryModels folder.
+# Model files are mounted at runtime from the external model cache.
 api/models/*.onnx
 api/models/*.bin
