@@ -44,8 +44,8 @@ export function getThemeTokens(themeMode: ThemeMode): ThemeTokens {
     mode: themeMode,
     isDark,
     colors: {
-      page: isDark ? '#080808' : '#f7f6f3',
-      pageSoft: isDark ? '#101010' : '#fbfbfa',
+      page: isDark ? '#080808' : '#ffffff',
+      pageSoft: isDark ? '#101010' : '#ffffff',
       surface: isDark ? 'rgba(20,20,19,0.92)' : 'rgba(255,255,255,0.88)',
       surfaceElevated: isDark ? 'rgba(27,27,26,0.96)' : 'rgba(255,255,255,0.96)',
       surfaceMuted: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,17,17,0.045)',

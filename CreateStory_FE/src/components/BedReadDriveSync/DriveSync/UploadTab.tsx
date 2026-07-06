@@ -37,35 +37,38 @@ export function UploadTab({
   const query = search.toLowerCase().trim();
 
   const filteredInvalid =
-    data?.invalid.filter(
+    (data?.invalid.filter(
       (folder) =>
         !query ||
         folder.display_name.toLowerCase().includes(query) ||
         folder.name.toLowerCase().includes(query),
-    ) ?? [];
+    ) ?? []).sort((a, b) => a.display_name.localeCompare(b.display_name));
+
   const filteredUploadable =
-    data?.uploadable.filter(
+    (data?.uploadable.filter(
       (folder) =>
         !query ||
         folder.display_name.toLowerCase().includes(query) ||
         folder.name.toLowerCase().includes(query),
-    ) ?? [];
+    ) ?? []).sort((a, b) => a.display_name.localeCompare(b.display_name));
+
   const filteredAlready =
-    data?.already_on_server.filter(
+    (data?.already_on_server.filter(
       (folder) =>
         !query ||
         folder.display_name.toLowerCase().includes(query) ||
         folder.name.toLowerCase().includes(query),
-    ) ?? [];
+    ) ?? []).sort((a, b) => a.display_name.localeCompare(b.display_name));
+
   const filteredNotReady =
-    (data?.not_ready ?? []).filter(
+    ((data?.not_ready ?? []).filter(
       (folder) =>
         !query ||
         folder.display_name.toLowerCase().includes(query) ||
         folder.name.toLowerCase().includes(query),
-    ) ?? [];
+    ) ?? []).sort((a, b) => a.display_name.localeCompare(b.display_name));
+  
   const filteredTotal = filteredUploadable.length + filteredInvalid.length + filteredAlready.length + filteredNotReady.length;
-  const hasSearch = search.trim().length > 0;
 
   const validCount = filteredUploadable.length;
   const allDone =
@@ -74,76 +77,195 @@ export function UploadTab({
   const isUploadingAny = uploadingCount > 0;
   const successCount = Array.from(uploadResults.values()).filter((result) => result.success).length;
   const failedCount = Array.from(uploadResults.values()).filter((result) => !result.success).length;
-  const invalidLabel = `Invalid (${filteredInvalid.length})`;
-  const readyLabel = `Ready to Upload (${validCount})`;
-  const alreadyLabel = `Already on Server (${filteredAlready.length})`;
-  const notReadyLabel = `Not DONE_ (${filteredNotReady.length})`;
 
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const searchBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
+  function renderTableBlock(
+    title: string,
+    badgeColor: string,
+    bgBadge: string,
+    items: DriveFolderEntry[],
+    status: 'ready' | 'invalid' | 'notReady' | 'already'
+  ) {
+    if (items.length === 0) return null;
+
+    return (
+      <div className="space-y-3 mb-8">
+        <div className="flex items-center gap-2 px-1">
+          <span className="font-bold text-sm text-[var(--cs-text)]">{title}</span>
+          <span
+            className="rounded-full px-2 py-0.5 text-xs font-bold"
+            style={{ color: badgeColor, background: bgBadge }}
+          >
+            {items.length}
+          </span>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-[var(--cs-border)] bg-[var(--cs-surface)] mt-2 shadow-sm">
+          <table className="w-full text-left border-collapse text-sm" style={{ tableLayout: 'fixed' }}>
+            <thead>
+              <tr className="border-b border-[var(--cs-border)] text-xs font-bold uppercase tracking-wider text-[var(--cs-text-muted)] bg-[var(--cs-surface-muted)]/40">
+                <th className="pl-6 pr-2 py-4 text-center" style={{ width: 48, minWidth: 48 }}>#</th>
+                <th className="px-6 py-4" style={{ width: 220, minWidth: 220 }}>Story Name</th>
+                <th className="px-6 py-4" style={{ width: 450, minWidth: 450 }}>Drive Folder Name</th>
+                <th className="px-6 py-4" style={{ width: 120, minWidth: 120 }}>Status</th>
+                <th className="px-6 py-4" style={{ width: 160, minWidth: 160 }}>Chapters</th>
+                <th className="px-6 py-4" style={{ minWidth: 350 }}>Validation Logs / Errors</th>
+                <th className="px-6 py-4 text-right" style={{ width: 140, minWidth: 140 }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--cs-border)]">
+              {items.map((folder, index) => {
+                const result = uploadResults.get(folder.id);
+                const isUploading = uploadingIds.has(folder.id);
+                const isSuccess = result?.success;
+                const isFailed = result && !result.success;
+
+                const hasPreUploadError = folder.validation_errors.length > 0 && !isSuccess;
+                const displayErrors = hasPreUploadError
+                  ? folder.validation_errors
+                  : (result && !result.success ? [result.message] : []);
+
+                return (
+                  <tr
+                    key={folder.id}
+                    className="hover:bg-[var(--cs-surface-muted)]/50 transition-colors group"
+                  >
+                    {/* Row index number starting from 1 */}
+                    <td className="pl-6 pr-2 py-5 text-center text-xs font-medium text-[var(--cs-text-faint)] whitespace-nowrap" style={{ width: 48, minWidth: 48 }}>
+                      {index + 1}
+                    </td>
+
+                    {/* Story Name */}
+                    <td className="px-6 py-5 font-semibold text-[13px] text-[var(--cs-text)] group-hover:text-[var(--cs-primary)] transition-colors" style={{ width: 220, minWidth: 220 }}>
+                      {folder.display_name}
+                    </td>
+
+                    {/* Drive Folder Name */}
+                    <td className="px-6 py-5 text-[11px] font-mono text-[var(--cs-text-faint)] truncate" style={{ width: 450, minWidth: 450, maxWidth: 450 }} title={folder.name}>
+                      {folder.name}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-6 py-5 whitespace-nowrap" style={{ width: 120, minWidth: 120 }}>
+                      {status === 'ready' && <StatusBadge prefix="READY" isDark={isDark} />}
+                      {status === 'invalid' && <StatusBadge prefix="ERROR" isDark={isDark} />}
+                      {status === 'notReady' && <StatusBadge prefix={folder.prefix || 'ING'} isDark={isDark} />}
+                      {status === 'already' && <StatusBadge prefix="DONE" isDark={isDark} />}
+                    </td>
+
+                    {/* Chapters */}
+                    <td className="px-6 py-5 whitespace-nowrap" style={{ width: 160, minWidth: 160 }}>
+                      {status !== 'invalid' ? (
+                        <span className="text-[10px] font-bold text-[var(--cs-text-soft)] bg-[var(--cs-surface-muted)] px-2.5 py-0.5 rounded-full border border-[var(--cs-border)] uppercase tracking-wider whitespace-nowrap">
+                          {folder.extended_chapter_count ?? 0} Chapters
+                        </span>
+                      ) : (
+                        <span className="text-xs text-[var(--cs-text-faint)]">—</span>
+                      )}
+                    </td>
+
+                    {/* Validation Logs / Errors */}
+                    <td className="px-6 py-5 text-xs">
+                      {displayErrors.length > 0 ? (
+                        <div className="flex items-start gap-1.5 text-[var(--cs-danger)] font-medium leading-relaxed max-w-md">
+                          <Icon icon={appIcons.error} className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span>{displayErrors.map(formatUploadValidationMessage).join(', ')}</span>
+                        </div>
+                      ) : result?.success ? (
+                        <div className="flex items-center gap-1.5 text-[var(--cs-success)] font-medium">
+                          <Icon icon={appIcons.check} className="h-3.5 w-3.5" />
+                          <span>{result.message}</span>
+                        </div>
+                      ) : status === 'notReady' ? (
+                        <span className="text-[var(--cs-text-faint)]">
+                          Skipped: folder prefix {folder.prefix || 'ING'}
+                        </span>
+                      ) : status === 'already' ? (
+                        <span className="text-[var(--cs-text-muted)]">Already indexed on backend database</span>
+                      ) : (
+                        <span className="text-[var(--cs-text-faint)]">Story structure validated & clean</span>
+                      )}
+                    </td>
+
+                    {/* Inline Actions */}
+                    <td className="px-6 py-5 text-right whitespace-nowrap">
+                      {isUploading && (
+                        <div className="inline-flex items-center gap-1.5 text-xs text-[var(--cs-warning)] font-semibold">
+                          <LoadingAppIcon isDark={isDark} color="var(--cs-warning)" />
+                          <span>Uploading...</span>
+                        </div>
+                      )}
+                      {isSuccess && (
+                        <div className="inline-flex items-center gap-1 text-xs text-[var(--cs-success)] font-semibold">
+                          <Icon icon={appIcons.check} className="h-4 w-4" />
+                          <span>Done</span>
+                        </div>
+                      )}
+                      {isFailed && !hasPreUploadError && (
+                        <div className="inline-flex items-center gap-1 text-xs text-[var(--cs-danger)] font-semibold">
+                          <Icon icon={appIcons.close} className="h-4 w-4" />
+                          <span>Failed</span>
+                        </div>
+                      )}
+                      {status === 'ready' && !isUploading && !isSuccess && !hasPreUploadError && (
+                        <button
+                          onClick={() => onUploadSingle(folder)}
+                          className="inline-flex items-center gap-1 rounded-full bg-[var(--cs-primary-soft)] hover:bg-[var(--cs-primary)] border border-[var(--cs-primary-soft)] px-4 py-1.5 text-xs font-semibold text-[var(--cs-primary)] hover:text-[var(--cs-active-text)] transition-all"
+                        >
+                          <Icon icon={appIcons.uploadFile} className="h-3.5 w-3.5" />
+                          <span>Upload</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-full min-h-[400px] flex-col">
-      <div
-        className="sticky top-0 z-10 flex flex-col gap-3 p-4 sm:flex-row"
-        style={{ background: panelBackground, borderBottom: `1px solid ${panelBorder}` }}
-      >
-        <div className="relative min-w-0 flex-1">
+    <div className="flex flex-col text-[var(--cs-text)]">
+      {/* Table Toolbar */}
+      <div className="flex flex-col gap-4 py-3 sm:flex-row sm:items-center sm:justify-between border-b border-[var(--cs-border)] bg-transparent">
+        <div className="relative min-w-0 flex-1 max-w-md">
           <Icon
             icon={appIcons.search}
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-            style={{ color: tertiaryText }}
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--cs-text-faint)]"
           />
           <input
             type="text"
             placeholder="Search stories..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="w-full rounded-xl border py-2.5 pl-9 pr-4 text-sm outline-none transition"
-            style={{
-              background: searchBg,
-              borderColor: panelBorder,
-              color: pageText,
-              boxShadow: 'none',
-            }}
+            className="w-full rounded-full border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] py-1.5 pl-9 pr-9 text-xs outline-none focus:border-[var(--cs-primary)] transition"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 transition-colors"
-              style={{ color: secondaryText }}
+              className="cs-search-clear absolute right-3 top-1/2 -translate-y-1/2 text-[var(--cs-text-soft)] hover:text-[var(--cs-text)] rounded-full p-0.5 transition-colors"
             >
-              <Icon icon={appIcons.close} className="h-4 w-4" />
+              <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             onClick={onCheck}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
-            style={{
-              background: loading ? mutedSurface : '#d97706',
-              borderColor: loading ? panelBorder : '#d97706',
-              color: loading ? secondaryText : '#ffffff',
-              opacity: loading ? 0.65 : 1,
-            }}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[var(--cs-surface-muted)] hover:bg-[var(--cs-border-strong)] border border-[var(--cs-border)] px-4 py-1.5 text-xs font-semibold text-[var(--cs-text-soft)] hover:text-[var(--cs-text)] transition-all disabled:opacity-50"
           >
             {loading ? (
               <>
                 <LoadingAppIcon isDark={isDark} color="currentColor" />
-                Scanning...
+                <span>Scanning...</span>
               </>
             ) : (
               <>
-                <Icon icon={appIcons.search} className="h-4 w-4" />
-                Check Upload
+                <Icon icon={appIcons.refresh} className="h-3.5 w-3.5" />
+                <span>Check Upload</span>
               </>
             )}
           </button>
@@ -152,28 +274,22 @@ export function UploadTab({
             <button
               onClick={onRequestUploadAll}
               disabled={isUploadingAny || allDone}
-              className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed"
-              style={{
-                background: isUploadingAny || allDone ? mutedSurface : '#d97706',
-                borderColor: isUploadingAny || allDone ? panelBorder : '#d97706',
-                color: isUploadingAny || allDone ? secondaryText : '#ffffff',
-                opacity: isUploadingAny ? 0.65 : 1,
-              }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--cs-primary)] hover:bg-[var(--cs-primary)]/90 px-4 py-1.5 text-xs font-semibold text-[var(--cs-active-text)] transition-all disabled:opacity-50"
             >
               {isUploadingAny ? (
                 <>
                   <LoadingAppIcon isDark={isDark} color="currentColor" />
-                  Uploading ({uploadingCount})
+                  <span>Uploading ({uploadingCount})</span>
                 </>
               ) : allDone ? (
                 <>
-                  <Icon icon={appIcons.check} className="h-4 w-4" />
-                  All Uploaded
+                  <Icon icon={appIcons.check} className="h-3.5 w-3.5" />
+                  <span>All Uploaded</span>
                 </>
               ) : (
                 <>
-                  <Icon icon={appIcons.uploadFile} className="h-4 w-4" />
-                  Upload All ({validCount})
+                  <Icon icon={appIcons.uploadFile} className="h-3.5 w-3.5" />
+                  <span>Upload All ({validCount})</span>
                 </>
               )}
             </button>
@@ -182,34 +298,21 @@ export function UploadTab({
       </div>
 
       {error && (
-        <div
-          className="mx-4 mt-3 flex items-center gap-3 rounded-xl border p-3"
-          style={{
-            background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.04)',
-            borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
-            color: isDark ? '#f87171' : '#dc2626',
-          }}
-        >
+        <div className="mt-3 flex items-center gap-3 rounded-xl border border-[var(--cs-danger)]/20 bg-[var(--cs-danger)]/5 text-[var(--cs-danger)] p-3 text-sm">
           <Icon icon={appIcons.error} className="h-5 w-5 shrink-0" />
           {error}
         </div>
       )}
 
+      {/* Filter Segment Selector */}
       {data && (
-        <div
-          className="flex items-center gap-1 border-b px-4 py-2"
-          style={{
-            background: mutedSurface,
-            borderColor: panelBorder,
-          }}
-        >
+        <div className="flex flex-wrap items-center gap-1.5 py-2 border-b border-[var(--cs-border)] bg-transparent">
           <FilterChip
             label="All"
             count={filteredTotal}
             active={filterSection === 'all'}
             onClick={() => setFilterSection('all')}
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           <FilterChip
             label="Ready"
@@ -218,7 +321,6 @@ export function UploadTab({
             onClick={() => setFilterSection('ready')}
             variant="green"
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           <FilterChip
             label="Invalid"
@@ -227,7 +329,6 @@ export function UploadTab({
             onClick={() => setFilterSection('invalid')}
             variant="red"
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           <FilterChip
             label="Not DONE_"
@@ -236,7 +337,6 @@ export function UploadTab({
             onClick={() => setFilterSection('notReady')}
             variant="amber"
             isDark={isDark}
-            panelBorder={panelBorder}
           />
           <FilterChip
             label="Already on Server"
@@ -244,48 +344,39 @@ export function UploadTab({
             active={filterSection === 'uploaded'}
             onClick={() => setFilterSection('uploaded')}
             isDark={isDark}
-            panelBorder={panelBorder}
           />
         </div>
       )}
 
+      {/* Status summary banner */}
       {data && !loading && (
-        <div
-          className="mx-4 mt-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2 text-xs"
-          style={{ background: mutedSurface, color: secondaryText }}
-        >
+        <div className="mt-3 flex flex-wrap items-center gap-3 py-2 text-xs text-[var(--cs-text-soft)] bg-transparent">
           <div className="flex items-center gap-1.5">
-            <Icon icon={appIcons.check} className="h-3.5 w-3.5" style={{ color: isDark ? '#34d399' : '#059669' }} />
+            <Icon icon={appIcons.check} className="h-3.5 w-3.5 text-[var(--cs-success)]" />
             {data.drive_folders.length} DONE_ folders scanned
           </div>
           <div className="flex items-center gap-1.5">
-            <Icon icon={appIcons.add} className="h-3.5 w-3.5" style={{ color: '#d97706' }} />
+            <Icon icon={appIcons.add} className="h-3.5 w-3.5 text-[var(--cs-warning)]" />
             {validCount} ready to upload
           </div>
           <div className="flex items-center gap-1.5">
-            <Icon icon={appIcons.trends} className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
+            <Icon icon={appIcons.trends} className="h-3.5 w-3.5 text-[var(--cs-text-soft)]" />
             {filteredAlready.length} already on server
           </div>
           {filteredInvalid.length > 0 && (
             <div className="flex items-center gap-1.5">
-              <Icon icon={appIcons.close} className="h-3.5 w-3.5" style={{ color: '#f87171' }} />
+              <Icon icon={appIcons.close} className="h-3.5 w-3.5 text-[var(--cs-danger)]" />
               {filteredInvalid.length} invalid
             </div>
           )}
-          {filteredNotReady.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <Icon icon={appIcons.info} className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
-              {filteredNotReady.length} not DONE_
-            </div>
-          )}
           {successCount > 0 && (
-            <div className="ml-auto flex items-center gap-1.5" style={{ color: isDark ? '#34d399' : '#059669' }}>
+            <div className="ml-auto flex items-center gap-1.5 text-[var(--cs-success)] font-semibold">
               <Icon icon={appIcons.check} className="h-3.5 w-3.5" />
               {successCount} successful
             </div>
           )}
           {failedCount > 0 && (
-            <div className="ml-auto flex items-center gap-1.5" style={{ color: isDark ? '#f87171' : '#dc2626' }}>
+            <div className="ml-auto flex items-center gap-1.5 text-[var(--cs-danger)] font-semibold">
               <Icon icon={appIcons.close} className="h-3.5 w-3.5" />
               {failedCount} failed
             </div>
@@ -293,214 +384,92 @@ export function UploadTab({
         </div>
       )}
 
-      <div className="flex-1 p-4">
+      {/* Main Table Content */}
+      <div className="flex-1 py-4">
         {!loading && !data && (
           <EmptyState
             isDark={isDark}
             message="Click 'Check Upload' to scan DONE_ folders that are ready to upload."
-            icon={
-              <Icon
-                icon={appIcons.shield}
-                className="h-8 w-8"
-                style={{ color: tertiaryText }}
-              />
-            }
+            icon={<Icon icon={appIcons.shield} className="h-8 w-8 text-[var(--cs-text-faint)]" />}
           />
         )}
 
         {data && !loading && data.drive_folders.length === 0 && (
-          <div
-            className="mb-4 flex items-start gap-3 rounded-xl border px-4 py-3 text-xs"
-            style={{
-              background: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.05)',
-              borderColor: isDark ? 'rgba(245,158,11,0.22)' : 'rgba(245,158,11,0.18)',
-              color: secondaryText,
-            }}
-          >
-            <Icon icon={appIcons.info} className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#d97706' }} />
-            <p className="leading-5">
-              Check Upload only scans Drive folders whose name starts with <span className="font-mono">DONE_</span>.
-              Rename completed story folders to <span className="font-mono">DONE_status_source - Story Title</span>, using
-              <span className="font-mono"> _nw</span>, <span className="font-mono">_gd</span>,
-              <span className="font-mono"> _wp</span>, or <span className="font-mono">_ink</span> before uploading.
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-[var(--cs-warning)]/20 bg-[var(--cs-warning)]/5 text-[var(--cs-text-soft)] px-4 py-3 text-xs leading-5">
+            <Icon icon={appIcons.info} className="mt-0.5 h-4 w-4 shrink-0 text-[var(--cs-warning)]" />
+            <p>
+              Check Upload only scans Drive folders whose name starts with <span className="font-mono font-semibold">DONE_</span>.
+              Rename completed story folders to <span className="font-mono font-semibold text-[var(--cs-primary)]">DONE_status_source - Story Title</span>, using
+              <span className="font-mono"> _nw</span>, <span className="font-mono"> _gd</span>,
+              <span className="font-mono"> _wp</span>, or <span className="font-mono"> _ink</span> before uploading.
             </p>
           </div>
         )}
 
         {loading && (
-          <div className="flex h-full w-full flex-col items-center justify-center py-16">
-            <LoadingAppIcon
-              isDark={isDark}
-              color="#d97706"
-              size="lg"
-            />
-            <p className="text-sm" style={{ color: secondaryText }}>
+          <div className="flex h-full w-full flex-col items-center justify-center py-20">
+            <LoadingAppIcon isDark={isDark} color="var(--cs-primary)" size="lg" />
+            <p className="text-sm text-[var(--cs-text-soft)]">
               Scanning your Drive folders...
             </p>
           </div>
         )}
 
-        {data && filterSection === 'all' && (
-          <>
-            {filteredInvalid.length > 0 && (
-              <div className="mb-4">
-                <SectionHeader
-                  label={invalidLabel}
-                  color="#f87171"
-                  icon={<Icon icon={appIcons.error} className="h-4 w-4" style={{ color: '#f87171' }} />}
-                  panelBorder={panelBorder}
-                  secondaryText={secondaryText}
-                />
-                <div className="space-y-2">
-                  {filteredInvalid.map((folder) => (
-                    <InvalidUploadCard key={folder.id} folder={folder} isDark={isDark} />
-                  ))}
-                </div>
+        {data && !loading && (
+          <div className="flex flex-col">
+            {/* Priority 1: Invalid */}
+            {(filterSection === 'all' || filterSection === 'invalid') &&
+              renderTableBlock(
+                'Invalid Folders',
+                'var(--cs-danger)',
+                'rgba(220,38,38,0.15)',
+                filteredInvalid,
+                'invalid'
+              )}
+
+            {/* Priority 2: Ready */}
+            {(filterSection === 'all' || filterSection === 'ready') &&
+              renderTableBlock(
+                'Ready to Upload',
+                'var(--cs-success)',
+                'rgba(22,163,74,0.15)',
+                filteredUploadable,
+                'ready'
+              )}
+
+            {/* Priority 3: Not DONE_ */}
+            {(filterSection === 'all' || filterSection === 'notReady') &&
+              renderTableBlock(
+                'Not DONE_ Folders',
+                'var(--cs-warning)',
+                'rgba(245,158,11,0.15)',
+                filteredNotReady,
+                'notReady'
+              )}
+
+            {/* Priority 4: Already on Server */}
+            {(filterSection === 'all' || filterSection === 'uploaded') &&
+              renderTableBlock(
+                'Already on Server',
+                'var(--cs-primary)',
+                'var(--cs-primary-soft)',
+                filteredAlready,
+                'already'
+              )}
+
+            {/* Empty check */}
+            {((filterSection === 'all' && filteredTotal === 0) ||
+              (filterSection === 'ready' && filteredUploadable.length === 0) ||
+              (filterSection === 'invalid' && filteredInvalid.length === 0) ||
+              (filterSection === 'notReady' && filteredNotReady.length === 0) ||
+              (filterSection === 'uploaded' && filteredAlready.length === 0)) && (
+              <div className="py-16 text-center text-[var(--cs-text-soft)] border border-dashed border-[var(--cs-border)] rounded-xl">
+                <Icon icon={appIcons.checkCircle} className="mx-auto mb-2 h-8 w-8 text-[var(--cs-text-faint)]" />
+                <p className="text-sm">No items matching current filters</p>
               </div>
             )}
-
-            {validCount > 0 && (
-              <div className="mb-4">
-                <SectionHeader
-                  label={readyLabel}
-                  color={isDark ? '#34d399' : '#059669'}
-                  icon={<Icon icon={appIcons.cloud} className="h-4 w-4" style={{ color: isDark ? '#34d399' : '#059669' }} />}
-                  panelBorder={panelBorder}
-                  secondaryText={secondaryText}
-                />
-                <div className="space-y-2">
-                  {filteredUploadable.map((folder) => {
-                    const result = uploadResults.get(folder.id);
-                    const isUploading = uploadingIds.has(folder.id);
-                    const isSuccess = result?.success;
-                    const isFailed = result && !result.success;
-                    return (
-                      <UploadCard
-                        key={folder.id}
-                        folder={folder}
-                        result={result}
-                        isUploading={isUploading}
-                        isSuccess={isSuccess}
-                        isFailed={!!isFailed}
-                        onUpload={() => onUploadSingle(folder)}
-                        isDark={isDark}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {filteredNotReady.length > 0 && (
-              <div className="mb-4">
-                <SectionHeader
-                  label={notReadyLabel}
-                  color="#f59e0b"
-                  icon={<Icon icon={appIcons.info} className="h-4 w-4" style={{ color: '#f59e0b' }} />}
-                  panelBorder={panelBorder}
-                  secondaryText={secondaryText}
-                />
-                <div className="space-y-2">
-                  {filteredNotReady.map((folder) => (
-                    <NotReadyUploadCard key={folder.id} folder={folder} isDark={isDark} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {filteredAlready.length > 0 && (
-              <div>
-                <SectionHeader
-                  label={alreadyLabel}
-                  color={secondaryText}
-                  icon={<Icon icon={appIcons.check} className="h-4 w-4" style={{ color: secondaryText }} />}
-                  panelBorder={panelBorder}
-                  secondaryText={secondaryText}
-                />
-                <div className="space-y-2">
-                  {filteredAlready.map((folder) => (
-                    <AlreadyCard key={folder.id} folder={folder} isDark={isDark} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {data && filterSection === 'all' && filteredTotal === 0 && (
-          <EmptyState
-            isDark={isDark}
-            message={
-              hasSearch
-                ? `No DONE_ upload folder matches "${search.trim()}". Check Upload only scans DONE_ folders; rename ING_ or INCOMPLETE_ folders to DONE_ when they are ready.`
-                : 'No DONE_ upload folders found.'
-            }
-            icon={
-              <Icon
-                icon={appIcons.search}
-                className="h-8 w-8"
-                style={{ color: tertiaryText }}
-              />
-            }
-          />
-        )}
-
-        {data && filterSection === 'ready' && validCount > 0 && (
-          <div className="space-y-2">
-            {filteredUploadable.map((folder) => {
-              const result = uploadResults.get(folder.id);
-              const isUploading = uploadingIds.has(folder.id);
-              const isSuccess = result?.success;
-              return (
-                <UploadCard
-                  key={folder.id}
-                  folder={folder}
-                  result={result}
-                  isUploading={isUploading}
-                  isSuccess={isSuccess}
-                  isFailed={false}
-                  onUpload={() => onUploadSingle(folder)}
-                  isDark={isDark}
-                />
-              );
-            })}
           </div>
         )}
-
-        {data && filterSection === 'invalid' && filteredInvalid.length > 0 && (
-          <div className="space-y-2">
-            {filteredInvalid.map((folder) => (
-              <InvalidUploadCard key={folder.id} folder={folder} isDark={isDark} />
-            ))}
-          </div>
-        )}
-
-        {data && filterSection === 'notReady' && filteredNotReady.length > 0 && (
-          <div className="space-y-2">
-            {filteredNotReady.map((folder) => (
-              <NotReadyUploadCard key={folder.id} folder={folder} isDark={isDark} />
-            ))}
-          </div>
-        )}
-
-        {data && filterSection === 'uploaded' && filteredAlready.length > 0 && (
-          <div className="space-y-2">
-            {filteredAlready.map((folder) => (
-              <AlreadyCard key={folder.id} folder={folder} isDark={isDark} />
-            ))}
-          </div>
-        )}
-
-        {data &&
-          ((filterSection === 'ready' && validCount === 0) ||
-            (filterSection === 'invalid' && filteredInvalid.length === 0) ||
-            (filterSection === 'notReady' && filteredNotReady.length === 0) ||
-            (filterSection === 'uploaded' && filteredAlready.length === 0)) && (
-            <div className="py-8 text-center" style={{ color: secondaryText }}>
-              <Icon icon={appIcons.checkCircle} className="mx-auto mb-2 h-8 w-8" style={{ color: tertiaryText }} />
-              <p className="text-sm">No items in this section</p>
-            </div>
-          )}
       </div>
     </div>
   );
@@ -512,8 +481,7 @@ function FilterChip({
   active,
   onClick,
   variant,
-  isDark,
-  panelBorder: _panelBorder,
+  isDark: _isDark,
 }: {
   readonly label: string;
   readonly count: number;
@@ -521,31 +489,36 @@ function FilterChip({
   readonly onClick: () => void;
   readonly variant?: 'green' | 'amber' | 'red';
   readonly isDark: boolean;
-  readonly panelBorder: string;
 }) {
   const colors =
     variant === 'green'
       ? {
-          active: 'rgba(52,211,153,0.15)',
-          activeText: isDark ? '#34d399' : '#059669',
-          inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)',
+          active: 'rgba(22,163,74,0.15)',
+          activeText: 'var(--cs-success)',
+          inactive: 'var(--cs-text-soft)',
         }
       : variant === 'red'
         ? {
-            active: 'rgba(248,113,113,0.15)',
-            activeText: isDark ? '#f87171' : '#b91c1c',
-            inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)',
+            active: 'rgba(220,38,38,0.15)',
+            activeText: 'var(--cs-danger)',
+            inactive: 'var(--cs-text-soft)',
           }
-        : {
-            active: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.06)',
-            activeText: isDark ? 'rgba(255,255,255,0.85)' : '#37352f',
-            inactive: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)',
-          };
+        : variant === 'amber'
+          ? {
+              active: 'rgba(245,158,11,0.15)',
+              activeText: 'var(--cs-warning)',
+              inactive: 'var(--cs-text-soft)',
+            }
+          : {
+              active: 'var(--cs-primary-soft)',
+              activeText: 'var(--cs-primary)',
+              inactive: 'var(--cs-text-soft)',
+            };
 
   return (
     <button
       onClick={onClick}
-      className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+      className="rounded-full px-4 py-1.5 text-xs font-semibold transition-colors hover:text-[var(--cs-text)]"
       style={{
         background: active ? colors.active : 'transparent',
         color: active ? colors.activeText : colors.inactive,
@@ -556,243 +529,15 @@ function FilterChip({
   );
 }
 
-function SectionHeader({
-  label,
-  color,
-  icon,
-  panelBorder,
-  secondaryText: _secondaryText,
-}: {
-  readonly label: string;
-  readonly color: string;
-  readonly icon: React.ReactNode;
-  readonly panelBorder: string;
-  readonly secondaryText: string;
-}) {
-  return (
-    <div
-      className="mb-2 flex items-center gap-2 border-b pb-2 text-sm font-medium"
-      style={{ borderColor: panelBorder, color }}
-    >
-      {icon}
-      {label}
-    </div>
-  );
-}
-
-function UploadCard({
-  folder,
-  result,
-  isUploading,
-  isSuccess,
-  isFailed,
-  onUpload,
-  isDark,
-}: {
-  readonly folder: DriveFolderEntry;
-  readonly result?: { success: boolean; message: string };
-  readonly isUploading: boolean;
-  readonly isSuccess?: boolean;
-  readonly isFailed: boolean;
-  readonly onUpload: () => void;
-  readonly isDark: boolean;
-}) {
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-
-  const hasPreUploadError = folder.validation_errors.length > 0 && !isSuccess;
-  const displayErrors = hasPreUploadError ? folder.validation_errors : (result && !result.success ? [result.message] : []);
-
-  return (
-    <div
-      className="flex items-center gap-3 rounded-xl border px-4 py-3"
-      style={{
-        background: mutedSurface,
-        borderColor: hasPreUploadError ? '#f87171' : panelBorder,
-      }}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
-          {folder.display_name}
-        </p>
-        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
-          {folder.name}
-        </p>
-        {!hasPreUploadError && (
-          <p className="mt-1 text-xs" style={{ color: secondaryText }}>
-            Chapters: <span className="font-semibold" style={{ color: pageText }}>{folder.extended_chapter_count ?? 0}</span>
-          </p>
-        )}
-        {displayErrors.map((err, i) => (
-          <p key={i} className="mt-1 truncate text-xs" style={{ color: '#f87171' }}>
-            {err}
-          </p>
-        ))}
-        {result && result.success && (
-          <p className="mt-1 truncate text-xs" style={{ color: isDark ? '#34d399' : '#059669' }}>
-            {result.message}
-          </p>
-        )}
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2">
-        {isUploading && <LoadingAppIcon isDark={isDark} color="#d97706" />}
-        {isSuccess && (
-          <div className="flex items-center gap-1 text-xs" style={{ color: isDark ? '#34d399' : '#059669' }}>
-            <Icon icon={appIcons.check} className="h-4 w-4" />
-            <span>Done</span>
-          </div>
-        )}
-        {isFailed && !hasPreUploadError && (
-          <div className="flex items-center gap-1 text-xs" style={{ color: '#f87171' }}>
-            <Icon icon={appIcons.close} className="h-4 w-4" />
-            <span>Failed</span>
-          </div>
-        )}
-        {!isUploading && !isSuccess && !hasPreUploadError && (
-          <button
-            onClick={onUpload}
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors"
-            style={{
-              background: '#d97706',
-              borderColor: '#d97706',
-              color: '#ffffff',
-            }}
-          >
-            <Icon icon={appIcons.uploadFile} className="h-3.5 w-3.5" />
-            Upload
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function InvalidUploadCard({
-  folder,
-  isDark,
-}: {
-  readonly folder: DriveFolderEntry;
-  readonly isDark: boolean;
-}) {
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const validationMessages = getUploadValidationMessages(folder);
-
-  return (
-    <div
-      className="flex items-start gap-3 rounded-xl border px-4 py-3"
-      style={{ background: mutedSurface, borderColor: panelBorder }}
-    >
-      <Icon icon={appIcons.error} className="mt-1 h-4 w-4 shrink-0" style={{ color: '#f87171' }} />
-      <div className="min-w-0 flex-1">
-        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
-          {folder.display_name}
-        </p>
-        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
-          {folder.name}
-        </p>
-        {validationMessages.map((message, i) => (
-          <p key={i} className={`${i === 0 ? 'mt-1' : 'mt-0.5'} text-xs leading-5`} style={{ color: '#f87171' }}>
-            {message}
-          </p>
-        ))}
-      </div>
-      <StatusBadge prefix="ERROR" isDark={isDark} />
-    </div>
-  );
-}
-
-function getUploadValidationMessages(folder: DriveFolderEntry): string[] {
-  if (!folder.validation_errors.length) {
-    return [
-      'Invalid DONE_ upload folder. Expected format: DONE_status_source - Story Title, with source _nw, _gd, _wp, or _ink.',
-    ];
-  }
-
-  return folder.validation_errors.map(formatUploadValidationMessage);
-}
-
 function formatUploadValidationMessage(message: string): string {
   const unrecognizedSource = message.match(/UNRECOGNIZED SOURCE:\s*'([^']+)'/i);
   if (unrecognizedSource) {
-    return `Unrecognized source token '${unrecognizedSource[1]}'. Upload folders must be named DONE_status_source - Story Title, using _nw, _gd, _wp, or _ink.`;
+    return `Unrecognized source token '${unrecognizedSource[1]}'. Expected _nw, _gd, _wp, or _ink.`;
   }
 
   if (/MISSING SOURCE/i.test(message)) {
-    return 'Missing source token. Upload folders must be named DONE_status_source - Story Title, using _nw, _gd, _wp, or _ink.';
+    return 'Missing source token in folder name.';
   }
 
   return message;
-}
-
-function NotReadyUploadCard({
-  folder,
-  isDark,
-}: {
-  readonly folder: DriveFolderEntry;
-  readonly isDark: boolean;
-}) {
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-  const prefix = folder.prefix || 'UNKNOWN';
-
-  return (
-    <div
-      className="flex items-start gap-3 rounded-xl border px-4 py-3"
-      style={{ background: mutedSurface, borderColor: panelBorder }}
-    >
-      <Icon icon={appIcons.info} className="mt-1 h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
-      <div className="min-w-0 flex-1">
-        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
-          {folder.display_name}
-        </p>
-        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
-          {folder.name}
-        </p>
-        <p className="mt-1 text-xs leading-5" style={{ color: '#b45309' }}>
-          Not ready for upload. Check Upload only uploads <span className="font-mono">DONE_</span> folders; rename this
-          <span className="font-mono"> {prefix}_</span> folder to <span className="font-mono">DONE_</span> when ready.
-        </p>
-      </div>
-      <StatusBadge prefix={prefix} isDark={isDark} />
-    </div>
-  );
-}
-
-function AlreadyCard({
-  folder,
-  isDark,
-}: {
-  readonly folder: DriveFolderEntry;
-  readonly isDark: boolean;
-}) {
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.62)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-
-  return (
-    <div
-      className="flex items-center gap-3 rounded-xl border px-4 py-3"
-      style={{ background: mutedSurface, borderColor: panelBorder }}
-    >
-      <Icon icon={appIcons.check} className="h-4 w-4 shrink-0" style={{ color: isDark ? 'rgba(255,255,255,0.34)' : 'rgba(55,53,47,0.42)' }} />
-      <div className="min-w-0 flex-1">
-        <p className="mt-1 truncate text-sm font-medium" style={{ color: pageText }}>
-          {folder.display_name}
-        </p>
-        <p className="mt-1 truncate text-xs font-mono" style={{ color: secondaryText }}>
-          {folder.name}
-        </p>
-      </div>
-      <StatusBadge prefix="DONE" isDark={isDark} />
-    </div>
-  );
 }

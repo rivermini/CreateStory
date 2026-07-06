@@ -82,10 +82,6 @@ export function StorySyncTabs({
   const uploadableCount = uploadableData?.uploadable.length ?? 0;
   const updatableCount = updatableData?.updatable.length ?? 0;
 
-  const panelBackground = isDark ? '#202020' : '#ffffff';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
-  const mutedSurface = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(55,53,47,0.05)';
-
   const handleUploadAll = () => {
     setShowUploadConfirm(false);
     onUploadAll();
@@ -135,147 +131,62 @@ export function StorySyncTabs({
         }}
       />
 
-      <div
-        className="overflow-hidden rounded-2xl border"
-        style={{ background: panelBackground, borderColor: panelBorder }}
-      >
-        <div className="flex">
+      <div className="space-y-4">
+        <div className="flex border-b border-[var(--cs-border)] bg-transparent">
           <button
             onClick={() => onTabChange('uploadable')}
-            className="relative flex flex-1 items-center justify-center gap-2.5 px-4 py-4 text-sm font-semibold transition-colors"
+            className="relative flex items-center gap-2 px-4 py-4 text-sm font-semibold transition-colors hover:text-[var(--cs-primary)]"
             style={{
-              color:
-                activeTab === 'uploadable'
-                  ? isDark
-                    ? '#ff7c33'
-                    : '#ff5b00'
-                  : isDark
-                    ? 'rgba(255,255,255,0.5)'
-                    : 'rgba(55,53,47,0.55)',
-              background:
-                activeTab === 'uploadable'
-                  ? isDark
-                    ? 'rgba(255, 91, 0, 0.10)'
-                    : 'rgba(255, 91, 0, 0.06)'
-                  : 'transparent',
+              color: activeTab === 'uploadable' ? 'var(--cs-primary)' : 'var(--cs-text-soft)',
             }}
           >
-            <Icon icon={appIcons.uploadFile} className="h-5 w-5" />
+            <Icon icon={appIcons.uploadFile} className="h-4.5 w-4.5" />
             <span>Upload to Drive</span>
             {uploadableCount > 0 ? (
-              <span
-                className="rounded-md border px-2 py-0.5 text-xs font-medium"
-                style={{
-                  background:
-                    activeTab === 'uploadable'
-                      ? isDark
-                        ? 'rgba(255, 91, 0, 0.14)'
-                        : 'rgba(255, 91, 0, 0.10)'
-                      : mutedSurface,
-                  borderColor:
-                    activeTab === 'uploadable'
-                      ? isDark
-                        ? 'rgba(255, 91, 0, 0.24)'
-                        : 'rgba(255, 91, 0, 0.18)'
-                      : panelBorder,
-                  color:
-                    activeTab === 'uploadable'
-                      ? isDark
-                        ? '#ff7c33'
-                        : '#ff5b00'
-                      : isDark
-                        ? 'rgba(255,255,255,0.5)'
-                        : 'rgba(55,53,47,0.55)',
-                }}
-              >
+              <span className="rounded-full bg-[var(--cs-primary-soft)] text-[var(--cs-primary)] text-[10px] px-1.5 py-0.5 font-bold">
                 {uploadableCount}
               </span>
             ) : uploadableData ? (
-              <span
-                className="rounded-md border px-2 py-0.5 text-xs"
-                style={{ background: mutedSurface, borderColor: panelBorder, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }}
-              >
+              <span className="rounded-full bg-[var(--cs-surface-muted)] text-[var(--cs-text-muted)] text-[10px] px-1.5 py-0.5 font-bold">
                 0
               </span>
             ) : null}
             {activeTab === 'uploadable' && (
               <div
-                className="absolute bottom-0 left-0 right-0 h-0.5"
-                style={{ background: 'linear-gradient(90deg, #ff5b00, #ff7c33)' }}
+                className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                style={{ background: 'var(--cs-primary)' }}
               />
             )}
           </button>
 
-          <div style={{ width: '1px', background: panelBorder }} />
-
           <button
             onClick={() => onTabChange('updatable')}
-            className="relative flex flex-1 items-center justify-center gap-2.5 px-4 py-4 text-sm font-semibold transition-colors"
+            className="relative flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors hover:text-[var(--cs-primary)]"
             style={{
-              color:
-                activeTab === 'updatable'
-                  ? isDark
-                    ? '#ff7c33'
-                    : '#ff5b00'
-                  : isDark
-                    ? 'rgba(255,255,255,0.5)'
-                    : 'rgba(55,53,47,0.55)',
-              background:
-                activeTab === 'updatable'
-                  ? isDark
-                    ? 'rgba(255, 91, 0, 0.10)'
-                    : 'rgba(255, 91, 0, 0.06)'
-                  : 'transparent',
+              color: activeTab === 'updatable' ? 'var(--cs-primary)' : 'var(--cs-text-soft)',
             }}
           >
-            <Icon icon={appIcons.trends} className="h-5 w-5" />
+            <Icon icon={appIcons.trends} className="h-4.5 w-4.5" />
             <span>Update Chapters</span>
             {updatableCount > 0 ? (
-              <span
-                className="rounded-md border px-2 py-0.5 text-xs font-medium"
-                style={{
-                  background:
-                    activeTab === 'updatable'
-                      ? isDark
-                        ? 'rgba(255, 91, 0, 0.14)'
-                        : 'rgba(255, 91, 0, 0.10)'
-                      : mutedSurface,
-                  borderColor:
-                    activeTab === 'updatable'
-                      ? isDark
-                        ? 'rgba(255, 91, 0, 0.24)'
-                        : 'rgba(255, 91, 0, 0.18)'
-                      : panelBorder,
-                  color:
-                    activeTab === 'updatable'
-                      ? isDark
-                        ? '#ff7c33'
-                        : '#ff5b00'
-                      : isDark
-                        ? 'rgba(255,255,255,0.5)'
-                        : 'rgba(55,53,47,0.55)',
-                }}
-              >
+              <span className="rounded-full bg-[var(--cs-primary-soft)] text-[var(--cs-primary)] text-[10px] px-1.5 py-0.5 font-bold">
                 {updatableCount}
               </span>
             ) : updatableData ? (
-              <span
-                className="rounded-md border px-2 py-0.5 text-xs"
-                style={{ background: mutedSurface, borderColor: panelBorder, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(55,53,47,0.55)' }}
-              >
+              <span className="rounded-full bg-[var(--cs-surface-muted)] text-[var(--cs-text-muted)] text-[10px] px-1.5 py-0.5 font-bold">
                 0
               </span>
             ) : null}
             {activeTab === 'updatable' && (
               <div
-                className="absolute bottom-0 left-0 right-0 h-0.5"
-                style={{ background: 'linear-gradient(90deg, #ff5b00, #ff7c33)' }}
+                className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                style={{ background: 'var(--cs-primary)' }}
               />
             )}
           </button>
         </div>
 
-        <div className="h-[calc(100vh-280px)] overflow-y-auto sm:min-h-[500px] sm:max-h-[calc(100vh-280px)]">
+        <div>
           {activeTab === 'uploadable' && (
             <UploadTab
               data={uploadableData}

@@ -45,6 +45,39 @@ export function Sidebar({
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
     const navSections = getVisibleNavSections(authUser.role);
 
+    const renderIcon = (iconKey: keyof typeof appIcons) => {
+        if (iconKey === 'sync') {
+            return (
+                <svg viewBox="0 0 192 192" fill="none" className="w-4 h-4 flex-shrink-0">
+                    <mask id="gdrive-mask-a" width="168" height="154" x="12" y="18" maskUnits="userSpaceOnUse" style={{ maskType: 'alpha' }}>
+                        <path fill="#b43333" d="M63.09 37c14.626-25.333 51.193-25.334 65.819 0l45.033 78c14.626 25.334-3.657 57.001-32.91 57.001H50.967c-29.253 0-47.536-31.667-32.91-57.001z"/>
+                    </mask>
+                    <g mask="url(#gdrive-mask-a)">
+                        <path fill="url(#gdrive-grad-b)" d="M206.905 172.02h-91.888l-19.015-32.934 45.944-79.578z"/>
+                        <path fill="url(#gdrive-grad-c)" d="M-14.919 172.006 50.04 59.494v.002L31.032 92.422h38.02L115 172.004l-129.918.001z"/>
+                        <path fill="url(#gdrive-grad-d)" d="M96.007-20.085 141.954 59.5l-19.011 32.928H31.048z"/>
+                    </g>
+                    <defs>
+                        <linearGradient id="gdrive-grad-b" x1="193.6" x2="103.09" y1="165.6" y2="111.21" gradientUnits="userSpaceOnUse">
+                            <stop offset=".09" stopColor="#ffe921"/>
+                            <stop offset="1" stopColor="#fec700"/>
+                        </linearGradient>
+                        <linearGradient id="gdrive-grad-c" x1="114.4" x2="15.53" y1="181.61" y2="121.8" gradientUnits="userSpaceOnUse">
+                            <stop offset=".15" stopColor="#a9a8ff"/>
+                            <stop offset=".33" stopColor="#6d97ff"/>
+                            <stop offset=".48" stopColor="#3186ff"/>
+                        </linearGradient>
+                        <linearGradient id="gdrive-grad-d" x1="128.88" x2="28.7" y1="37.88" y2="84.64" gradientUnits="userSpaceOnUse">
+                            <stop offset=".55" stopColor="#0ebc5f"/>
+                            <stop offset=".85" stopColor="#78c9ff"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            );
+        }
+        return <Icon icon={appIcons[iconKey]} className="w-3.5 h-3.5" />;
+    };
+
     const makeNavItem = (item: { to: string; label: string; iconKey: string }) => {
         const resolvedIcon = NAV_ICONS[item.iconKey as keyof typeof NAV_ICONS] as keyof typeof appIcons;
         const active = navActive(location.pathname, item.to);
@@ -64,7 +97,7 @@ export function Sidebar({
                     }}
                 >
                     <span className="flex h-4.5 w-4.5 flex-shrink-0 items-center justify-center">
-                        <Icon icon={appIcons[resolvedIcon]} className="w-3.5 h-3.5" />
+                        {renderIcon(resolvedIcon)}
                     </span>
                     <span>{item.label}</span>
                 </Link>
@@ -106,7 +139,7 @@ export function Sidebar({
                     className="flex h-5 w-5 flex-shrink-0 items-center justify-center transition-colors duration-150"
                     style={{ color }}
                 >
-                    <Icon icon={appIcons[resolvedIcon]} className="w-3.5 h-3.5" />
+                    {renderIcon(resolvedIcon)}
                 </span>
 
                 <span
@@ -130,20 +163,18 @@ export function Sidebar({
 
     return (
         <aside
-            className="hidden lg:flex fixed bottom-4 left-4 top-4 z-40 flex-col overflow-hidden rounded-[22px] border transition-colors duration-200"
+            className="hidden lg:flex fixed bottom-0 left-0 top-0 z-40 flex-col overflow-hidden border-r transition-colors duration-200"
             style={{
-                width: 248,
-                background: tokens.colors.surfaceElevated,
+                width: 260,
+                background: isDark ? tokens.colors.surfaceElevated : '#f9fafb',
                 borderColor: tokens.colors.border,
-                boxShadow: tokens.shadows.soft,
-                backdropFilter: 'blur(18px)',
+                boxShadow: 'none',
             }}
         >
             <div
-                className="flex items-center gap-3 border-b"
+                className="flex items-center gap-3"
                 style={{
-                    padding: '14px 14px 12px',
-                    borderColor: tokens.colors.border,
+                    padding: '20px 20px 12px',
                 }}
             >
                 <div

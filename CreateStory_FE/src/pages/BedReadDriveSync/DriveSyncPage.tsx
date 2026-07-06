@@ -19,6 +19,8 @@ import { StorySyncTabs, type StorySyncTab } from '../../components/BedReadDriveS
 import { LoadingAppIcon } from '../../components/BedReadDriveSync/DriveSync/SyncTabShared';
 import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
 import type { ThemeMode } from '../../types/theme';
+import { PageShell, PageHeader, Surface } from '../../components/Shared/Primitives';
+
 
 const pollUpdate = (
   jobId: string,
@@ -134,14 +136,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [updatingJobs, setUpdatingJobs] = useState<Map<string, string>>(new Map());
   const updateLocksRef = useRef<Set<string>>(new Set());
   const [storiesNeedingUpdate, setStoriesNeedingUpdate] = useState<StoriesNeedingUpdateEntry[]>([]);
-
-  const pageBackground = 'var(--cs-page)';
-  const panelBackground = 'var(--cs-surface-elevated)';
-  const panelBorder = 'var(--cs-border)';
-  const pageText = 'var(--cs-text)';
-  const secondaryText = 'var(--cs-text-soft)';
-  const tertiaryText = 'var(--cs-text-faint)';
-  const mutedSurface = 'var(--cs-surface-muted)';
 
   useEffect(() => {
     const interval = setInterval(
@@ -366,130 +360,68 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     [handleUpdateSingle],
   );
 
-  const hasActiveJobs = trackedJobs.length > 0 || updatingJobs.size > 0;
-  const totalUploadable = uploadableData?.uploadable.length ?? 0;
-  const totalUpdatable = updatableData?.updatable.length ?? 0;
-  const successfulUploads = Array.from(uploadResults.values()).filter((result) => result.success).length;
-
   return (
-    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <PageShell themeMode={themeMode}>
+      <div className="flex w-full flex-col px-4 py-6 sm:px-6 lg:px-8">
         <main className="space-y-4">
-          <section
-            className="rounded-2xl border px-5 py-5 sm:px-6"
-            style={{ background: panelBackground, borderColor: panelBorder }}
-          >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-[0.16em]" style={{ color: tertiaryText }}>
-                  Sync
-                </div>
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl" style={{ color: pageText }}>
-                  Drive Sync
-                </h1>
-                <p className="text-sm leading-6 sm:text-[15px]" style={{ color: secondaryText }}>
-                  Sync your crawled novels with Google Drive.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {config && !configLoading && (
-            <div
-              className="flex flex-wrap items-center gap-4 rounded-2xl border px-4 py-3"
-              style={{ background: panelBackground, borderColor: panelBorder }}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ background: hasActiveJobs ? '#f59e0b' : '#10b981' }}
-                />
-                <span className="text-sm font-medium" style={{ color: pageText }}>
-                  {hasActiveJobs ? 'Syncing...' : 'Ready'}
+          <PageHeader
+            themeMode={themeMode}
+            eyebrow="Sync"
+            title="Drive Sync"
+            description={
+              config && !configLoading ? (
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>Sync your crawled novels with Google Drive.</span>
+                  <span className="text-[var(--cs-text-faint)]">•</span>
+                  <span className="flex items-center gap-1 font-mono text-xs text-[var(--cs-text-soft)] bg-[var(--cs-surface-muted)] px-1.5 py-0.5 rounded border border-[var(--cs-border)]">
+                    <Icon icon={appIcons.folder} className="h-3 w-3 shrink-0" />
+                    <span>Drive ID: {config.folder_id}</span>
+                  </span>
                 </span>
-              </div>
-
-              <div className="hidden h-5 sm:block" style={{ width: '1px', background: panelBorder }} />
-
-              <div className="flex min-w-0 items-center gap-2">
-                <Icon icon={appIcons.folder} className="h-4 w-4 shrink-0" style={{ color: tertiaryText }} />
-                <span className="truncate text-xs" style={{ color: tertiaryText }}>
-                  {config.folder_id}
-                </span>
-              </div>
-
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                <div
-                  className="hidden items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium sm:flex"
-                  style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}
-                >
-                  <Icon icon={appIcons.uploadFile} className="h-3.5 w-3.5" />
-                  {totalUploadable} ready to upload
-                </div>
-                <div
-                  className="hidden items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium md:flex"
-                  style={{ background: mutedSurface, borderColor: panelBorder, color: secondaryText }}
-                >
-                  <Icon icon={appIcons.trends} className="h-3.5 w-3.5" />
-                  {totalUpdatable} can update
-                </div>
-                {successfulUploads > 0 && (
-                  <div
-                    className="hidden items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium lg:flex"
-                    style={{
-                      background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)',
-                      borderColor: isDark ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.16)',
-                      color: isDark ? '#6ee7b7' : '#047857',
-                    }}
-                  >
-                    <Icon icon={appIcons.check} className="h-3.5 w-3.5" />
-                    {successfulUploads} uploaded
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+              ) : (
+                "Sync your crawled novels with Google Drive."
+              )
+            }
+            actions={
+              <ServerModeBanner
+                serverUrl={config?.main_be_api_base_url ?? null}
+                isDark={isDark}
+                isConfigLoading={configLoading}
+                isConfigValid={
+                  tokenInvalid
+                    ? undefined
+                    : configInvalid
+                      ? false
+                      : configLoading
+                        ? undefined
+                        : Boolean(config?.main_be_api_base_url && config?.main_be_user_id)
+                }
+                tokenInvalid={tokenInvalid}
+              />
+            }
+          />
 
           {configLoading && (
-            <div
-              className="flex items-center justify-center gap-3 rounded-2xl border p-8"
-              style={{ background: panelBackground, borderColor: panelBorder }}
-            >
-              <LoadingAppIcon isDark={isDark} color={secondaryText} />
-              <span className="text-sm" style={{ color: secondaryText }}>
+            <Surface className="flex items-center justify-center gap-3 p-8">
+              <LoadingAppIcon isDark={isDark} color="var(--cs-text-soft)" />
+              <span className="text-sm" style={{ color: 'var(--cs-text-soft)' }}>
                 Loading Drive Sync...
               </span>
-            </div>
+            </Surface>
           )}
 
           {configError && (
             <div
               className="rounded-xl border px-4 py-3 text-sm"
               style={{
-                background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)',
-                borderColor: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)',
-                color: isDark ? '#f87171' : '#dc2626',
+                background: 'rgba(220, 38, 38, 0.08)',
+                borderColor: 'rgba(220, 38, 38, 0.16)',
+                color: 'var(--cs-danger)',
               }}
             >
               {configError}
             </div>
           )}
-
-          <ServerModeBanner
-            serverUrl={config?.main_be_api_base_url ?? null}
-            isDark={isDark}
-            isConfigLoading={configLoading}
-            isConfigValid={
-              tokenInvalid
-                ? undefined
-                : configInvalid
-                  ? false
-                  : configLoading
-                    ? undefined
-                    : Boolean(config?.main_be_api_base_url && config?.main_be_user_id)
-            }
-            tokenInvalid={tokenInvalid}
-          />
 
           {config && !configLoading && (
             <StorySyncTabs
@@ -522,6 +454,6 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           )}
         </main>
       </div>
-    </div>
+    </PageShell>
   );
 }

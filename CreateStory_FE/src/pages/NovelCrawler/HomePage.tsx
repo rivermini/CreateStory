@@ -156,9 +156,6 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
   // so we never block the whole crawl for them.
   const isWattpadOriginal = siteInfo?.config_name === 'wattpad' && novelMetadata?.is_paywalled === true;
 
-  const pageBackground = isDark
-    ? 'linear-gradient(180deg, #191919 0%, #171717 100%)'
-    : 'linear-gradient(180deg, #fbfbfa 0%, #f7f6f3 100%)';
   const panelBackground = isDark ? '#202020' : '#ffffff';
   const panelBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(55,53,47,0.12)';
   const pageText = isDark ? 'rgba(255,255,255,0.92)' : '#37352f';
@@ -233,7 +230,7 @@ export function HomePage({ themeMode }: Readonly<HomePageProps>) {
   };
 
   return (
-    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: pageBackground }}>
+    <div className={`${isDark ? 'dark' : 'light'} min-h-screen`}>
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
         <main className="space-y-4">
           <section

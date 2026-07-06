@@ -474,8 +474,8 @@ html[data-theme='dark'] .thesvg-badge-primary {
 
 /* CreateStory theSVG-inspired redesign system */
 :root {
-  --cs-page: #f7f6f3;
-  --cs-page-soft: #fbfbfa;
+  --cs-page: #ffffff;
+  --cs-page-soft: #ffffff;
   --cs-surface: rgba(255, 255, 255, 0.88);
   --cs-surface-elevated: rgba(255, 255, 255, 0.96);
   --cs-surface-muted: rgba(17, 17, 17, 0.045);
@@ -683,11 +683,11 @@ body {
   gap: 18px;
   align-items: flex-start;
   justify-content: space-between;
-  border: 1px solid var(--cs-border);
-  border-radius: 24px;
-  background: var(--cs-surface-elevated);
-  box-shadow: var(--cs-shadow-soft);
-  padding: 22px 24px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 12px 0 24px;
 }
 
 .cs-eyebrow {
@@ -902,10 +902,7 @@ body {
 }
 
 .cs-main-content {
-  background:
-    radial-gradient(circle at 80% 10%, rgba(255, 91, 0, 0.05), transparent 32rem),
-    radial-gradient(circle at 20% 80%, rgba(139, 92, 246, 0.03), transparent 32rem),
-    var(--cs-page) !important;
+  background: var(--cs-page) !important;
 }
 
 .cs-main-content main,
@@ -945,6 +942,10 @@ html[data-theme='dark'] .cs-main-content .thesvg-hero-gradient {
   transform: translateY(-1px);
 }
 
+.cs-main-content button.cs-search-clear:hover {
+  transform: translateY(-50%) !important;
+}
+
 .cs-main-content table {
   border-collapse: separate;
   border-spacing: 0;
@@ -978,8 +979,8 @@ html[data-theme='dark'] .cs-main-content .thesvg-hero-gradient {
 @media (max-width: 1023px) {
   .cs-page-header {
     flex-direction: column;
-    border-radius: 18px;
-    padding: 18px;
+    border-radius: 0;
+    padding: 12px 0 16px;
   }
 
   .cs-page-title {
