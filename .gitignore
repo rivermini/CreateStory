@@ -1,0 +1,42 @@
+# CreateStory — top-level ignore guard.
+# The repo root is NOT a git repo today, but if one is ever initialized here,
+# this keeps secrets and build junk from being tracked/exposed the moment it is.
+
+# Secrets & credentials — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+*cookie*.json
+*cookies*.json
+*credentials*.json
+*service-account*.json
+inkitt.json
+goodnovel.json
+Production.json
+*drive-sync-*.json
+miscellaneous/
+.purged/
+cloudflared.exe
+
+# Build artifacts
+node_modules/
+dist/
+frontend-dist/
+Exports/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local editor/tool state
+.claude/
+.cursor/
+.vscode/
+
+# Logs & archives
+*.log
+*.zip
