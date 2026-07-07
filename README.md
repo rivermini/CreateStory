@@ -205,10 +205,10 @@ C:\ProgramData\CreateStory\secrets\internal_service_token
 On a fresh Windows machine, you do not need to create these manually. Simply navigate to the `Services/` directory and run:
 
 ```powershell
-.\setup_secrets.bat
+task secrets:ensure
 ```
 
-This runs a PowerShell script (`setup_secrets.ps1`) that generates secure random keys and passwords for any missing files without overwriting existing ones.
+This runs the PowerShell secret builder script (`setup_secrets.ps1`) that generates secure random keys and passwords for any missing files without overwriting existing ones.
 
 ---
 
@@ -233,16 +233,28 @@ The Kokoro TTS engine requires model weights to synthesize audio. These weights 
 
 ### Step 3: Running the Stack
 
-#### Running the Backend (Docker Compose)
+#### Running the Backend (Docker Compose via Taskfile)
 In the `Services` directory, run:
 ```powershell
-.\update_services.bat
+# List all available tasks
+task --list
+
+# Start the stack for the first time (Clean -> Reset Secrets -> Verify Models -> Start Background Stack -> Setup Admin)
+task start:fresh
+
+# Rebuild and reload all services normally in the foreground
+task start
+
+# Rebuild and reload all services (including rebuilding frontend)
+task update:all
+
+# Rebuild and reload all backend services (no frontend build)
+task update:backend
+
+# Update a single service (no-deps build, e.g. gateway or voices)
+task update:gateway
+task update:voices
 ```
-This utility script opens an interactive terminal menu:
-* **Option 1**: Complete system build (compiles Vite frontend with base production URLs, moves assets, and boots all services).
-* **Option 2-6**: Rebuild individual backend services (`Gateway`, `Voices`, `Crawler`, `DriveSync`, `AutoAudio`).
-* **Option 7**: Build frontend code and restart Nginx service container.
-* **Option 8**: Restart Nginx frontend container only.
 
 #### Running the Frontend (Local Development)
 To launch a fast Vite development server (port `5173` with HMR):

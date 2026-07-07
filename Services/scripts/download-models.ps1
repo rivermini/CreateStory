@@ -27,7 +27,7 @@
 param(
     [string]$Repo   = "hatrumtruong27/CreateStory",
     [string]$Tag    = "models-v1.0",
-    [string]$OutDir = (Join-Path $PSScriptRoot "..\api\models"),
+    [string]$OutDir = (Join-Path $PSScriptRoot "..\BedReadVoices\api\models"),
     [switch]$Force
 )
 

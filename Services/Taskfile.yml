@@ -1,0 +1,155 @@
+version: '3'
+
+vars:
+  SERVICES_DIR: 'Services'
+
+tasks:
+  default:
+    desc: "List all available tasks"
+    cmds:
+      - task --list
+
+  start:
+    desc: "Build and start the backend compose stack in the foreground"
+    cmds:
+      - docker compose up --build {{.CLI_ARGS}}
+
+  start:bg:
+    desc: "Build and start the backend compose stack in the background"
+    cmds:
+      - docker compose up -d --build {{.CLI_ARGS}}
+
+  clean:
+    desc: "Force stop all containers and remove volumes, networks, and local images"
+    cmds:
+      - docker compose down -v --rmi local --remove-orphans
+      - docker rm -f create-story-fastapi-gateway create-story-bedread-voices create-story-bedread-drive-sync create-story-novel-crawler create-story-auto-audio create-story-flaresolverr create-story-frontend create-story-postgres 2>nul
+
+  start:fresh:
+    desc: "Clean everything, reset secrets, verify models, start stack, and run admin setup"
+    cmds:
+      - task: clean
+      - task: secrets:reset
+      - task: models:check
+      - task: start:bg
+      - echo "Waiting for API Gateway to become healthy..."
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/wait_container_healthy.ps1 -Container create-story-fastapi-gateway -Label Gateway
+      - task: admin
+
+  "secrets:ensure":
+    desc: "Generate missing secret files only (idempotent setup)"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_secrets.ps1 -Mode ensure
+
+  "secrets:delete":
+    desc: "Delete current secret files"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_secrets.ps1 -Mode delete
+
+  "secrets:reset":
+    desc: "Delete and regenerate all secret files"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_secrets.ps1 -Mode reset
+
+  "models:check":
+    desc: "Verify presence and integrity of Kokoro models (downloads if missing/corrupt)"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/download-models.ps1
+
+  "models:force-update":
+    desc: "Stop stack, remove models, download fresh assets, and rebuild/restart services"
+    cmds:
+      - docker compose stop bedread_voices auto_audio
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/download-models.ps1 -Force
+      - docker compose up -d --build bedread_voices auto_audio
+
+  admin:
+    desc: "Set up the initial admin account using interactive prompts"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command '$email = Read-Host "Enter admin email"; if ($email) { docker compose exec -it fastapi_gateway python bootstrap_admin.py --email $email } else { Write-Host "Admin email is required." }'
+
+  "build:frontend":
+    desc: "Compile Vite production bundle and move it into Services/frontend-dist"
+    dir: "../CreateStory_FE"
+    cmds:
+      - docker compose -f ../Services/docker-compose.yml stop frontend 2>nul || true
+      - npm install
+      - npm run build
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '../Services/frontend-dist') { Remove-Item -Recurse -Force '../Services/frontend-dist' }; Copy-Item -Path './dist' -Destination '../Services/frontend-dist' -Recurse -Force"
+      - docker compose -f ../Services/docker-compose.yml up -d frontend 2>nul || true
+
+  "update:all":
+    desc: "Build frontend, rebuild, and reload all compose services"
+    cmds:
+      - task: "build:frontend"
+      - docker compose up -d --build
+      - docker image prune -f 2>nul || true
+
+  "update:backend":
+    desc: "Rebuild and reload all backend compose services (no frontend build)"
+    cmds:
+      - docker compose up -d --build postgres fastapi_gateway bedread_voices novel_crawler flaresolverr bedread_drive_sync auto_audio
+      - docker image prune -f 2>nul || true
+
+  "update:gateway":
+    desc: "Update fastapi_gateway service (no-deps rebuild)"
+    cmds:
+      - docker compose up -d --build --no-deps fastapi_gateway
+      - docker image prune -f 2>nul || true
+
+  "update:voices":
+    desc: "Update bedread_voices service (no-deps rebuild)"
+    cmds:
+      - docker compose up -d --build --no-deps bedread_voices
+      - docker image prune -f 2>nul || true
+
+  "update:crawler":
+    desc: "Update novel_crawler service (no-deps rebuild)"
+    cmds:
+      - docker compose up -d --build --no-deps novel_crawler
+      - docker image prune -f 2>nul || true
+
+  "update:sync":
+    desc: "Update bedread_drive_sync service (no-deps rebuild)"
+    cmds:
+      - docker compose up -d --build --no-deps bedread_drive_sync
+      - docker image prune -f 2>nul || true
+
+  "update:audio":
+    desc: "Update auto_audio service (no-deps rebuild)"
+    cmds:
+      - docker compose up -d --build --no-deps auto_audio
+      - docker image prune -f 2>nul || true
+
+  "update:frontend-only":
+    desc: "Restart the nginx frontend container only"
+    cmds:
+      - docker compose restart frontend
+
+  export:
+    desc: "Build frontend and package the microservices workspace into a zip archive"
+    cmds:
+      - task: "build:frontend"
+      - |
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "
+        $ts = (Get-Date).ToString('yyyyMMdd_HHmmss');
+        $zipName = \"NovaServices_$ts.zip\";
+        $destDir = '../Exports';
+        $tempDir = './_export_temp';
+        if (!(Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null };
+        if (Test-Path $tempDir) { Remove-Item -Recurse -Force $tempDir };
+        New-Item -ItemType Directory -Path $tempDir | Out-Null;
+        & robocopy ./ $tempDir /e /xd .venv output Output data Data _export_temp .git /xf .git* /nc /nfl /ndl /njh /njs /is;
+        Compress-Archive -Path $tempDir -DestinationPath \"$destDir/$zipName\" -Force;
+        Remove-Item -Recurse -Force $tempDir;
+        Write-Host '============================================';
+        Write-Host \"Done! Package created: $destDir/$zipName\";
+        Write-Host '============================================';
+        "
+
+  "start:frontend":
+    desc: "Start the local Vite React development server on http://localhost:5173"
+    dir: "../CreateStory_FE"
+    cmds:
+      - npm install
+      - npm run dev

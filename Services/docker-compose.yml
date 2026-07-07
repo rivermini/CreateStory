@@ -144,8 +144,8 @@ services:
       - database_url
       - internal_service_token
     volumes:
-      # Kokoro model files live outside this repo as a local cache by default:
-      # ../../CreateStoryModels from Services/ resolves to a sibling of CreateStory/.
+      # Kokoro model files are located inside the repo by default:
+      # ./BedReadVoices/api/models (override KOKORO_MODELS_DIR in .env if using a custom cache).
       # Mount the two model FILES individually (not the whole dir) into api/models
       # so the bind mount does not hide the Python package there (db_models.py,
       # __init__.py) — the app reads api/models/kokoro-v1.0.onnx + voices-v1.0.bin.

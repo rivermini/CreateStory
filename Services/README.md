@@ -16,20 +16,55 @@ Your current team access model is Cloudflare-managed routes on the existing `cre
 
 The gateway is the only public backend entry point. Workers and PostgreSQL are not published to the host.
 
-## Normal update workflow
+## Installing Task
 
-Use:
+We use **go-task** (Task) as a lightweight, cross-platform dev tool runner. You can find detailed instructions in the [official Task installation guide](https://taskfile.dev/docs/installation), or use these quick commands:
 
-```bat
-update_services.bat
+### Windows:
+```powershell
+winget install go-task.task
+```
+*(Remember to restart your terminal after installing to reload the PATH).*
+
+### macOS:
+```bash
+brew install go-task
 ```
 
-Useful options:
+### Linux:
+```bash
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d
+```
 
-- `1` builds the frontend with `VITE_API_BASE_URL=https://be.createstory.online`, copies it to `Services\frontend-dist`, then rebuilds/reloads all Docker services.
-- `2-6` rebuild individual backend services.
-- `7` rebuilds only the frontend and restarts the frontend container.
-- `8` restarts only the frontend container.
+---
+
+## Normal developer workflow
+
+Use the **Taskfile** to run developer workflow tasks:
+
+```bash
+# List all available tasks
+task --list
+
+# Start the stack for the first time (Clean -> Reset Secrets -> Verify Models -> Start Stack -> Set Admin)
+task start:fresh
+
+# Rebuild and reload all services normally in the foreground
+task start
+
+# Rebuild and reload all services in the background
+task start:bg
+
+# Rebuild and reload all services (including rebuilding frontend)
+task update:all
+
+# Rebuild and reload all backend services (no frontend build)
+task update:backend
+
+# Update a single service (no-deps build, e.g. gateway or voices)
+task update:gateway
+task update:voices
+```
 
 ## Required secret files
 
@@ -42,12 +77,11 @@ C:\ProgramData\CreateStory\secrets\jwt_secret_key
 C:\ProgramData\CreateStory\secrets\internal_service_token
 ```
 
-On a fresh machine you do not need to create these by hand. `update_services.bat`
-runs `setup_secrets.ps1` on launch and generates any missing secret file, keeping
+On a fresh machine you do not need to create these by hand. Running `task secrets:ensure`
+runs `setup_secrets.ps1` and generates any missing secret file, keeping
 `postgres_password` and the password embedded in `database_url` in sync. Existing
-files are never overwritten. Run `setup_secrets.bat` directly to pre-create them.
-Because the secrets live outside the workspace, they are **not** included in
-`export_services.bat` archives - each machine provisions its own.
+files are never overwritten. Because the secrets live outside the workspace,
+they are **not** included in exported zip packages - each machine provisions its own.
 
 Do not commit `.env`, cookies, service-account JSON, browser profiles, private keys, or token files.
 
@@ -66,6 +100,5 @@ Copy `.env.example` to `.env` only if you need to override non-secret Compose se
 - `docker-compose.yml` - local stack definition
 - `docker-compose.ci.yml` - CI-only secret-file override
 - `nginx-frontend.conf` - Nginx config for the built React frontend
-- `update_services.bat` - normal local update workflow
-- `export_services.bat` - archive/export helper
+- `Taskfile.yml` - developer task runner configuration
 - `AutoAudio/`, `BedReadDriveSync/`, `BedReadVoices/`, `FastAPIServer/`, `NovelCrawler/` - service repositories
