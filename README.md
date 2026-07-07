@@ -233,6 +233,14 @@ The Kokoro TTS engine requires model weights to synthesize audio. These weights 
 
 ### Step 3: Running the Stack
 
+#### Prerequisite: Install Task
+This project uses **go-task** (Task) to run developer setup and running commands. Install it using the [official Task installation guide](https://taskfile.dev/docs/installation) or run:
+* **Windows**: `winget install Task.Task` *(restart your terminal afterward)*
+* **macOS**: `brew install go-task`
+* **Linux**: `sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d`
+
+---
+
 #### Running the Backend (Docker Compose via Taskfile)
 In the `Services` directory, run:
 ```powershell
