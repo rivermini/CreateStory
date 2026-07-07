@@ -27,20 +27,37 @@
 param(
     [string]$Repo   = "hatrumtruong27/CreateStory",
     [string]$Tag    = "models-v1.0",
-    [string]$OutDir = (Join-Path $PSScriptRoot "..\api\models")
+    [string]$OutDir = (Join-Path $PSScriptRoot "..\api\models"),
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
 $files = "kokoro-v1.0.onnx", "voices-v1.0.bin"
 $minimumBytes = @{
-    "kokoro-v1.0.onnx" = 100MB
-    "voices-v1.0.bin" = 1MB
+    "kokoro-v1.0.onnx" = 310MB
+    "voices-v1.0.bin" = 24MB
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
 Write-Host "Repo:   $Repo (tag $Tag)"
 Write-Host "Target: $OutDir"
+
+if ($Force) {
+    foreach ($name in $files) {
+        $path = Join-Path $OutDir $name
+        if (Test-Path -LiteralPath $path) {
+            if (Test-Path -LiteralPath $path -PathType Container) {
+                Write-Host "[force] Removing existing directory stub $name."
+                Remove-Item -LiteralPath $path -Recurse -Force
+            } else {
+                Write-Host "[force] Removing existing model file $name for redownload."
+                Remove-Item -LiteralPath $path -Force
+            }
+        }
+    }
+}
+
 
 function Test-ValidModelFile([string]$Path, [string]$Name) {
     if (Test-Path -LiteralPath $Path -PathType Container) {
