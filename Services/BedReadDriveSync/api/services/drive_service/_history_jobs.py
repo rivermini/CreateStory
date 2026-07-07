@@ -240,6 +240,12 @@ class HistoryJobsMixin:
                 existing_indices.add(posting_index)
             next_index = max(next_index, posting_index + 1)
 
+        # Check max_chapter.md at the end of posting chapters
+        max_ch_val = self._parse_max_chapter_file(drive_service, folder_id, display_name)
+        if max_ch_val is not None:
+            self._append_log("info", f"Updating maxChapter to {max_ch_val} from max_chapter.md", display_name)
+            self.put_story_metadata(story_id, max_chapter=max_ch_val)
+
         self._status.stories_created += 1
         self._append_log("info", f"  Done: {chapters_added} chapters added.", display_name)
 
@@ -1143,6 +1149,12 @@ class HistoryJobsMixin:
                 chapters_skipped += 1
 
             next_index = max(next_index, posting_index + 1)
+
+        # Check max_chapter.md at the end of posting chapters
+        max_ch_val = self._parse_max_chapter_file(drive_service, folder_id, display_name, job_id=job_id)
+        if max_ch_val is not None:
+            self.append_job_log(job_id, "info", f"Updating maxChapter to {max_ch_val} from max_chapter.md")
+            self.put_story_metadata(story_id, max_chapter=max_ch_val)
 
         return (chapters_added, chapters_skipped, True, "")
 

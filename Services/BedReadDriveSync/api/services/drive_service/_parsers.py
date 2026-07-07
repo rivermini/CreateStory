@@ -386,6 +386,44 @@ class ParsersMixin:
 
         return main_cat_id, sub_cat_ids
 
+    def _parse_max_chapter_file(
+        self, drive_service: Any, folder_id: str, display_name: str, job_id: Optional[str] = None
+    ) -> Optional[int]:
+        """
+        Find and parse 'max_chapter.md' inside a story folder.
+        If null -> send nothing (report to log).
+        If exist use that number (number only, if it contains non-numeric text, report to log).
+        """
+        max_chapter_file = self._find_metadata_file(drive_service, folder_id, "max_chapter.md")
+        if not max_chapter_file:
+            self._append_log("info", "max_chapter.md not found — maxChapter will not be set/updated", display_name, job_id=job_id)
+            return None
+
+        try:
+            content = DriveAPIMixin._get_file_content(self, drive_service, max_chapter_file["id"])
+        except Exception as exc:
+            self._append_log("warning", f"Failed to read max_chapter.md: {exc}", display_name, job_id=job_id)
+            return None
+
+        stripped = content.strip().strip("\ufeff")
+        if not stripped:
+            self._append_log("info", "max_chapter.md is empty — maxChapter will not be set/updated", display_name, job_id=job_id)
+            return None
+
+        if re.search(r"\D", stripped):
+            self._append_log("warning", f"max_chapter.md contains non-numeric text: {stripped!r}", display_name, job_id=job_id)
+            digit_match = re.search(r"\d+", stripped)
+            if digit_match:
+                return int(digit_match.group(0))
+            return None
+
+        try:
+            return int(stripped)
+        except ValueError:
+            self._append_log("warning", f"max_chapter.md contains invalid integer: {stripped!r}", display_name, job_id=job_id)
+            return None
+
+
 
 from api.services.drive_service._drive_api import DriveAPIMixin
 import logging

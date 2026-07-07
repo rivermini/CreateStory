@@ -243,7 +243,7 @@ class DriveAPIMixin:
 
         METADATA_FILES = {
             "tags.md", "title.md", "synopsis.md", "push.md",
-            "blueprint-current.md", "category.md", "voice-profile.md",
+            "blueprint-current.md", "category.md", "voice-profile.md", "max_chapter.md",
         }
 
         def _is_chapter_file(name: str) -> bool:
@@ -662,7 +662,7 @@ class DriveAPIMixin:
         def _is_chapter_file(name: str) -> bool:
             lower = name.lower()
             if lower in ("tags.md", "title.md", "synopsis.md", "push.md",
-                         "blueprint-current.md", "category.md", "voice-profile.md"):
+                         "blueprint-current.md", "category.md", "voice-profile.md", "max_chapter.md"):
                 return False
             if lower.startswith("chapter") or "chapter" in lower:
                 return True
@@ -740,7 +740,7 @@ class DriveAPIMixin:
         def _is_chapter_file(name: str) -> bool:
             lower = name.lower()
             if lower in ("tags.md", "title.md", "synopsis.md", "push.md",
-                         "blueprint-current.md", "category.md", "voice-profile.md"):
+                         "blueprint-current.md", "category.md", "voice-profile.md", "max_chapter.md"):
                 return False
             if lower.startswith("chapter") or "chapter" in lower:
                 return True
@@ -804,7 +804,7 @@ class DriveAPIMixin:
         def _is_chapter_file(name: str) -> bool:
             lower = name.lower()
             if lower in ("tags.md", "title.md", "synopsis.md", "push.md",
-                         "blueprint-current.md", "category.md", "voice-profile.md"):
+                         "blueprint-current.md", "category.md", "voice-profile.md", "max_chapter.md"):
                 return False
             if lower.startswith("chapter") or "chapter" in lower:
                 return True
@@ -922,7 +922,7 @@ class DriveAPIMixin:
                     for f in files:
                         fname = f.get("name", "")
                         if fname.lower() in ("tags.md", "title.md", "synopsis.md", "push.md",
-                                             "blueprint-current.md", "category.md", "voice-profile.md"):
+                                             "blueprint-current.md", "category.md", "voice-profile.md", "max_chapter.md"):
                             continue
                         if not _is_valid_chapter_filename(fname):
                             format_errors.setdefault(folder_id, []).append(fname)

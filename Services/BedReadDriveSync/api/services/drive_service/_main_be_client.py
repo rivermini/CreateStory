@@ -1313,6 +1313,8 @@ class MainBEClientMixin:
         except Exception as exc:
             self._append_log("warning", f"[update] Failed to read tags.md: {exc}", display_name, job_id=job_id)
 
+        max_ch_val = self._parse_max_chapter_file(drive_service, folder_id, display_name, job_id=job_id)
+
         existing_indices = self._get_existing_chapter_indices(story_id)
         self._append_log("info", f"[update] Server has {len(existing_indices)} chapters: {sorted(existing_indices)}", display_name, job_id=job_id)
         server_max = max(existing_indices) if existing_indices else 0
@@ -1345,17 +1347,16 @@ class MainBEClientMixin:
             planned_existing.add(planned_posting_index)
             planned_next_index = max(planned_next_index, planned_posting_index + 1)
 
-        if planned_post_indices:
-            planned_max_chapter = max(max(existing_indices) if existing_indices else 0, max(planned_post_indices))
+        if max_ch_val is not None:
             current_max_chapter = max(max(existing_indices) if existing_indices else 0, self._get_story_max_chapter(story_id))
-            if planned_max_chapter > current_max_chapter:
+            if max_ch_val > current_max_chapter:
                 self._append_log(
                     "info",
-                    f"[update] Updating maxChapter {current_max_chapter} -> {planned_max_chapter} before posting chapters",
+                    f"[update] Updating maxChapter {current_max_chapter} -> {max_ch_val} (from max_chapter.md) before posting chapters",
                     display_name,
                     job_id=job_id,
                 )
-                ok, err_detail = self.put_story_metadata(story_id, max_chapter=planned_max_chapter)
+                ok, err_detail = self.put_story_metadata(story_id, max_chapter=max_ch_val)
                 if not ok:
                     self._append_log(
                         "warning",
@@ -1439,9 +1440,8 @@ class MainBEClientMixin:
 
         self._append_log("info", f"[update] Done. Added={chapters_added} Skipped={chapters_skipped}", display_name, job_id=job_id)
 
-        new_max_chapter = max(existing_indices) if existing_indices else None
-        if free_chapters_count is not None or new_max_chapter is not None or tags is not None:
-            ok, err_detail = self.put_story_metadata(story_id, max_chapter=new_max_chapter, free_chapters_count=free_chapters_count, tags=tags)
+        if free_chapters_count is not None or max_ch_val is not None or tags is not None:
+            ok, err_detail = self.put_story_metadata(story_id, max_chapter=max_ch_val, free_chapters_count=free_chapters_count, tags=tags)
             if ok:
                 self._append_log("info", f"[update] Story metadata updated", display_name, job_id=job_id)
             else:
