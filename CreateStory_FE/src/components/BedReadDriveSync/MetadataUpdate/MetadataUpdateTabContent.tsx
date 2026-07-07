@@ -492,6 +492,7 @@ function fieldLabel(field: string): string {
     push: 'Push',
     synopsis: 'Synopsis',
     tags: 'Tags',
+    max_chapter: 'Max Chapter',
   };
   return labels[field] ?? field;
 }

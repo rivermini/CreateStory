@@ -25,14 +25,15 @@ _METADATA_DOWNLOAD_CONCURRENCY = _positive_int_from_env(
     _METADATA_UPDATE_WORKERS,
 )
 _METADATA_DOWNLOAD_SEMAPHORE = threading.BoundedSemaphore(_METADATA_DOWNLOAD_CONCURRENCY)
-_METADATA_FILE_NAMES = ("Category.md", "free.md", "Push.md", "Synopsis.md", "synopsis.md", "tags.md")
-_METADATA_FIELDS = ("category", "free_chapters_count", "push", "synopsis", "tags")
+_METADATA_FILE_NAMES = ("Category.md", "free.md", "Push.md", "Synopsis.md", "synopsis.md", "tags.md", "max_chapter.md")
+_METADATA_FIELDS = ("category", "free_chapters_count", "push", "synopsis", "tags", "max_chapter")
 _METADATA_FIELD_FILES = {
     "category": ("category.md",),
     "free_chapters_count": ("free.md",),
     "push": ("push.md",),
     "synopsis": ("synopsis.md",),
     "tags": ("tags.md",),
+    "max_chapter": ("max_chapter.md",),
 }
 _METADATA_FIELD_PRIMARY_FILE = {
     "category": "Category.md",
@@ -40,6 +41,7 @@ _METADATA_FIELD_PRIMARY_FILE = {
     "push": "Push.md",
     "synopsis": "Synopsis.md",
     "tags": "tags.md",
+    "max_chapter": "max_chapter.md",
 }
 _METADATA_CACHE_SETTING_KEY = "metadata_update_content_cache"
 _METADATA_CACHE_MAX_ENTRIES = 5000
@@ -183,6 +185,24 @@ def _parse_tags_content(content: str | None) -> list[str]:
     return tags
 
 
+def _parse_max_chapter_content(content: str | None) -> Optional[int]:
+    if not content:
+        return None
+    stripped = content.strip().strip("\ufeff")
+    if not stripped:
+        return None
+    if re.search(r"\D", stripped):
+        logger.warning(f"max_chapter.md contains non-numeric text: {stripped!r}")
+        digit_match = re.search(r"\d+", stripped)
+        if digit_match:
+            return int(digit_match.group(0))
+        return None
+    try:
+        return int(stripped)
+    except ValueError:
+        return None
+
+
 # -------------------------------------------------------------------------
 # Category ID <-> name lookup
 # -------------------------------------------------------------------------
@@ -300,6 +320,8 @@ def _parse_file_content(fname_lower: str, content: str | None) -> Any:
         return _parse_synopsis_content(content)
     elif fname_lower == "tags.md":
         return _parse_tags_content(content)
+    elif fname_lower == "max_chapter.md":
+        return _parse_max_chapter_content(content)
     return content
 
 
@@ -451,7 +473,7 @@ def _batch_get_server_values(
         cache_key = _server_values_cache_key(story_ref)
         with cache_lock:
             cached = cache.get(cache_key)
-        if isinstance(cached, dict):
+        if isinstance(cached, dict) and "max_chapter" in cached:
             values_by_id[story_id] = cached
         else:
             refs_to_fetch.append(story_ref)
@@ -668,18 +690,33 @@ def _fetch_story_impl(service: Any, story_id: str) -> dict:
         raise RuntimeError("Drive sync config not set.")
 
     url = f"{service._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}"
-    headers = {
-        "Authorization": f"Bearer {service._config.main_be_bearer_token}",
-        "x-user-id": service._config.main_be_user_id or "",
-    }
-    with service._main_be_client(timeout=60.0) as client:
-        resp = client.get(url, headers=headers)
-        if resp.status_code not in (200, 201):
-            raise RuntimeError(f"Story fetch HTTP {resp.status_code}")
-        body = resp.json()
-        if isinstance(body, dict) and "data" in body:
-            return body.get("data", {})
-        return body
+    
+    headers_android = service._main_be_headers()
+    headers_web = service._main_be_headers()
+    headers_web.pop("x-platform", None)
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _fetch(headers: dict) -> dict:
+        with service._main_be_client(timeout=60.0) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"Story fetch HTTP {resp.status_code}")
+            body = resp.json()
+            if isinstance(body, dict) and "data" in body:
+                return body.get("data", {})
+            return body
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f_android = executor.submit(_fetch, headers_android)
+        f_web = executor.submit(_fetch, headers_web)
+        data_android = f_android.result()
+        data_web = f_web.result()
+
+    merged = {**data_web, **data_android}
+    if "id" not in merged and "storyId" in merged:
+        merged["id"] = merged["storyId"]
+    return merged
 
 
 # -------------------------------------------------------------------------
@@ -732,6 +769,12 @@ def _extract_folder_values(
     if isinstance(t, list):
         tags = t
 
+    max_ch = _val("max_chapter.md")
+    if isinstance(max_ch, (int, float)):
+        max_ch = int(max_ch)
+    else:
+        max_ch = None
+
     return {
         "main_category": main_cat_name,
         "sub_category": sub_cat_names[0] if sub_cat_names else None,
@@ -740,6 +783,7 @@ def _extract_folder_values(
         "push_content": push_content,
         "synopsis": synopsis,
         "tags": tags,
+        "max_chapter": max_ch,
     }
 
 
@@ -753,6 +797,7 @@ def _extract_server_values(story: dict) -> dict:
         "push_content": notif.get("content"),
         "synopsis": story.get("synopsis"),
         "tags": story.get("tags") or [],
+        "max_chapter": story.get("maxChapter") or 0,
     }
 
 
@@ -823,6 +868,14 @@ def _compute_differences(folder_vals: dict, server_vals: dict) -> list[dict]:
             "server_value": server_vals["tags"],
         })
 
+    if folder_vals.get("max_chapter") is not None:
+        if folder_vals.get("max_chapter") != server_vals.get("max_chapter", 0):
+            diffs.append({
+                "field": "max_chapter",
+                "folder_value": folder_vals.get("max_chapter"),
+                "server_value": server_vals.get("max_chapter", 0),
+            })
+
     return diffs
 
 
@@ -854,6 +907,9 @@ def _extract_field_detail(field: str, folder_vals: dict, server_vals: dict) -> d
     elif field == "tags":
         folder_value = folder_vals["tags"]
         server_value = server_vals["tags"]
+    elif field == "max_chapter":
+        folder_value = folder_vals.get("max_chapter")
+        server_value = server_vals.get("max_chapter", 0)
     else:
         folder_value = None
         server_value = None
@@ -892,6 +948,9 @@ def _build_metadata_payload_from_folder_values(folder_vals: dict, fields: list[s
     if "tags" in fields:
         payload["tags"] = folder_vals.get("tags") or []
 
+    if "max_chapter" in fields and folder_vals.get("max_chapter") is not None:
+        payload["maxChapter"] = int(folder_vals["max_chapter"])
+
     return payload
 
 
@@ -904,6 +963,7 @@ def _empty_server_values() -> dict:
         "push_content": None,
         "synopsis": None,
         "tags": [],
+        "max_chapter": 0,
     }
 
 
@@ -916,6 +976,7 @@ def _empty_folder_values() -> dict:
         "push_content": None,
         "synopsis": None,
         "tags": [],
+        "max_chapter": None,
     }
 
 
