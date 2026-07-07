@@ -92,9 +92,8 @@ gh release download models-v1.0 --repo hatrumtruong27/CreateStory \
   --pattern "kokoro-v1.0.onnx" --pattern "voices-v1.0.bin" --dir api/models
 ```
 
-> **Docker:** compose mounts the models read-only from `${KOKORO_MODELS_DIR:-../../CreateStoryModels}`
-> (default `D:\Developer\Nova\CreateStoryModels`), so populate that folder instead of `api/models`:
-> `powershell scripts/download-models.ps1 -OutDir D:\Developer\Nova\CreateStoryModels`.
+> **Docker:** compose mounts the models read-only from `${KOKORO_MODELS_DIR:-./BedReadVoices/api/models}`.
+> Run `powershell scripts/download-models.ps1` to populate this folder.
 
 ---
 

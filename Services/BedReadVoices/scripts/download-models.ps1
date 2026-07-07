@@ -20,8 +20,8 @@
     powershell scripts/download-models.ps1
 
 .EXAMPLE
-    # Docker: populate the external folder compose mounts read-only into the container
-    powershell scripts/download-models.ps1 -OutDir D:\Developer\Nova\CreateStoryModels
+    # Customize output folder (if overriding KOKORO_MODELS_DIR)
+    powershell scripts/download-models.ps1 -OutDir C:\CustomModelsFolder
 #>
 [CmdletBinding()]
 param(

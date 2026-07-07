@@ -216,19 +216,18 @@ This runs a PowerShell script (`setup_secrets.ps1`) that generates secure random
 
 The Kokoro TTS engine requires model weights to synthesize audio. These weights are large and are excluded from the repository.
 
-1. **Cache Folder Structure**: Keep model files in a dedicated cache directory sibling to the monorepo:
+1. **Folder Structure**: Keep model files inside `Services/BedReadVoices/api/models/`:
    ```text
-   D:\Developer\Nova\CreateStory\         <-- This Monorepo
-   D:\Developer\Nova\CreateStoryModels\   <-- Local Cache
+   Services/BedReadVoices/api/models/
      ├─ kokoro-v1.0.onnx
      └─ voices-v1.0.bin
    ```
 2. **Download Model Files**:
    Navigate to `Services/BedReadVoices` and run:
    ```powershell
-   powershell scripts/download-models.ps1 -OutDir D:\Developer\Nova\CreateStoryModels
+   powershell scripts/download-models.ps1
    ```
-   *Note: If `KOKORO_MODELS_DIR` is not specified, it defaults to `../../CreateStoryModels`.*
+   *Note: If `KOKORO_MODELS_DIR` is not specified, it defaults to `./BedReadVoices/api/models`.*
 
 ---
 
@@ -262,7 +261,7 @@ If you need custom variables (such as changing the model directory path), copy `
 
 | Variable | Default Value | Description |
 |---|---|---|
-| `KOKORO_MODELS_DIR` | `../../CreateStoryModels` | Local directory containing ONNX models |
+| `KOKORO_MODELS_DIR` | `./BedReadVoices/api/models` | Local directory containing ONNX models |
 | `MAX_QUEUED_JOBS_GLOBAL` | `300` | Global TTS worker queue limit |
 | `DEV_MODE` | `false` | Enables database cleanup/dev routes |
 | `ENVIRONMENT` | `development` | Setting to `production` hard-disables all dev API routes |
