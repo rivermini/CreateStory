@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from api.models.drive_sync import JobKind
 from api.services.drive_service import get_drive_sync_service
 
 logger = logging.getLogger(__name__)
@@ -172,6 +174,53 @@ def _build_put_payload(differences: list[dict]) -> dict:
 router = APIRouter(prefix="/metadata-update", tags=["Drive Sync"])
 
 
+def _resolve_history_names(service, folder_id: str, story_id: str) -> tuple[str, str]:
+    """Best-effort folder/display names for sync-history rows."""
+    try:
+        folders, _ = service.list_drive_folders(limit=10000, offset=0)
+        for folder in folders:
+            if folder.get("id") == folder_id:
+                folder_name = folder.get("name") or folder_id
+                story_title = folder.get("display_name") or folder_name
+                return folder_name, f"{story_title} - Metadata update"
+    except Exception:
+        pass
+    return folder_id, f"{story_id} - Metadata update"
+
+
+def _record_metadata_history(
+    service,
+    *,
+    folder_id: str,
+    folder_name: str,
+    display_name: str,
+    result_message: str = "",
+    error: Optional[str] = None,
+    log_message: Optional[str] = None,
+    main_be_api_base_url: Optional[str] = None,
+) -> None:
+    try:
+        logs = None
+        if log_message:
+            logs = [{
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "level": "info",
+                "message": log_message,
+            }]
+        service.record_completed_job(
+            kind=JobKind.METADATA_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            result_message=result_message,
+            logs=logs,
+            error=error,
+            main_be_api_base_url=main_be_api_base_url,
+        )
+    except Exception:
+        logger.exception("Failed to record metadata update history for folder %s", folder_id)
+
+
 @router.get("/check-all", response_model=MetadataCheckAllResponse, tags=["Drive Sync"])
 async def check_all() -> MetadataCheckAllResponse:
     """
@@ -274,6 +323,8 @@ async def update_metadata(folder_id: str, story_id: str, body: MetadataUpdateReq
     if not payload:
         return MetadataUpdateResponse(success=True, message="No differences to update.")
 
+    folder_name, display_name = _resolve_history_names(service, folder_id, story_id)
+
     url = f"{config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}"
     headers = {
         "Content-Type": "application/json",
@@ -285,8 +336,18 @@ async def update_metadata(folder_id: str, story_id: str, body: MetadataUpdateReq
         with service._main_be_client(timeout=120.0) as client:
             resp = client.put(url, content=service._json_body(payload), headers=headers)
             if resp.status_code in (200, 201):
+                msg = f"Metadata updated: {', '.join(payload.keys())}."
                 logger.info("Metadata update success for story %s: %s", story_id, list(payload.keys()))
-                return MetadataUpdateResponse(success=True, message=f"Metadata updated: {', '.join(payload.keys())}.")
+                _record_metadata_history(
+                    service,
+                    folder_id=folder_id,
+                    folder_name=folder_name,
+                    display_name=display_name,
+                    result_message=msg,
+                    log_message=f"Updated fields: {', '.join(payload.keys())}",
+                    main_be_api_base_url=config.main_be_api_base_url,
+                )
+                return MetadataUpdateResponse(success=True, message=msg)
 
             if resp.status_code == 400:
                 error_body = resp.text[:500]
@@ -295,27 +356,78 @@ async def update_metadata(folder_id: str, story_id: str, body: MetadataUpdateReq
                     logger.info("Tags not found on main BE for story %s: %s — retrying without tags.", story_id, missing)
 
                     if "tags" not in payload:
+                        _record_metadata_history(
+                            service,
+                            folder_id=folder_id,
+                            folder_name=folder_name,
+                            display_name=display_name,
+                            error=f"HTTP 400: {error_body}",
+                            main_be_api_base_url=config.main_be_api_base_url,
+                        )
                         return MetadataUpdateResponse(success=False, message=f"HTTP 400: {error_body}")
 
                     payload = {k: v for k, v in payload.items() if k != "tags"}
                     resp = client.put(url, content=service._json_body(payload), headers=headers)
                     if resp.status_code in (200, 201):
+                        msg = f"Metadata updated (tags skipped: {', '.join(missing)}): {', '.join(payload.keys())}."
                         logger.info("Metadata update (tags-fallback) success for story %s.", story_id)
-                        return MetadataUpdateResponse(
-                            success=True,
-                            message=f"Metadata updated (tags skipped: {', '.join(missing)}): {', '.join(payload.keys())}.",
+                        _record_metadata_history(
+                            service,
+                            folder_id=folder_id,
+                            folder_name=folder_name,
+                            display_name=display_name,
+                            result_message=msg,
+                            log_message=f"Updated (tags skipped: {', '.join(missing)}): {', '.join(payload.keys())}",
+                            main_be_api_base_url=config.main_be_api_base_url,
                         )
-                    return MetadataUpdateResponse(success=False, message=f"HTTP {resp.status_code}: {resp.text[:300]}")
+                        return MetadataUpdateResponse(success=True, message=msg)
+                    err_msg = f"HTTP {resp.status_code}: {resp.text[:300]}"
+                    _record_metadata_history(
+                        service,
+                        folder_id=folder_id,
+                        folder_name=folder_name,
+                        display_name=display_name,
+                        error=err_msg,
+                        main_be_api_base_url=config.main_be_api_base_url,
+                    )
+                    return MetadataUpdateResponse(success=False, message=err_msg)
 
             detail = resp.text[:300]
             logger.warning("Metadata update failed for %s HTTP %d: %s", story_id, resp.status_code, detail)
-            return MetadataUpdateResponse(success=False, message=f"HTTP {resp.status_code}: {detail}")
+            err_msg = f"HTTP {resp.status_code}: {detail}"
+            _record_metadata_history(
+                service,
+                folder_id=folder_id,
+                folder_name=folder_name,
+                display_name=display_name,
+                error=err_msg,
+                main_be_api_base_url=config.main_be_api_base_url,
+            )
+            return MetadataUpdateResponse(success=False, message=err_msg)
     except httpx.HTTPStatusError as exc:
         logger.warning("Metadata update HTTP error for %s: %s", story_id, exc)
-        return MetadataUpdateResponse(success=False, message=f"HTTP error: {exc.response.status_code}")
+        err_msg = f"HTTP error: {exc.response.status_code}"
+        _record_metadata_history(
+            service,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            error=err_msg,
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+        return MetadataUpdateResponse(success=False, message=err_msg)
     except Exception as exc:
         logger.error("Metadata update exception for %s: %s", story_id, exc)
-        return MetadataUpdateResponse(success=False, message=str(exc))
+        err_msg = str(exc)
+        _record_metadata_history(
+            service,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            error=err_msg,
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+        return MetadataUpdateResponse(success=False, message=err_msg)
 
 
 @router.get(

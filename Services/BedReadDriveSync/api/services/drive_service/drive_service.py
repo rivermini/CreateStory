@@ -85,7 +85,11 @@ from api.services.drive_service._paths import (
 )
 
 _JOB_STATUS_VALID = {JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.SUCCESS, JobStatus.ERROR, JobStatus.CANCELLED}
-_JOB_KINDS_VALID = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE}
+_JOB_KINDS_VALID = {
+    JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
+    JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
+    JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+}
 
 
 # -------------------------------------------------------------------------

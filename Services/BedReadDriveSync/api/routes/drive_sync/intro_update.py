@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from api.services.drive_service import get_drive_sync_service
+from api.models.drive_sync import JobKind
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,21 @@ async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "int
             intro_file_name=intro_filename,
             intro_url=result,
         )
+        try:
+            service.record_completed_job(
+                kind=JobKind.INTRO_UPDATE,
+                folder_id=folder_id,
+                folder_name=folder_name,
+                display_name=f"{story_title} - Intro update",
+                result_message=f"Intro '{intro_filename}' uploaded successfully.",
+                logs=[{
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "level": "info",
+                    "message": f"Intro uploaded: {intro_filename}",
+                }],
+            )
+        except Exception:
+            pass
         return UploadIntroResponse(success=True, message="Intro uploaded successfully.", intro_url=result)
     else:
         service._record_intro_update(
@@ -192,4 +208,15 @@ async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "int
             intro_file_name=intro_filename,
             error=result or "Upload failed.",
         )
+        try:
+            service.record_completed_job(
+                kind=JobKind.INTRO_UPDATE,
+                folder_id=folder_id,
+                folder_name=folder_name,
+                display_name=f"{story_title} - Intro update",
+                result_message="",
+                error=result or "Upload failed.",
+            )
+        except Exception:
+            pass
         return UploadIntroResponse(success=False, message=result or "Upload failed.", intro_url=None)

@@ -735,7 +735,7 @@ export interface TrackedJob {
 
 export interface SyncJob {
   id: string;
-  kind: 'upload_single' | 'update_single' | 'chapter_content_update';
+  kind: 'upload_single' | 'update_single' | 'chapter_content_update' | 'metadata_update' | 'cover_update' | 'banner_update' | 'intro_update' | 'title_update';
   status: 'queued' | 'running' | 'success' | 'error' | 'cancelled';
   folder_id: string;
   folder_name: string;

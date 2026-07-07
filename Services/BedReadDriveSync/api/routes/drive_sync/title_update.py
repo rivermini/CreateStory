@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from api.services.drive_service import get_drive_sync_service
+from api.models.drive_sync import JobKind
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,46 @@ class BatchTitleUpdateResponse(BaseModel):
 
 
 router = APIRouter(prefix="/title-update", tags=["Drive Sync"])
+
+
+def _title_history_names(service, folder_id: str, story_title: str = "") -> tuple[str, str]:
+    try:
+        folders, _ = service.list_drive_folders(limit=10000, offset=0)
+        for folder in folders:
+            if folder.get("id") == folder_id:
+                folder_name = folder.get("name") or folder_id
+                display_title = story_title or folder.get("display_name") or folder_name
+                return folder_name, f"{display_title} - Title update"
+    except Exception:
+        pass
+    display_title = story_title or folder_id
+    return folder_id, f"{display_title} - Title update"
+
+
+def _record_title_history(
+    service,
+    *,
+    folder_id: str,
+    folder_name: str,
+    display_name: str,
+    result_message: str = "",
+    chapters_added: int = 0,
+    chapters_skipped: int = 0,
+    error: Optional[str] = None,
+) -> None:
+    try:
+        service.record_completed_job(
+            kind=JobKind.TITLE_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            result_message=result_message,
+            chapters_added=chapters_added,
+            chapters_skipped=chapters_skipped,
+            error=error,
+        )
+    except Exception:
+        logger.exception("Failed to record title update history for folder %s", folder_id)
 
 
 def _to_folder_entry(d: dict) -> TitleFolderEntry:
@@ -174,10 +215,28 @@ async def update_chapter_title(story_id: str, folder_id: str, chapter_number: in
             service.update_chapter_title_from_drive, story_id, folder_id, chapter_number
         )
     except RuntimeError as exc:
+        folder_name, display_name = _title_history_names(service, folder_id)
+        _record_title_history(
+            service,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            error=str(exc),
+        )
         return TitleUpdateChapterResponse(success=False, message=str(exc))
     except Exception as exc:
         logger.exception("Chapter title update failed")
         raise HTTPException(status_code=500, detail="Chapter title update failed.")
+
+    folder_name, display_name = _title_history_names(service, folder_id)
+    _record_title_history(
+        service,
+        folder_id=folder_id,
+        folder_name=folder_name,
+        display_name=display_name,
+        result_message=f"Chapter {chapter_number} title updated.",
+        chapters_added=1,
+    )
 
     chapter = TitleChapterEntry(
         chapter_number=result.get("chapter_number", chapter_number),
@@ -206,9 +265,17 @@ async def update_folder_titles(story_id: str, folder_id: str) -> TitleFolderUpda
     try:
         result = await asyncio.to_thread(service.update_folder_titles, story_id, folder_id)
     except RuntimeError as exc:
+        folder_name, display_name = _title_history_names(service, folder_id)
+        _record_title_history(
+            service,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            error=str(exc),
+        )
         return TitleFolderUpdateResult(
             folder_id=folder_id,
-            folder_name=folder_id,
+            folder_name=folder_name,
             story_id=story_id,
             stop_reason=str(exc),
             success_count=0,
@@ -218,9 +285,23 @@ async def update_folder_titles(story_id: str, folder_id: str) -> TitleFolderUpda
         logger.exception("Folder title update failed")
         raise HTTPException(status_code=500, detail="Folder title update failed.")
 
+    success_count = result.get("success_count", 0)
+    failed_count = result.get("failed_count", 0)
+    folder_name, display_name = _title_history_names(service, folder_id)
+    _record_title_history(
+        service,
+        folder_id=folder_id,
+        folder_name=folder_name,
+        display_name=display_name,
+        result_message=f"Titles updated: {success_count} succeeded, {failed_count} failed.",
+        chapters_added=success_count,
+        chapters_skipped=failed_count,
+        error=result.get("stop_reason") if failed_count > 0 else None,
+    )
+
     return TitleFolderUpdateResult(
         folder_id=folder_id,
-        folder_name=folder_id,
+        folder_name=folder_name,
         story_id=story_id,
         update_results=[
             TitleUpdateChapterResult(
@@ -232,8 +313,8 @@ async def update_folder_titles(story_id: str, folder_id: str) -> TitleFolderUpda
         ],
         stopped_at=result.get("stopped_at"),
         stop_reason=result.get("stop_reason"),
-        success_count=result.get("success_count", 0),
-        failed_count=result.get("failed_count", 0),
+        success_count=success_count,
+        failed_count=failed_count,
     )
 
 
@@ -258,6 +339,21 @@ async def batch_update(body: BatchTitleUpdateRequest) -> BatchTitleUpdateRespons
     except Exception as exc:
         logger.exception("Batch title update failed")
         raise HTTPException(status_code=500, detail="Batch title update failed.")
+
+    # Record each folder result to sync history
+    for r in result.get("results", []):
+        sc = r.get("success_count", 0)
+        fc = r.get("failed_count", 0)
+        _record_title_history(
+            service,
+            folder_id=r.get("folder_id", ""),
+            folder_name=r.get("folder_name", ""),
+            display_name=f"{r.get('story_title') or r.get('folder_name', '')} - Title update",
+            result_message=f"Titles updated: {sc} succeeded, {fc} failed.",
+            chapters_added=sc,
+            chapters_skipped=fc,
+            error=r.get("stop_reason") if fc > 0 else None,
+        )
 
     return BatchTitleUpdateResponse(
         results=[

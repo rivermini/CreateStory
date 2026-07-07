@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from api.services.drive_service import get_drive_sync_service
+from api.models.drive_sync import JobKind
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +185,21 @@ async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "b
             banner_file_name=banner_filename,
             banner_url=result,
         )
+        try:
+            service.record_completed_job(
+                kind=JobKind.BANNER_UPDATE,
+                folder_id=folder_id,
+                folder_name=folder_name,
+                display_name=f"{story_title} - Banner update",
+                result_message=f"Banner '{banner_filename}' uploaded successfully.",
+                logs=[{
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "level": "info",
+                    "message": f"Banner uploaded: {banner_filename}",
+                }],
+            )
+        except Exception:
+            pass
         return UploadBannerResponse(success=True, message="Banner uploaded successfully.", banner_url=result)
     else:
         service._record_banner_update(
@@ -195,4 +211,15 @@ async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "b
             banner_file_name=banner_filename,
             error=result or "Upload failed.",
         )
+        try:
+            service.record_completed_job(
+                kind=JobKind.BANNER_UPDATE,
+                folder_id=folder_id,
+                folder_name=folder_name,
+                display_name=f"{story_title} - Banner update",
+                result_message="",
+                error=result or "Upload failed.",
+            )
+        except Exception:
+            pass
         return UploadBannerResponse(success=False, message=result or "Upload failed.", banner_url=None)

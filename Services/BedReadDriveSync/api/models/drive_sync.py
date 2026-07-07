@@ -168,6 +168,11 @@ class JobKind(str):
     UPLOAD_SINGLE = "upload_single"
     UPDATE_SINGLE = "update_single"
     CHAPTER_CONTENT_UPDATE = "chapter_content_update"
+    METADATA_UPDATE = "metadata_update"
+    COVER_UPDATE = "cover_update"
+    BANNER_UPDATE = "banner_update"
+    INTRO_UPDATE = "intro_update"
+    TITLE_UPDATE = "title_update"
 
 
 class JobLogEntry(BaseModel):

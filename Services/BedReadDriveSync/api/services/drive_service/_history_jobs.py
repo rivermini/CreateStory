@@ -835,7 +835,11 @@ class HistoryJobsMixin:
         """Persist a completed job for immediate operations that do not need a worker."""
         from api.models.drive_sync import JobKind, JobLogEntry, JobStatus, SyncJob
 
-        _JOB_KINDS_VALID = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE}
+        _JOB_KINDS_VALID = {
+            JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
+            JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
+            JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+        }
         if kind not in _JOB_KINDS_VALID:
             raise ValueError(f"Invalid job kind: {kind}")
 

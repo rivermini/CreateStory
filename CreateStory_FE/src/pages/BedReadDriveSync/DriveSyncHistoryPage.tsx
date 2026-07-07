@@ -12,7 +12,7 @@ interface DriveSyncHistoryPageProps {
 }
 
 type FilterStatus = 'all' | 'queued' | 'running' | 'success' | 'error' | 'cancelled';
-type FilterKind = 'all' | 'upload_single' | 'update_single';
+type FilterKind = 'all' | SyncJob['kind'];
 type SortOrder = 'newest' | 'oldest';
 type TimeRange = 'all' | 'today' | 'week' | 'month' | 'specific';
 
@@ -44,6 +44,11 @@ const JOB_KIND_LABEL_MAP: Record<SyncJob['kind'], string> = {
   upload_single: 'Upload',
   update_single: 'Update',
   chapter_content_update: 'ChapterContent Update',
+  metadata_update: 'Metadata Update',
+  cover_update: 'Cover Update',
+  banner_update: 'Banner Update',
+  intro_update: 'Intro Update',
+  title_update: 'Title Update',
 };
 
 function getJobKindLabel(kind: SyncJob['kind']): string {
@@ -304,7 +309,7 @@ export function DriveSyncHistoryPage({ themeMode: _themeMode }: DriveSyncHistory
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [filterKind, setFilterKind] = useState<FilterKind>('all');
-  const [showChapterContentUpdates, setShowChapterContentUpdates] = useState(false);
+  const [showChapterContentUpdates, setShowChapterContentUpdates] = useState(true);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [specificDate, setSpecificDate] = useState('');
@@ -748,6 +753,12 @@ export function DriveSyncHistoryPage({ themeMode: _themeMode }: DriveSyncHistory
               {([
                 ['upload_single', 'Upload only'],
                 ['update_single', 'Update only'],
+                ['chapter_content_update', 'Content only'],
+                ['metadata_update', 'Metadata only'],
+                ['cover_update', 'Cover only'],
+                ['banner_update', 'Banner only'],
+                ['intro_update', 'Intro only'],
+                ['title_update', 'Title only'],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
