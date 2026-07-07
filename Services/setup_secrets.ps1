@@ -1,9 +1,9 @@
 <#
-  Creates the CreateStory Docker secret files if they are missing.
+  Creates, deletes, or resets the CreateStory Docker secret files.
 
-  Idempotent: existing files are left untouched, so the Postgres password and
-  the password embedded in database_url stay in sync across runs and across
-  service restarts. Only missing files are generated.
+  Default mode is idempotent: existing files are left untouched, so the Postgres
+  password and the password embedded in database_url stay in sync across runs
+  and across service restarts. Only missing files are generated.
 
   Self-heals "directory stubs": when a secret source file is missing, Docker
   bind-mounts auto-create the source path as an EMPTY DIRECTORY on the host
@@ -15,9 +15,21 @@
   Postgres and the Python services read the exact value (a BOM would corrupt
   the first character).
 #>
+param(
+    [ValidateSet('ensure', 'delete', 'reset')]
+    [string]$Mode = 'ensure'
+)
+
 $ErrorActionPreference = 'Stop'
 
 $dir = 'C:\ProgramData\CreateStory\secrets'
+$secretNames = @(
+    'postgres_password',
+    'database_url',
+    'jwt_secret_key',
+    'internal_service_token',
+    'cookie_encryption_key'
+)
 
 function Fail([string]$msg) {
     Write-Host ""
@@ -59,6 +71,37 @@ function Ensure-Secret([string]$name, [scriptblock]$generator) {
     catch { Fail "cannot write $path ($($_.Exception.Message))" }
     Write-Host "[secrets] $name created"
     return $value
+}
+
+function Remove-Secret([string]$name) {
+    $path = Join-Path $dir $name
+
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        try { Remove-Item -LiteralPath $path -Force }
+        catch { Fail "cannot delete $path ($($_.Exception.Message))" }
+        Write-Host "[secrets] $name deleted"
+        return
+    }
+
+    if (Test-Path -LiteralPath $path -PathType Container) {
+        try { Remove-Item -LiteralPath $path -Recurse -Force }
+        catch { Fail "cannot delete directory stub $path ($($_.Exception.Message))" }
+        Write-Host "[secrets] $name directory stub deleted"
+        return
+    }
+
+    Write-Host "[secrets] $name does not exist"
+}
+
+if ($Mode -eq 'delete' -or $Mode -eq 'reset') {
+    foreach ($name in $secretNames) {
+        Remove-Secret $name
+    }
+
+    if ($Mode -eq 'delete') {
+        Write-Host "[secrets] Deleted requested secrets from $dir"
+        exit 0
+    }
 }
 
 # postgres_password first, then reuse it inside database_url so they match.
