@@ -25,6 +25,19 @@ MAX_CRAWL_BATCH = int(os.getenv("MAX_CRAWL_BATCH", "10"))
 
 router = APIRouter(prefix="/api/crawl", tags=["Crawl"])
 
+_TRACEBACK_LOG_PATTERNS = (
+    re.compile(r"^Traceback \(most recent call last\):"),
+    re.compile(r'^\s*File ".*", line \d+, in '),
+    re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*(Error|Exception):"),
+)
+_INTERNAL_PATH_PATTERN = re.compile(r"/app/[^\s)'\"]+")
+
+
+def _sanitize_log_line_for_ui(line: str) -> str | None:
+    if any(pattern.search(line) for pattern in _TRACEBACK_LOG_PATTERNS):
+        return None
+    return _INTERNAL_PATH_PATTERN.sub("[internal-path]", line)
+
 
 class InkittCookieUpdateRequest(BaseModel):
     cookies: str = Field(..., min_length=1, description="Inkitt cookies as Selenium JSON or a raw Cookie header.")
@@ -543,9 +556,14 @@ async def crawl_status_full(crawl_id: str, request: Request) -> dict:
             content={"detail": f"Crawl '{crawl_id}' not found."},
         )
     require_owner(request, session.created_by_user_id)
+    log_lines = [
+        sanitized
+        for line in session.log_lines[-100:]
+        if (sanitized := _sanitize_log_line_for_ui(line)) is not None
+    ]
     return {
         "progress": session.to_progress_update(),
-        "log_lines": session.log_lines[-100:],
+        "log_lines": log_lines,
     }
 
 

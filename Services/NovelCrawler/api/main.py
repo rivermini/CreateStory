@@ -39,15 +39,19 @@ async def lifespan(app: FastAPI):
     try:
         from api.repositories.inkitt_cookie_repository import migrate_json_to_db
         from api.db import SessionLocal
+        from api.models.db_models import encrypt_plaintext_cookie_values
         db = SessionLocal()
         try:
             migrated = migrate_json_to_db(db)
             if migrated > 0:
                 logger.info("Migrated %d Inkitt cookie(s) from JSON file to database.", migrated)
+            encrypted = encrypt_plaintext_cookie_values(db)
+            if encrypted > 0:
+                logger.info("Encrypted %d legacy crawler cookie value(s) in database.", encrypted)
         finally:
             db.close()
     except Exception as exc:
-        logger.warning("Inkitt cookie migration failed: %s", exc)
+        logger.warning("Crawler cookie migration failed: %s", exc)
     try:
         from handlers.selenium_handler import _get_browser
         browser = _get_browser()

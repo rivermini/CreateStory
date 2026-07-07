@@ -2,17 +2,96 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import os
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text
+from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text, TypeDecorator, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db import Base
 
+_ENCRYPTED_COOKIE_PREFIX = "enc:v1:"
+_COOKIE_ENCRYPTION_KEY_ENV = "NOVEL_CRAWLER_COOKIE_ENCRYPTION_KEY"
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _cookie_fernet() -> Fernet:
+    key = _cookie_encryption_key()
+    if not key:
+        raise RuntimeError(
+            f"{_COOKIE_ENCRYPTION_KEY_ENV} or COOKIE_ENCRYPTION_KEY must be set before storing crawler cookies."
+        )
+    try:
+        return Fernet(key.encode("utf-8"))
+    except ValueError:
+        derived = base64.urlsafe_b64encode(hashlib.sha256(key.encode("utf-8")).digest())
+        return Fernet(derived)
+
+
+def _cookie_encryption_key() -> str:
+    for name in (_COOKIE_ENCRYPTION_KEY_ENV, "COOKIE_ENCRYPTION_KEY"):
+        key = os.getenv(name, "").strip()
+        if key:
+            return key
+        file_path = os.getenv(f"{name}_FILE", "").strip()
+        if file_path:
+            try:
+                return open(file_path, encoding="utf-8").read().strip()
+            except OSError as exc:
+                raise RuntimeError(f"Unable to read {name}_FILE: {exc}") from exc
+    return ""
+
+
+def _encrypt_cookie_value(value: str) -> str:
+    if value.startswith(_ENCRYPTED_COOKIE_PREFIX):
+        return value
+    encrypted = _cookie_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
+    return f"{_ENCRYPTED_COOKIE_PREFIX}{encrypted}"
+
+
+def encrypt_plaintext_cookie_values(db) -> int:
+    """Rewrite legacy plaintext cookie values in-place using the current key."""
+    migrated = 0
+    for table_name in ("inkitt_cookies", "goodnovel_cookies", "scribblehub_cookies"):
+        rows = db.execute(
+            text(f"SELECT id, value FROM {table_name} WHERE value NOT LIKE :prefix"),
+            {"prefix": f"{_ENCRYPTED_COOKIE_PREFIX}%"},
+        ).mappings()
+        for row in rows:
+            db.execute(
+                text(f"UPDATE {table_name} SET value = :value WHERE id = :id"),
+                {"id": row["id"], "value": _encrypt_cookie_value(row["value"] or "")},
+            )
+            migrated += 1
+    if migrated:
+        db.commit()
+    return migrated
+
+
+class EncryptedCookieValue(TypeDecorator[str]):
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value: str | None, dialect) -> str | None:
+        if value is None or value.startswith(_ENCRYPTED_COOKIE_PREFIX):
+            return value
+        return _encrypt_cookie_value(value)
+
+    def process_result_value(self, value: str | None, dialect) -> str | None:
+        if value is None or not value.startswith(_ENCRYPTED_COOKIE_PREFIX):
+            return value
+        token = value[len(_ENCRYPTED_COOKIE_PREFIX):]
+        try:
+            return _cookie_fernet().decrypt(token.encode("utf-8")).decode("utf-8")
+        except InvalidToken as exc:
+            raise RuntimeError("Failed to decrypt crawler cookie value; check the configured encryption key.") from exc
 
 
 class CrawlSessionRecord(Base):
@@ -63,7 +142,7 @@ class InkittCookie(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    value: Mapped[str] = mapped_column(EncryptedCookieValue(), nullable=False, default="")
     domain: Mapped[str] = mapped_column(String(256), nullable=False, default=".inkitt.com")
     path: Mapped[str] = mapped_column(String(64), nullable=False, default="/")
     secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -88,7 +167,7 @@ class GoodNovelCookie(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    value: Mapped[str] = mapped_column(EncryptedCookieValue(), nullable=False, default="")
     domain: Mapped[str] = mapped_column(String(256), nullable=False, default=".goodnovel.com")
     path: Mapped[str] = mapped_column(String(64), nullable=False, default="/")
     secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -113,7 +192,7 @@ class ScribbleHubCookie(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    value: Mapped[str] = mapped_column(EncryptedCookieValue(), nullable=False, default="")
     domain: Mapped[str] = mapped_column(String(256), nullable=False, default=".scribblehub.com")
     path: Mapped[str] = mapped_column(String(64), nullable=False, default="/")
     secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
