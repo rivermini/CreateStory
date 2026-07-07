@@ -27,11 +27,36 @@ from api.service_auth import enforce_service_auth
 from core.db import init_db
 
 
+def _require_ffmpeg_libopus() -> None:
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "FFmpeg is required for AutoAudio Opus compression but was not found."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("FFmpeg version check timed out.") from exc
+
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    if result.returncode != 0 or "libopus" not in output:
+        raise RuntimeError(
+            "FFmpeg with libopus support is required for AutoAudio Opus compression."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Pre-initialize the service at startup to avoid cold-start on first HTTP request.
     # This eagerly loads the history and instantiates downstream clients.
     _logger.info("AutoAudio startup: pre-initializing service...")
+    _require_ffmpeg_libopus()
     init_db()
     from core.service import get_auto_audio_service
     svc = get_auto_audio_service()

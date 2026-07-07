@@ -47,6 +47,11 @@ class UploadManager:
 
         try:
             compressed = self._compress_audio_to_opus(session, local_file_path)
+            if Path(compressed.name).suffix.lower() != f".{OPUS_EXTENSION}":
+                raise RuntimeError(
+                    "AutoAudio requires FFmpeg Opus compression; refusing to upload "
+                    f"uncompressed audio file {compressed.name}."
+                )
             mime_type = "audio/ogg"
             file_name = compressed.name
             file_size = compressed.size
@@ -170,18 +175,8 @@ class UploadManager:
 
         ffmpeg_path = self._find_ffmpeg()
         if not ffmpeg_path:
-            session.add_log(
-                6,
-                "FFmpeg not found, uploading original audio as-is "
-                "(pip install imageio-ffmpeg to enable Opus compression)",
-                level="warning",
-            )
-            return _CompressedAudio(
-                data=audio_bytes,
-                name=audio_path.name,
-                original=original_size,
-                compressed=original_size,
-                size=original_size,
+            raise RuntimeError(
+                "FFmpeg is required for AutoAudio Opus compression but was not found."
             )
 
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -204,7 +204,16 @@ class BatchPoller:
                     )
                     return False, completed_files
 
+            failed = sum(1 for s in statuses if s == "failed")
             if all(s in ("completed", "failed") for s in statuses):
+                if failed:
+                    session.add_log(
+                        4,
+                        f"Batch job {batch_id} finished with {failed}/{total} chapters failed "
+                        f"({len(completed_files)} completed)",
+                        level="error",
+                    )
+                    return False, completed_files
                 return True, completed_files
 
             session.set_step(5, f"Generating audio ({done}/{total})", story=session.current_story)

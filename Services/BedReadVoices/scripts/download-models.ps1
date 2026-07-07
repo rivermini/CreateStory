@@ -12,7 +12,8 @@
       * private -> the direct URLs 404 without auth; install the GitHub CLI and run
                    `gh auth login` first. This script auto-uses `gh` when it is on PATH.
 
-    Idempotent: an existing file is skipped (the gh path uses --skip-existing).
+    Idempotent for valid files. Docker-created directory stubs and tiny placeholder
+    files are removed and replaced.
 
 .EXAMPLE
     # Local dev: populate Services/BedReadVoices/api/models
@@ -31,11 +32,51 @@ param(
 
 $ErrorActionPreference = "Stop"
 $files = "kokoro-v1.0.onnx", "voices-v1.0.bin"
+$minimumBytes = @{
+    "kokoro-v1.0.onnx" = 100MB
+    "voices-v1.0.bin" = 1MB
+}
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
 Write-Host "Repo:   $Repo (tag $Tag)"
 Write-Host "Target: $OutDir"
+
+function Test-ValidModelFile([string]$Path, [string]$Name) {
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        Write-Host "[fix ] $Name is a Docker-created directory stub; removing it."
+        Remove-Item -LiteralPath $Path -Recurse -Force
+        return $false
+    }
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $false
+    }
+
+    $size = (Get-Item -LiteralPath $Path).Length
+    if ($size -lt $minimumBytes[$Name]) {
+        Write-Host "[fix ] $Name is too small ($size bytes); removing it."
+        Remove-Item -LiteralPath $Path -Force
+        return $false
+    }
+
+    Write-Host "[skip] $Name already present ($size bytes)."
+    return $true
+}
+
+function Assert-ValidModelFile([string]$Path, [string]$Name) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "$Name was not downloaded to $Path"
+    }
+    $size = (Get-Item -LiteralPath $Path).Length
+    if ($size -lt $minimumBytes[$Name]) {
+        throw "$Name is still invalid after download ($size bytes at $Path)"
+    }
+}
+
+foreach ($name in $files) {
+    Test-ValidModelFile (Join-Path $OutDir $name) $name | Out-Null
+}
 
 # Prefer the GitHub CLI when present: it transparently handles auth, private repos,
 # and the S3 redirect that a hand-rolled token download trips over.
@@ -45,6 +86,9 @@ if ($gh) {
     $ghArgs = @("release", "download", $Tag, "--repo", $Repo, "--dir", $OutDir, "--skip-existing")
     foreach ($f in $files) { $ghArgs += @("--pattern", $f) }
     & gh @ghArgs
+    foreach ($name in $files) {
+        Assert-ValidModelFile (Join-Path $OutDir $name) $name
+    }
     Write-Host "Done."
     return
 }
@@ -52,14 +96,14 @@ if ($gh) {
 Write-Host "gh not found -- using direct download (works while the repo is public)."
 foreach ($name in $files) {
     $dest = Join-Path $OutDir $name
-    if (Test-Path $dest) {
-        Write-Host "[skip] $name already present."
+    if (Test-ValidModelFile $dest $name) {
         continue
     }
     $url = "https://github.com/$Repo/releases/download/$Tag/$name"
     Write-Host "[get ] $url"
     try {
         Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+        Assert-ValidModelFile $dest $name
         Write-Host "[done] $dest"
     } catch {
         Remove-Item $dest -ErrorAction SilentlyContinue

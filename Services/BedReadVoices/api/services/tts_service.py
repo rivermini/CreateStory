@@ -19,6 +19,8 @@ from api.repositories.audio_repository import GeneratedAudioRepository
 logger = logging.getLogger(__name__)
 MIN_KOKORO_CONCURRENCY = 1
 MAX_KOKORO_CONCURRENCY = 2
+MIN_KOKORO_MODEL_BYTES = 100 * 1024 * 1024
+MIN_KOKORO_VOICES_BYTES = 1 * 1024 * 1024
 
 
 def _detect_execution_provider() -> str:
@@ -335,10 +337,32 @@ class TTSService:
                     "  #   https://github.com/hatrumtruong27/CreateStory/releases/download/models-v1.0/voices-v1.0.bin  -> api/models/"
                 )
 
+            too_small = []
+            model_size = model_path.stat().st_size
+            voices_size = voices_path.stat().st_size
+            if model_size < MIN_KOKORO_MODEL_BYTES:
+                too_small.append(f"{model_path} ({model_size} bytes)")
+            if voices_size < MIN_KOKORO_VOICES_BYTES:
+                too_small.append(f"{voices_path} ({voices_size} bytes)")
+            if too_small:
+                raise RuntimeError(
+                    "Kokoro model files look invalid or incomplete. Replace these files "
+                    "with the real release assets before running TTS:\n  "
+                    + "\n  ".join(too_small)
+                )
+
             from kokoro_onnx import Kokoro
             provider = _detect_execution_provider()
             os.environ["ONNX_PROVIDER"] = provider
-            kokoro = Kokoro(str(model_path), str(voices_path))
+            try:
+                kokoro = Kokoro(str(model_path), str(voices_path))
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to load Kokoro model files. The ONNX file is likely corrupt, "
+                    "incomplete, or not the real release asset. Replace "
+                    f"{model_path} and {voices_path}, then restart BedReadVoices. "
+                    f"Original error: {exc}"
+                ) from exc
             setattr(self, attr, kokoro)
             logger.info("Kokoro model loaded for worker %d on %s.", worker_id, provider)
 

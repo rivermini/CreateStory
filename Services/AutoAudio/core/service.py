@@ -378,10 +378,42 @@ class AutoAudioService:
                 session.update_progress(0, len(phase3_missing))
                 self._run_story_pipeline(session, phase3_missing)
 
+            failed_results = [
+                result for result in session.story_results
+                if result.get("error")
+                or result.get("upload_errors")
+                or int(result.get("chapters_uploaded", 0) or 0)
+                < int(result.get("chapters_expected", 0) or 0)
+            ]
+
             if session._stopping:
                 session.set_status("stopped")
                 session.add_log(11, "Auto audio session stopped by user")
                 session.set_step(11, "Auto audio session stopped")
+            elif failed_results:
+                failed_chapters = sum(
+                    max(
+                        0,
+                        int(result.get("chapters_expected", 0) or 0)
+                        - int(result.get("chapters_uploaded", 0) or 0),
+                    )
+                    for result in failed_results
+                )
+                session.set_status(
+                    "error",
+                    error=(
+                        f"{len(failed_results)} story batch(es) incomplete; "
+                        f"{failed_chapters} chapter(s) not uploaded"
+                    ),
+                )
+                session.add_log(
+                    11,
+                    f"Auto audio session finished with errors: "
+                    f"{len(failed_results)} story batch(es) incomplete, "
+                    f"{failed_chapters} chapter(s) not uploaded",
+                    level="error",
+                )
+                session.set_step(11, "Auto audio session finished with errors")
             else:
                 session.set_status("completed")
                 session.add_log(11, "Auto audio session completed successfully")

@@ -25,6 +25,28 @@ from api.routes import tts, bedread
 from api.service_auth import enforce_service_auth
 
 
+def _require_ffmpeg_libopus() -> None:
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "FFmpeg is required for audio processing but was not found."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("FFmpeg version check timed out.") from exc
+
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    if result.returncode != 0 or "libopus" not in output:
+        raise RuntimeError("FFmpeg with libopus support is required for audio processing.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -34,32 +56,8 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("BedRead job metadata initialization skipped: %s", exc)
 
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["ffmpeg", "-version"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if "libopus" not in result.stdout.lower() and "libopus" not in result.stderr.lower():
-            logger.warning(
-                "FFmpeg does not appear to support libopus. "
-                "Opus audio uploads may fail. Install ffmpeg with libopus: "
-                "pip install imageio-ffmpeg  (or system ffmpeg with libopus)"
-            )
-        else:
-            logger.info("FFmpeg libopus support confirmed at startup.")
-    except FileNotFoundError:
-        logger.warning(
-            "FFmpeg not found in PATH. "
-            "Audio upload with Opus compression will not be available. "
-            "Install ffmpeg: pip install imageio-ffmpeg"
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning("FFmpeg version check timed out.")
-    except Exception as exc:
-        logger.warning("FFmpeg version check failed: %s", exc)
+    _require_ffmpeg_libopus()
+    logger.info("FFmpeg libopus support confirmed at startup.")
 
     yield
     logger.info("BedReadVoices shutdown: closing HTTP clients...")

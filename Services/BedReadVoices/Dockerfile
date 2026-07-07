@@ -11,14 +11,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . .
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg gosu && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN adduser --disabled-password --gecos "" appuser && \
     chown -R appuser:appuser /app && \
     mkdir -p /app/output && \
     chown -R appuser:appuser /app/output
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gosu && \
-    rm -rf /var/lib/apt/lists/*
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
