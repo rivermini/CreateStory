@@ -275,23 +275,44 @@ class MainBEClientMixin:
         return []
 
     @staticmethod
+    def _coerce_int(value: Any) -> Optional[int]:
+        """Return an int for numeric API fields, preserving None/malformed as None."""
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    @classmethod
+    def _story_max_chapter_from_api(cls, story: dict) -> int:
+        """Extract the best available server chapter count from a story payload."""
+        for key in ("maxChapter", "chapterCount", "totalChapters", "chaptersCount"):
+            value = cls._coerce_int(story.get(key))
+            if value is not None:
+                return max(0, value)
+
+        count_data = story.get("_count")
+        if isinstance(count_data, dict):
+            for key in ("chapters", "storyChapters"):
+                value = cls._coerce_int(count_data.get(key))
+                if value is not None:
+                    return max(0, value)
+
+        for key in ("chapters", "storyChapters"):
+            value = story.get(key)
+            if isinstance(value, list):
+                return len(value)
+
+        return 0
+
+    @staticmethod
     def _story_ref_from_api(story: dict) -> dict:
         """Coerce a story payload into the frontend's ServerStoryRef shape."""
-        max_chapter = (
-            story.get("maxChapter")
-            or story.get("chapterCount")
-            or story.get("totalChapters")
-            or story.get("chaptersCount")
-            or 0
-        )
-        try:
-            max_chapter = int(max_chapter)
-        except Exception:
-            max_chapter = 0
         return {
             "id": str(story.get("id") or story.get("storyId") or ""),
             "title": str(story.get("title") or story.get("name") or ""),
-            "maxChapter": max_chapter,
+            "maxChapter": MainBEClientMixin._story_max_chapter_from_api(story),
         }
 
     @staticmethod
@@ -1074,15 +1095,42 @@ class MainBEClientMixin:
                     body = resp.json()
                     data = self._unwrap_api_data(body)
                     if isinstance(data, dict):
-                        for key in ("maxChapter", "chapterCount", "totalChapters", "chaptersCount"):
-                            raw = data.get(key)
-                            if raw is not None:
-                                return int(raw)
+                        return self._story_max_chapter_from_api(data)
                 else:
                     self._append_log("debug", f"GET story maxChapter for {story_id[:8]}... failed {resp.status_code}")
         except Exception as exc:
             self._append_log("debug", f"GET story maxChapter for {story_id[:8]}... exception: {exc}")
         return 0
+
+    def resolve_server_chapter_max(self, story_id: str, fallback: int = 0) -> int:
+        """Return the highest chapter currently present on the server.
+
+        Some list/detail endpoints omit maxChapter for stories whose actual chapters
+        already exist. Update checks must use chapter presence, otherwise Drive files
+        1..N look like all-new chapters when only N-M are pending.
+        """
+        resolved = max(0, int(fallback or 0))
+        try:
+            chapter_data = self.get_server_chapter_data(story_id, max_chapter=resolved)
+            numbers = chapter_data.get("numbers", []) if isinstance(chapter_data, dict) else []
+            numeric: list[int] = []
+            for number in numbers:
+                try:
+                    value = int(number)
+                except Exception:
+                    continue
+                if value > 0:
+                    numeric.append(value)
+            if numeric:
+                resolved = max(resolved, max(numeric))
+        except Exception as exc:
+            self._append_log("debug", f"Resolve server chapter list for {story_id[:8]}... failed: {exc}")
+
+        try:
+            resolved = max(resolved, self._get_story_max_chapter(story_id))
+        except Exception as exc:
+            self._append_log("debug", f"Resolve story maxChapter for {story_id[:8]}... failed: {exc}")
+        return resolved
 
     def _posted_chapter_exists(self, story_id: str, index: int, expected_content: str) -> tuple[bool, str]:
         """Check whether a failed POST still created the chapter on the server."""
@@ -1177,12 +1225,9 @@ class MainBEClientMixin:
                     if not items:
                         break
                     for story in items:
-                        all_stories.append({
-                            "id": story.get("id"),
-                            "title": story.get("title"),
-                            "maxChapter": story.get("maxChapter") or story.get("chapterCount") or 0,
-                            "updatedAt": story.get("updatedAt"),
-                        })
+                        story_ref = self._story_ref_from_api(story)
+                        story_ref["updatedAt"] = story.get("updatedAt")
+                        all_stories.append(story_ref)
                     page += 1
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 401:

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -81,6 +82,43 @@ def _normalize(s: str) -> str:
     for ch in ("\u2019", "\u2018", "\u201A", "\u201B", "\u02BC", "\u02BB", "\uFF07"):
         s = s.replace(ch, "'")
     return s.strip().lower()
+
+
+def _resolve_actual_server_chapter_maxes(
+    service,
+    server_stories: list[ServerStoryRef],
+) -> dict[str, ServerStoryRef]:
+    """Resolve actual uploaded chapter max for update checks.
+
+    Main BE now leaves maxChapter nullable while waiting for metadata updates, so
+    update detection must compare Drive chapter indices against existing server
+    chapters rather than the story metadata field alone.
+    """
+    if not server_stories:
+        return {}
+
+    resolved_by_id: dict[str, ServerStoryRef] = {story.id: story for story in server_stories}
+    max_workers = min(8, max(1, len(server_stories)))
+
+    def _resolve(story: ServerStoryRef) -> ServerStoryRef:
+        actual_max = service.resolve_server_chapter_max(story.id, story.maxChapter)
+        if actual_max == story.maxChapter:
+            return story
+        return ServerStoryRef(id=story.id, title=story.title, maxChapter=actual_max)
+
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="server-chapter-max") as executor:
+        futures = [executor.submit(_resolve, story) for story in server_stories]
+        for future in as_completed(futures):
+            story = future.result()
+            resolved_by_id[story.id] = story
+    return resolved_by_id
+
+
+async def _resolve_actual_server_chapter_maxes_async(
+    service,
+    server_stories: list[ServerStoryRef],
+) -> dict[str, ServerStoryRef]:
+    return await asyncio.to_thread(_resolve_actual_server_chapter_maxes, service, server_stories)
 
 
 def _wrong_update_prefix_message(folder: dict) -> str:
@@ -291,6 +329,22 @@ async def check_updatable() -> CheckUpdatableResponse:
             continue
         wrong_prefix_folders.append(folder)
 
+    refs_to_resolve: dict[str, ServerStoryRef] = {}
+    for folder in matched_extended_folders + wrong_prefix_folders:
+        server_story = server_by_title.get(_normalize(folder.get("display_name", "")))
+        if server_story is not None:
+            refs_to_resolve[server_story.id] = server_story
+    try:
+        resolved_refs = await _resolve_actual_server_chapter_maxes_async(
+            service,
+            list(refs_to_resolve.values()),
+        )
+        for server_story in resolved_refs.values():
+            server_by_title[_normalize(server_story.title)] = server_story
+    except Exception:
+        logger.exception("Failed to resolve actual server chapter counts")
+        raise HTTPException(status_code=500, detail="Failed to resolve server chapter counts.")
+
     extended_ids = [f["id"] for f in matched_extended_folders]
 
     try:
@@ -443,7 +497,10 @@ async def check_updatable() -> CheckUpdatableResponse:
 
     return CheckUpdatableResponse(
         all_extended_folders=extended_folders,
-        server_stories=[ServerStoryRef(**s) for s in server_stories],
+        server_stories=[
+            server_by_title.get(_normalize(s.get("title", "")), ServerStoryRef(**s))
+            for s in server_stories
+        ],
         updatable=updatable,
         no_update_needed=no_update_needed,
         no_server_match=no_server_match,
@@ -512,6 +569,28 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         if f.get("prefix") == "EXTENDED" and _normalize(f.get("display_name", "")) in reader_titles_lower
     ]
 
+    titles_to_resolve = {
+        _normalize(f.get("display_name", ""))
+        for f in matched_extended_folders
+        if _normalize(f.get("display_name", ""))
+    }
+    titles_to_resolve.update(wrong_prefix_by_title)
+    refs_to_resolve = {
+        server_by_title[title].id: server_by_title[title]
+        for title in titles_to_resolve
+        if title in server_by_title
+    }
+    try:
+        resolved_refs = await _resolve_actual_server_chapter_maxes_async(
+            service,
+            list(refs_to_resolve.values()),
+        )
+        for server_story in resolved_refs.values():
+            server_by_title[_normalize(server_story.title)] = server_story
+    except Exception:
+        logger.exception("Failed to resolve actual server chapter counts")
+        raise HTTPException(status_code=500, detail="Failed to resolve server chapter counts.")
+
     if not matched_extended_folders:
         # Still separate missing folders from matching folders that have the wrong prefix.
         no_drive_folder: list[ServerOnlyStoryEntry] = []
@@ -539,7 +618,10 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
                     no_drive_folder.append(ServerOnlyStoryEntry(server_story=server_ref, last_updated=last_updated))
         return CheckUpdatableResponse(
             all_extended_folders=[],
-            server_stories=[ServerStoryRef(**s) for s in server_stories],
+            server_stories=[
+                server_by_title.get(_normalize(s.get("title", "")), ServerStoryRef(**s))
+                for s in server_stories
+            ],
             updatable=[],
             no_update_needed=[],
             no_server_match=[],
@@ -711,7 +793,10 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
 
     return CheckUpdatableResponse(
         all_extended_folders=matched_extended_folders,
-        server_stories=[ServerStoryRef(**s) for s in server_stories],
+        server_stories=[
+            server_by_title.get(_normalize(s.get("title", "")), ServerStoryRef(**s))
+            for s in server_stories
+        ],
         updatable=updatable,
         no_update_needed=no_update_needed,
         no_server_match=no_server_match,
