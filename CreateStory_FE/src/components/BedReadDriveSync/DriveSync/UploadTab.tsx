@@ -107,7 +107,7 @@ export function UploadTab({
                 <th className="px-6 py-4" style={{ width: 450, minWidth: 450 }}>Drive Folder Name</th>
                 <th className="px-6 py-4" style={{ width: 120, minWidth: 120 }}>Status</th>
                 <th className="px-6 py-4" style={{ width: 160, minWidth: 160 }}>Chapters</th>
-                <th className="px-6 py-4" style={{ minWidth: 350 }}>Validation Logs / Errors</th>
+                <th className="px-6 py-4" style={{ width: 350, minWidth: 350 }}>Validation Logs / Errors</th>
                 <th className="px-6 py-4 text-right" style={{ width: 140, minWidth: 140 }}>Actions</th>
               </tr>
             </thead>
@@ -163,7 +163,7 @@ export function UploadTab({
                     </td>
 
                     {/* Validation Logs / Errors */}
-                    <td className="px-6 py-5 text-xs">
+                    <td className="px-6 py-5 text-xs" style={{ width: 350, minWidth: 350 }}>
                       {displayErrors.length > 0 ? (
                         <div className="flex items-start gap-1.5 text-[var(--cs-danger)] font-medium leading-relaxed max-w-md">
                           <Icon icon={appIcons.error} className="h-3.5 w-3.5 mt-0.5 shrink-0" />

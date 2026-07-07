@@ -294,8 +294,8 @@ export function UpdateTab({
                 <th className="px-6 py-4" style={{ width: 220, minWidth: 220 }}>Story Name</th>
                 <th className="px-6 py-4" style={{ width: 450, minWidth: 450 }}>Drive Folder Name</th>
                 <th className="px-6 py-4" style={{ width: 120, minWidth: 120 }}>Status</th>
-                <th className="px-6 py-4" style={{ width: 160, minWidth: 160 }}>Sync Volume</th>
-                <th className="px-6 py-4" style={{ minWidth: 350 }}>Validation Logs / MD Files</th>
+                <th className="px-6 py-4" style={{ width: 220, minWidth: 220 }}>Sync Volume</th>
+                <th className="px-6 py-4" style={{ width: 350, minWidth: 350 }}>Validation Logs / MD Files</th>
                 <th className="px-6 py-4 text-right" style={{ width: 140, minWidth: 140 }}>Actions</th>
               </tr>
             </thead>
@@ -324,8 +324,6 @@ export function UpdateTab({
                 const freePanel = openFilePanels.get(freeKey);
                 const tagsPanel = openFilePanels.get(tagsKey);
 
-                const isReaderNeedingUpdate = storiesNeedingUpdateIds.has(item.id);
-
                 return (
                   <tr
                     key={item.id}
@@ -342,11 +340,6 @@ export function UpdateTab({
                         <span className="font-semibold text-[13px] text-[var(--cs-text)] group-hover:text-[var(--cs-primary)] transition-colors">
                           {item.title}
                         </span>
-                        {isReaderNeedingUpdate && (
-                          <span className="rounded-full bg-[var(--cs-danger)]/10 border border-[var(--cs-danger)]/20 px-2 py-0.5 text-[9px] font-bold text-[var(--cs-danger)] uppercase tracking-wider animate-pulse">
-                            Needing Update
-                          </span>
-                        )}
                       </div>
                     </td>
 
@@ -366,7 +359,7 @@ export function UpdateTab({
                     </td>
 
                     {/* Sync Volume */}
-                    <td className="px-6 py-5 whitespace-nowrap" style={{ width: 160, minWidth: 160 }}>
+                    <td className="px-6 py-5 whitespace-nowrap" style={{ width: 220, minWidth: 220 }}>
                       {item.status === 'ready' && entry ? (
                         <div className="flex items-center gap-2">
                           <input
@@ -410,7 +403,7 @@ export function UpdateTab({
                     </td>
 
                     {/* Validation Logs & MD files preview */}
-                    <td className="px-6 py-5 text-xs">
+                    <td className="px-6 py-5 text-xs" style={{ width: 350, minWidth: 350 }}>
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-col gap-1.5">
                           {item.status === 'invalid' && entry && (
@@ -454,13 +447,13 @@ export function UpdateTab({
                           <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => toggleFilePanel(item.id, 'free.md', item.folderId!)}
-                              className="rounded-full bg-[var(--cs-surface-muted)] hover:bg-[var(--cs-border-strong)] px-3 py-0.5 text-[10px] text-[var(--cs-text-soft)] hover:text-[var(--cs-text)] transition-colors"
+                              className="rounded-md bg-[var(--cs-surface-muted)] hover:bg-[var(--cs-border-strong)] px-3 py-0.5 text-[10px] text-[var(--cs-text-soft)] hover:text-[var(--cs-text)] transition-colors"
                             >
                               free.md {freePanel?.loading ? '...' : freePanel ? '▲' : '▼'}
                             </button>
                             <button
                               onClick={() => toggleFilePanel(item.id, 'tags.md', item.folderId!)}
-                              className="rounded-full bg-[var(--cs-surface-muted)] hover:bg-[var(--cs-border-strong)] px-3 py-0.5 text-[10px] text-[var(--cs-text-soft)] hover:text-[var(--cs-text)] transition-colors"
+                              className="rounded-md bg-[var(--cs-surface-muted)] hover:bg-[var(--cs-border-strong)] px-3 py-0.5 text-[10px] text-[var(--cs-text-soft)] hover:text-[var(--cs-text)] transition-colors"
                             >
                               tags.md {tagsPanel?.loading ? '...' : tagsPanel ? '▲' : '▼'}
                             </button>

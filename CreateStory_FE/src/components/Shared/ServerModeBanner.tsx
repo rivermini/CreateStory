@@ -78,7 +78,7 @@ export function ServerModeBanner({
       {/* Hover Information Popover */}
       {isHovered && (
         <div
-          className="absolute right-0 top-full mt-2 w-72 rounded-xl border p-4 shadow-xl text-left bg-[var(--cs-surface-elevated)] border-[var(--cs-border)] z-50 backdrop-blur-md"
+          className="absolute right-0 top-full mt-2 w-80 rounded-xl border p-4 shadow-xl text-left bg-[var(--cs-surface-elevated)] border-[var(--cs-border)] z-50 backdrop-blur-md"
         >
           <div className="flex items-start gap-2.5">
             <div className="mt-0.5">
@@ -97,13 +97,18 @@ export function ServerModeBanner({
                   : variant === 'production' ? 'Production Server'
                   : 'Non-Production Server'}
               </p>
-              <p className="mt-1 text-[11px] text-[var(--cs-text-soft)] font-mono leading-relaxed break-all">
+              <p className="mt-1 text-[11px] text-[var(--cs-text-soft)] leading-relaxed">
                 {variant === 'error'
                   ? 'Auto Audio requires Drive Sync configuration.'
                   : variant === 'token_invalid'
-                  ? `Connected: ${serverUrl} (Token expired 401)`
-                  : `Connected: ${serverUrl}`}
+                  ? 'Connected (Token expired 401):'
+                  : 'Connected to:'}
               </p>
+              {variant !== 'error' && (
+                <p className="text-[11px] text-[var(--cs-text-soft)] font-mono leading-relaxed break-all select-all">
+                  {serverUrl}
+                </p>
+              )}
 
               {variant === 'production' && (
                 <p className="mt-2 text-[10px] font-medium text-[var(--cs-warning)] leading-relaxed border-t border-[var(--cs-border)] pt-1.5">

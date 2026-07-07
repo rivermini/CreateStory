@@ -498,10 +498,10 @@ html[data-theme='dark'] .thesvg-badge-primary {
 }
 
 html[data-theme='dark'] {
-  --cs-page: #080808;
-  --cs-page-soft: #101010;
-  --cs-surface: rgba(20, 20, 19, 0.92);
-  --cs-surface-elevated: rgba(27, 27, 26, 0.96);
+  --cs-page: #212121;
+  --cs-page-soft: #1c1c1c;
+  --cs-surface: rgba(43, 43, 43, 0.92);
+  --cs-surface-elevated: rgba(28, 28, 28, 0.96);
   --cs-surface-muted: rgba(255, 255, 255, 0.06);
   --cs-border: rgba(255, 255, 255, 0.08);
   --cs-border-strong: rgba(255, 255, 255, 0.16);
