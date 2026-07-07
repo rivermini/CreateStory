@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -18,7 +19,11 @@ class BedReadJobRepository:
 
     def load_jobs(self) -> list[dict]:
         with self.session_factory() as db:
-            rows = db.scalars(select(BedReadAudioJobRecord).order_by(BedReadAudioJobRecord.started_at.desc().nullslast())).all()
+            rows = db.scalars(
+                select(BedReadAudioJobRecord)
+                .order_by(BedReadAudioJobRecord.started_at.desc().nullslast())
+                .limit(100)
+            ).all()
             return [self._row_to_dict(row) for row in rows]
 
     def has_jobs(self) -> bool:
@@ -101,8 +106,51 @@ class GeneratedAudioRepository:
 
     def load_jobs(self) -> list[dict]:
         with self.session_factory() as db:
-            rows = db.scalars(select(GeneratedAudioFileRecord).order_by(GeneratedAudioFileRecord.updated_at.desc())).all()
+            rows = db.scalars(
+                select(GeneratedAudioFileRecord)
+                .order_by(GeneratedAudioFileRecord.updated_at.desc())
+                .limit(100)
+            ).all()
             return [self._row_to_dict(row) for row in rows]
+
+    def cleanup_old_jobs(self, cutoff: datetime, output_base: Path) -> tuple[int, int, list[str]]:
+        output_root = output_base.resolve()
+        with self.session_factory() as db:
+            rows = list(
+                db.scalars(
+                    select(GeneratedAudioFileRecord).where(
+                        GeneratedAudioFileRecord.status.in_(("completed", "failed")),
+                        GeneratedAudioFileRecord.updated_at < cutoff,
+                    )
+                ).all()
+            )
+            removed_files = 0
+            removed_ids: list[str] = []
+            for row in rows:
+                removed_ids.append(row.job_id)
+                paths = []
+                if row.output_path:
+                    paths.append(Path(row.output_path))
+                if row.output_dir:
+                    paths.append(Path(row.output_dir))
+                for path in paths:
+                    try:
+                        resolved = path.resolve()
+                    except OSError:
+                        continue
+                    if output_root not in (resolved, *resolved.parents):
+                        continue
+                    if resolved.is_dir():
+                        shutil.rmtree(resolved, ignore_errors=True)
+                        removed_files += 1
+                    elif resolved.exists():
+                        resolved.unlink(missing_ok=True)
+                        removed_files += 1
+
+            if removed_ids:
+                db.execute(delete(GeneratedAudioFileRecord).where(GeneratedAudioFileRecord.job_id.in_(removed_ids)))
+                db.commit()
+            return len(removed_ids), removed_files, removed_ids
 
     def save_job(self, entry: dict) -> None:
         with self.session_factory() as db:

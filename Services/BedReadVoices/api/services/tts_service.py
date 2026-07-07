@@ -8,9 +8,9 @@ import re
 import uuid
 import gc
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from typing import Optional
 
 from api.db import init_db
@@ -81,6 +81,9 @@ def _default_concurrency(ignore_env: bool = False) -> int:
 SAMPLE_RATE = 24000
 MAX_QUEUED_JOBS_PER_USER = int(os.getenv("MAX_QUEUED_JOBS_PER_USER", "20"))
 MAX_QUEUED_JOBS_GLOBAL = int(os.getenv("MAX_QUEUED_JOBS_GLOBAL", "100"))
+JOB_CLEANUP_RETENTION_DAYS = _env_int("TTS_JOB_CLEANUP_RETENTION_DAYS", 30, minimum=1)
+JOB_CLEANUP_INTERVAL_SECONDS = _env_int("TTS_JOB_CLEANUP_INTERVAL_SECONDS", 6 * 60 * 60, minimum=60)
+TEXTLESS_TERMINAL_STATUSES = {"completed", "failed", "cancelled", "interrupted"}
 
 
 class TTSCapacityError(RuntimeError):
@@ -194,6 +197,8 @@ class TTSService:
         self._lock = Lock()
         self._workers: list[Thread] = []
         self._workers_running = True
+        self._cleanup_stop = Event()
+        self._cleanup_thread: Thread | None = None
         self._target_workers = self.CONCURRENCY
         self._busy_workers: set[int] = set()
         self._project_root = Path(__file__).parent.parent.parent.resolve()
@@ -210,6 +215,9 @@ class TTSService:
             t = Thread(target=self._worker_loop, args=(i,), daemon=True)
             t.start()
             self._workers.append(t)
+
+        self._cleanup_thread = Thread(target=self._cleanup_old_jobs_loop, daemon=True)
+        self._cleanup_thread.start()
 
         logger.info(
             "TTSService started with %d workers, provider=%s, chunk_size=%d, save_chunks=%s.",
@@ -236,7 +244,7 @@ class TTSService:
                     job_id=job_id,
                     created_by_user_id=entry.get("created_by_user_id"),
                     status=status,
-                    text=entry.get("text", ""),
+                    text="" if status in TEXTLESS_TERMINAL_STATUSES else entry.get("text", ""),
                     voice=entry.get("voice", "af_sarah"),
                     lang=entry.get("lang", "en-us"),
                     speed=entry.get("speed", 1.0),
@@ -259,6 +267,32 @@ class TTSService:
         except Exception as exc:
             logger.warning("Failed to load generated audio jobs from PostgreSQL: %s", exc)
 
+    def _cleanup_old_jobs_loop(self) -> None:
+        while not self._cleanup_stop.is_set():
+            self._cleanup_old_jobs_once()
+            if self._cleanup_stop.wait(JOB_CLEANUP_INTERVAL_SECONDS):
+                break
+
+    def _cleanup_old_jobs_once(self) -> None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=JOB_CLEANUP_RETENTION_DAYS)
+        try:
+            removed_jobs, removed_files, removed_ids = self._job_repo.cleanup_old_jobs(cutoff, self._output_base)
+        except Exception as exc:
+            logger.warning("Failed to clean up old TTS jobs: %s", exc)
+            return
+        if not removed_ids:
+            return
+        with self._lock:
+            for job_id in removed_ids:
+                job = self._jobs.get(job_id)
+                if job and job.status in {"completed", "failed"}:
+                    self._jobs.pop(job_id, None)
+        logger.info(
+            "Cleaned up %d old TTS job record(s) and %d audio path(s).",
+            removed_jobs,
+            removed_files,
+        )
+
     def _persist_job(self, job: TTSJob, queue_position: int = 0) -> None:
         try:
             data = job.to_dict(queue_position=queue_position)
@@ -266,7 +300,7 @@ class TTSService:
             if job.output_dir and job.output_filename:
                 output_path = str(Path(job.output_dir) / job.output_filename)
             data["output_path"] = output_path
-            data["text"] = job.text
+            data["text"] = "" if job.status in TEXTLESS_TERMINAL_STATUSES else job.text
             self._job_repo.save_job(data)
         except Exception as exc:
             logger.warning("Failed to persist TTS job %s: %s", job.job_id, exc)
@@ -598,6 +632,7 @@ class TTSService:
             if job.status in ("completed", "failed", "cancelled"):
                 return False
             job.status = "cancelled"
+            job.text = ""
             job.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if job_id in self._queue:
                 self._queue.remove(job_id)
@@ -718,6 +753,7 @@ class TTSService:
             for job in self._jobs.values():
                 if job.status in ("queued", "processing"):
                     job.status = "cancelled"
+                    job.text = ""
                     job.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self._jobs.clear()
             self._queue.clear()
@@ -836,6 +872,7 @@ class TTSService:
                     j = self._jobs.get(job_id)
                     persist_job = None
                     if j and j.status == "cancelled":
+                        j.text = ""
                         j.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         persist_job = j
                         logger.info("Worker %d job %s finished cancellation cleanup.", worker_id, job_id)
@@ -870,6 +907,7 @@ class TTSService:
                     j = self._jobs.get(job_id)
                     if j:
                         j.status = "failed"
+                        j.text = ""
                         j.error = repr(exc)
                         j.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         persist_job = j
