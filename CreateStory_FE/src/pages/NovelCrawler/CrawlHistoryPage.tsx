@@ -30,6 +30,12 @@ function formatDuration(start: string | null, finish: string | null): string {
   } catch { return '—'; }
 }
 
+const ACTIVE_POLLING_STATUSES = new Set(['running', 'pending', 'processing', 'queued']);
+
+function isPollingActiveStatus(status: string): boolean {
+  return ACTIVE_POLLING_STATUSES.has(status);
+}
+
 interface SessionCardProps {
   readonly session: CrawlSessionSummary;
   readonly order?: number;
@@ -323,11 +329,17 @@ export default function CrawlHistoryPage({ themeMode }: Readonly<{ themeMode: Th
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSessions();
+  }, [fetchSessions]);
+
+  const hasActiveSessions = sessions.some((session) => isPollingActiveStatus(session.status));
+
+  useEffect(() => {
+    if (!hasActiveSessions) return;
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') fetchSessions();
     }, 3000);
     return () => clearInterval(interval);
-  }, [fetchSessions]);
+  }, [fetchSessions, hasActiveSessions]);
 
   const timeCutoff = (() => {
     if (timeRange === 'all') return null;

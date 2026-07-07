@@ -38,6 +38,12 @@ function canDeleteBatchJob(job: BatchJob): boolean {
   return job.status === 'completed' || job.status === 'cancelled' || job.status === 'failed';
 }
 
+const ACTIVE_POLLING_STATUSES = new Set(['running', 'pending', 'processing', 'queued']);
+
+function isPollingActiveStatus(status: string): boolean {
+  return ACTIVE_POLLING_STATUSES.has(status);
+}
+
 const STATUS_DOT_MAP: Record<string, (isDark: boolean) => string> = {
   pending: (d) => d ? 'bg-white/30' : 'bg-gray-400',
   queued: () => 'bg-amber-400',
@@ -373,12 +379,15 @@ export default function BedReadJobsPage({ themeMode }: BedReadJobsPageProps) {
     fetchJobs().finally(() => setIsLoading(false));
   }, [fetchJobs]);
 
+  const hasActiveJobs = jobs.some((job) => isPollingActiveStatus(job.status));
+
   useEffect(() => {
+    if (!hasActiveJobs) return;
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') fetchJobs();
     }, 1000);
     return () => clearInterval(interval);
-  }, [fetchJobs]);
+  }, [fetchJobs, hasActiveJobs]);
 
   const timeCutoff = (() => {
     if (timeRange === 'all') return null;

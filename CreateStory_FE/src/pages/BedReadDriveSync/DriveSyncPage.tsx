@@ -22,6 +22,10 @@ import type { ThemeMode } from '../../types/theme';
 import { PageShell, PageHeader, Surface } from '../../components/Shared/Primitives';
 
 
+function hasTrackedJobs(jobs: TrackedJob[]): boolean {
+  return jobs.length > 0;
+}
+
 const pollUpdate = (
   jobId: string,
   storyId: string,
@@ -136,14 +140,22 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [updatingJobs, setUpdatingJobs] = useState<Map<string, string>>(new Map());
   const updateLocksRef = useRef<Set<string>>(new Set());
   const [storiesNeedingUpdate, setStoriesNeedingUpdate] = useState<StoriesNeedingUpdateEntry[]>([]);
+  const trackedJobsRef = useRef<TrackedJob[]>([]);
 
   useEffect(() => {
+    trackedJobsRef.current = trackedJobs;
+  }, [trackedJobs]);
+
+  const hasActiveTrackedJobs = hasTrackedJobs(trackedJobs);
+
+  useEffect(() => {
+    if (!hasActiveTrackedJobs) return;
     const interval = setInterval(
-      () => pollUploadResults(trackedJobs, setTrackedJobs, setUploadResults, setUploadingJobs, uploadLocksRef),
+      () => pollUploadResults(trackedJobsRef.current, setTrackedJobs, setUploadResults, setUploadingJobs, uploadLocksRef),
       4000,
     );
     return () => clearInterval(interval);
-  }, [trackedJobs]);
+  }, [hasActiveTrackedJobs]);
 
   useEffect(() => {
     return () => {
