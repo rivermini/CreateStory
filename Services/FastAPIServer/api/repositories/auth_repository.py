@@ -75,6 +75,9 @@ class AuthRepository:
             return None
         return token
 
+    def get_refresh_token(self, raw_token: str) -> RefreshToken | None:
+        return self.db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(raw_token)))
+
     def revoke_refresh_token(self, raw_token: str) -> bool:
         token = self.db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_refresh_token(raw_token)))
         if token is None:

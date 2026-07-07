@@ -50,6 +50,13 @@ def _required_env(name: str) -> str:
 
 # Required — no defaults; server will not start without these.
 JWT_SECRET_KEY = _required_env("JWT_SECRET_KEY")
+if len(JWT_SECRET_KEY) < 32:
+    print(
+        "[FATAL] JWT_SECRET_KEY is too weak. "
+        "Set JWT_SECRET_KEY or JWT_SECRET_KEY_FILE to a value with at least 32 characters.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 INTERNAL_SERVICE_TOKEN = _required_env("INTERNAL_SERVICE_TOKEN")
 
 _DATABASE_URL = _env_or_file("DATABASE_URL")

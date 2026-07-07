@@ -107,5 +107,6 @@ async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse
     finally:
         reset_request_identity(identity_token)
     response.headers["Cache-Control"] = "no-store"
+    response.headers["Content-Disposition"] = "attachment"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response

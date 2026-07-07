@@ -24,6 +24,7 @@ from api.service_client import set_request_identity
 
 password_hasher = PasswordHasher()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+_DUMMY_PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$JO9BnSo7eUXaMGB/b5Gy6w$ItIpbkMI52XHKa0ua7Td9WhtYY5pqsv/1dsbsFkM8fc"
 _job_rate_lock = Lock()
 _job_rate_windows: dict[str, deque[float]] = defaultdict(deque)
 _JOB_RATE_LIMIT = 10
@@ -39,6 +40,10 @@ def verify_password(password: str, password_hash: str) -> bool:
         return password_hasher.verify(password_hash, password)
     except (InvalidHashError, VerificationError, VerifyMismatchError):
         return False
+
+
+def verify_dummy_password(password: str) -> bool:
+    return verify_password(password, _DUMMY_PASSWORD_HASH)
 
 
 def create_access_token(user: User) -> str:

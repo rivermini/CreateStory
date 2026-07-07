@@ -11,7 +11,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.auth import create_access_token, hash_password, require_active_user, verify_password
+from api.auth import create_access_token, hash_password, require_active_user, verify_dummy_password, verify_password
 from api.db import get_db
 from api.models.db_models import User
 from api.repositories.auth_repository import AuthRepository
@@ -65,7 +65,10 @@ def _tokens(repo: AuthRepository, user: User) -> AuthTokensResponse:
 def login(req: LoginRequest, request: Request, db: Annotated[Session, Depends(get_db)]) -> AuthTokensResponse:
     repo = AuthRepository(db)
     user = repo.get_user_by_email(req.email)
-    if user is None or not verify_password(req.password, user.password_hash):
+    if user is None:
+        verify_dummy_password(req.password)
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    if not verify_password(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User is disabled.")
@@ -78,6 +81,9 @@ def refresh(req: RefreshRequest, request: Request, db: Annotated[Session, Depend
     repo = AuthRepository(db)
     token = repo.get_valid_refresh_token(req.refresh_token)
     if token is None:
+        reused_token = repo.get_refresh_token(req.refresh_token)
+        if reused_token is not None and reused_token.revoked_at is not None:
+            repo.revoke_user_refresh_tokens(reused_token.user_id)
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token.")
     user = repo.get_user_by_id(token.user_id)
     if user is None or not user.is_active:
