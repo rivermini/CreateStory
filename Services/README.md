@@ -22,7 +22,7 @@ We use **go-task** (Task) as a lightweight, cross-platform dev tool runner. You 
 
 ### Windows:
 ```powershell
-winget install go-task.task
+winget install Task.Task
 ```
 *(Remember to restart your terminal after installing to reload the PATH).*
 

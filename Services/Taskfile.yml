@@ -66,17 +66,14 @@ tasks:
   admin:
     desc: "Set up the initial admin account using interactive prompts"
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -Command '$email = Read-Host "Enter admin email"; if ($email) { docker compose exec -it fastapi_gateway python bootstrap_admin.py --email $email } else { Write-Host "Admin email is required." }'
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_admin.ps1
 
   "build:frontend":
     desc: "Compile Vite production bundle and move it into Services/frontend-dist"
-    dir: "../CreateStory_FE"
     cmds:
-      - docker compose -f ../Services/docker-compose.yml stop frontend 2>nul || true
-      - npm install
-      - npm run build
-      - powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '../Services/frontend-dist') { Remove-Item -Recurse -Force '../Services/frontend-dist' }; Copy-Item -Path './dist' -Destination '../Services/frontend-dist' -Recurse -Force"
-      - docker compose -f ../Services/docker-compose.yml up -d frontend 2>nul || true
+      - docker compose stop frontend 2>nul || true
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '../CreateStory_FE') { Push-Location '../CreateStory_FE'; if (Get-Command npm -ErrorAction SilentlyContinue) { npm install; npm run build; Pop-Location; if (Test-Path './frontend-dist') { Remove-Item -Recurse -Force './frontend-dist' }; Copy-Item -Path '../CreateStory_FE/dist' -Destination './frontend-dist' -Recurse -Force } else { Pop-Location; Write-Host '[WARN] npm not found. Skipping frontend compilation.' } } else { Write-Host '[INFO] CreateStory_FE directory not found. Using existing frontend-dist.' }"
+      - docker compose up -d frontend 2>nul || true
 
   "update:all":
     desc: "Build frontend, rebuild, and reload all compose services"
@@ -130,22 +127,7 @@ tasks:
     desc: "Build frontend and package the microservices workspace into a zip archive"
     cmds:
       - task: "build:frontend"
-      - |
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "
-        $ts = (Get-Date).ToString('yyyyMMdd_HHmmss');
-        $zipName = \"NovaServices_$ts.zip\";
-        $destDir = '../Exports';
-        $tempDir = './_export_temp';
-        if (!(Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null };
-        if (Test-Path $tempDir) { Remove-Item -Recurse -Force $tempDir };
-        New-Item -ItemType Directory -Path $tempDir | Out-Null;
-        & robocopy ./ $tempDir /e /xd .venv output Output data Data _export_temp .git /xf .git* /nc /nfl /ndl /njh /njs /is;
-        Compress-Archive -Path $tempDir -DestinationPath \"$destDir/$zipName\" -Force;
-        Remove-Item -Recurse -Force $tempDir;
-        Write-Host '============================================';
-        Write-Host \"Done! Package created: $destDir/$zipName\";
-        Write-Host '============================================';
-        "
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/export_services.ps1
 
   "start:frontend":
     desc: "Start the local Vite React development server on http://localhost:5173"
