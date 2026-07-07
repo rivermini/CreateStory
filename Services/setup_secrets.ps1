@@ -66,5 +66,6 @@ $pgpw = Ensure-Secret 'postgres_password' { New-Token 32 }
 Ensure-Secret 'database_url' { "postgresql+psycopg://create_story:$pgpw@postgres:5432/create_story" } | Out-Null
 Ensure-Secret 'jwt_secret_key' { New-Token 48 } | Out-Null
 Ensure-Secret 'internal_service_token' { New-Token 48 } | Out-Null
+Ensure-Secret 'cookie_encryption_key' { New-Token 48 } | Out-Null
 
 Write-Host "[secrets] OK -> $dir"

@@ -183,6 +183,7 @@ services:
           # PIDs and take down other services. Idle ~100 MiB.
           pids: 512
           memory: 2g
+    pids_limit: 512
     command: sh -c "alembic upgrade head && python main.py"
     environment:
       TZ: Asia/Bangkok
@@ -190,12 +191,14 @@ services:
       DEV_MODE: ${DEV_MODE:-false}
       DATABASE_URL_FILE: /run/secrets/database_url
       INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
+      NOVEL_CRAWLER_COOKIE_ENCRYPTION_KEY_FILE: /run/secrets/cookie_encryption_key
       SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
       CHROME_BIN: /usr/bin/chromium
       FLARESOLVERR_URL: http://flaresolverr:8191/v1
     secrets:
       - database_url
       - internal_service_token
+      - cookie_encryption_key
     volumes:
       - novel_crawler_output:/app/output
     networks:
@@ -230,6 +233,7 @@ services:
           # process table (fork-storm protection).
           pids: 512
           memory: 1536m
+    pids_limit: 512
     environment:
       TZ: Asia/Bangkok
       LOG_LEVEL: info
@@ -367,6 +371,8 @@ secrets:
     file: C:/ProgramData/CreateStory/secrets/jwt_secret_key
   internal_service_token:
     file: C:/ProgramData/CreateStory/secrets/internal_service_token
+  cookie_encryption_key:
+    file: C:/ProgramData/CreateStory/secrets/cookie_encryption_key
 
 networks:
   edge:
