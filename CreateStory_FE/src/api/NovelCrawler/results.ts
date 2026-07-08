@@ -46,8 +46,9 @@ export function getGoodnovelBatchDownloadUrl(batchId: string): string {
   return `${BASE_URL}/api/results/goodnovel-batch/${encodeURIComponent(batchId)}/download`;
 }
 
-export function getInkittBatchDownloadUrl(batchId: string): string {
-  return `${BASE_URL}/api/results/inkitt-batch/${encodeURIComponent(batchId)}/download`;
+export function getInkittBatchDownloadUrl(batchId: string, runId?: string): string {
+  const params = runId ? `?run_id=${encodeURIComponent(runId)}` : '';
+  return `${BASE_URL}/api/results/inkitt-batch/${encodeURIComponent(batchId)}/download${params}`;
 }
 
 export async function listAllResults(): Promise<CrawlSessionSummary[]> {

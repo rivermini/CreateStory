@@ -184,10 +184,17 @@ class GoodNovelBatchCrawlRequest(BaseModel):
 class InkittBatchStartRequest(BaseModel):
     batch_name: str | None = Field(default=None, max_length=160)
     genres: list[str] | None = Field(default=None, description="Inkitt genre slugs. Empty means all supported genres.")
-    max_pages_per_genre: int = Field(default=3, ge=1, le=25)
+    max_pages_per_genre: int = Field(default=3, ge=1, le=1000)
     discover_concurrency: int = Field(default=4, ge=1, le=6)
-    crawl_concurrency: int = Field(default=2, ge=1, le=4)
-    request_delay_seconds: float = Field(default=0.35, ge=0, le=5)
+    crawl_concurrency: int = Field(default=1, ge=1, le=10)
+    request_delay_seconds: float = Field(default=2.0, ge=1, le=15)
+    crawl_after_discovery: bool = Field(default=True)
+
+
+class InkittBatchCrawlRequest(BaseModel):
+    crawl_concurrency: int = Field(default=1, ge=1, le=10)
+    request_delay_seconds: float = Field(default=2.0, ge=1, le=15)
+    max_stories: int | None = Field(default=None, ge=1, le=10000)
 
 
 @router.post("/start", response_model=CrawlStartResponse)
@@ -428,7 +435,45 @@ async def start_inkitt_batch(
             discover_concurrency=request.discover_concurrency,
             crawl_concurrency=request.crawl_concurrency,
             request_delay_seconds=request.request_delay_seconds,
+            crawl_after_discovery=request.crawl_after_discovery,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/inkitt-batch/{batch_id}/crawl")
+async def crawl_inkitt_batch(
+    batch_id: str,
+    request: InkittBatchCrawlRequest,
+    http_request: Request,
+) -> dict:
+    """Start or resume crawling a discovered Inkitt batch queue."""
+    require_operator_identity(http_request)
+    service = _require_inkitt_batch_owner(batch_id, http_request)
+    try:
+        state = service.start_crawl(
+            batch_id=batch_id,
+            crawl_concurrency=request.crawl_concurrency,
+            request_delay_seconds=request.request_delay_seconds,
+            max_stories=request.max_stories,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/inkitt-batch/{batch_id}/pause")
+async def pause_inkitt_batch(batch_id: str, http_request: Request) -> dict:
+    """Gracefully pause an active Inkitt batch crawl."""
+    require_operator_identity(http_request)
+    service = _require_inkitt_batch_owner(batch_id, http_request)
+    try:
+        state = service.pause_crawl(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return service.get_status(state.batch_id)

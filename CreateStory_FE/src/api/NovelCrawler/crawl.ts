@@ -15,6 +15,7 @@ import type {
   GoodNovelBatchRowsResponse,
   GoodNovelBatchScanRequest,
   GoodNovelBatchSummary,
+  InkittBatchCrawlRequest,
   InkittBatchRowsResponse,
   InkittBatchStartRequest,
   InkittBatchSummary,
@@ -173,6 +174,24 @@ export async function startInkittBatch(request: InkittBatchStartRequest): Promis
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
+    timeout: 60000,
+  });
+}
+
+export async function crawlInkittBatch(batchId: string, request: InkittBatchCrawlRequest): Promise<InkittBatchSummary> {
+  return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/crawl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    timeout: 60000,
+  });
+}
+
+export async function pauseInkittBatch(batchId: string): Promise<InkittBatchSummary> {
+  return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/pause`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
     timeout: 60000,
   });
 }

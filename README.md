@@ -256,6 +256,9 @@ task start
 # Rebuild and reload all services (including rebuilding frontend)
 task update:all
 
+# Rebuild and reload all services, skipping frontend compilation
+task update:all-noFE
+
 # Rebuild and reload all backend services (no frontend build)
 task update:backend
 

@@ -424,6 +424,9 @@ class _SeleniumBrowser:
                 ("[class*='popup']", "[class*='close']"),
                 ("[class*='overlay']", "[class*='close']"),
                 ("[class*='modal']", "[class*='close']"),
+                ("[role='dialog']", "button[aria-label*='close' i], button[class*='close'], [class*='close'], svg"),
+                ("[aria-modal='true']", "button[aria-label*='close' i], button[class*='close'], [class*='close'], svg"),
+                ("div[class*='ReactModal']", "button[aria-label*='close' i], button[class*='close'], [class*='close'], svg"),
                 ("[id*='popup']", "[id*='close']"),
                 ("[id*='overlay']", "[id*='close']"),
                 ("[id*='modal']", "[id*='close']"),
@@ -470,6 +473,10 @@ class _SeleniumBrowser:
 
             if dismissed:
                 time.sleep(0.5)
+            try:
+                self._driver.switch_to.active_element.send_keys("\ue00c")
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -500,6 +507,10 @@ class _SeleniumBrowser:
                     break
                 metrics = result
                 time.sleep(wait_ms / 1000.0)
+                clicked_more = self._click_reader_load_more(driver)
+                if clicked_more:
+                    time.sleep(max(wait_ms, 800) / 1000.0)
+                    stable_count = 0
 
                 count_result = driver.execute_script(
                     build_paragraph_count_script(paragraph_selector)
@@ -536,6 +547,48 @@ class _SeleniumBrowser:
             pass
 
         return paragraphs, step
+
+    def _click_reader_load_more(self, driver) -> int:
+        try:
+            result = driver.execute_script(
+                """
+                (function () {
+                    var labels = [
+                        'load more',
+                        'show more',
+                        'read more',
+                        'continue reading',
+                        'continue',
+                        'more'
+                    ];
+                    var candidates = Array.from(document.querySelectorAll(
+                        'article button, article a, main button, main a, button, a[role="button"]'
+                    ));
+                    var clicked = 0;
+                    for (var i = 0; i < candidates.length && clicked < 3; i++) {
+                        var el = candidates[i];
+                        var text = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        if (!text) continue;
+                        var matches = labels.some(function (label) { return text === label || text.indexOf(label) >= 0; });
+                        if (!matches) continue;
+                        var rect = el.getBoundingClientRect();
+                        if (rect.width < 20 || rect.height < 10) continue;
+                        var style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden' || style.pointerEvents === 'none') continue;
+                        if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue;
+                        try {
+                            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                            el.click();
+                            clicked += 1;
+                        } catch (err) {}
+                    }
+                    return clicked;
+                })();
+                """
+            )
+            return int(result or 0)
+        except Exception:
+            return 0
 
     def _scroll_page(self, driver, domain: str) -> list[str] | None:
         from core.scroll_utils import (
@@ -603,6 +656,8 @@ class _SeleniumBrowser:
 
         preferred_by_domain: dict[str, str] = {
             "wattpad": "p[data-p-id]",
+            "www.inkitt.com": "article#story-text-container p[data-content], article#story-text-container p",
+            "inkitt.com": "article#story-text-container p[data-content], article#story-text-container p",
         }
         preferred = preferred_by_domain.get(domain, "p")
         all_selectors = [preferred] + [s for s in PARAGRAPH_SELECTORS if s != preferred]

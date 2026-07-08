@@ -261,7 +261,7 @@ export interface GoodNovelBatchCrawlRequest {
   request_delay_seconds: number;
 }
 
-export type InkittBatchPhase = 'running' | 'completed' | 'failed';
+export type InkittBatchPhase = 'discovering' | 'ready' | 'crawling' | 'completed' | 'failed';
 export type InkittBatchRowStatus = 'discovered' | 'queued' | 'crawling' | 'completed' | 'skipped' | 'failed';
 
 export interface InkittBatchSummary {
@@ -274,6 +274,8 @@ export interface InkittBatchSummary {
   skipped_count: number;
   failed_count: number;
   processed_count: number;
+  total_chapters: number;
+  crawled_chapters: number;
   download_ready: boolean;
   error_message: string;
   created_at: string;
@@ -284,7 +286,22 @@ export interface InkittBatchSummary {
   crawl_concurrency: number;
   request_delay_seconds: number;
   selected_genres: string[];
+  crawl_runs: InkittBatchCrawlRun[];
+  cancel_requested: boolean;
   log_lines: string[];
+}
+
+export interface InkittBatchCrawlRun {
+  run_id: string;
+  started_at: string;
+  finished_at: string | null;
+  target_stories: number;
+  completed_count: number;
+  failed_count: number;
+  skipped_count: number;
+  crawled_chapters?: number;
+  total_chapters?: number;
+  status: string;
 }
 
 export interface InkittBatchRow {
@@ -322,6 +339,13 @@ export interface InkittBatchStartRequest {
   discover_concurrency: number;
   crawl_concurrency: number;
   request_delay_seconds: number;
+  crawl_after_discovery?: boolean;
+}
+
+export interface InkittBatchCrawlRequest {
+  crawl_concurrency: number;
+  request_delay_seconds: number;
+  max_stories?: number | null;
 }
 
 export interface ProgressUpdate {

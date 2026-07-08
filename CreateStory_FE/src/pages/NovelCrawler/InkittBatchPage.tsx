@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getInkittBatchDownloadUrl,
   getInkittBatchRows,
   getInkittBatchStatus,
+  crawlInkittBatch,
   listInkittBatches,
+  pauseInkittBatch,
   removeInkittBatch,
   startInkittBatch,
   type InkittBatchRow,
@@ -37,6 +39,10 @@ const GENRES = [
   ['young-adult', 'Young Adult'],
 ] as const;
 
+const ALL_GENRE_SLUGS = GENRES.map(([slug]) => slug);
+const DISCOVER_ALL_MAX_PAGES = 1000;
+const ROW_PAGE_SIZE = 500;
+
 const FILTERS = [
   { value: 'all', label: 'All' },
   { value: 'completed', label: 'Exported' },
@@ -52,30 +58,46 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [selectedGenres, setSelectedGenres] = useState<string[]>(() => GENRES.map(([slug]) => slug));
   const [maxPages, setMaxPages] = useState(3);
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
-  const [crawlConcurrency, setCrawlConcurrency] = useState(2);
-  const [requestDelaySeconds, setRequestDelaySeconds] = useState(0.35);
+  const [crawlConcurrency, setCrawlConcurrency] = useState(1);
+  const [requestDelaySeconds, setRequestDelaySeconds] = useState(2);
+  const [storiesPerRun, setStoriesPerRun] = useState(200);
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('inkitt_batch_id') || '');
   const [summary, setSummary] = useState<InkittBatchSummary | null>(null);
   const [history, setHistory] = useState<InkittBatchSummary[]>([]);
   const [rows, setRows] = useState<InkittBatchRow[]>([]);
   const [rowTotal, setRowTotal] = useState(0);
-  const [rowLimit, setRowLimit] = useState(100);
   const [rowFilter, setRowFilter] = useState('all');
   const [isStarting, setIsStarting] = useState(false);
+  const [isPausing, setIsPausing] = useState(false);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<InkittBatchSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [downloadTarget, setDownloadTarget] = useState('');
   const [error, setError] = useState('');
+  const syncedBatchIdRef = useRef('');
 
-  const active = summary?.phase === 'running';
-  const progressPercent = summary && summary.total_stories > 0
+  const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
+  const progressPercent = summary && summary.total_chapters > 0
+    ? Math.round((summary.crawled_chapters / summary.total_chapters) * 100)
+    : summary && summary.total_stories > 0
     ? Math.round((summary.processed_count / summary.total_stories) * 100)
     : active ? 5 : 0;
   const selectedGenreLabels = useMemo(
     () => GENRES.filter(([slug]) => selectedGenres.includes(slug)).map(([, label]) => label),
     [selectedGenres],
   );
+
+  useEffect(() => {
+    if (!summary || syncedBatchIdRef.current === summary.batch_id) return;
+    syncedBatchIdRef.current = summary.batch_id;
+    setBatchName(summary.batch_name || '');
+    setSelectedGenres(summary.selected_genres?.length ? summary.selected_genres : ALL_GENRE_SLUGS);
+    setMaxPages(summary.max_pages_per_genre || 3);
+    setDiscoverConcurrency(summary.discover_concurrency || 4);
+    setCrawlConcurrency(summary.crawl_concurrency || 1);
+    setRequestDelaySeconds(summary.request_delay_seconds || 2);
+  }, [summary]);
 
   const fetchHistory = useCallback(() => {
     setHistoryLoading(true);
@@ -92,18 +114,18 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh Inkitt batch status.'));
   }, [batchId]);
 
-  const fetchRows = useCallback(() => {
+  const fetchRows = useCallback((offset = 0) => {
     if (!batchId) return;
     setRowsLoading(true);
-    getInkittBatchRows(batchId, { offset: 0, limit: rowLimit, status: rowFilter })
+    getInkittBatchRows(batchId, { offset, limit: ROW_PAGE_SIZE, status: rowFilter })
       .then((response) => {
-        setRows(response.items);
+        setRows((current) => offset > 0 ? [...current, ...response.items] : response.items);
         setRowTotal(response.total);
         setSummary(response.batch);
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Inkitt batch rows.'))
       .finally(() => setRowsLoading(false));
-  }, [batchId, rowFilter, rowLimit]);
+  }, [batchId, rowFilter]);
 
   useEffect(() => {
     fetchHistory();
@@ -112,14 +134,14 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   useEffect(() => {
     if (!batchId) return;
     sessionStorage.setItem('inkitt_batch_id', batchId);
-    fetchRows();
+    fetchRows(0);
   }, [batchId, fetchRows]);
 
   useEffect(() => {
     if (!batchId || !active) return;
     const id = window.setInterval(() => {
       fetchStatus();
-      fetchRows();
+      fetchRows(0);
       fetchHistory();
     }, 2500);
     return () => window.clearInterval(id);
@@ -134,7 +156,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     });
   };
 
-  const handleStart = async () => {
+  const handleStart = async (crawlAfterDiscovery = true) => {
     if (selectedGenres.length === 0) {
       setError('Select at least one Inkitt genre.');
       return;
@@ -149,6 +171,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
         discover_concurrency: discoverConcurrency,
         crawl_concurrency: crawlConcurrency,
         request_delay_seconds: requestDelaySeconds,
+        crawl_after_discovery: crawlAfterDiscovery,
       });
       setBatchId(response.batch_id);
       setSummary(response);
@@ -163,12 +186,99 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     }
   };
 
-  const handleDownload = () => {
+  const handleDiscoverAll = async () => {
+    setIsStarting(true);
+    setError('');
+    try {
+      const response = await startInkittBatch({
+        batch_name: batchName || 'Inkitt all free completed discovery',
+        genres: ALL_GENRE_SLUGS,
+        max_pages_per_genre: DISCOVER_ALL_MAX_PAGES,
+        discover_concurrency: discoverConcurrency,
+        crawl_concurrency: crawlConcurrency,
+        request_delay_seconds: requestDelaySeconds,
+        crawl_after_discovery: false,
+      });
+      setSelectedGenres(ALL_GENRE_SLUGS);
+      setMaxPages(DISCOVER_ALL_MAX_PAGES);
+      setBatchId(response.batch_id);
+      setSummary(response);
+      setRows([]);
+      setRowTotal(0);
+      setRowFilter('all');
+      fetchHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to discover all Inkitt stories.');
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  const handleCrawlSelected = async () => {
     if (!batchId) return;
-    void downloadWithAuth(getInkittBatchDownloadUrl(batchId), `inkitt_batch_${batchId}.zip`);
+    setIsStarting(true);
+    setError('');
+    try {
+      const response = await crawlInkittBatch(batchId, {
+        crawl_concurrency: crawlConcurrency,
+        request_delay_seconds: requestDelaySeconds,
+        max_stories: storiesPerRun,
+      });
+      setSummary(response);
+      fetchRows(0);
+      fetchHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start Inkitt crawl.');
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  const handlePauseCrawl = async () => {
+    if (!batchId) return;
+    setIsPausing(true);
+    setError('');
+    try {
+      const response = await pauseInkittBatch(batchId);
+      setSummary(response);
+      fetchRows(0);
+      fetchHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to pause Inkitt crawl.');
+    } finally {
+      setIsPausing(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!batchId) return;
+    setDownloadTarget('all');
+    setError('');
+    try {
+      await downloadWithAuth(getInkittBatchDownloadUrl(batchId), `inkitt_batch_${batchId}.zip`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download Inkitt ZIP.');
+    } finally {
+      setDownloadTarget('');
+    }
+  };
+
+  const handleDownloadRun = async (runId: string) => {
+    if (!batchId) return;
+    const target = `run:${runId}`;
+    setDownloadTarget(target);
+    setError('');
+    try {
+      await downloadWithAuth(getInkittBatchDownloadUrl(batchId, runId), `inkitt_batch_${batchId}_${runId}.zip`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download Inkitt run ZIP.');
+    } finally {
+      setDownloadTarget('');
+    }
   };
 
   const handleSelectBatch = (batch: InkittBatchSummary) => {
+    syncedBatchIdRef.current = '';
     setBatchId(batch.batch_id);
     setSummary(batch);
     setRows([]);
@@ -288,16 +398,17 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
               </div>
 
               <div className="flex flex-wrap items-end gap-3">
-                <NumberField label="Pages/genre" value={maxPages} min={1} max={25} onChange={setMaxPages} />
+                <NumberField label="Pages/genre" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
                 <NumberField label="Discover workers" value={discoverConcurrency} min={1} max={6} onChange={setDiscoverConcurrency} />
-                <NumberField label="Crawl workers" value={crawlConcurrency} min={1} max={4} onChange={setCrawlConcurrency} />
-                <DecimalField label="Delay seconds" value={requestDelaySeconds} min={0} max={5} step={0.05} onChange={setRequestDelaySeconds} />
+                <NumberField label="Crawl workers" value={crawlConcurrency} min={1} max={10} onChange={setCrawlConcurrency} />
+                <NumberField label="Stories/run" value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
+                <DecimalField label="Delay seconds" value={requestDelaySeconds} min={1} max={15} step={0.25} onChange={setRequestDelaySeconds} />
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={handleStart}
+                  onClick={() => handleStart(true)}
                   disabled={isStarting || active || selectedGenres.length === 0}
                   className="inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                   style={{ background: primary, color: '#fff' }}
@@ -307,13 +418,53 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={handleDownload}
-                  disabled={!summary?.download_ready}
+                  onClick={() => handleStart(false)}
+                  disabled={isStarting || active || selectedGenres.length === 0}
                   className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                   style={{ borderColor: panelBorder, background: muted, color: text }}
                 >
-                  <Icon icon={appIcons.download} className="h-4 w-4" />
-                  Download ZIP
+                  {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.search} className="h-4 w-4" />}
+                  Discover only
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscoverAll}
+                  disabled={isStarting || active}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ borderColor: primary, background: 'var(--cs-primary-soft)', color: primary }}
+                >
+                  {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.search} className="h-4 w-4" />}
+                  Discover all free completed
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCrawlSelected}
+                  disabled={isStarting || active || !summary || summary.phase === 'completed' || summary.total_stories === 0}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ borderColor: panelBorder, background: muted, color: text }}
+                >
+                  {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.play} className="h-4 w-4" />}
+                  Start/Resume crawl
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePauseCrawl}
+                  disabled={isPausing || summary?.phase !== 'crawling' || summary?.cancel_requested}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ borderColor: panelBorder, background: muted, color: text }}
+                >
+                  {isPausing || summary?.cancel_requested ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.pause} className="h-4 w-4" />}
+                  {summary?.cancel_requested ? 'Pausing...' : 'Pause crawl'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={!summary?.download_ready || Boolean(downloadTarget)}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ borderColor: panelBorder, background: muted, color: text }}
+                >
+                  <Icon icon={downloadTarget === 'all' ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${downloadTarget === 'all' ? 'animate-spin' : ''}`} />
+                  {downloadTarget === 'all' ? 'Preparing ZIP' : 'Download exported ZIP'}
                 </button>
               </div>
             </div>
@@ -327,6 +478,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 <Stat label="Skipped" value={summary?.skipped_count ?? 0} />
                 <Stat label="Failed" value={summary?.failed_count ?? 0} />
                 <Stat label="Genres" value={selectedGenres.length} />
+                <Stat label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${(summary?.total_chapters ?? 0).toLocaleString()}`} />
               </div>
               <div className="mt-4">
                 <Progress label="Progress" value={progressPercent} />
@@ -362,7 +514,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                         <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.total_stories.toLocaleString()} stories</span>
                       </button>
                       <div className="flex justify-end">
-                        <button type="button" onClick={() => setDeleteTarget(batch)} disabled={batch.phase === 'running'} className="inline-flex h-9 w-9 items-center justify-center rounded-md border disabled:cursor-not-allowed disabled:opacity-45" style={{ borderColor: panelBorder, background: muted, color: batch.phase === 'running' ? faint : '#dc2626' }}>
+                        <button type="button" onClick={() => setDeleteTarget(batch)} disabled={batch.phase === 'discovering' || batch.phase === 'crawling'} className="inline-flex h-9 w-9 items-center justify-center rounded-md border disabled:cursor-not-allowed disabled:opacity-45" style={{ borderColor: panelBorder, background: muted, color: batch.phase === 'discovering' || batch.phase === 'crawling' ? faint : '#dc2626' }}>
                           <Icon icon={appIcons.delete} className="h-4 w-4" />
                         </button>
                       </div>
@@ -383,6 +535,54 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
             </section>
           )}
 
+          {summary && summary.log_lines.length > 0 && (
+            <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold" style={{ color: text }}>Batch log</h2>
+                <span className="text-xs tabular-nums" style={{ color: faint }}>{summary.log_lines.length.toLocaleString()} lines</span>
+              </div>
+              <div className="mt-3 max-h-56 overflow-auto rounded-md border px-3 py-2 font-mono text-xs leading-5" style={{ borderColor: panelBorder, background: muted, color: soft }}>
+                {summary.log_lines.slice().reverse().map((line, index) => (
+                  <div key={`${line}-${index}`}>{line}</div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {summary && (
+            <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold" style={{ color: text }}>Crawl runs</h2>
+                  <p className="text-sm" style={{ color: soft }}>Download one run or the full accumulated batch.</p>
+                </div>
+                <button type="button" onClick={handleDownload} disabled={!summary.download_ready || Boolean(downloadTarget)} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                  <Icon icon={downloadTarget === 'all' ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${downloadTarget === 'all' ? 'animate-spin' : ''}`} />
+                  {downloadTarget === 'all' ? 'Preparing ZIP' : 'Download all'}
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {(summary.crawl_runs || []).length > 0 ? summary.crawl_runs.map((run) => (
+                  <div key={run.run_id} className="grid gap-2 rounded-md border px-3 py-3 md:grid-cols-[minmax(140px,1fr)_120px_120px_120px_auto] md:items-center" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                    <div>
+                      <p className="text-sm font-semibold">{run.started_at}</p>
+                      <p className="text-xs" style={{ color: soft }}>{run.run_id}</p>
+                    </div>
+                    <span className="text-xs" style={{ color: soft }}>{run.status}</span>
+                    <span className="text-xs tabular-nums" style={{ color: soft }}>{run.completed_count.toLocaleString()}/{run.target_stories.toLocaleString()} stories</span>
+                    <span className="text-xs tabular-nums" style={{ color: soft }}>{(run.crawled_chapters ?? 0).toLocaleString()}/{(run.total_chapters ?? 0).toLocaleString()} chapters</span>
+                    <button type="button" onClick={() => { void handleDownloadRun(run.run_id); }} disabled={run.completed_count === 0 || Boolean(downloadTarget)} className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold disabled:opacity-60" style={{ borderColor: panelBorder, background: panelBg, color: text }}>
+                      <Icon icon={downloadTarget === `run:${run.run_id}` ? appIcons.spinner : appIcons.download} className={`h-3.5 w-3.5 ${downloadTarget === `run:${run.run_id}` ? 'animate-spin' : ''}`} />
+                      {downloadTarget === `run:${run.run_id}` ? 'Preparing' : 'Download run'}
+                    </button>
+                  </div>
+                )) : (
+                  <div className="rounded-md border px-3 py-4 text-sm" style={{ borderColor: panelBorder, color: soft }}>No crawl runs yet.</div>
+                )}
+              </div>
+            </section>
+          )}
+
           {summary && (
             <section className="overflow-hidden rounded-lg border" style={{ background: panelBg, borderColor: panelBorder }}>
               <div className="flex flex-col gap-3 border-b px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: panelBorder }}>
@@ -392,7 +592,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {FILTERS.map((filter) => (
-                    <button key={filter.value} type="button" onClick={() => { setRowFilter(filter.value); setRowLimit(100); }} className="rounded-md border px-2.5 py-1.5 text-xs font-medium" style={{ borderColor: panelBorder, background: rowFilter === filter.value ? 'var(--cs-primary-soft)' : muted, color: rowFilter === filter.value ? primary : soft }}>
+                    <button key={filter.value} type="button" onClick={() => { setRowFilter(filter.value); setRows([]); setRowTotal(0); }} className="rounded-md border px-2.5 py-1.5 text-xs font-medium" style={{ borderColor: panelBorder, background: rowFilter === filter.value ? 'var(--cs-primary-soft)' : muted, color: rowFilter === filter.value ? primary : soft }}>
                       {filter.label}
                     </button>
                   ))}
@@ -444,7 +644,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
 
               {rows.length < rowTotal && (
                 <div className="border-t px-4 py-4 sm:px-5" style={{ borderColor: panelBorder }}>
-                  <button type="button" onClick={() => setRowLimit((value) => value + 100)} disabled={rowsLoading} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                  <button type="button" onClick={() => fetchRows(rows.length)} disabled={rowsLoading} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
                     {rowsLoading && <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />}
                     Load more
                   </button>
@@ -476,11 +676,11 @@ function DecimalField({ label, value, min, max, step, onChange }: { readonly lab
   );
 }
 
-function Stat({ label, value }: { readonly label: string; readonly value: number }) {
+function Stat({ label, value }: { readonly label: string; readonly value: number | string }) {
   return (
     <div className="rounded-md border px-3 py-2" style={{ borderColor: 'var(--cs-border)', background: 'var(--cs-surface-muted)' }}>
       <div className="text-xs" style={{ color: 'var(--cs-text-faint)' }}>{label}</div>
-      <div className="mt-1 text-lg font-semibold" style={{ color: 'var(--cs-text)' }}>{value.toLocaleString()}</div>
+      <div className="mt-1 text-lg font-semibold" style={{ color: 'var(--cs-text)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
     </div>
   );
 }
@@ -510,7 +710,9 @@ function StatusChip({ row }: { readonly row: InkittBatchRow }) {
 
 function phaseLabel(phase: InkittBatchSummary['phase']): string {
   const labels: Record<InkittBatchSummary['phase'], string> = {
-    running: 'Running',
+    discovering: 'Discovering',
+    ready: 'Ready',
+    crawling: 'Crawling',
     completed: 'Completed',
     failed: 'Failed',
   };

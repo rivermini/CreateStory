@@ -117,6 +117,18 @@ async def get_inkitt_batch_status(batch_id: str) -> JSONResponse:
     return await _forward_request("GET", f"/api/crawl/inkitt-batch/{batch_id}")
 
 
+@router.post("/inkitt-batch/{batch_id}/crawl", dependencies=[Depends(require_job_creation_rate)])
+async def crawl_inkitt_batch(batch_id: str, request: dict = Body(...)) -> JSONResponse:
+    """Start or resume an Inkitt batch crawl."""
+    return await _forward_request("POST", f"/api/crawl/inkitt-batch/{batch_id}/crawl", json_body=request)
+
+
+@router.post("/inkitt-batch/{batch_id}/pause", dependencies=[Depends(require_operator)])
+async def pause_inkitt_batch(batch_id: str) -> JSONResponse:
+    """Gracefully pause an active Inkitt batch crawl."""
+    return await _forward_request("POST", f"/api/crawl/inkitt-batch/{batch_id}/pause", json_body={})
+
+
 @router.get("/inkitt-batch/{batch_id}/rows")
 async def list_inkitt_batch_rows(
     batch_id: str,

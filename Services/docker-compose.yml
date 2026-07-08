@@ -195,6 +195,9 @@ services:
       SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
       CHROME_BIN: /usr/bin/chromium
       FLARESOLVERR_URL: http://flaresolverr:8191/v1
+      INKITT_DISCOVER_RETRY_TIMES: ${INKITT_DISCOVER_RETRY_TIMES:-6}
+      INKITT_DISCOVER_RETRY_BASE_SECONDS: ${INKITT_DISCOVER_RETRY_BASE_SECONDS:-15}
+      INKITT_DISCOVER_RETRY_MAX_SECONDS: ${INKITT_DISCOVER_RETRY_MAX_SECONDS:-120}
     secrets:
       - database_url
       - internal_service_token

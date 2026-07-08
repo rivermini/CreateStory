@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
@@ -249,7 +249,7 @@ async def download_goodnovel_batch(batch_id: str, request: Request) -> FileRespo
 
 
 @router.get("/inkitt-batch/{batch_id}/download")
-async def download_inkitt_batch(batch_id: str, request: Request) -> FileResponse:
+async def download_inkitt_batch(batch_id: str, request: Request, run_id: str | None = Query(default=None)) -> FileResponse:
     """Zip the genre-grouped combined files for a completed Inkitt batch."""
     from api.services.inkitt_batch_service import get_inkitt_batch_service
 
@@ -260,7 +260,7 @@ async def download_inkitt_batch(batch_id: str, request: Request) -> FileResponse
             user_id=getattr(request.state, "create_story_user_id", None),
             role=getattr(request.state, "create_story_role", None),
         )
-        _state, files = service.get_download_files(batch_id)
+        _state, files = service.get_download_files(batch_id, run_id=run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -268,7 +268,8 @@ async def download_inkitt_batch(batch_id: str, request: Request) -> FileResponse
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _zip_file_response(files, f"inkitt_batch_{batch_id}.zip")
+    suffix = f"_{run_id}" if run_id else ""
+    return _zip_file_response(files, f"inkitt_batch_{batch_id}{suffix}.zip")
 
 
 @router.get("/{crawl_id}/download-all")

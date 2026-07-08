@@ -27,6 +27,7 @@ _tickets: dict[str, "DownloadTicket"] = {}
 _RESULT_DOWNLOAD = re.compile(
     r"^/api/results/(?:download-all|download-all-combined|download-combined-all|"
     r"goodnovel-batch/[0-9a-f]{8}/download|"
+    r"inkitt-batch/[0-9a-f]{8}/download|"
     r"[0-9a-f]{8}/(?:download|download-all))$"
 )
 _BEDREAD_DOWNLOAD = re.compile(r"^/api/bedread/jobs/[0-9a-f]{8}/(?:download|zip)$")

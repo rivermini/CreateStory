@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
 import shutil
 import threading
@@ -27,12 +28,17 @@ from utils.sanitize import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
-INKITT_BATCH_MAX_PAGES = int(os.getenv("INKITT_BATCH_MAX_PAGES", "25"))
-INKITT_BATCH_MAX_STORIES = int(os.getenv("INKITT_BATCH_MAX_STORIES", "2000"))
+INKITT_BATCH_MAX_PAGES = int(os.getenv("INKITT_BATCH_MAX_PAGES", "1000"))
+INKITT_BATCH_MAX_STORIES = int(os.getenv("INKITT_BATCH_MAX_STORIES", "100000"))
 INKITT_BATCH_MAX_DISCOVER_WORKERS = int(os.getenv("INKITT_BATCH_MAX_DISCOVER_WORKERS", "6"))
-INKITT_BATCH_MAX_CRAWL_WORKERS = int(os.getenv("INKITT_BATCH_MAX_CRAWL_WORKERS", "4"))
+INKITT_BATCH_MAX_CRAWL_WORKERS = int(os.getenv("INKITT_BATCH_MAX_CRAWL_WORKERS", "10"))
+INKITT_DISCOVER_RETRY_TIMES = int(os.getenv("INKITT_DISCOVER_RETRY_TIMES", "6"))
+INKITT_DISCOVER_RETRY_BASE_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_BASE_SECONDS", "15"))
+INKITT_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_MAX_SECONDS", "120"))
+INKITT_RENDERED_FALLBACK = os.getenv("INKITT_RENDERED_FALLBACK", "1").strip().lower() not in {"0", "false", "no"}
+INKITT_RENDERED_FALLBACK_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_WORDS", "120"))
 
-BatchPhase = Literal["running", "completed", "failed"]
+BatchPhase = Literal["discovering", "ready", "crawling", "completed", "failed"]
 RowStatus = Literal["discovered", "queued", "crawling", "completed", "skipped", "failed"]
 
 
@@ -75,10 +81,20 @@ class InkittBatchRow:
     read_count: int | None = None
     output_file: str = ""
     metadata_file: str = ""
+    crawl_run_id: str = ""
+    completed_at: str = ""
     error: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class InkittDiscoveryResult:
+    refs: list[dict[str, Any]]
+    pages_checked: int = 0
+    raw_stories_seen: int = 0
+    stop_reason: str = ""
 
 
 @dataclass
@@ -87,17 +103,19 @@ class InkittBatchState:
     created_by_user_id: str | None
     rows: list[InkittBatchRow] = field(default_factory=list)
     batch_name: str = ""
-    phase: BatchPhase = "running"
+    phase: BatchPhase = "discovering"
     error_message: str = ""
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     started_at: str | None = None
     finished_at: str | None = None
     max_pages_per_genre: int = 3
     discover_concurrency: int = 4
-    crawl_concurrency: int = 2
-    request_delay_seconds: float = 0.35
+    crawl_concurrency: int = 1
+    request_delay_seconds: float = 2.0
     output_dir: str = ""
     selected_genres: list[str] = field(default_factory=list)
+    crawl_runs: list[dict[str, Any]] = field(default_factory=list)
+    cancel_requested: bool = False
     log_lines: list[str] = field(default_factory=list)
 
     def add_log(self, message: str) -> None:
@@ -114,10 +132,17 @@ class InkittBatchService:
         self._batch_root = (self._project_root / "output" / "inkitt_batch").resolve()
         self._batch_root.mkdir(parents=True, exist_ok=True)
         self._index_file = self._batch_root / "batch_index.json"
+        self._discovered_story_index_file = self._batch_root / "discovered_story_index.json"
+        self._exported_story_index_file = self._batch_root / "exported_story_index.json"
         self._last_persist_at = 0.0
+        self._request_lock = threading.Lock()
+        self._last_request_at = 0.0
+        self._history_lock = threading.Lock()
         cfg = load_site_config("inkitt")
         self._promo_patterns = build_promo_patterns(cfg.get("promo_patterns", []))
         self._load_index()
+        self._bootstrap_discovered_story_index_from_batches()
+        self._bootstrap_exported_story_index_from_batches()
 
     def start(
         self,
@@ -128,6 +153,7 @@ class InkittBatchService:
         discover_concurrency: int,
         crawl_concurrency: int,
         request_delay_seconds: float,
+        crawl_after_discovery: bool = True,
     ) -> InkittBatchState:
         selected = normalize_genres(genres)
         batch_id = uuid.uuid4().hex[:8]
@@ -139,19 +165,73 @@ class InkittBatchService:
             max_pages_per_genre=clamp(max_pages_per_genre, 1, INKITT_BATCH_MAX_PAGES),
             discover_concurrency=clamp(discover_concurrency, 1, INKITT_BATCH_MAX_DISCOVER_WORKERS),
             crawl_concurrency=clamp(crawl_concurrency, 1, INKITT_BATCH_MAX_CRAWL_WORKERS),
-            request_delay_seconds=max(0.0, min(float(request_delay_seconds), 5.0)),
+            request_delay_seconds=max(1.0, min(float(request_delay_seconds), 15.0)),
             output_dir=str(self._prepare_output_dir(batch_id)),
             selected_genres=selected,
+            cancel_requested=False,
         )
-        state.add_log(f"Started Inkitt batch for {len(selected)} genre(s).")
+        state.add_log(f"Started Inkitt discovery for {len(selected)} genre(s).")
 
         with self._lock:
             self._batches[batch_id] = state
             self._persist_locked(force=True)
 
-        thread = threading.Thread(target=self._run_thread, args=(batch_id,), daemon=True)
+        thread = threading.Thread(target=self._run_thread, args=(batch_id, crawl_after_discovery), daemon=True)
         thread.start()
         return state
+
+    def start_crawl(
+        self,
+        batch_id: str,
+        crawl_concurrency: int,
+        request_delay_seconds: float,
+        max_stories: int | None = None,
+    ) -> InkittBatchState:
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            if state.phase in {"discovering", "crawling"}:
+                raise ValueError("This Inkitt batch is already active.")
+            available_rows = [row for row in state.rows if row.status in {"queued", "discovered", "failed"}]
+            if max_stories is not None:
+                available_rows = available_rows[:max(1, int(max_stories))]
+            if not available_rows:
+                raise ValueError("This Inkitt batch has no queued stories to crawl.")
+            run_id = uuid.uuid4().hex[:8]
+            for row in available_rows:
+                row.status = "queued"
+                row.error = ""
+                row.crawl_run_id = run_id
+            state.phase = "crawling"
+            state.cancel_requested = False
+            state.finished_at = None
+            state.crawl_concurrency = clamp(crawl_concurrency, 1, INKITT_BATCH_MAX_CRAWL_WORKERS)
+            state.request_delay_seconds = max(1.0, min(float(request_delay_seconds), 15.0))
+            state.crawl_runs.append({
+                "run_id": run_id,
+                "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "finished_at": None,
+                "target_stories": len(available_rows),
+                "completed_count": 0,
+                "failed_count": 0,
+                "skipped_count": 0,
+                "status": "crawling",
+            })
+            state.add_log(f"Started crawl run {run_id} for {len(available_rows)} story/stories.")
+            self._persist_locked(force=True)
+
+        thread = threading.Thread(target=self._crawl_thread, args=(batch_id, run_id), daemon=True)
+        thread.start()
+        return state
+
+    def pause_crawl(self, batch_id: str) -> InkittBatchState:
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            if state.phase != "crawling":
+                raise ValueError("Only an active Inkitt crawl can be paused.")
+            state.cancel_requested = True
+            state.add_log("Pause requested. Current in-flight story/stories will finish, then the queue will stop.")
+            self._persist_locked(force=True)
+            return state
 
     def get_status(self, batch_id: str) -> dict[str, Any]:
         with self._lock:
@@ -186,7 +266,7 @@ class InkittBatchService:
     def delete_batch(self, batch_id: str) -> bool:
         with self._lock:
             state = self._get_state_locked(batch_id)
-            if state.phase == "running":
+            if state.phase in {"discovering", "crawling"}:
                 raise ValueError("Active Inkitt batches cannot be deleted. Wait for the batch to finish first.")
             output_dirs = [(self._batch_root / batch_id).resolve()]
             if state.output_dir:
@@ -220,12 +300,15 @@ class InkittBatchService:
             return
         raise HTTPException(status_code=403, detail="Access denied for this Inkitt batch.")
 
-    def get_download_files(self, batch_id: str) -> tuple[InkittBatchState, list[tuple[Path, str]]]:
+    def get_download_files(self, batch_id: str, run_id: str | None = None) -> tuple[InkittBatchState, list[tuple[Path, str]]]:
         with self._lock:
             state = self._get_state_locked(batch_id)
-            if state.phase != "completed":
-                raise ValueError("Batch is not completed yet.")
             output_dir = Path(state.output_dir).resolve() if state.output_dir else self._batch_root / batch_id
+            run_rows = [
+                row
+                for row in state.rows
+                if run_id and row.status == "completed" and row.crawl_run_id == run_id
+            ]
 
         if not output_dir.exists() or not output_dir.is_dir():
             raise FileNotFoundError("Batch output folder was not found.")
@@ -233,16 +316,25 @@ class InkittBatchService:
             raise ValueError("Batch output path escapes the batch root.")
 
         files: list[tuple[Path, str]] = []
-        for pattern in ("*.md", "info.json"):
-            for path in sorted(output_dir.rglob(pattern)):
-                if path.is_file() and not path.is_symlink():
-                    archive_name = str(path.relative_to(output_dir)).replace("\\", "/")
-                    files.append((path, archive_name))
+        if run_id:
+            for row in run_rows:
+                for name in (row.output_file, row.metadata_file):
+                    if not name:
+                        continue
+                    path = (output_dir / name).resolve()
+                    if path.is_file() and not path.is_symlink() and path.is_relative_to(output_dir):
+                        files.append((path, name.replace("\\", "/")))
+        else:
+            for pattern in ("*.md", "info.json"):
+                for path in sorted(output_dir.rglob(pattern)):
+                    if path.is_file() and not path.is_symlink():
+                        archive_name = str(path.relative_to(output_dir)).replace("\\", "/")
+                        files.append((path, archive_name))
         if not files:
             raise FileNotFoundError("No Inkitt batch files were created.")
         return state, files
 
-    def _run_thread(self, batch_id: str) -> None:
+    def _run_thread(self, batch_id: str, crawl_after_discovery: bool) -> None:
         try:
             refs = self._discover(batch_id)
             with self._lock:
@@ -250,21 +342,33 @@ class InkittBatchService:
                 if state is None:
                     return
                 if not refs:
-                    state.phase = "completed"
+                    state.phase = "ready"
                     state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     state.add_log("No free completed Inkitt stories found.")
                     self._persist_locked(force=True)
                     return
+                queued_refs = refs[:INKITT_BATCH_MAX_STORIES]
                 state.rows = [
                     InkittBatchRow(index=index, **ref)
-                    for index, ref in enumerate(refs[:INKITT_BATCH_MAX_STORIES], start=1)
+                    for index, ref in enumerate(queued_refs, start=1)
                 ]
                 for row in state.rows:
                     row.status = "queued"
                 state.add_log(f"Discovery finished: {len(state.rows)} completed story candidate(s).")
+                if len(refs) > len(queued_refs):
+                    state.add_log(
+                        f"Discovery queue capped at {len(queued_refs)} of {len(refs)} candidate(s). "
+                        "Increase INKITT_BATCH_MAX_STORIES to include more."
+                    )
+                state.phase = "crawling" if crawl_after_discovery else "ready"
+                if not crawl_after_discovery:
+                    state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self._persist_locked(force=True)
 
-            self._crawl_rows(batch_id)
+            if not crawl_after_discovery:
+                return
+
+            self._crawl_rows(batch_id, None)
 
             with self._lock:
                 state = self._batches.get(batch_id)
@@ -288,95 +392,242 @@ class InkittBatchService:
                     state.add_log(f"Batch failed: {exc}")
                     self._persist_locked(force=True)
 
+    def _crawl_thread(self, batch_id: str, run_id: str) -> None:
+        try:
+            self._crawl_rows(batch_id, run_id)
+            with self._lock:
+                state = self._batches.get(batch_id)
+                if state is None:
+                    return
+                paused = state.cancel_requested
+                state.cancel_requested = False
+                remaining = any(row.status in {"queued", "discovered", "failed"} for row in state.rows)
+                state.phase = "ready" if paused or remaining else "completed"
+                state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                completed = sum(1 for row in state.rows if row.status == "completed")
+                skipped = sum(1 for row in state.rows if row.status == "skipped")
+                failed = sum(1 for row in state.rows if row.status == "failed")
+                self._finish_crawl_run_locked(state, run_id, status="paused" if paused else "completed")
+                if paused:
+                    state.add_log(f"Crawl run {run_id} paused. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                else:
+                    state.add_log(f"Crawl run {run_id} finished. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                self._persist_locked(force=True)
+        except Exception as exc:
+            logger.exception("[inkitt-batch/%s] crawl failed", batch_id)
+            with self._lock:
+                state = self._batches.get(batch_id)
+                if state:
+                    state.phase = "failed"
+                    state.error_message = str(exc)
+                    state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    state.add_log(f"Crawl failed: {exc}")
+                    self._finish_crawl_run_locked(state, run_id, status="failed")
+                    self._persist_locked(force=True)
+
     def _discover(self, batch_id: str) -> list[dict[str, Any]]:
         with self._lock:
             state = self._get_state_locked(batch_id)
             selected = list(state.selected_genres)
             max_pages = state.max_pages_per_genre
             max_workers = state.discover_concurrency
+            delay = state.request_delay_seconds
 
-        discovered: dict[str, dict[str, Any]] = {}
+        discovered_this_run: dict[str, dict[str, Any]] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = {
-                pool.submit(self._discover_genre, slug, label, max_pages): (slug, label)
+                pool.submit(self._discover_genre, slug, label, max_pages, delay): (slug, label)
                 for slug, label in INKITT_GENRES
                 if slug in selected
             }
             for future in as_completed(futures):
                 slug, label = futures[future]
                 try:
-                    refs = future.result()
+                    result = future.result()
+                    refs = result.refs
                 except Exception as exc:
                     logger.warning("[inkitt-batch/%s] discovery failed for %s: %s", batch_id, slug, exc)
                     refs = []
+                    result = InkittDiscoveryResult(refs=[], stop_reason=f"failed: {exc}")
                     with self._lock:
                         state = self._batches.get(batch_id)
                         if state:
                             state.add_log(f"{label}: discovery failed: {exc}")
                 for ref in refs:
-                    discovered.setdefault(ref["story_id"], ref)
+                    discovered_this_run.setdefault(ref["story_id"], ref)
                 with self._lock:
                     state = self._batches.get(batch_id)
                     if state:
-                        state.add_log(f"{label}: found {len(refs)} completed candidate(s).")
+                        detail = (
+                            f"{label}: found {len(refs)} completed candidate(s) "
+                            f"from {result.raw_stories_seen} API story row(s) "
+                            f"across {result.pages_checked} page(s)"
+                        )
+                        if result.stop_reason:
+                            detail += f"; stopped: {result.stop_reason}"
+                        state.add_log(detail)
                         self._persist_locked()
 
-        return sorted(discovered.values(), key=lambda item: (item["genre"], item["title"].lower()))
+        added_count, catalog_refs = self._merge_discovered_story_refs(discovered_this_run.values(), selected)
+        exported_story_ids = self._load_exported_story_ids()
+        refs = [ref for ref in catalog_refs if ref["story_id"] not in exported_story_ids]
+        skipped_exported = len(catalog_refs) - len(refs)
+        with self._lock:
+            state = self._batches.get(batch_id)
+            if state:
+                state.add_log(
+                    f"System catalog updated: {added_count} new, "
+                    f"{len(catalog_refs)} total for selected genre(s)."
+                )
+                if skipped_exported:
+                    state.add_log(f"Skipped {skipped_exported} story/stories already exported in prior batches.")
+                self._persist_locked(force=True)
+        return sorted(refs, key=lambda item: (item["genre"], item["title"].lower()))
 
-    def _discover_genre(self, genre_slug: str, genre_label: str, max_pages: int) -> list[dict[str, Any]]:
+    def _discover_genre(
+        self,
+        genre_slug: str,
+        genre_label: str,
+        max_pages: int,
+        delay: float = 2.0,
+    ) -> InkittDiscoveryResult:
         session = self._make_session()
         refs_by_id: dict[str, dict[str, Any]] = {}
-        previous_page_ids: set[str] = set()
+        pages_checked = 0
+        raw_stories_seen = 0
+        stop_reason = f"reached max page limit ({max_pages})"
         for page in range(1, max_pages + 1):
-            url = f"https://www.inkitt.com/genres/{genre_slug}"
-            if page > 1:
-                url = f"{url}?page={page}"
-            response = session.get(url, timeout=30)
+            url = f"https://www.inkitt.com/1/genres/{genre_slug}"
+            pages_checked = page
+            request_kwargs = {
+                "params": {"page": page, "sorting": "popular_all_time", "story_type": "original"},
+                "headers": {
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": f"https://www.inkitt.com/genres/{genre_slug}",
+                },
+                "timeout": 30,
+            }
+            response: requests.Response | None = None
+            for attempt in range(INKITT_DISCOVER_RETRY_TIMES + 1):
+                try:
+                    response = self._throttled_get(session, url, delay, **request_kwargs)
+                except requests.RequestException as exc:
+                    stop_reason = f"request failed on page {page}: {exc.__class__.__name__}"
+                    if attempt >= INKITT_DISCOVER_RETRY_TIMES:
+                        response = None
+                        break
+                    time.sleep(self._discover_retry_wait(None, attempt))
+                    continue
+                if response.status_code != 429:
+                    break
+                retry_after = response.headers.get("Retry-After")
+                stop_reason = f"HTTP 429 on page {page}"
+                if retry_after:
+                    stop_reason += f" (Retry-After: {retry_after})"
+                if attempt >= INKITT_DISCOVER_RETRY_TIMES:
+                    stop_reason += f" after {INKITT_DISCOVER_RETRY_TIMES} retries"
+                    break
+                time.sleep(self._discover_retry_wait(response, attempt))
+            if response is None:
+                break
             if response.status_code != 200:
+                stop_reason = f"HTTP {response.status_code} on page {page}"
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after:
+                        stop_reason += f" (Retry-After: {retry_after})"
+                    stop_reason += f" after {INKITT_DISCOVER_RETRY_TIMES} retries"
                 break
-            soup = BeautifulSoup(response.text, "html.parser")
-            refs = extract_completed_story_refs(soup, genre_slug, genre_label)
-            page_ids = {ref["story_id"] for ref in refs}
-            if page > 1 and (not page_ids or page_ids == previous_page_ids):
+            try:
+                payload = response.json()
+            except ValueError:
+                stop_reason = f"invalid JSON on page {page}"
                 break
-            previous_page_ids = page_ids
+            stories = payload.get("stories") or []
+            if not stories:
+                stop_reason = f"empty page {page}"
+                break
+            raw_stories_seen += len(stories)
+            refs = extract_completed_story_refs_from_api(payload, genre_slug, genre_label)
             for ref in refs:
                 refs_by_id.setdefault(ref["story_id"], ref)
-        return list(refs_by_id.values())
+            if len(stories) < 20:
+                stop_reason = f"short page {page} ({len(stories)} story row(s))"
+                break
+        return InkittDiscoveryResult(
+            refs=list(refs_by_id.values()),
+            pages_checked=pages_checked,
+            raw_stories_seen=raw_stories_seen,
+            stop_reason=stop_reason,
+        )
 
-    def _crawl_rows(self, batch_id: str) -> None:
+    def _crawl_rows(self, batch_id: str, run_id: str | None = None) -> None:
         with self._lock:
             state = self._get_state_locked(batch_id)
-            rows = [row for row in state.rows if row.status == "queued"]
+            pending_indices = [
+                row.index for row in state.rows
+                if row.status == "queued" and (run_id is None or row.crawl_run_id == run_id)
+            ]
             max_workers = state.crawl_concurrency
             output_dir = Path(state.output_dir).resolve()
             delay = state.request_delay_seconds
 
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(self._crawl_one, row, output_dir, delay): row.index
-                for row in rows
-            }
-            for future in as_completed(futures):
-                row_index = futures[future]
+        pending_lock = threading.Lock()
+
+        def take_next_row() -> InkittBatchRow | None:
+            while True:
+                with self._lock:
+                    state = self._batches.get(batch_id)
+                    if state is None or state.cancel_requested:
+                        return None
+                with pending_lock:
+                    if not pending_indices:
+                        return None
+                    row_index = pending_indices.pop(0)
+                with self._lock:
+                    state = self._batches.get(batch_id)
+                    if state is None or row_index < 1 or row_index > len(state.rows):
+                        continue
+                    row = state.rows[row_index - 1]
+                    if row.status == "queued" and (run_id is None or row.crawl_run_id == run_id):
+                        return row
+
+        def worker() -> None:
+            while True:
+                row = take_next_row()
+                if row is None:
+                    return
                 try:
-                    update = future.result()
+                    update = self._crawl_one(batch_id, row, output_dir, delay)
                 except Exception as exc:
-                    logger.warning("[inkitt-batch/%s] crawl failed for row %s: %s", batch_id, row_index, exc)
+                    logger.warning("[inkitt-batch/%s] crawl failed for row %s: %s", batch_id, row.index, exc)
                     update = {"status": "failed", "error": str(exc)}
                 with self._lock:
                     state = self._batches.get(batch_id)
                     if state is None:
                         return
-                    row = state.rows[row_index - 1]
+                    persisted_row = state.rows[row.index - 1]
                     for key, value in update.items():
-                        setattr(row, key, value)
+                        setattr(persisted_row, key, value)
+                    if persisted_row.status == "completed":
+                        persisted_row.completed_at = persisted_row.completed_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        self._record_exported_story(persisted_row, batch_id)
                     self._persist_locked()
 
-    def _crawl_one(self, row: InkittBatchRow, output_dir: Path, delay: float) -> dict[str, Any]:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = [pool.submit(worker) for _ in range(min(max_workers, len(pending_indices)))]
+            for future in as_completed(futures):
+                future.result()
+
+    def _crawl_one(self, batch_id: str, row: InkittBatchRow, output_dir: Path, delay: float) -> dict[str, Any]:
+        if self._is_cancel_requested(batch_id):
+            return {"status": "queued", "error": ""}
         row.status = "crawling"
         spider = InkittSpider(novel=row.url, limit=10000)
-        story_html = spider._fetch_html(row.url)
+        story_html = self._fetch_spider_html(spider, row.url, delay)
+        if self._is_cancel_requested(batch_id):
+            return {"status": "queued", "error": ""}
         story_soup = BeautifulSoup(story_html, "html.parser")
         metadata = spider._extract_novel_metadata(story_soup, row.story_id, row.url)
         metadata.update(extract_story_quality(story_soup))
@@ -388,21 +639,40 @@ class InkittBatchService:
         chapter_links = spider._collect_chapter_links(story_soup, row.story_id, row.url)
         if not chapter_links:
             return {"status": "skipped", "error": "No chapter list found."}
+        self._update_row_progress(batch_id, row.index, status="crawling", total_chapters=len(chapter_links), crawled_chapters=0)
 
         chapters: list[tuple[int, str, str, str]] = []
         try:
-            for index, link in enumerate(chapter_links):
+            for link in chapter_links:
+                if self._is_cancel_requested(batch_id):
+                    return {
+                        "status": "queued",
+                        "total_chapters": len(chapter_links),
+                        "crawled_chapters": 0,
+                        "error": "",
+                    }
                 chapter_url = link["url"]
-                html = story_html if spider._same_url(chapter_url, row.url) else spider._fetch_html(chapter_url)
+                html = story_html if spider._same_url(chapter_url, row.url) else self._fetch_spider_html(spider, chapter_url, delay)
+                if self._is_cancel_requested(batch_id):
+                    return {
+                        "status": "queued",
+                        "total_chapters": len(chapter_links),
+                        "crawled_chapters": 0,
+                        "error": "",
+                    }
                 soup = BeautifulSoup(html, "html.parser")
                 content = spider._extract_chapter_content(soup)
                 cleaned = clean_chapter_content(content, self._promo_patterns)
+                if should_use_rendered_fallback(cleaned):
+                    rendered = self._fetch_rendered_chapter_content(chapter_url)
+                    rendered_cleaned = clean_chapter_content(rendered, self._promo_patterns)
+                    if len(rendered_cleaned.split()) > len(cleaned.split()):
+                        cleaned = rendered_cleaned
                 if not cleaned:
                     raise RuntimeError("No readable free chapter content.")
                 title = spider._extract_chapter_title(soup) or link.get("title") or f"Chapter {link['chapter_number']}"
                 chapters.append((int(link["chapter_number"]), title, cleaned, chapter_url))
-                if delay > 0 and index < len(chapter_links) - 1:
-                    time.sleep(delay)
+                self._update_row_progress(batch_id, row.index, crawled_chapters=len(chapters))
         except RuntimeError as exc:
             message = str(exc)
             if "requires login" in message.lower() or "subscription" in message.lower():
@@ -452,6 +722,255 @@ class InkittBatchService:
             "error": "",
         }
 
+    def _is_cancel_requested(self, batch_id: str) -> bool:
+        with self._lock:
+            state = self._batches.get(batch_id)
+            return bool(state and state.cancel_requested)
+
+    def _update_row_progress(self, batch_id: str, row_index: int, **updates: Any) -> None:
+        with self._lock:
+            state = self._batches.get(batch_id)
+            if state is None or row_index < 1 or row_index > len(state.rows):
+                return
+            row = state.rows[row_index - 1]
+            for key, value in updates.items():
+                setattr(row, key, value)
+            self._persist_locked()
+
+    def _fetch_rendered_chapter_content(self, url: str) -> str:
+        if not INKITT_RENDERED_FALLBACK:
+            return ""
+        try:
+            from handlers.selenium_handler import _get_browser
+
+            browser = _get_browser()
+            html, status, _body, _headers, paragraphs = browser.fetch_with_retry(
+                url,
+                timeout=60,
+                skip_scroll=False,
+                max_retries=1,
+            )
+            if status and status >= 400:
+                return ""
+            if paragraphs:
+                return "\n\n".join(clean_text(str(paragraph)) for paragraph in paragraphs if clean_text(str(paragraph)))
+            soup = BeautifulSoup(html or "", "html.parser")
+            return InkittSpider(novel=url, limit=1)._extract_chapter_content(soup)
+        except Exception as exc:
+            logger.warning("[inkitt-batch] rendered fallback failed for %s: %s", url, exc)
+            return ""
+
+    def _finish_crawl_run_locked(self, state: InkittBatchState, run_id: str, status: str = "completed") -> None:
+        for run in state.crawl_runs:
+            if run.get("run_id") != run_id:
+                continue
+            run_rows = [row for row in state.rows if row.crawl_run_id == run_id]
+            run["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            run["completed_count"] = sum(1 for row in run_rows if row.status == "completed")
+            run["failed_count"] = sum(1 for row in run_rows if row.status == "failed")
+            run["skipped_count"] = sum(1 for row in run_rows if row.status == "skipped")
+            run["crawled_chapters"] = sum(int(row.crawled_chapters or 0) for row in run_rows)
+            run["total_chapters"] = sum(int(row.total_chapters or 0) for row in run_rows)
+            run["status"] = status
+            return
+
+    def _fetch_spider_html(self, spider: InkittSpider, url: str, delay: float, attempts: int = 5) -> str:
+        last_error = ""
+        for attempt in range(attempts):
+            response = self._throttled_get(spider._session, url, delay)
+            if response.status_code == 429:
+                retry_after = parse_retry_after(response.headers.get("Retry-After"))
+                wait = retry_after if retry_after is not None else min(90.0, 8.0 * (attempt + 1))
+                wait += random.uniform(0.5, 2.0)
+                last_error = f"[inkitt] HTTP 429 while fetching {url}"
+                time.sleep(wait)
+                continue
+            if (spider._is_blocked_response(response) or spider._is_login_gated_response(response.text)) and not spider._cookies_loaded:
+                spider._saved_cookie_count = spider._load_saved_cookies()
+                response = self._throttled_get(spider._session, url, delay)
+            if response.status_code != 200:
+                raise RuntimeError(f"[inkitt] HTTP {response.status_code} while fetching {url}")
+            if spider._is_blocked_response(response):
+                raise RuntimeError(
+                    "[inkitt] Cloudflare challenge did not clear. "
+                    "Open the story in a browser and save cookies before retrying."
+                )
+            if spider._is_login_gated_response(response.text):
+                raise RuntimeError(
+                    "[inkitt] This chapter requires login. "
+                    "Log in to Inkitt and save cookies before retrying."
+                )
+            return response.text
+        raise RuntimeError(f"{last_error}; retry limit reached. Increase delay seconds and retry the batch.")
+
+    def _discover_retry_wait(self, response: requests.Response | None, attempt: int) -> float:
+        retry_after = parse_retry_after(response.headers.get("Retry-After") if response is not None else None)
+        wait = retry_after if retry_after is not None else INKITT_DISCOVER_RETRY_BASE_SECONDS * (attempt + 1)
+        wait = min(INKITT_DISCOVER_RETRY_MAX_SECONDS, max(1.0, wait))
+        return wait + random.uniform(0.5, 2.0)
+
+    def _throttled_get(self, session: requests.Session, url: str, delay: float, **kwargs: Any) -> requests.Response:
+        min_delay = max(1.0, float(delay or 0))
+        with self._request_lock:
+            elapsed = time.monotonic() - self._last_request_at
+            if elapsed < min_delay:
+                time.sleep(min_delay - elapsed)
+            kwargs.setdefault("timeout", 30)
+            response = session.get(url, **kwargs)
+            self._last_request_at = time.monotonic()
+            return response
+
+    def _load_exported_story_ids(self) -> set[str]:
+        with self._history_lock:
+            index = self._load_exported_story_index_unlocked()
+            return set(index.keys())
+
+    def _merge_discovered_story_refs(
+        self,
+        refs: Any,
+        selected_genres: list[str] | None = None,
+    ) -> tuple[int, list[dict[str, Any]]]:
+        selected = set(selected_genres or [slug for slug, _label in INKITT_GENRES])
+        with self._history_lock:
+            index = self._load_discovered_story_index_unlocked()
+            original_ids = set(index.keys())
+            changed = False
+            for ref in refs:
+                normalized = normalize_catalog_ref(ref)
+                if normalized:
+                    merged = {**index.get(normalized["story_id"], {}), **normalized}
+                    if index.get(normalized["story_id"]) != merged:
+                        index[normalized["story_id"]] = merged
+                        changed = True
+            if changed:
+                self._write_discovered_story_index_unlocked(index)
+            catalog_refs = [
+                ref for ref in index.values()
+                if ref.get("genre_slug") in selected
+            ]
+            return len(set(index.keys()) - original_ids), catalog_refs
+
+    def _load_discovered_story_index_unlocked(self) -> dict[str, dict[str, Any]]:
+        if not self._discovered_story_index_file.exists():
+            return {}
+        try:
+            payload = json.loads(self._discovered_story_index_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Failed to load Inkitt discovered story index: %s", exc)
+            return {}
+        stories = payload.get("stories") if isinstance(payload, dict) else payload
+        if not isinstance(stories, dict):
+            return {}
+        index: dict[str, dict[str, Any]] = {}
+        for story_id, story in stories.items():
+            if not re.fullmatch(r"\d+", str(story_id)) or not isinstance(story, dict):
+                continue
+            normalized = normalize_catalog_ref(story)
+            if normalized:
+                index[str(story_id)] = normalized
+        return index
+
+    def _write_discovered_story_index_unlocked(self, index: dict[str, dict[str, Any]]) -> None:
+        tmp_path = self._discovered_story_index_file.with_suffix(".tmp")
+        payload = {
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "stories": dict(sorted(index.items(), key=lambda item: item[0])),
+        }
+        try:
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_path.replace(self._discovered_story_index_file)
+        except Exception as exc:
+            logger.warning("Failed to persist Inkitt discovered story index: %s", exc)
+
+    def _record_exported_story(self, row: InkittBatchRow, batch_id: str) -> None:
+        if not row.story_id:
+            return
+        with self._history_lock:
+            index = self._load_exported_story_index_unlocked()
+            index[row.story_id] = {
+                "story_id": row.story_id,
+                "title": row.title,
+                "author": row.author,
+                "genre": row.genre,
+                "genre_slug": row.genre_slug,
+                "source_url": row.url,
+                "batch_id": batch_id,
+                "output_file": row.output_file,
+                "metadata_file": row.metadata_file,
+                "crawl_run_id": row.crawl_run_id,
+                "rating": row.rating,
+                "review_count": row.review_count,
+                "read_count": row.read_count,
+                "crawled_chapters": row.crawled_chapters,
+                "exported_at": row.completed_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            self._write_exported_story_index_unlocked(index)
+
+    def _load_exported_story_index_unlocked(self) -> dict[str, dict[str, Any]]:
+        if not self._exported_story_index_file.exists():
+            return {}
+        try:
+            payload = json.loads(self._exported_story_index_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Failed to load Inkitt exported story index: %s", exc)
+            return {}
+        stories = payload.get("stories") if isinstance(payload, dict) else payload
+        if not isinstance(stories, dict):
+            return {}
+        return {
+            str(story_id): story
+            for story_id, story in stories.items()
+            if re.fullmatch(r"\d+", str(story_id)) and isinstance(story, dict)
+        }
+
+    def _write_exported_story_index_unlocked(self, index: dict[str, dict[str, Any]]) -> None:
+        tmp_path = self._exported_story_index_file.with_suffix(".tmp")
+        payload = {
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "stories": dict(sorted(index.items(), key=lambda item: item[0])),
+        }
+        try:
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_path.replace(self._exported_story_index_file)
+        except Exception as exc:
+            logger.warning("Failed to persist Inkitt exported story index: %s", exc)
+
+    def _bootstrap_discovered_story_index_from_batches(self) -> None:
+        refs = []
+        for state in self._batches.values():
+            for row in state.rows:
+                if row.story_id and row.status != "completed":
+                    refs.append(row.to_dict())
+        if refs:
+            self._merge_discovered_story_refs(refs)
+
+    def _bootstrap_exported_story_index_from_batches(self) -> None:
+        with self._history_lock:
+            index = self._load_exported_story_index_unlocked()
+            original_count = len(index)
+            for batch_id, state in self._batches.items():
+                for row in state.rows:
+                    if row.status != "completed" or not row.story_id:
+                        continue
+                    index.setdefault(row.story_id, {
+                        "story_id": row.story_id,
+                        "title": row.title,
+                        "author": row.author,
+                        "genre": row.genre,
+                        "genre_slug": row.genre_slug,
+                        "source_url": row.url,
+                        "batch_id": batch_id,
+                        "output_file": row.output_file,
+                        "metadata_file": row.metadata_file,
+                        "rating": row.rating,
+                        "review_count": row.review_count,
+                        "read_count": row.read_count,
+                        "crawled_chapters": row.crawled_chapters,
+                        "exported_at": state.finished_at or state.started_at or state.created_at,
+                    })
+            if len(index) != original_count:
+                self._write_exported_story_index_unlocked(index)
+
     def _make_session(self) -> requests.Session:
         session = requests.Session()
         session.headers.update(InkittSpider._HEADERS)
@@ -487,6 +1006,8 @@ class InkittBatchService:
         skipped = sum(1 for row in state.rows if row.status == "skipped")
         failed = sum(1 for row in state.rows if row.status == "failed")
         crawled_or_done = completed + skipped + failed
+        total_chapters = sum(int(row.total_chapters or 0) for row in state.rows)
+        crawled_chapters = sum(int(row.crawled_chapters or 0) for row in state.rows)
         return {
             "batch_id": state.batch_id,
             "batch_name": state.batch_name,
@@ -497,7 +1018,9 @@ class InkittBatchService:
             "skipped_count": skipped,
             "failed_count": failed,
             "processed_count": crawled_or_done,
-            "download_ready": state.phase == "completed" and completed > 0,
+            "total_chapters": total_chapters,
+            "crawled_chapters": crawled_chapters,
+            "download_ready": completed > 0 or self._has_downloadable_files(state),
             "error_message": state.error_message,
             "created_at": state.created_at,
             "started_at": state.started_at,
@@ -507,6 +1030,8 @@ class InkittBatchService:
             "crawl_concurrency": state.crawl_concurrency,
             "request_delay_seconds": state.request_delay_seconds,
             "selected_genres": state.selected_genres,
+            "crawl_runs": list(reversed(state.crawl_runs[-20:])),
+            "cancel_requested": state.cancel_requested,
             "log_lines": state.log_lines[-60:],
         }
 
@@ -516,6 +1041,12 @@ class InkittBatchService:
         if status_filter in {"completed", "skipped", "failed", "queued", "crawling", "discovered"}:
             return [row for row in state.rows if row.status == status_filter]
         return state.rows
+
+    def _has_downloadable_files(self, state: InkittBatchState) -> bool:
+        output_dir = Path(state.output_dir).resolve() if state.output_dir else self._batch_root / state.batch_id
+        if not output_dir.exists() or not output_dir.is_dir() or not output_dir.is_relative_to(self._batch_root):
+            return False
+        return any(path.is_file() and not path.is_symlink() for path in output_dir.rglob("*.md"))
 
     def _get_state_locked(self, batch_id: str) -> InkittBatchState:
         if not re.fullmatch(r"[0-9a-f]{8}", batch_id or ""):
@@ -541,16 +1072,23 @@ class InkittBatchService:
                     continue
                 rows = [InkittBatchRow(**row) for row in entry.get("rows", []) if isinstance(row, dict)]
                 phase = entry.get("phase") or "failed"
+                cancel_requested = bool(entry.get("cancel_requested") or False)
                 error_message = str(entry.get("error_message") or "")
                 log_lines = list(entry.get("log_lines") or [])
-                if phase == "running":
-                    phase = "failed"
-                    error_message = "Batch was interrupted by a service restart."
-                    log_lines.append(f"{datetime.now().strftime('%H:%M:%S')} Batch interrupted by service restart.")
+                if phase in {"running", "crawling"}:
+                    phase = "ready"
+                    cancel_requested = False
+                    error_message = ""
+                    log_lines.append(f"{datetime.now().strftime('%H:%M:%S')} Crawl paused by service restart; queued work can be resumed.")
                     for row in rows:
-                        if row.status in {"queued", "crawling", "discovered"}:
-                            row.status = "failed"
-                            row.error = row.error or "Interrupted before completion."
+                        if row.status in {"crawling", "discovered"}:
+                            row.status = "queued"
+                            row.error = ""
+                elif phase == "discovering":
+                    phase = "failed"
+                    cancel_requested = False
+                    error_message = "Discovery was interrupted by a service restart. Start a new discovery to rebuild the catalog."
+                    log_lines.append(f"{datetime.now().strftime('%H:%M:%S')} Discovery interrupted by service restart.")
                 self._batches[batch_id] = InkittBatchState(
                     batch_id=batch_id,
                     created_by_user_id=entry.get("created_by_user_id"),
@@ -563,10 +1101,12 @@ class InkittBatchService:
                     finished_at=entry.get("finished_at"),
                     max_pages_per_genre=int(entry.get("max_pages_per_genre") or 3),
                     discover_concurrency=int(entry.get("discover_concurrency") or 4),
-                    crawl_concurrency=int(entry.get("crawl_concurrency") or 2),
-                    request_delay_seconds=float(entry.get("request_delay_seconds") or 0.35),
+                    crawl_concurrency=int(entry.get("crawl_concurrency") or 1),
+                    request_delay_seconds=float(entry.get("request_delay_seconds") or 2.0),
                     output_dir=entry.get("output_dir") or str(self._batch_root / batch_id),
                     selected_genres=list(entry.get("selected_genres") or [slug for slug, _label in INKITT_GENRES]),
+                    crawl_runs=list(entry.get("crawl_runs") or []),
+                    cancel_requested=cancel_requested,
                     log_lines=log_lines[-250:],
                 )
             if self._batches:
@@ -617,6 +1157,43 @@ def extract_completed_story_refs(soup: BeautifulSoup, genre_slug: str, genre_lab
             "author": clean_text(author_match.group(1)) if author_match else "",
             "total_chapters": int(chapter_match.group(1)) if chapter_match else None,
             "review_count": int(review_match.group(1).replace(",", "")) if review_match else None,
+        }
+    return list(refs.values())
+
+
+def extract_completed_story_refs_from_api(payload: dict[str, Any], genre_slug: str, genre_label: str) -> list[dict[str, Any]]:
+    refs: dict[str, dict[str, Any]] = {}
+    stories = payload.get("stories") if isinstance(payload, dict) else None
+    if not isinstance(stories, list):
+        return []
+
+    for story in stories:
+        if not isinstance(story, dict):
+            continue
+        story_id = str(story.get("id") or "").strip()
+        title = clean_text(str(story.get("title") or story.get("test_title") or ""))
+        if not story_id or not title:
+            continue
+        if str(story.get("story_status") or "").lower() != "complete":
+            continue
+        if story.get("for_patrons_only") is True:
+            continue
+
+        user = story.get("user") if isinstance(story.get("user"), dict) else {}
+        author = clean_text(str(user.get("name") or user.get("username") or ""))
+        rating = story.get("overall_rating_cache")
+        review_count = story.get("reviews_count")
+        chapter_count = story.get("chapters_count")
+        refs[story_id] = {
+            "genre": genre_label,
+            "genre_slug": genre_slug,
+            "title": title,
+            "url": f"https://www.inkitt.com/stories/{story_id}",
+            "story_id": story_id,
+            "author": author,
+            "total_chapters": int(chapter_count) if isinstance(chapter_count, int) else None,
+            "rating": float(rating) if isinstance(rating, (int, float)) else None,
+            "review_count": int(review_count) if isinstance(review_count, int) else None,
         }
     return list(refs.values())
 
@@ -719,10 +1296,62 @@ def normalize_genres(genres: list[str] | None) -> list[str]:
     return selected or [slug for slug, _label in INKITT_GENRES]
 
 
+def normalize_catalog_ref(ref: Any) -> dict[str, Any] | None:
+    if not isinstance(ref, dict):
+        return None
+    story_id = str(ref.get("story_id") or "").strip()
+    title = clean_text(str(ref.get("title") or ""))
+    url = str(ref.get("url") or "").strip()
+    genre_slug = str(ref.get("genre_slug") or "").strip()
+    if not story_id or not title or not url or not genre_slug:
+        return None
+    genre_labels = dict(INKITT_GENRES)
+    normalized: dict[str, Any] = {
+        "genre": clean_text(str(ref.get("genre") or genre_labels.get(genre_slug) or genre_slug)),
+        "genre_slug": genre_slug,
+        "title": title,
+        "url": url,
+        "story_id": story_id,
+        "author": clean_text(str(ref.get("author") or "")),
+        "total_chapters": int(ref["total_chapters"]) if isinstance(ref.get("total_chapters"), int) else None,
+        "rating": float(ref["rating"]) if isinstance(ref.get("rating"), (int, float)) else None,
+        "review_count": int(ref["review_count"]) if isinstance(ref.get("review_count"), int) else None,
+        "read_count": int(ref["read_count"]) if isinstance(ref.get("read_count"), int) else None,
+    }
+    return normalized
+
+
 def parse_compact_number(value: str, suffix: str | None) -> int:
     number = float(value.replace(",", ""))
     multiplier = {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000}.get((suffix or "").upper(), 1)
     return int(number * multiplier)
+
+
+def parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None
+
+
+def should_use_rendered_fallback(content: str) -> bool:
+    text = clean_text(content)
+    if not text:
+        return True
+    words = text.split()
+    if len(words) < INKITT_RENDERED_FALLBACK_WORDS:
+        return True
+    suspicious = (
+        "about the author",
+        "follow +",
+        "write a review",
+        "add to reading list",
+        "next chapter",
+    )
+    lowered = text.lower()
+    return any(marker in lowered for marker in suspicious)
 
 
 def clean_text(text: str) -> str:

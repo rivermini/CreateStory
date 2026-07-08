@@ -82,6 +82,12 @@ tasks:
       - docker compose up -d --build
       - docker image prune -f 2>nul || true
 
+  "update:all-noFE":
+    desc: "Rebuild and reload all compose services, skipping frontend compilation"
+    cmds:
+      - docker compose up -d --build
+      - docker image prune -f 2>nul || true
+
   "update:backend":
     desc: "Rebuild and reload all backend compose services (no frontend build)"
     cmds:
