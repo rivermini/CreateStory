@@ -59,7 +59,7 @@ def _encrypt_cookie_value(value: str) -> str:
 def encrypt_plaintext_cookie_values(db) -> int:
     """Rewrite legacy plaintext cookie values in-place using the current key."""
     migrated = 0
-    for table_name in ("inkitt_cookies", "goodnovel_cookies", "scribblehub_cookies"):
+    for table_name in ("inkitt_cookies", "goodnovel_cookies", "scribblehub_cookies", "webnovel_cookies"):
         rows = db.execute(
             text(f"SELECT id, value FROM {table_name} WHERE value NOT LIKE :prefix"),
             {"prefix": f"{_ENCRYPTED_COOKIE_PREFIX}%"},
@@ -194,6 +194,31 @@ class ScribbleHubCookie(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     value: Mapped[str] = mapped_column(EncryptedCookieValue(), nullable=False, default="")
     domain: Mapped[str] = mapped_column(String(256), nullable=False, default=".scribblehub.com")
+    path: Mapped[str] = mapped_column(String(64), nullable=False, default="/")
+    secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    expires_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class WebNovelCookie(Base):
+    """Stores user-provided WebNovel cookies and their matching User-Agent.
+
+    WebNovel protects catalog/chapter endpoints with Cloudflare. The crawler
+    replays cookies captured from a real browser session, especially
+    cf_clearance, together with the User-Agent that generated them. Login
+    cookies may also let the account read chapters it has already unlocked.
+
+    Only the most recently saved set of cookies is considered valid at any
+    time. Expired cookies are skipped at read time.
+    """
+
+    __tablename__ = "webnovel_cookies"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    value: Mapped[str] = mapped_column(EncryptedCookieValue(), nullable=False, default="")
+    domain: Mapped[str] = mapped_column(String(256), nullable=False, default=".webnovel.com")
     path: Mapped[str] = mapped_column(String(64), nullable=False, default="/")
     secure: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     expires_at: Mapped[int | None] = mapped_column(Integer, nullable=True)

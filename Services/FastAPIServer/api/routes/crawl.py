@@ -81,6 +81,18 @@ async def check_goodnovel_cookies(request: dict | None = Body(default=None)) -> 
     return await _forward_request("POST", "/api/crawl/goodnovel-cookies/status", json_body=request or {})
 
 
+@router.post("/webnovel-cookies", dependencies=[Depends(require_operator)])
+async def update_webnovel_cookies(request: dict = Body(...)) -> JSONResponse:
+    """Update saved WebNovel cookies in the NovelCrawler service."""
+    return await _forward_request("POST", "/api/crawl/webnovel-cookies", json_body=request)
+
+
+@router.post("/webnovel-cookies/status", dependencies=[Depends(require_operator)])
+async def check_webnovel_cookies(request: dict | None = Body(default=None)) -> JSONResponse:
+    """Check saved WebNovel cookies in the NovelCrawler service."""
+    return await _forward_request("POST", "/api/crawl/webnovel-cookies/status", json_body=request or {})
+
+
 @router.post("/goodnovel-batch/scan", dependencies=[Depends(require_job_creation_rate)])
 async def start_goodnovel_batch_scan(request: dict = Body(...)) -> JSONResponse:
     """Start a GoodNovel title scan batch."""

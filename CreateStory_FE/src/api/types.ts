@@ -163,6 +163,21 @@ export interface GoodNovelCookieStatusResponse {
   extra_unlocked?: number | null;
 }
 
+export interface WebNovelCookieUpdateResponse {
+  updated: boolean;
+  cookie_count: number;
+  has_cf_clearance: boolean;
+  has_user_agent: boolean;
+}
+
+export interface WebNovelCookieStatusResponse {
+  valid: boolean | null;
+  reason: string;
+  message: string;
+  cookie_count: number;
+  tested_url?: string | null;
+}
+
 export type GoodNovelBatchPhase = 'scanning' | 'scan_completed' | 'crawling' | 'completed' | 'failed';
 export type GoodNovelBatchRowStatus = 'pending' | 'found' | 'not_found' | 'ambiguous' | 'error';
 export type GoodNovelBatchCrawlStatus = 'pending' | 'queued' | 'crawling' | 'completed' | 'failed' | 'skipped';

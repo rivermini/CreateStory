@@ -1,0 +1,38 @@
+site_name: WebNovel
+base_url: https://www.webnovel.com
+
+mirror_domains:
+  - www.webnovel.com
+
+domains:
+  - www.webnovel.com
+  - webnovel.com
+
+# Story pages:
+#   /book/<slug>_<bookId>
+#   /book/<bookId>
+# Catalog pages:
+#   /book/<bookId>/catalog
+story_url_pattern: "^https?://(?:www\\.)?webnovel\\.com/book/(?:[^/]+_)?\\d+(?:/catalog)?"
+
+rate_limit: 1.0
+
+selectors:
+  novel_title: "h1, h2"
+  chapter_list: "a[href*='/book/'][href*='_']"
+  chapter_body: ".cha-words p"
+  next_chapter: "a[href*='/chapter-'], a:-soup-contains('next chapter')"
+  cover_image: "meta[property='og:image']"
+  author: "meta[name='author']"
+
+promo_patterns:
+  - "WebNovel"
+  - "Download App"
+  - "Vote with Power Stone"
+  - "SEND GIFT"
+  - "Batch unlock chapters"
+
+spider_settings:
+  DOWNLOAD_DELAY: 1.0
+  AUTOTHROTTLE_ENABLED: true
+  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"

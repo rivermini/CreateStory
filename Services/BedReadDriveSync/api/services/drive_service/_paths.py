@@ -42,7 +42,7 @@ _SHARED_CREDENTIALS_DIR = (
 _RE_STATUS_PREFIX = re.compile(r"^(DONE_|ING_|INCOMPLETE_|EXTENDED_)")
 
 _RE_SOURCE_SUFFIX = re.compile(
-    r"_(?:wp|gd|Goodnovel|nw|ink|jn|jobnib|sh|scribblehub|nl|novellunar)(?![a-zA-Z0-9_])|_-_?novel(?=\s|_|\s-\s|$)", re.IGNORECASE
+    r"_(?:wp|gd|Goodnovel|nw|ink|jn|jobnib|sh|scribblehub|nl|novellunar|wn|webnovel)(?![a-zA-Z0-9_])|_-_?novel(?=\s|_|\s-\s|$)", re.IGNORECASE
 )
 
 # -------------------------------------------------------------------------
@@ -63,6 +63,8 @@ _PLATFORM_TO_ENUM: dict[str, str] = {
     "scribblehub": "ScribbleHub",
     "nl": "NovelLunar",
     "novellunar": "NovelLunar",
+    "wn": "WebNovel",
+    "webnovel": "WebNovel",
 }
 
 _CATEGORY_MAP: dict[str, tuple[str, str | None]] = {

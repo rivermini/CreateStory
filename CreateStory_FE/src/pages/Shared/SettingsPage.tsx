@@ -7,6 +7,8 @@ import {
   checkScribblehubCookies,
   updateGoodnovelCookies,
   checkGoodnovelCookies,
+  updateWebnovelCookies,
+  checkWebnovelCookies,
   getSettings,
   updateSettings,
   getDriveSyncConfig,
@@ -22,7 +24,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 import { showToast } from '../../components/Shared/Toast';
 
-type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'goodnovel' | 'crawler' | 'audio' | 'danger';
+type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'goodnovel' | 'webnovel' | 'crawler' | 'audio' | 'danger';
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
@@ -45,6 +47,7 @@ const CATEGORY_ITEMS: CategoryItem[] = [
   { id: 'inkitt', label: 'Inkitt Cookies', description: 'Crawler login cookies', icon: 'shield' },
   { id: 'scribblehub', label: 'ScribbleHub Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
   { id: 'goodnovel', label: 'GoodNovel Cookies', description: 'Login cookies to unlock chapters', icon: 'shield' },
+  { id: 'webnovel', label: 'WebNovel Cookies', description: 'Cloudflare and login cookies', icon: 'shield' },
   { id: 'crawler', label: 'Crawler', description: 'Default crawl behavior', icon: 'settings' },
   { id: 'audio', label: 'Audio Pipeline', description: 'Auto Audio and TTS', icon: 'music' },
   { id: 'danger', label: 'Advanced', description: 'Cleanup actions', icon: 'delete' },
@@ -145,6 +148,13 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [checkingGoodnovelCookies, setCheckingGoodnovelCookies] = useState(false);
   const [goodnovelCookieError, setGoodnovelCookieError] = useState('');
   const [goodnovelCookieMessage, setGoodnovelCookieMessage] = useState('');
+  const [webnovelCookies, setWebnovelCookies] = useState('');
+  const [webnovelUserAgent, setWebnovelUserAgent] = useState('');
+  const [webnovelTestUrl, setWebnovelTestUrl] = useState('');
+  const [savingWebnovelCookies, setSavingWebnovelCookies] = useState(false);
+  const [checkingWebnovelCookies, setCheckingWebnovelCookies] = useState(false);
+  const [webnovelCookieError, setWebnovelCookieError] = useState('');
+  const [webnovelCookieMessage, setWebnovelCookieMessage] = useState('');
 
   useEffect(() => {
     getSettings()
@@ -693,6 +703,103 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     }
   };
 
+  const handleSaveWebnovelCookies = async () => {
+    const cookies = webnovelCookies.trim();
+    const userAgent = webnovelUserAgent.trim();
+    if (!cookies) {
+      setWebnovelCookieError('Paste your WebNovel cookies before saving.');
+      setWebnovelCookieMessage('');
+      return;
+    }
+    if (!userAgent) {
+      setWebnovelCookieError('Paste your browser User-Agent so cf_clearance matches the crawler request.');
+      setWebnovelCookieMessage('');
+      return;
+    }
+
+    setSavingWebnovelCookies(true);
+    setWebnovelCookieError('');
+    setWebnovelCookieMessage('');
+    try {
+      const result = await updateWebnovelCookies(cookies, userAgent);
+      if (!result.has_cf_clearance) {
+        setWebnovelCookieError('Saved, but no cf_clearance cookie was found. WebNovel may still return a Cloudflare challenge.');
+      } else {
+        const message = `Saved ${result.cookie_count} WebNovel cookie${result.cookie_count === 1 ? '' : 's'}.`;
+        setWebnovelCookieMessage(message);
+        showToast(message, 'success', 2200, 'top-center');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update WebNovel cookies.';
+      setWebnovelCookieError(message);
+      showToast('Failed to update WebNovel cookies.', 'error', 2500, 'top-center');
+    } finally {
+      setSavingWebnovelCookies(false);
+    }
+  };
+
+  const handleCheckWebnovelCookies = async () => {
+    setCheckingWebnovelCookies(true);
+    setWebnovelCookieError('');
+    setWebnovelCookieMessage('');
+    try {
+      const result = await checkWebnovelCookies(webnovelTestUrl.trim() || undefined);
+      if (result.valid) {
+        setWebnovelCookieMessage(result.message);
+        showToast('WebNovel cookies are working.', 'success', 2200, 'top-center');
+      } else if (result.valid === null) {
+        setWebnovelCookieMessage(result.message);
+        showToast('Checked WebNovel cookies.', 'info', 2500, 'top-center');
+      } else {
+        setWebnovelCookieError(result.message);
+      }
+    } catch (err) {
+      setWebnovelCookieError(err instanceof Error ? err.message : 'Failed to test WebNovel cookies.');
+    } finally {
+      setCheckingWebnovelCookies(false);
+    }
+  };
+
+  const handleWebnovelJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let json = JSON.parse(text);
+
+      let extractedUA = '';
+      if (json && !Array.isArray(json) && typeof json === 'object') {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+
+      if (json && !Array.isArray(json) && (json.cookies || json.data)) json = json.cookies || json.data;
+
+      if (Array.isArray(json)) {
+        setWebnovelCookies(JSON.stringify(json));
+        if (!extractedUA) {
+          const uaEntry = json.find((c) => (c?.name || '').toLowerCase() === 'user-agent');
+          if (uaEntry?.value) extractedUA = String(uaEntry.value);
+        }
+      } else if (json && typeof json === 'object' && json.cookieHeader) {
+        setWebnovelCookies(String(json.cookieHeader));
+      } else {
+        setWebnovelCookies(text.trim());
+      }
+
+      if (extractedUA) {
+        setWebnovelUserAgent(String(extractedUA));
+        showToast('WebNovel cookies + User-Agent loaded from file.', 'success', 2500, 'top-center');
+      } else {
+        showToast('WebNovel cookies loaded from file. User-Agent not found.', 'info', 3000, 'top-center');
+      }
+      setWebnovelCookieError('');
+    } catch (err) {
+      setWebnovelCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -915,6 +1022,41 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
             <p className="text-xs" style={{ color: tertiaryText }}>Easiest way: run `miscellaneous/GoodNovel Cookies/update_goodnovel_cookies.bat`, log in to GoodNovel in the Chrome window it opens, and it writes `goodnovel.json` — then upload that file here. Or in Chrome at `https://www.goodnovel.com` (logged in): DevTools → Application → Cookies → copy the `TOKEN` cookie (or the whole Cookie header). Cookies expire — re-paste when the test shows the login no longer unlocks extra chapters.</p>
             {goodnovelCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{goodnovelCookieMessage}</div>}
             {goodnovelCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{goodnovelCookieError}</div>}
+          </section>
+        );
+      case 'webnovel':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="WebNovel Cookies" description="Paste WebNovel browser cookies and the matching User-Agent so the crawler can read pages that Cloudflare allows for that session." pageText={pageText} secondaryText={secondaryText} />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label htmlFor="settings-webnovel-cookies" className={labelClassName}>Cookies - `cf_clearance=...`, a full Cookie header, or a JSON cookie array</label>
+                <textarea id="settings-webnovel-cookies" value={webnovelCookies} onChange={(e) => { setWebnovelCookies(e.target.value); setWebnovelCookieError(''); setWebnovelCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} placeholder={'cf_clearance=AbCd...; uid=...'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-webnovel-ua" className={labelClassName}>Browser User-Agent (run `navigator.userAgent` in the same browser session)</label>
+                <textarea id="settings-webnovel-ua" value={webnovelUserAgent} onChange={(e) => { setWebnovelUserAgent(e.target.value); setWebnovelCookieError(''); setWebnovelCookieMessage(''); }} rows={2} className={`${fieldClassName} resize-y font-mono text-xs`} placeholder={'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/... Safari/537.36'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-webnovel-test-url" className={labelClassName}>WebNovel URL to test against (optional)</label>
+                <input id="settings-webnovel-test-url" value={webnovelTestUrl} onChange={(e) => { setWebnovelTestUrl(e.target.value); setWebnovelCookieError(''); setWebnovelCookieMessage(''); }} className={`${fieldClassName} font-mono text-xs`} placeholder={'https://www.webnovel.com/book/title_123/chapter-1_456'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={handleSaveWebnovelCookies} disabled={savingWebnovelCookies || !webnovelCookies.trim() || !webnovelUserAgent.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingWebnovelCookies || !webnovelCookies.trim() || !webnovelUserAgent.trim() ? subtleSurface : primaryButton, color: savingWebnovelCookies || !webnovelCookies.trim() || !webnovelUserAgent.trim() ? tertiaryText : '#fff' }}>
+                {savingWebnovelCookies ? 'Saving...' : 'Save Cookies'}
+              </button>
+              <button type="button" onClick={handleCheckWebnovelCookies} disabled={checkingWebnovelCookies} className="rounded-lg border px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                {checkingWebnovelCookies ? 'Testing...' : 'Test Cookies'}
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                <span>Upload Cookies JSON</span>
+                <input type="file" accept="application/json" onChange={handleWebnovelJsonFileUpload} className="hidden" />
+              </label>
+            </div>
+            <p className="text-xs" style={{ color: tertiaryText }}>In Chrome at `https://www.webnovel.com`: DevTools - Application - Cookies - copy `cf_clearance` or the full Cookie header. Save the same browser's User-Agent. Locked chapters still require that your account can read them.</p>
+            {webnovelCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{webnovelCookieMessage}</div>}
+            {webnovelCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{webnovelCookieError}</div>}
           </section>
         );
       case 'crawler':

@@ -14,6 +14,7 @@ from api.models.crawl_request import (
     CrawlCancelResponse,
     CrawlRequest,
     CrawlStartResponse,
+    LogEntry,
     ProgressUpdate,
     validate_external_url,
 )
@@ -33,10 +34,20 @@ _TRACEBACK_LOG_PATTERNS = (
 _INTERNAL_PATH_PATTERN = re.compile(r"/app/[^\s)'\"]+")
 
 
-def _sanitize_log_line_for_ui(line: str) -> str | None:
-    if any(pattern.search(line) for pattern in _TRACEBACK_LOG_PATTERNS):
+def _sanitize_log_line_for_ui(entry: LogEntry | str) -> LogEntry | str | None:
+    if isinstance(entry, str):
+        if any(pattern.search(entry) for pattern in _TRACEBACK_LOG_PATTERNS):
+            return None
+        return _INTERNAL_PATH_PATTERN.sub("[internal-path]", entry)
+
+    if any(pattern.search(entry.message) for pattern in _TRACEBACK_LOG_PATTERNS):
         return None
-    return _INTERNAL_PATH_PATTERN.sub("[internal-path]", line)
+    sanitized_message = _INTERNAL_PATH_PATTERN.sub("[internal-path]", entry.message)
+    return LogEntry(
+        timestamp=entry.timestamp,
+        message=sanitized_message,
+        level=entry.level,
+    )
 
 
 class InkittCookieUpdateRequest(BaseModel):
@@ -124,6 +135,35 @@ class GoodNovelCookieStatusResponse(BaseModel):
     readable_without_login: int | None = None
     total: int | None = None
     extra_unlocked: int | None = None
+
+
+class WebNovelCookieUpdateRequest(BaseModel):
+    cookies: str = Field(..., min_length=1, description="WebNovel cookies as JSON, a name/value map, or a raw Cookie header.")
+    user_agent: str | None = Field(default=None, description="The browser User-Agent matching the WebNovel cookies.")
+
+
+class WebNovelCookieUpdateResponse(BaseModel):
+    updated: bool
+    cookie_count: int
+    has_cf_clearance: bool
+    has_user_agent: bool
+
+
+class WebNovelCookieStatusRequest(BaseModel):
+    story_url: str | None = Field(default=None, description="Optional WebNovel story/chapter URL to test against.")
+
+    @field_validator("story_url")
+    @classmethod
+    def _validate_story_url(cls, value: str | None) -> str | None:
+        return validate_external_url(value, ("webnovel.com",), field_name="story_url")
+
+
+class WebNovelCookieStatusResponse(BaseModel):
+    valid: bool | None
+    reason: str
+    message: str
+    cookie_count: int
+    tested_url: str | None = None
 
 
 class GoodNovelBatchScanRequest(BaseModel):
@@ -269,6 +309,42 @@ async def check_goodnovel_cookies(request: GoodNovelCookieStatusRequest, http_re
         result.get("tested_url"),
     )
     return GoodNovelCookieStatusResponse(**result)
+
+
+@router.post("/webnovel-cookies", response_model=WebNovelCookieUpdateResponse)
+async def update_webnovel_cookies(request: WebNovelCookieUpdateRequest, http_request: Request) -> WebNovelCookieUpdateResponse:
+    """Update the saved WebNovel cookies used by the WebNovel spider."""
+    require_operator_identity(http_request)
+    from api.services.webnovel_cookie_service import update_webnovel_cookies as save_cookies
+
+    try:
+        result = save_cookies(request.cookies, request.user_agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    logger.info(
+        "Updated WebNovel cookies: %d cookie(s), cf_clearance=%s, user_agent=%s",
+        result["cookie_count"],
+        result["has_cf_clearance"],
+        result["has_user_agent"],
+    )
+    return WebNovelCookieUpdateResponse(**result)
+
+
+@router.post("/webnovel-cookies/status", response_model=WebNovelCookieStatusResponse)
+async def check_webnovel_cookies(request: WebNovelCookieStatusRequest, http_request: Request) -> WebNovelCookieStatusResponse:
+    """Check whether saved WebNovel cookies clear the Cloudflare challenge."""
+    require_operator_identity(http_request)
+    from api.services.webnovel_cookie_service import check_webnovel_cookies as run_check
+
+    result = run_check(request.story_url)
+    logger.info(
+        "Checked WebNovel cookies: valid=%s reason=%s tested_url=%s",
+        result["valid"],
+        result["reason"],
+        result.get("tested_url"),
+    )
+    return WebNovelCookieStatusResponse(**result)
 
 
 def _require_goodnovel_batch_owner(batch_id: str, request: Request):

@@ -9,6 +9,8 @@ import type {
   ScribbleHubCookieStatusResponse,
   GoodNovelCookieUpdateResponse,
   GoodNovelCookieStatusResponse,
+  WebNovelCookieUpdateResponse,
+  WebNovelCookieStatusResponse,
   GoodNovelBatchCrawlRequest,
   GoodNovelBatchRowsResponse,
   GoodNovelBatchScanRequest,
@@ -84,6 +86,26 @@ export async function updateGoodnovelCookies(
 
 export async function checkGoodnovelCookies(storyUrl?: string): Promise<GoodNovelCookieStatusResponse> {
   return apiFetch<GoodNovelCookieStatusResponse>('/api/crawl/goodnovel-cookies/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ story_url: storyUrl }),
+    timeout: 60000,
+  });
+}
+
+export async function updateWebnovelCookies(
+  cookies: string,
+  userAgent?: string,
+): Promise<WebNovelCookieUpdateResponse> {
+  return apiFetch<WebNovelCookieUpdateResponse>('/api/crawl/webnovel-cookies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies, user_agent: userAgent }),
+  });
+}
+
+export async function checkWebnovelCookies(storyUrl?: string): Promise<WebNovelCookieStatusResponse> {
+  return apiFetch<WebNovelCookieStatusResponse>('/api/crawl/webnovel-cookies/status', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ story_url: storyUrl }),

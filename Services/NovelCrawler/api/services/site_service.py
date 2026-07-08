@@ -169,6 +169,34 @@ def _fetch_novellunar_metadata(url: str) -> tuple[Optional[str], Optional[NovelM
     return title, novel_meta
 
 
+def _fetch_webnovel_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata], Optional[str]]:
+    try:
+        from bs4 import BeautifulSoup
+        from spiders.webnovel import WebNovelSpider
+
+        spider = WebNovelSpider(novel=url, limit=1)
+        normalized_url = spider._normalize_url(url)
+        catalog_url = spider._catalog_url(normalized_url)
+        soup = BeautifulSoup(spider._fetch_html(catalog_url, referer=normalized_url), "html.parser")
+        metadata = spider._extract_story_metadata(soup, spider._story_url_from_catalog(catalog_url))
+        slug = spider.novel_slug
+    except Exception as exc:
+        logger.debug("[webnovel] Metadata fetch failed for %s: %s", url, exc)
+        return None, None, None
+
+    title = metadata.get("title")
+    novel_meta = NovelMetadata(
+        title=title,
+        author=metadata.get("author"),
+        authors=metadata.get("authors"),
+        cover_url=metadata.get("cover_url"),
+        description=metadata.get("description"),
+        num_parts=metadata.get("num_parts"),
+        tags=metadata.get("tags") or [],
+    )
+    return title, novel_meta, slug
+
+
 def _fetch_inkitt_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetadata]]:
     try:
         import json
@@ -378,6 +406,14 @@ class SiteService:
 
         elif site_info.config_name == "novellunar":
             story_title, novel_meta = _fetch_novellunar_metadata(url)
+
+        elif site_info.config_name == "webnovel":
+            story_title, novel_meta, webnovel_slug = _fetch_webnovel_metadata(url)
+            if webnovel_slug:
+                slug = webnovel_slug
+            elif slug:
+                slug = re.sub(r"_\d+$", "", slug)
+                slug = re.sub(r"/catalog$", "", slug)
 
         elif site_info.config_name == "scribblehub":
             scribblehub_slug = _scribblehub_slug_from_url(url)

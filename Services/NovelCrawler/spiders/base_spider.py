@@ -42,7 +42,7 @@ class BaseSpider(Spider):
     config_name: str = ""
     download_delay: float = 2.0
     max_retries: int = 3
-    selector_config: SelectorConfig = field(default_factory=SelectorConfig)
+    selector_config: SelectorConfig = SelectorConfig()
     custom_settings: dict = {}
 
     def __init__(self, *args, **kwargs):

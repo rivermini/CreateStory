@@ -39,7 +39,7 @@ class FileService:
 
     def get_output_file(self, crawl_id: str, filename: str) -> Path:
         output_dir = self.get_output_dir(crawl_id)
-        if not filename or Path(filename).is_absolute() or Path(filename).name != filename:
+        if not filename or Path(filename).is_absolute() or Path(filename).name != filename or "\\" in filename or "/" in filename:
             raise CrawlPathError("Invalid output filename.")
         candidate = output_dir / filename
         if candidate.is_symlink():

@@ -66,6 +66,11 @@ def is_goodnovel_chapter_url(url: str) -> bool:
     return bool(re.search(r"/book/[^/]+_\d+/[^/]+_\d+$", parsed_path, re.IGNORECASE))
 
 
+def is_webnovel_chapter_url(url: str) -> bool:
+    parsed_path = urllib.parse.urlparse(url).path.rstrip("/")
+    return bool(re.search(r"/book/[^/]+_\d+/[^/]+_\d+$", parsed_path, re.IGNORECASE))
+
+
 def is_chapter_url(url: str) -> bool:
     from urllib.parse import urlparse
 
@@ -92,6 +97,9 @@ def is_chapter_url(url: str) -> bool:
 
     if "goodnovel" in parsed.netloc:
         return is_goodnovel_chapter_url(url)
+
+    if "webnovel" in parsed.netloc:
+        return is_webnovel_chapter_url(url)
 
     return False
 
@@ -635,6 +643,39 @@ def _fetch_goodnovel_chapters(story_url: str, timeout: int = 30) -> tuple[list[C
     return entries, None, len(story.chapters), story.title, counts
 
 
+def _fetch_webnovel_chapters(story_url: str, timeout: int = 45) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str], dict]:
+    try:
+        from spiders.webnovel import WebNovelSpider
+
+        spider = WebNovelSpider(novel=story_url, limit=50)
+        catalog_url = spider._catalog_url(spider._normalize_url(story_url))
+        html = spider._fetch_html(catalog_url, referer=story_url, timeout=timeout)
+        soup = BeautifulSoup(html, "html.parser")
+        metadata = spider._extract_story_metadata(soup, spider._story_url_from_catalog(catalog_url))
+        links = spider._collect_chapter_links(soup, catalog_url)
+    except Exception as exc:
+        logger.warning("[webnovel] Chapter list fetch failed: %s", exc)
+        return [], "WebNovel chapter list failed. Refresh WebNovel cookies in Settings if Cloudflare is blocking the request.", None, None, {}
+
+    entries = [
+        ChapterEntry(
+            chapter_number=int(link["chapter_number"]),
+            title=link.get("title") or f"Chapter {link['chapter_number']}",
+            url=link["url"],
+            locked=bool(link.get("locked")) if link.get("locked") is not None else None,
+        )
+        for link in links[:50]
+    ]
+    locked_count = sum(1 for link in links if link.get("locked") is True)
+    free_count = len(links) - locked_count if links else None
+    counts = {
+        "free_chapter_count": free_count,
+        "paid_chapter_count": locked_count if links else None,
+        "authenticated": bool(getattr(spider._client, "_cookies", [])),
+    }
+    return entries, None, metadata.get("num_parts") or len(links), metadata.get("title"), counts
+
+
 def _is_inkitt_blocked(html: str) -> bool:
     head = html[:10000]
     return (
@@ -789,6 +830,12 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
                 story_title = fetched_story_title
         elif site_info.config_name == "goodnovel":
             chapters, fetch_warning, total_chapter_count, fetched_story_title, extra_counts = _fetch_goodnovel_chapters(story_url)
+            if fetch_warning:
+                warning = fetch_warning
+            if fetched_story_title:
+                story_title = fetched_story_title
+        elif site_info.config_name == "webnovel":
+            chapters, fetch_warning, total_chapter_count, fetched_story_title, extra_counts = _fetch_webnovel_chapters(story_url)
             if fetch_warning:
                 warning = fetch_warning
             if fetched_story_title:
