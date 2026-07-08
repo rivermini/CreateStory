@@ -223,6 +223,21 @@ export function NovelInfoPanel({
         </div>
       )}
 
+      {/* Inkitt Subscription Story Notice */}
+      {siteName?.toLowerCase() === 'inkitt' && novelMetadata?.is_paywalled && (
+        <div className="shrink-0 border-b border-[var(--cs-border)] px-3 py-2.5">
+          <div className="rounded-lg border p-3" style={{ borderColor: 'rgba(251,191,36,0.24)', background: isDark ? 'rgba(251,191,36,0.08)' : 'rgba(251,191,36,0.05)' }}>
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--cs-text)]">
+              <Icon icon={appIcons.paywall} className="h-4 w-4" />
+              Author Subscription Story
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--cs-text-muted)]">
+              This story requires an author subscription on Inkitt to read fully. Crawling will only succeed for paywalled chapters if you have an active subscription and have saved your Inkitt cookies in Settings.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Chapter table */}
       <div className="flex-1 overflow-y-auto" style={{ minHeight: '200px' }} ref={tocRef}>
         {chapters.length === 0 ? (

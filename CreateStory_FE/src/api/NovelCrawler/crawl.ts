@@ -15,6 +15,9 @@ import type {
   GoodNovelBatchRowsResponse,
   GoodNovelBatchScanRequest,
   GoodNovelBatchSummary,
+  InkittBatchRowsResponse,
+  InkittBatchStartRequest,
+  InkittBatchSummary,
   CrawlStatusWithLogs,
   ProgressUpdate,
   ActiveCrawl,
@@ -163,6 +166,44 @@ export async function startGoodnovelBatchCrawl(
     body: JSON.stringify(request),
     timeout: 60000,
   });
+}
+
+export async function startInkittBatch(request: InkittBatchStartRequest): Promise<InkittBatchSummary> {
+  return apiFetch<InkittBatchSummary>('/api/crawl/inkitt-batch/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    timeout: 60000,
+  });
+}
+
+export async function listInkittBatches(): Promise<InkittBatchSummary[]> {
+  return apiFetch<InkittBatchSummary[]>('/api/crawl/inkitt-batch');
+}
+
+export async function getInkittBatchStatus(batchId: string): Promise<InkittBatchSummary> {
+  return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}`);
+}
+
+export async function getInkittBatchRows(
+  batchId: string,
+  options: { offset?: number; limit?: number; status?: string } = {},
+): Promise<InkittBatchRowsResponse> {
+  const params = new URLSearchParams({
+    offset: String(options.offset ?? 0),
+    limit: String(options.limit ?? 100),
+    status: options.status ?? 'all',
+  });
+  return apiFetch<InkittBatchRowsResponse>(
+    `/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/rows?${params.toString()}`
+  );
+}
+
+export async function removeInkittBatch(batchId: string): Promise<{ deleted: boolean; batch_id: string }> {
+  return apiFetch<{ deleted: boolean; batch_id: string }>(
+    `/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export async function cancelCrawl(crawlId: string): Promise<CrawlCancelResponse> {

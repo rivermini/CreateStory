@@ -22,6 +22,7 @@ import { type ThemeMode } from './types/theme';
 const LoginPage = lazy(() => import('./pages/Shared/LoginPage').then(m => ({ default: m.LoginPage })));
 const HomePage = lazy(() => import('./pages/NovelCrawler/HomePage').then(m => ({ default: m.HomePage })));
 const GoodNovelBatchPage = lazy(() => import('./pages/NovelCrawler/GoodNovelBatchPage').then(m => ({ default: m.GoodNovelBatchPage })));
+const InkittBatchPage = lazy(() => import('./pages/NovelCrawler/InkittBatchPage').then(m => ({ default: m.InkittBatchPage })));
 const CrawlPage = lazy(() => import('./pages/NovelCrawler/CrawlPage').then(m => ({ default: m.CrawlPage })));
 const ResultPage = lazy(() => import('./pages/NovelCrawler/ResultPage').then(m => ({ default: m.ResultPage })));
 const CrawlHistory = lazy(() => import('./pages/NovelCrawler/CrawlHistoryPage').then(m => ({ default: m.default })));
@@ -261,6 +262,7 @@ function Shell({
             <Routes>
               <Route path="/" element={<HomePage themeMode={themeMode}  />} />
               <Route path="/goodnovel-batch" element={<GoodNovelBatchPage themeMode={themeMode} />} />
+              <Route path="/inkitt-batch" element={<InkittBatchPage themeMode={themeMode} />} />
               <Route path="/crawl" element={<CrawlPage themeMode={themeMode}  />} />
               <Route path="/results" element={<ResultPage themeMode={themeMode} />} />
               <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} />} />

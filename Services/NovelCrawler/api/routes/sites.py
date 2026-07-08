@@ -440,7 +440,17 @@ def _fetch_inkitt_chapters(story_url: str, timeout: int = 30) -> tuple[list[Chap
     if not entries:
         return [], "No chapter links found on this Inkitt page", None, story_title
 
-    return entries[:50], None, total_count, story_title
+    is_subscription = False
+    if "globalData.authorPatronTiers" in html:
+        match = re.search(r"globalData\.authorPatronTiers\s*=\s*\[(.*?)\];", html)
+        if match and match.group(1).strip():
+            is_subscription = True
+    if not is_subscription and ('id="patron-tiers"' in html or 'class="patron-tiers"' in html or 'patron-tiers' in html):
+        if soup.select_one("#patron-tiers"):
+            is_subscription = True
+
+    warning = "This story requires an author subscription to read fully." if is_subscription else None
+    return entries[:50], warning, total_count, story_title
 
 
 def _fetch_jobnib_chapters(story_url: str, timeout: int = 60) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:

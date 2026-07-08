@@ -261,6 +261,69 @@ export interface GoodNovelBatchCrawlRequest {
   request_delay_seconds: number;
 }
 
+export type InkittBatchPhase = 'running' | 'completed' | 'failed';
+export type InkittBatchRowStatus = 'discovered' | 'queued' | 'crawling' | 'completed' | 'skipped' | 'failed';
+
+export interface InkittBatchSummary {
+  batch_id: string;
+  batch_name: string;
+  phase: InkittBatchPhase;
+  total_stories: number;
+  discovered_count: number;
+  completed_count: number;
+  skipped_count: number;
+  failed_count: number;
+  processed_count: number;
+  download_ready: boolean;
+  error_message: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  max_pages_per_genre: number;
+  discover_concurrency: number;
+  crawl_concurrency: number;
+  request_delay_seconds: number;
+  selected_genres: string[];
+  log_lines: string[];
+}
+
+export interface InkittBatchRow {
+  index: number;
+  genre: string;
+  genre_slug: string;
+  title: string;
+  url: string;
+  story_id: string;
+  author: string;
+  status: InkittBatchRowStatus;
+  completion_status: string;
+  total_chapters: number | null;
+  crawled_chapters: number;
+  rating: number | null;
+  review_count: number | null;
+  read_count: number | null;
+  output_file: string;
+  metadata_file: string;
+  error: string;
+}
+
+export interface InkittBatchRowsResponse {
+  batch: InkittBatchSummary;
+  items: InkittBatchRow[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface InkittBatchStartRequest {
+  batch_name?: string | null;
+  genres?: string[] | null;
+  max_pages_per_genre: number;
+  discover_concurrency: number;
+  crawl_concurrency: number;
+  request_delay_seconds: number;
+}
+
 export interface ProgressUpdate {
   chapters_crawled: number;
   chapters_total: number;

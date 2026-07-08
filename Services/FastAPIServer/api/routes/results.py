@@ -68,6 +68,12 @@ async def download_goodnovel_batch(batch_id: str) -> StreamingResponse:
     return await _proxy_download(f"/api/results/goodnovel-batch/{batch_id}/download")
 
 
+@router.get("/inkitt-batch/{batch_id}/download")
+async def download_inkitt_batch(batch_id: str) -> StreamingResponse:
+    """Zip the genre-grouped combined files for an Inkitt batch."""
+    return await _proxy_download(f"/api/results/inkitt-batch/{batch_id}/download")
+
+
 @router.get("/{crawl_id}/download-all")
 async def download_all_files(crawl_id: str) -> StreamingResponse:
     """Zip all output files from a crawl session."""

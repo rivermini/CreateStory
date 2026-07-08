@@ -240,6 +240,16 @@ def _fetch_inkitt_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetad
     description = json_ld.get("description") or _meta_content(soup, "meta[name='description']")
     chapter_count = _inkitt_chapter_count(soup, url)
 
+    is_paywalled = False
+    html = resp.text
+    if "globalData.authorPatronTiers" in html:
+        match = re.search(r"globalData\.authorPatronTiers\s*=\s*\[(.*?)\];", html)
+        if match and match.group(1).strip():
+            is_paywalled = True
+    if not is_paywalled and ('id="patron-tiers"' in html or 'class="patron-tiers"' in html or 'patron-tiers' in html):
+        if soup.select_one("#patron-tiers"):
+            is_paywalled = True
+
     metadata = NovelMetadata(
         title=title,
         author=author,
@@ -247,6 +257,7 @@ def _fetch_inkitt_metadata(url: str) -> tuple[Optional[str], Optional[NovelMetad
         cover_url=cover_url,
         description=description,
         num_parts=chapter_count,
+        is_paywalled=is_paywalled,
     )
     return title, metadata
 

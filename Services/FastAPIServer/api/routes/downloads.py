@@ -97,7 +97,7 @@ def create_download_ticket(
 @router.get("/api/download/{token}", response_model=None)
 async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse:
     with _tickets_lock:
-        ticket = _tickets.pop(token, None)  # single-use: consume on redeem
+        ticket = _tickets.get(token, None)  # multi-use within its TTL to support download managers (e.g. IDM)
     if ticket is None or ticket.expires_at <= time.monotonic():
         raise HTTPException(status_code=404, detail="Download ticket is invalid or expired.")
 
@@ -106,7 +106,24 @@ async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse
         response = await streaming_proxy("GET", ticket.upstream_url, timeout=300.0)
     finally:
         reset_request_identity(identity_token)
+
+    if response.status_code < 400:
+        orig_disposition = response.headers.get("content-disposition")
+        if orig_disposition:
+            if "filename" in orig_disposition:
+                if not orig_disposition.strip().lower().startswith("attachment"):
+                    response.headers["Content-Disposition"] = orig_disposition.replace("inline", "attachment")
+                else:
+                    response.headers["Content-Disposition"] = orig_disposition
+            else:
+                response.headers["Content-Disposition"] = "attachment"
+        else:
+            response.headers["Content-Disposition"] = "attachment"
+    else:
+        # Prevent downloading error responses (like 404 or 401) as files
+        response.headers.pop("Content-Disposition", None)
+        response.headers.pop("content-disposition", None)
+
     response.headers["Cache-Control"] = "no-store"
-    response.headers["Content-Disposition"] = "attachment"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response

@@ -25,6 +25,7 @@ export interface NavSection {
 const NAV_ITEMS_CRAWL: NavItem[] = [
     { to: '/', label: 'New Crawl', iconKey: '/' },
     { to: '/goodnovel-batch', label: 'GoodNovel Batch', iconKey: '/goodnovel-batch' },
+    { to: '/inkitt-batch', label: 'Inkitt Batch', iconKey: '/inkitt-batch' },
     { to: '/results/all', label: 'Crawl History', iconKey: '/results/all' },
 ];
 

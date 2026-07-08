@@ -99,6 +99,45 @@ async def start_goodnovel_batch_scan(request: dict = Body(...)) -> JSONResponse:
     return await _forward_request("POST", "/api/crawl/goodnovel-batch/scan", json_body=request)
 
 
+@router.post("/inkitt-batch/start", dependencies=[Depends(require_job_creation_rate)])
+async def start_inkitt_batch(request: dict = Body(...)) -> JSONResponse:
+    """Start an Inkitt free completed genre batch."""
+    return await _forward_request("POST", "/api/crawl/inkitt-batch/start", json_body=request)
+
+
+@router.get("/inkitt-batch")
+async def list_inkitt_batches() -> JSONResponse:
+    """Return Inkitt batch history."""
+    return await _forward_request("GET", "/api/crawl/inkitt-batch")
+
+
+@router.get("/inkitt-batch/{batch_id}")
+async def get_inkitt_batch_status(batch_id: str) -> JSONResponse:
+    """Return Inkitt batch status."""
+    return await _forward_request("GET", f"/api/crawl/inkitt-batch/{batch_id}")
+
+
+@router.get("/inkitt-batch/{batch_id}/rows")
+async def list_inkitt_batch_rows(
+    batch_id: str,
+    offset: int = Query(default=0),
+    limit: int = Query(default=100),
+    status: str = Query(default="all"),
+) -> JSONResponse:
+    """Return a paged slice of Inkitt batch rows."""
+    return await _forward_request(
+        "GET",
+        f"/api/crawl/inkitt-batch/{batch_id}/rows",
+        params={"offset": offset, "limit": limit, "status": status},
+    )
+
+
+@router.delete("/inkitt-batch/{batch_id}", dependencies=[Depends(require_operator)])
+async def delete_inkitt_batch(batch_id: str) -> JSONResponse:
+    """Delete an Inkitt batch history entry."""
+    return await _forward_request("DELETE", f"/api/crawl/inkitt-batch/{batch_id}")
+
+
 @router.get("/goodnovel-batch")
 async def list_goodnovel_batches() -> JSONResponse:
     """Return GoodNovel batch history."""

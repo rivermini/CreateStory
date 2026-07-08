@@ -24,6 +24,8 @@ router = APIRouter(prefix="/api/dev", tags=["Development"])
 
 CONFIRMATION_TEXT = "CLEAR_BACKEND_DATA"
 SERVICES_ROOT = Path(__file__).resolve().parents[3]
+if str(SERVICES_ROOT) == "/":
+    SERVICES_ROOT = Path("/services_mock_root")
 
 RUNTIME_TABLES = [
     "refresh_tokens",
