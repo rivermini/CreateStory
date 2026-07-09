@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
+  exportInkittBatchCatalog,
   getInkittBatchDownloadUrl,
   getInkittBatchRows,
   getInkittBatchStatus,
+  importInkittDiscoveredCatalog,
   crawlInkittBatch,
   listInkittBatches,
   pauseInkittBatch,
@@ -14,6 +17,7 @@ import {
 import { downloadWithAuth } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
+import { getInkittLogTone, inkittLogToneClass, splitInkittLogLine } from './inkittLogUtils';
 
 interface InkittBatchPageProps {
   readonly themeMode: ThemeMode;
@@ -52,6 +56,18 @@ const FILTERS = [
   { value: 'queued', label: 'Queued' },
 ];
 
+function downloadJsonFile(payload: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('');
@@ -69,6 +85,9 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [rowFilter, setRowFilter] = useState('all');
   const [isStarting, setIsStarting] = useState(false);
   const [isPausing, setIsPausing] = useState(false);
+  const [isCatalogExporting, setIsCatalogExporting] = useState(false);
+  const [isCatalogImporting, setIsCatalogImporting] = useState(false);
+  const [catalogMessage, setCatalogMessage] = useState('');
   const [rowsLoading, setRowsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<InkittBatchSummary | null>(null);
@@ -76,6 +95,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [downloadTarget, setDownloadTarget] = useState('');
   const [error, setError] = useState('');
   const syncedBatchIdRef = useRef('');
+  const catalogFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
   const progressPercent = summary && summary.total_chapters > 0
@@ -277,6 +297,60 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     }
   };
 
+  const handleExportCatalog = async () => {
+    const selectedBatchId = summary?.batch_id || batchId;
+    if (!selectedBatchId) {
+      setError('Select an Inkitt batch before exporting its discovered catalog.');
+      return;
+    }
+    setIsCatalogExporting(true);
+    setCatalogMessage('');
+    setError('');
+    try {
+      const backup = await exportInkittBatchCatalog(selectedBatchId);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJsonFile(backup, `inkitt_batch_catalog_${selectedBatchId}_${stamp}_${backup.story_count}.json`);
+      setCatalogMessage(`Exported ${backup.story_count.toLocaleString()} story/stories from the selected batch.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export selected Inkitt batch catalog.');
+    } finally {
+      setIsCatalogExporting(false);
+    }
+  };
+
+  const handleImportCatalogClick = () => {
+    catalogFileInputRef.current?.click();
+  };
+
+  const handleImportCatalogFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setIsCatalogImporting(true);
+    setCatalogMessage('');
+    setError('');
+    try {
+      const payload = JSON.parse(await file.text()) as unknown;
+      const response = await importInkittDiscoveredCatalog(payload);
+      syncedBatchIdRef.current = '';
+      setBatchId(response.batch.batch_id);
+      setSummary(response.batch);
+      setRows([]);
+      setRowTotal(0);
+      setRowFilter('all');
+      setCatalogMessage(
+        `Imported ${response.imported_count.toLocaleString()} valid story/stories; `
+        + `${response.new_count.toLocaleString()} new; `
+        + `${response.queued_count.toLocaleString()} queued from this file in a restored batch.`,
+      );
+      fetchHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import Inkitt discovered catalog.');
+    } finally {
+      setIsCatalogImporting(false);
+    }
+  };
+
   const handleSelectBatch = (batch: InkittBatchSummary) => {
     syncedBatchIdRef.current = '';
     setBatchId(batch.batch_id);
@@ -466,7 +540,39 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                   <Icon icon={downloadTarget === 'all' ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${downloadTarget === 'all' ? 'animate-spin' : ''}`} />
                   {downloadTarget === 'all' ? 'Preparing ZIP' : 'Download exported ZIP'}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleExportCatalog}
+                  disabled={isCatalogExporting || !summary}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ borderColor: panelBorder, background: muted, color: text }}
+                >
+                  <Icon icon={isCatalogExporting ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${isCatalogExporting ? 'animate-spin' : ''}`} />
+                  {isCatalogExporting ? 'Exporting batch' : 'Export selected batch'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportCatalogClick}
+                  disabled={isCatalogImporting || active}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ borderColor: panelBorder, background: muted, color: text }}
+                >
+                  <Icon icon={isCatalogImporting ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${isCatalogImporting ? 'animate-spin' : ''}`} />
+                  {isCatalogImporting ? 'Importing catalog' : 'Import catalog'}
+                </button>
+                <input
+                  ref={catalogFileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={handleImportCatalogFile}
+                />
               </div>
+              {catalogMessage && (
+                <div className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.08)', color: isDark ? '#86efac' : '#15803d' }}>
+                  {catalogMessage}
+                </div>
+              )}
             </div>
 
             <div className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
@@ -539,12 +645,29 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
             <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-base font-semibold" style={{ color: text }}>Batch log</h2>
-                <span className="text-xs tabular-nums" style={{ color: faint }}>{summary.log_lines.length.toLocaleString()} lines</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs tabular-nums" style={{ color: faint }}>{summary.log_lines.length.toLocaleString()} latest lines</span>
+                  <Link
+                    to={`/inkitt-batch/${encodeURIComponent(summary.batch_id)}/full-logs`}
+                    className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold"
+                    style={{ borderColor: panelBorder, background: muted, color: text }}
+                  >
+                    <Icon icon={appIcons.file} className="h-3.5 w-3.5" />
+                    Full logs
+                  </Link>
+                </div>
               </div>
-              <div className="mt-3 max-h-56 overflow-auto rounded-md border px-3 py-2 font-mono text-xs leading-5" style={{ borderColor: panelBorder, background: muted, color: soft }}>
-                {summary.log_lines.slice().reverse().map((line, index) => (
-                  <div key={`${line}-${index}`}>{line}</div>
-                ))}
+              <div className="mt-3 max-h-56 overflow-auto rounded-md border p-2 font-mono text-xs leading-5" style={{ borderColor: panelBorder, background: muted }}>
+                {summary.log_lines.slice().reverse().map((line, index) => {
+                  const { time, message } = splitInkittLogLine(line);
+                  const tone = getInkittLogTone(line);
+                  return (
+                    <div key={`${line}-${index}`} className={`mb-1 rounded border-l-2 px-2 py-1 last:mb-0 ${inkittLogToneClass(tone)}`}>
+                      {time && <span className="mr-2 font-semibold opacity-70">{time}</span>}
+                      <span className="break-words">{message}</span>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}

@@ -16,6 +16,9 @@ import type {
   GoodNovelBatchScanRequest,
   GoodNovelBatchSummary,
   InkittBatchCrawlRequest,
+  InkittCatalogBackup,
+  InkittCatalogImportResponse,
+  InkittBatchLogsResponse,
   InkittBatchRowsResponse,
   InkittBatchStartRequest,
   InkittBatchSummary,
@@ -216,6 +219,26 @@ export async function getInkittBatchRows(
   return apiFetch<InkittBatchRowsResponse>(
     `/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/rows?${params.toString()}`
   );
+}
+
+export async function getInkittBatchLogs(batchId: string): Promise<InkittBatchLogsResponse> {
+  return apiFetch<InkittBatchLogsResponse>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/logs`);
+}
+
+export async function exportInkittBatchCatalog(batchId: string): Promise<InkittCatalogBackup> {
+  return apiFetch<InkittCatalogBackup>(
+    `/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/catalog/export`,
+    { timeout: 300000 },
+  );
+}
+
+export async function importInkittDiscoveredCatalog(payload: unknown): Promise<InkittCatalogImportResponse> {
+  return apiFetch<InkittCatalogImportResponse>('/api/crawl/inkitt-batch/catalog/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    timeout: 300000,
+  });
 }
 
 export async function removeInkittBatch(batchId: string): Promise<{ deleted: boolean; batch_id: string }> {

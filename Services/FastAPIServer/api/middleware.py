@@ -207,7 +207,7 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
                     return JSONResponse(
                         status_code=413,
                         content={
-                            "detail": "Request body exceeds the 2 MiB limit.",
+                            "detail": f"Request body exceeds the {MAX_REQUEST_BODY_BYTES // (1024 * 1024)} MiB limit.",
                             "code": "request_too_large",
                             "request_id": request_id,
                         },

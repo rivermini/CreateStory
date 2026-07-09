@@ -491,6 +491,40 @@ async def list_inkitt_batches(request: Request) -> list[dict]:
     )
 
 
+@router.get("/inkitt-batch/catalog/export")
+async def export_inkitt_discovered_catalog(http_request: Request) -> dict:
+    """Export all discovered Inkitt story metadata for backup/restore."""
+    require_operator_identity(http_request)
+    from api.services.inkitt_batch_service import get_inkitt_batch_service
+
+    return get_inkitt_batch_service().export_discovered_catalog()
+
+
+@router.get("/inkitt-batch/{batch_id}/catalog/export")
+async def export_inkitt_batch_catalog(batch_id: str, request: Request) -> dict:
+    """Export discovered Inkitt story metadata from one selected batch."""
+    service = _require_inkitt_batch_owner(batch_id, request)
+    try:
+        return service.export_batch_catalog(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/inkitt-batch/catalog/import")
+async def import_inkitt_discovered_catalog(payload: dict, http_request: Request) -> dict:
+    """Import and merge a discovered Inkitt story catalog backup."""
+    require_operator_identity(http_request)
+    from api.services.inkitt_batch_service import get_inkitt_batch_service
+
+    try:
+        return get_inkitt_batch_service().import_discovered_catalog(
+            payload,
+            created_by_user_id=current_owner(http_request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.get("/inkitt-batch/{batch_id}")
 async def get_inkitt_batch_status(batch_id: str, request: Request) -> dict:
     """Return current Inkitt batch status."""
@@ -513,6 +547,16 @@ async def list_inkitt_batch_rows(
     service = _require_inkitt_batch_owner(batch_id, request)
     try:
         return service.list_rows(batch_id, offset=offset, limit=limit, status_filter=status)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/inkitt-batch/{batch_id}/logs")
+async def get_inkitt_batch_logs(batch_id: str, request: Request) -> dict:
+    """Return the full retained Inkitt batch log."""
+    service = _require_inkitt_batch_owner(batch_id, request)
+    try:
+        return service.get_full_logs(batch_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

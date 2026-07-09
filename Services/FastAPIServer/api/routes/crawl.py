@@ -23,12 +23,13 @@ async def _forward_request(
     path: str,
     json_body: Any = None,
     params: dict | None = None,
+    timeout: float = 300.0,
 ) -> JSONResponse | StreamingResponse:
     """Forward an HTTP request to NovelCrawler."""
     url = f"{_nc_url()}{path}"
     if path == "/api/crawl/stream":
-        return await streaming_proxy(method, url, params=params, timeout=300.0)
-    return await json_proxy(method, url, params=params, json_body=json_body, timeout=300.0)
+        return await streaming_proxy(method, url, params=params, timeout=timeout)
+    return await json_proxy(method, url, params=params, json_body=json_body, timeout=timeout)
 
 
 @router.post("/start", dependencies=[Depends(require_job_creation_rate)])
@@ -111,6 +112,24 @@ async def list_inkitt_batches() -> JSONResponse:
     return await _forward_request("GET", "/api/crawl/inkitt-batch")
 
 
+@router.get("/inkitt-batch/catalog/export", dependencies=[Depends(require_operator)])
+async def export_inkitt_discovered_catalog() -> JSONResponse:
+    """Export all discovered Inkitt story metadata for backup/restore."""
+    return await _forward_request("GET", "/api/crawl/inkitt-batch/catalog/export", timeout=300.0)
+
+
+@router.get("/inkitt-batch/{batch_id}/catalog/export")
+async def export_inkitt_batch_catalog(batch_id: str) -> JSONResponse:
+    """Export discovered Inkitt story metadata from one selected batch."""
+    return await _forward_request("GET", f"/api/crawl/inkitt-batch/{batch_id}/catalog/export", timeout=300.0)
+
+
+@router.post("/inkitt-batch/catalog/import", dependencies=[Depends(require_operator)])
+async def import_inkitt_discovered_catalog(request: dict = Body(...)) -> JSONResponse:
+    """Import and merge a discovered Inkitt story catalog backup."""
+    return await _forward_request("POST", "/api/crawl/inkitt-batch/catalog/import", json_body=request, timeout=300.0)
+
+
 @router.get("/inkitt-batch/{batch_id}")
 async def get_inkitt_batch_status(batch_id: str) -> JSONResponse:
     """Return Inkitt batch status."""
@@ -142,6 +161,12 @@ async def list_inkitt_batch_rows(
         f"/api/crawl/inkitt-batch/{batch_id}/rows",
         params={"offset": offset, "limit": limit, "status": status},
     )
+
+
+@router.get("/inkitt-batch/{batch_id}/logs")
+async def get_inkitt_batch_logs(batch_id: str) -> JSONResponse:
+    """Return the full retained Inkitt batch log."""
+    return await _forward_request("GET", f"/api/crawl/inkitt-batch/{batch_id}/logs")
 
 
 @router.delete("/inkitt-batch/{batch_id}", dependencies=[Depends(require_operator)])

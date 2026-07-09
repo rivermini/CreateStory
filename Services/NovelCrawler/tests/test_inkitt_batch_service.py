@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import threading
 import types
@@ -33,6 +34,7 @@ from api.services.inkitt_batch_service import (
     extract_completed_story_refs,
     extract_completed_story_refs_from_api,
     extract_story_quality,
+    should_use_rendered_fallback,
 )
 
 
@@ -425,6 +427,172 @@ def test_rendered_fallback_uses_global_request_delay(monkeypatch) -> None:
     assert content == "Rendered chapter text"
     assert slept == [3.0]
     assert service._last_request_at == 15.0
+
+
+def test_rendered_fallback_skips_long_static_chapter_with_ui_markers(monkeypatch) -> None:
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_WORDS", 120)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS", 800)
+    long_chapter = " ".join(["chapterword"] * 2500) + "\n\nAbout the Author\n\nNext Chapter"
+
+    assert should_use_rendered_fallback(long_chapter) is False
+
+
+def test_rendered_fallback_keeps_short_and_suspicious_chapters_safe(monkeypatch) -> None:
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_WORDS", 120)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS", 800)
+
+    assert should_use_rendered_fallback(" ".join(["short"] * 80)) is True
+    assert should_use_rendered_fallback(" ".join(["word"] * 200) + " About the Author") is True
+
+
+def test_import_discovered_catalog_merges_and_creates_ready_batch(tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._lock = threading.Lock()
+    service._batches = {}
+    service._batch_root = tmp_path
+    service._batch_root.mkdir(parents=True, exist_ok=True)
+    service._index_file = tmp_path / "batch_index.json"
+    service._discovered_story_index_file = tmp_path / "discovered_story_index.json"
+    service._exported_story_index_file = tmp_path / "exported_story_index.json"
+    service._last_persist_at = 0.0
+    service._history_lock = threading.Lock()
+
+    payload = {
+        "kind": "inkitt_discovered_catalog",
+        "version": 1,
+        "stories": [
+            {
+                "story_id": "111",
+                "title": "Restored Story",
+                "url": "https://www.inkitt.com/stories/111",
+                "genre": "Action",
+                "genre_slug": "action",
+                "author": "Author",
+                "total_chapters": 12,
+                "rating": 4.7,
+                "review_count": 9,
+                "read_count": 1000,
+            }
+        ],
+    }
+
+    result = service.import_discovered_catalog(payload, created_by_user_id="user-1")
+    export = service.export_discovered_catalog()
+
+    assert result["imported_count"] == 1
+    assert result["new_count"] == 1
+    assert result["total_count"] == 1
+    assert result["queued_count"] == 1
+    assert result["batch"]["phase"] == "ready"
+    assert result["batch"]["total_stories"] == 1
+    assert export["story_count"] == 1
+    assert export["stories"][0]["story_id"] == "111"
+
+
+def test_import_discovered_catalog_queues_only_imported_file_refs(tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._lock = threading.Lock()
+    service._batches = {}
+    service._batch_root = tmp_path
+    service._batch_root.mkdir(parents=True, exist_ok=True)
+    service._index_file = tmp_path / "batch_index.json"
+    service._discovered_story_index_file = tmp_path / "discovered_story_index.json"
+    service._exported_story_index_file = tmp_path / "exported_story_index.json"
+    service._last_persist_at = 0.0
+    service._history_lock = threading.Lock()
+    service._discovered_story_index_file.write_text(
+        json.dumps({
+            "stories": {
+                "222": {
+                    "story_id": "222",
+                    "title": "Already Cataloged Story",
+                    "url": "https://www.inkitt.com/stories/222",
+                    "genre": "Drama",
+                    "genre_slug": "drama",
+                }
+            }
+        }),
+        encoding="utf-8",
+    )
+
+    payload = {
+        "kind": "inkitt_batch_discovered_catalog",
+        "version": 1,
+        "stories": [
+            {
+                "story_id": "111",
+                "title": "Imported Batch Story",
+                "url": "https://www.inkitt.com/stories/111",
+                "genre": "Action",
+                "genre_slug": "action",
+            }
+        ],
+    }
+
+    result = service.import_discovered_catalog(payload, created_by_user_id="user-1")
+    export = service.export_discovered_catalog()
+
+    assert result["imported_count"] == 1
+    assert result["new_count"] == 1
+    assert result["total_count"] == 2
+    assert result["queued_count"] == 1
+    assert result["batch"]["total_stories"] == 1
+    assert export["story_count"] == 2
+    restored_batch_id = result["batch"]["batch_id"]
+    assert [row.story_id for row in service._batches[restored_batch_id].rows] == ["111"]
+
+
+def test_export_batch_catalog_only_includes_selected_batch() -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._lock = threading.Lock()
+    service._batches = {
+        "aaaaaaaa": InkittBatchState(
+            batch_id="aaaaaaaa",
+            created_by_user_id="user-1",
+            batch_name="Selected batch",
+            selected_genres=["action"],
+            rows=[
+                InkittBatchRow(
+                    index=1,
+                    genre="Action",
+                    genre_slug="action",
+                    title="Selected Story",
+                    url="https://www.inkitt.com/stories/111",
+                    story_id="111",
+                    author="Author One",
+                    total_chapters=12,
+                    rating=4.7,
+                    review_count=9,
+                    read_count=1000,
+                )
+            ],
+        ),
+        "bbbbbbbb": InkittBatchState(
+            batch_id="bbbbbbbb",
+            created_by_user_id="user-1",
+            batch_name="Other batch",
+            selected_genres=["drama"],
+            rows=[
+                InkittBatchRow(
+                    index=1,
+                    genre="Drama",
+                    genre_slug="drama",
+                    title="Other Story",
+                    url="https://www.inkitt.com/stories/222",
+                    story_id="222",
+                )
+            ],
+        ),
+    }
+
+    export = service.export_batch_catalog("aaaaaaaa")
+
+    assert export["kind"] == "inkitt_batch_discovered_catalog"
+    assert export["batch_id"] == "aaaaaaaa"
+    assert export["batch_name"] == "Selected batch"
+    assert export["story_count"] == 1
+    assert export["selected_genres"] == ["action"]
+    assert [story["story_id"] for story in export["stories"]] == ["111"]
 
 
 def test_crawl_rows_stops_taking_new_rows_after_pause(tmp_path, monkeypatch) -> None:

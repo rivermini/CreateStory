@@ -332,6 +332,32 @@ export interface InkittBatchRowsResponse {
   limit: number;
 }
 
+export interface InkittBatchLogsResponse {
+  batch: InkittBatchSummary;
+  log_lines: string[];
+  total: number;
+}
+
+export interface InkittCatalogBackup {
+  kind: 'inkitt_discovered_catalog' | 'inkitt_batch_discovered_catalog';
+  version: number;
+  exported_at: string;
+  batch_id?: string;
+  batch_name?: string;
+  story_count: number;
+  selected_genres?: string[];
+  genres: Array<{ slug: string; label: string }>;
+  stories: Array<Record<string, unknown>>;
+}
+
+export interface InkittCatalogImportResponse {
+  imported_count: number;
+  new_count: number;
+  total_count: number;
+  queued_count: number;
+  batch: InkittBatchSummary;
+}
+
 export interface InkittBatchStartRequest {
   batch_name?: string | null;
   genres?: string[] | null;

@@ -38,6 +38,8 @@ INKITT_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_MAX_S
 INKITT_DISCOVER_RETRY_HTTP_CODES = {429, 500, 502, 503, 504}
 INKITT_RENDERED_FALLBACK = os.getenv("INKITT_RENDERED_FALLBACK", "1").strip().lower() not in {"0", "false", "no"}
 INKITT_RENDERED_FALLBACK_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_WORDS", "120"))
+INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS", "800"))
+INKITT_BATCH_MEMORY_LOG_LINES = int(os.getenv("INKITT_BATCH_MEMORY_LOG_LINES", "10000"))
 
 BatchPhase = Literal["discovering", "ready", "crawling", "completed", "failed"]
 RowStatus = Literal["discovered", "queued", "crawling", "completed", "skipped", "failed"]
@@ -121,11 +123,21 @@ class InkittBatchState:
     crawl_runs: list[dict[str, Any]] = field(default_factory=list)
     cancel_requested: bool = False
     log_lines: list[str] = field(default_factory=list)
+    log_file: str = ""
 
     def add_log(self, message: str) -> None:
-        self.log_lines.append(f"{datetime.now().strftime('%H:%M:%S')} {message}")
-        if len(self.log_lines) > 250:
-            self.log_lines = self.log_lines[-250:]
+        line = f"{datetime.now().strftime('%H:%M:%S')} {message}"
+        self.log_lines.append(line)
+        if len(self.log_lines) > INKITT_BATCH_MEMORY_LOG_LINES:
+            self.log_lines = self.log_lines[-INKITT_BATCH_MEMORY_LOG_LINES:]
+        if self.log_file:
+            try:
+                log_path = Path(self.log_file)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                with log_path.open("a", encoding="utf-8") as handle:
+                    handle.write(f"{line}\n")
+            except Exception as exc:
+                logger.warning("Failed to append Inkitt batch log: %s", exc)
 
 
 class InkittBatchService:
@@ -174,6 +186,7 @@ class InkittBatchService:
             output_dir=str(self._prepare_output_dir(batch_id)),
             selected_genres=selected,
             cancel_requested=False,
+            log_file=str(self._log_file_for_batch(batch_id)),
         )
         state.add_log(f"Started Inkitt discovery for {len(selected)} genre(s).")
 
@@ -267,6 +280,157 @@ class InkittBatchService:
                 "offset": offset,
                 "limit": limit,
             }
+
+    def export_discovered_catalog(self) -> dict[str, Any]:
+        with self._history_lock:
+            index = self._load_discovered_story_index_unlocked()
+        stories = sorted(index.values(), key=lambda item: (item.get("genre") or "", (item.get("title") or "").lower()))
+        return {
+            "kind": "inkitt_discovered_catalog",
+            "version": 1,
+            "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "story_count": len(stories),
+            "genres": [{"slug": slug, "label": label} for slug, label in INKITT_GENRES],
+            "stories": stories,
+        }
+
+    def export_batch_catalog(self, batch_id: str) -> dict[str, Any]:
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            stories: list[dict[str, Any]] = []
+            for row in state.rows:
+                normalized = normalize_catalog_ref({
+                    "genre": row.genre,
+                    "genre_slug": row.genre_slug,
+                    "title": row.title,
+                    "url": row.url,
+                    "story_id": row.story_id,
+                    "author": row.author,
+                    "total_chapters": row.total_chapters,
+                    "rating": row.rating,
+                    "review_count": row.review_count,
+                    "read_count": row.read_count,
+                })
+                if normalized:
+                    stories.append(normalized)
+            payload = {
+                "kind": "inkitt_batch_discovered_catalog",
+                "version": 1,
+                "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "batch_id": state.batch_id,
+                "batch_name": state.batch_name,
+                "story_count": len(stories),
+                "selected_genres": list(state.selected_genres),
+                "genres": [{"slug": slug, "label": label} for slug, label in INKITT_GENRES],
+                "stories": sorted(
+                    stories,
+                    key=lambda item: (item.get("genre") or "", (item.get("title") or "").lower()),
+                ),
+            }
+        return payload
+
+    def import_discovered_catalog(self, payload: Any, created_by_user_id: str | None) -> dict[str, Any]:
+        refs = self._extract_catalog_refs(payload)
+        if not refs:
+            raise ValueError("No valid Inkitt discovered stories found in the import file.")
+        new_count, catalog_refs = self._merge_discovered_story_refs(refs)
+        exported_story_ids = self._load_exported_story_ids()
+        queued_refs = [ref for ref in refs if ref["story_id"] not in exported_story_ids]
+        state = self._create_ready_batch_from_refs(
+            created_by_user_id=created_by_user_id,
+            batch_name="Imported Inkitt discovered catalog",
+            refs=queued_refs,
+        )
+        with self._lock:
+            state.add_log(
+                f"Imported discovered catalog backup: {len(refs)} valid story/stories, "
+                f"{new_count} new, {len(catalog_refs)} total in catalog."
+            )
+            if len(refs) != len(queued_refs):
+                state.add_log(f"Skipped {len(refs) - len(queued_refs)} imported story/stories already exported in prior batches.")
+            self._persist_locked(force=True)
+            summary = self._summary_locked(state)
+        return {
+            "imported_count": len(refs),
+            "new_count": new_count,
+            "total_count": len(catalog_refs),
+            "queued_count": len(queued_refs),
+            "batch": summary,
+        }
+
+    def get_full_logs(self, batch_id: str) -> dict[str, Any]:
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            summary = self._summary_locked(state)
+            log_file = Path(state.log_file).resolve() if state.log_file else self._log_file_for_batch(batch_id)
+            memory_lines = list(state.log_lines)
+
+        log_lines = self._read_log_lines(log_file)
+        if not log_lines:
+            log_lines = memory_lines
+        return {
+            "batch": summary,
+            "log_lines": log_lines,
+            "total": len(log_lines),
+        }
+
+    def _create_ready_batch_from_refs(
+        self,
+        created_by_user_id: str | None,
+        batch_name: str,
+        refs: list[dict[str, Any]],
+    ) -> InkittBatchState:
+        batch_id = uuid.uuid4().hex[:8]
+        rows = [
+            InkittBatchRow(index=index, **ref, status="queued")
+            for index, ref in enumerate(refs[:INKITT_BATCH_MAX_STORIES], start=1)
+        ]
+        state = InkittBatchState(
+            batch_id=batch_id,
+            created_by_user_id=created_by_user_id,
+            rows=rows,
+            batch_name=batch_name,
+            phase="ready",
+            started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            max_pages_per_genre=INKITT_BATCH_MAX_PAGES,
+            discover_concurrency=1,
+            crawl_concurrency=1,
+            request_delay_seconds=5.0,
+            output_dir=str(self._prepare_output_dir(batch_id)),
+            selected_genres=[slug for slug, _label in INKITT_GENRES],
+            cancel_requested=False,
+            log_file=str(self._log_file_for_batch(batch_id)),
+        )
+        state.add_log(f"Ready batch created from discovered catalog: {len(rows)} queued story/stories.")
+        if len(refs) > len(rows):
+            state.add_log(
+                f"Import queue capped at {len(rows)} of {len(refs)} story/stories. "
+                "Increase INKITT_BATCH_MAX_STORIES to include more."
+            )
+        with self._lock:
+            self._batches[batch_id] = state
+            self._persist_locked(force=True)
+        return state
+
+    def _extract_catalog_refs(self, payload: Any) -> list[dict[str, Any]]:
+        stories: Any
+        if isinstance(payload, list):
+            stories = payload
+        elif isinstance(payload, dict):
+            stories = payload.get("stories") or payload.get("items") or payload.get("data") or payload
+            if isinstance(stories, dict):
+                stories = list(stories.values())
+        else:
+            stories = []
+        if not isinstance(stories, list):
+            return []
+        refs: dict[str, dict[str, Any]] = {}
+        for story in stories:
+            normalized = normalize_catalog_ref(story)
+            if normalized:
+                refs[normalized["story_id"]] = normalized
+        return list(refs.values())
 
     def delete_batch(self, batch_id: str) -> bool:
         with self._lock:
@@ -1207,6 +1371,20 @@ class InkittBatchService:
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
 
+    def _log_file_for_batch(self, batch_id: str) -> Path:
+        return (self._batch_root / batch_id / "full.log").resolve()
+
+    def _read_log_lines(self, log_file: Path) -> list[str]:
+        try:
+            if not log_file.exists() or not log_file.is_file():
+                return []
+            if not log_file.is_relative_to(self._batch_root):
+                return []
+            return [line.rstrip("\n") for line in log_file.read_text(encoding="utf-8").splitlines()]
+        except Exception as exc:
+            logger.warning("Failed to read Inkitt batch log: %s", exc)
+            return []
+
     def _summary_locked(self, state: InkittBatchState) -> dict[str, Any]:
         total = len(state.rows)
         completed = sum(1 for row in state.rows if row.status == "completed")
@@ -1296,7 +1474,7 @@ class InkittBatchService:
                     cancel_requested = False
                     error_message = "Discovery was interrupted by a service restart. Start a new discovery to rebuild the catalog."
                     log_lines.append(f"{datetime.now().strftime('%H:%M:%S')} Discovery interrupted by service restart.")
-                self._batches[batch_id] = InkittBatchState(
+                state = InkittBatchState(
                     batch_id=batch_id,
                     created_by_user_id=entry.get("created_by_user_id"),
                     rows=rows,
@@ -1314,12 +1492,27 @@ class InkittBatchService:
                     selected_genres=list(entry.get("selected_genres") or [slug for slug, _label in INKITT_GENRES]),
                     crawl_runs=list(entry.get("crawl_runs") or []),
                     cancel_requested=cancel_requested,
-                    log_lines=log_lines[-250:],
+                    log_lines=log_lines[-INKITT_BATCH_MEMORY_LOG_LINES:],
+                    log_file=entry.get("log_file") or str(self._log_file_for_batch(batch_id)),
                 )
+                self._seed_log_file_if_missing(state)
+                self._batches[batch_id] = state
             if self._batches:
                 self._persist_locked(force=True)
         except Exception as exc:
             logger.warning("Failed to load Inkitt batch index: %s", exc)
+
+    def _seed_log_file_if_missing(self, state: InkittBatchState) -> None:
+        if not state.log_file or not state.log_lines:
+            return
+        try:
+            log_file = Path(state.log_file).resolve()
+            if not log_file.is_relative_to(self._batch_root) or log_file.exists():
+                return
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            log_file.write_text("\n".join(state.log_lines) + "\n", encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Failed to seed Inkitt batch full log: %s", exc)
 
     def _persist_locked(self, force: bool = False) -> None:
         now = time.time()
@@ -1550,6 +1743,8 @@ def should_use_rendered_fallback(content: str) -> bool:
     words = text.split()
     if len(words) < INKITT_RENDERED_FALLBACK_WORDS:
         return True
+    if len(words) > INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS:
+        return False
     suspicious = (
         "about the author",
         "follow +",

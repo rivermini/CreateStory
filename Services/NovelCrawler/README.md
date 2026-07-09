@@ -92,6 +92,7 @@ The server starts on **http://localhost:8002**. API docs are at **http://localho
 | `INKITT_DISCOVER_RETRY_BASE_SECONDS` | `15` | Base cooldown for Inkitt discovery retries |
 | `INKITT_DISCOVER_RETRY_MAX_SECONDS` | `120` | Maximum cooldown for Inkitt discovery retries |
 | `INKITT_RENDERED_FALLBACK` | `1` | Enables browser fallback when static Inkitt chapter HTML is incomplete |
+| `INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS` | `800` | Only use browser fallback for suspicious static content at or below this word count |
 
 ---
 
@@ -228,8 +229,9 @@ Recommended production posture:
 - Use a `5` to `10` second request delay for long runs.
 - Crawl in small runs, for example `50` to `200` stories, then download or resume later.
 - Treat HTTP `429` and `403` as slow-down signals: pause, raise the delay, and resume after a cooldown.
-- Keep `INKITT_RENDERED_FALLBACK=1` only when needed; browser fallback is now under the same global
-  request delay gate as static fetches, but it is still heavier than plain HTML fetches.
+- Keep `INKITT_RENDERED_FALLBACK=1` only when needed; browser fallback is under the same global request
+  delay gate as static fetches and is skipped for long static chapters by default, but it is still heavier
+  than plain HTML fetches.
 
 ---
 
