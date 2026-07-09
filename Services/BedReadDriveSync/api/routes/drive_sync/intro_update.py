@@ -1,7 +1,7 @@
 """Intro update endpoints for drive sync."""
 
 import logging
-from datetime import datetime, timezone
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -38,6 +38,8 @@ class UploadIntroResponse(BaseModel):
     success: bool
     message: str
     intro_url: Optional[str] = None
+    job_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 router = APIRouter(prefix="/intro-update", tags=["Drive Sync"])
@@ -162,61 +164,33 @@ async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "int
     folder_name = folder_info.get("name", "")
     story_title = folder_info.get("display_name", "")
 
-    def _do_upload():
-        success, result = service._upload_story_intro_from_folder(story_id, folder_id, intro_filename)
-        return success, result
-
     try:
-        success, result = await asyncio.to_thread(_do_upload)
-    except Exception as exc:
-        logger.exception("Intro upload failed")
-        raise HTTPException(status_code=500, detail="Intro upload failed.")
+        job, created = service.create_job_once(
+            kind=JobKind.INTRO_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=f"{story_title} - Intro update",
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
-    if success:
-        service._record_intro_update(
-            story_id=story_id,
-            story_title=story_title,
-            folder_id=folder_id,
-            folder_name=folder_name,
-            status="updated",
-            intro_file_name=intro_filename,
-            intro_url=result,
+    if created:
+        thread = threading.Thread(
+            target=service.sync_intro_update_as_job,
+            args=(job.id, story_id, intro_filename),
+            daemon=True,
         )
-        try:
-            service.record_completed_job(
-                kind=JobKind.INTRO_UPDATE,
-                folder_id=folder_id,
-                folder_name=folder_name,
-                display_name=f"{story_title} - Intro update",
-                result_message=f"Intro '{intro_filename}' uploaded successfully.",
-                logs=[{
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "level": "info",
-                    "message": f"Intro uploaded: {intro_filename}",
-                }],
-            )
-        except Exception:
-            pass
-        return UploadIntroResponse(success=True, message="Intro uploaded successfully.", intro_url=result)
-    else:
-        service._record_intro_update(
-            story_id=story_id,
-            story_title=story_title,
-            folder_id=folder_id,
-            folder_name=folder_name,
-            status="error",
-            intro_file_name=intro_filename,
-            error=result or "Upload failed.",
-        )
-        try:
-            service.record_completed_job(
-                kind=JobKind.INTRO_UPDATE,
-                folder_id=folder_id,
-                folder_name=folder_name,
-                display_name=f"{story_title} - Intro update",
-                result_message="",
-                error=result or "Upload failed.",
-            )
-        except Exception:
-            pass
-        return UploadIntroResponse(success=False, message=result or "Upload failed.", intro_url=None)
+        thread.start()
+
+    return UploadIntroResponse(
+        success=True,
+        message=(
+            f"Intro update queued for '{story_title}'."
+            if created
+            else f"Intro update already queued or running for '{story_title}'."
+        ),
+        intro_url=None,
+        job_id=job.id,
+        status=job.status,
+    )

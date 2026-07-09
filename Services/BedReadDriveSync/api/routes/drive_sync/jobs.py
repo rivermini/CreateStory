@@ -53,6 +53,12 @@ async def create_job(body: JobCreateRequest) -> JobCreateResponse:
 
     from api.models.drive_sync import JobKind
 
+    if body.kind not in {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job kind '{body.kind}' must be queued through its specific update endpoint.",
+        )
+
     job, created = service.create_job_once(
         kind=body.kind,
         folder_id=body.folder_id,

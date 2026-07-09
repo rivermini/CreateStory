@@ -1,7 +1,7 @@
 """Banner update endpoints for drive sync."""
 
 import logging
-from datetime import datetime, timezone
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -38,6 +38,8 @@ class UploadBannerResponse(BaseModel):
     success: bool
     message: str
     banner_url: Optional[str] = None
+    job_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 router = APIRouter(prefix="/banner-update", tags=["Drive Sync"])
@@ -165,61 +167,32 @@ async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "b
     folder_name = folder_info.get("name", "")
     story_title = folder_info.get("display_name", "")
 
-    def _do_upload():
-        success, result = service._upload_story_banner_from_folder(story_id, folder_id, banner_filename)
-        return success, result
-
     try:
-        success, result = await asyncio.to_thread(_do_upload)
-    except Exception as exc:
-        logger.exception("Banner upload failed")
-        raise HTTPException(status_code=500, detail="Banner upload failed.")
+        job, created = service.create_job_once(
+            kind=JobKind.BANNER_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=f"{story_title} - Banner update",
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
-    if success:
-        service._record_banner_update(
-            story_id=story_id,
-            story_title=story_title,
-            folder_id=folder_id,
-            folder_name=folder_name,
-            status="updated",
-            banner_file_name=banner_filename,
-            banner_url=result,
-        )
-        try:
-            service.record_completed_job(
-                kind=JobKind.BANNER_UPDATE,
-                folder_id=folder_id,
-                folder_name=folder_name,
-                display_name=f"{story_title} - Banner update",
-                result_message=f"Banner '{banner_filename}' uploaded successfully.",
-                logs=[{
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "level": "info",
-                    "message": f"Banner uploaded: {banner_filename}",
-                }],
-            )
-        except Exception:
-            pass
-        return UploadBannerResponse(success=True, message="Banner uploaded successfully.", banner_url=result)
-    else:
-        service._record_banner_update(
-            story_id=story_id,
-            story_title=story_title,
-            folder_id=folder_id,
-            folder_name=folder_name,
-            status="error",
-            banner_file_name=banner_filename,
-            error=result or "Upload failed.",
-        )
-        try:
-            service.record_completed_job(
-                kind=JobKind.BANNER_UPDATE,
-                folder_id=folder_id,
-                folder_name=folder_name,
-                display_name=f"{story_title} - Banner update",
-                result_message="",
-                error=result or "Upload failed.",
-            )
-        except Exception:
-            pass
-        return UploadBannerResponse(success=False, message=result or "Upload failed.", banner_url=None)
+    if created:
+        threading.Thread(
+            target=service.sync_banner_update_as_job,
+            args=(job.id, story_id, banner_filename),
+            daemon=True,
+        ).start()
+
+    return UploadBannerResponse(
+        success=True,
+        message=(
+            f"Banner update queued for '{story_title}'."
+            if created
+            else f"Banner update already queued or running for '{story_title}'."
+        ),
+        banner_url=None,
+        job_id=job.id,
+        status=job.status,
+    )

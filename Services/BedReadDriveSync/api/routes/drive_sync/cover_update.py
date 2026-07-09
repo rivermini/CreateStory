@@ -1,7 +1,7 @@
 """Cover update endpoints for drive sync."""
 
 import logging
-from datetime import datetime, timezone
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -38,6 +38,8 @@ class UploadCoverResponse(BaseModel):
     success: bool
     message: str
     cover_url: Optional[str] = None
+    job_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 router = APIRouter(prefix="/cover-update", tags=["Drive Sync"])
@@ -162,61 +164,32 @@ async def upload_cover(folder_id: str, story_id: str, cover_filename: str = "cov
     folder_name = folder_info.get("name", "")
     story_title = folder_info.get("display_name", "")
 
-    def _do_upload():
-        success, result = service._upload_story_cover_from_folder(story_id, folder_id, cover_filename)
-        return success, result
-
     try:
-        success, result = await asyncio.to_thread(_do_upload)
-    except Exception as exc:
-        logger.exception("Cover upload failed")
-        raise HTTPException(status_code=500, detail="Cover upload failed.")
+        job, created = service.create_job_once(
+            kind=JobKind.COVER_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=f"{story_title} - Cover update",
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
-    if success:
-        service._record_cover_update(
-            story_id=story_id,
-            story_title=story_title,
-            folder_id=folder_id,
-            folder_name=folder_name,
-            status="updated",
-            cover_file_name=cover_filename,
-            cover_url=result,
-        )
-        try:
-            service.record_completed_job(
-                kind=JobKind.COVER_UPDATE,
-                folder_id=folder_id,
-                folder_name=folder_name,
-                display_name=f"{story_title} - Cover update",
-                result_message=f"Cover '{cover_filename}' uploaded successfully.",
-                logs=[{
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "level": "info",
-                    "message": f"Cover uploaded: {cover_filename}",
-                }],
-            )
-        except Exception:
-            pass
-        return UploadCoverResponse(success=True, message="Cover uploaded successfully.", cover_url=result)
-    else:
-        service._record_cover_update(
-            story_id=story_id,
-            story_title=story_title,
-            folder_id=folder_id,
-            folder_name=folder_name,
-            status="error",
-            cover_file_name=cover_filename,
-            error=result or "Upload failed.",
-        )
-        try:
-            service.record_completed_job(
-                kind=JobKind.COVER_UPDATE,
-                folder_id=folder_id,
-                folder_name=folder_name,
-                display_name=f"{story_title} - Cover update",
-                result_message="",
-                error=result or "Upload failed.",
-            )
-        except Exception:
-            pass
-        return UploadCoverResponse(success=False, message=result or "Upload failed.", cover_url=None)
+    if created:
+        threading.Thread(
+            target=service.sync_cover_update_as_job,
+            args=(job.id, story_id, cover_filename),
+            daemon=True,
+        ).start()
+
+    return UploadCoverResponse(
+        success=True,
+        message=(
+            f"Cover update queued for '{story_title}'."
+            if created
+            else f"Cover update already queued or running for '{story_title}'."
+        ),
+        cover_url=None,
+        job_id=job.id,
+        status=job.status,
+    )

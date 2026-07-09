@@ -843,6 +843,8 @@ export interface ContentUpdateChapterResponse {
   success: boolean;
   message: string;
   chapter?: ContentUpdateChapterStatus | null;
+  job_id?: string | null;
+  status?: string | null;
 }
 
 export interface BatchChapterUpdateResult {
@@ -957,6 +959,9 @@ export interface CoverUpdateUploadResponse {
   success: boolean;
   message: string;
   cover_url?: string | null;
+  banner_url?: string | null;
+  job_id?: string | null;
+  status?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -988,6 +993,8 @@ export interface IntroUpdateUploadResponse {
   success: boolean;
   message: string;
   intro_url?: string | null;
+  job_id?: string | null;
+  status?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,6 +1056,8 @@ export interface MetadataCheckAllResponse {
 export interface MetadataUpdateResponse {
   success: boolean;
   message: string;
+  job_id?: string | null;
+  status?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1092,6 +1101,8 @@ export interface TitleUpdateChapterResponse {
   success: boolean;
   message: string;
   chapter?: TitleChapterEntry | null;
+  job_id?: string | null;
+  status?: string | null;
 }
 
 export interface TitleUpdateChapterResult {
@@ -1110,6 +1121,8 @@ export interface TitleFolderUpdateResult {
   stop_reason: string | null;
   success_count: number;
   failed_count: number;
+  job_id?: string | null;
+  status?: string | null;
 }
 
 export interface BatchTitleUpdateResponse {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -75,6 +76,8 @@ class MetadataUpdateRequest(BaseModel):
 class MetadataUpdateResponse(BaseModel):
     success: bool
     message: str
+    job_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 class MetadataFieldDetailResponse(BaseModel):
@@ -313,17 +316,36 @@ async def update_metadata(folder_id: str, story_id: str, body: MetadataUpdateReq
     if not body.differences:
         return MetadataUpdateResponse(success=True, message="No differences to update.")
 
-    requested_fields = [d.field for d in body.differences]
-    try:
-        payload = service.build_metadata_update_payload_from_folder(folder_id, requested_fields)
-    except Exception as exc:
-        logger.warning("Failed to build metadata update payload for folder %s: %s", folder_id, exc)
-        payload = _build_put_payload([d.model_dump() for d in body.differences])
-
-    if not payload:
-        return MetadataUpdateResponse(success=True, message="No differences to update.")
-
     folder_name, display_name = _resolve_history_names(service, folder_id, story_id)
+
+    try:
+        job, created = service.create_job_once(
+            kind=JobKind.METADATA_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if created:
+        threading.Thread(
+            target=service.sync_metadata_update_as_job,
+            args=(job.id, story_id, [d.model_dump() for d in body.differences]),
+            daemon=True,
+        ).start()
+
+    return MetadataUpdateResponse(
+        success=True,
+        message=(
+            f"Metadata update queued for '{display_name}'."
+            if created
+            else f"Metadata update already queued or running for '{display_name}'."
+        ),
+        job_id=job.id,
+        status=job.status,
+    )
 
     url = f"{config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}"
     headers = {

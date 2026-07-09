@@ -131,7 +131,7 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
         setUploadResults((prev) => new Map(prev).set(folderId, { success: result.success, message: result.message }));
       }
       if (result.success) {
-        showToast('Cover updated successfully.', 'success', 2000, 'top-center');
+        showToast(result.message || 'Cover update queued.', 'success', 2000, 'top-center');
       } else {
         showToast(`Cover update failed: ${result.message}`, 'error', 4000, 'top-center');
       }

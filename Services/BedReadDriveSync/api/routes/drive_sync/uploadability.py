@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
@@ -1033,6 +1034,8 @@ class ContentUpdateChapterResponse(BaseModel):
     success: bool
     message: str
     chapter: Optional[ContentUpdateChapterStatus] = None
+    job_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 @router.get("/content-update/search", response_model=ContentUpdateSearchResponse, tags=["Drive Sync"])
@@ -1110,6 +1113,35 @@ async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUp
     config = service.get_config()
     if config is None:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    try:
+        job, created = service.create_job_once(
+            kind=JobKind.CHAPTER_CONTENT_UPDATE,
+            folder_id=body.folder_id,
+            folder_name=body.folder_id,
+            display_name=f"{body.story_id} - Chapter {body.chapter_number} content update",
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if created:
+        threading.Thread(
+            target=service.sync_content_update_as_job,
+            args=(job.id, body.story_id, body.chapter_number),
+            daemon=True,
+        ).start()
+
+    return ContentUpdateChapterResponse(
+        success=True,
+        message=(
+            f"Chapter {body.chapter_number} content update queued."
+            if created
+            else f"Chapter {body.chapter_number} content update already queued or running."
+        ),
+        job_id=job.id,
+        status=job.status,
+    )
 
     try:
         updated = await asyncio.to_thread(
@@ -1230,6 +1262,39 @@ async def batch_update_content_folders(body: BatchContentUpdateRequest) -> Batch
     folder_names = [name.strip() for name in body.folder_names if name.strip()]
     if not folder_names:
         raise HTTPException(status_code=400, detail="No folder names provided.")
+
+    queued_results: list[BatchFolderResult] = []
+    empty_summary = ContentUpdateSummary(total=0, same=0, different=0, missingDrive=0, driveOnly=0, errors=0)
+    for folder_name in folder_names:
+        try:
+            job, created = service.create_job_once(
+                kind=JobKind.CHAPTER_CONTENT_UPDATE,
+                folder_id=folder_name,
+                folder_name=folder_name,
+                display_name=f"{folder_name} - Content update",
+                main_be_api_base_url=config.main_be_api_base_url,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        if created:
+            threading.Thread(
+                target=service.sync_content_update_as_job,
+                args=(job.id, ""),
+                daemon=True,
+            ).start()
+
+        queued_results.append(
+            BatchFolderResult(
+                folder_name=folder_name,
+                found=True,
+                summary=empty_summary,
+                message="Queued." if created else "Already queued or running.",
+                stop_reason="Queued." if created else "Already queued or running.",
+            )
+        )
+
+    return BatchContentUpdateResponse(results=queued_results)
 
     try:
         results = await asyncio.to_thread(service.batch_update_folders_content, folder_names)

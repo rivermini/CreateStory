@@ -108,7 +108,7 @@ export function CheckTitleUpdatePage({ themeMode }: CheckTitleUpdatePageProps) {
       const result = await updateChapterTitle(storyId, folderId, chapterNumber);
       if (resultVersion === updateResultVersionRef.current) {
         showToast(
-          result.success ? `Chapter ${chapterNumber} title updated.` : result.message,
+          result.success ? (result.message || `Chapter ${chapterNumber} title update queued.`) : result.message,
           result.success ? 'success' : 'error',
           3000,
           'top-center'
@@ -142,10 +142,7 @@ export function CheckTitleUpdatePage({ themeMode }: CheckTitleUpdatePageProps) {
     try {
       const result = await updateFolderTitles(entry.story_id, entry.folder_id);
       if (resultVersion === updateResultVersionRef.current) {
-        const msg =
-          result.failed_count === 0
-            ? `Folder updated: ${result.success_count} titles changed.`
-            : `Folder updated: ${result.success_count} changed, ${result.failed_count} failed.`;
+        const msg = result.stop_reason || `Title update queued for ${entry.story_title || entry.folder_name}.`;
         showToast(msg, result.failed_count > 0 ? 'warning' : 'success', 4000, 'top-center');
         if (result.success_count > 0) {
           updateResultVersionRef.current += 1;
@@ -179,23 +176,18 @@ export function CheckTitleUpdatePage({ themeMode }: CheckTitleUpdatePageProps) {
     try {
       const result = await batchUpdateTitles(canUpdateIds, 2);
       if (resultVersion === updateResultVersionRef.current) {
-        let totalSuccess = 0;
         let totalFailed = 0;
         for (const folder of result.results) {
-          totalSuccess += folder.success_count;
           totalFailed += folder.failed_count;
         }
         showToast(
           totalFailed === 0
-            ? `Batch complete: ${totalSuccess} titles updated across ${result.results.length} folders.`
-            : `Batch complete: ${totalSuccess} updated, ${totalFailed} failed across ${result.results.length} folders.`,
+            ? `Queued ${result.results.length} title update job${result.results.length === 1 ? '' : 's'}.`
+            : `Queued title updates with ${totalFailed} folder${totalFailed === 1 ? '' : 's'} skipped.`,
           totalFailed > 0 ? 'warning' : 'success',
           5000,
           'top-center'
         );
-        updateResultVersionRef.current += 1;
-        setChapterUpdateVersions(new Map());
-        setCheckAllData(null);
       }
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Batch update failed.', 'error', 4000, 'top-center');

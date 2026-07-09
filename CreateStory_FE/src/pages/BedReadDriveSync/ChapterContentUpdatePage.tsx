@@ -124,8 +124,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
         resultsMap.set(folderResult.folder_name, folderResult.update_results);
       }
       setMultiUpdateResults(resultsMap);
-      const successCount = result.results.filter((f) => f.update_results.some((r) => r.success)).length;
-      showToast(`Batch update done: ${successCount}/${result.results.length} folders had updates.`, 'success', 3000, 'top-center');
+      showToast(`Queued ${result.results.length} content update job${result.results.length === 1 ? '' : 's'}.`, 'success', 3000, 'top-center');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Batch update failed.', 'error', 3000, 'top-center');
     } finally {
@@ -146,8 +145,7 @@ export function ChapterContentUpdatePage(props: Readonly<ChapterContentUpdatePag
       const result = await updateContentChapter(selectedStory.id, scanData.folder.id, chapterNumber);
       setUpdateResults((prev) => new Map(prev).set(chapterNumber, { success: result.success, message: result.message }));
       if (result.success) {
-        setScanData((prev) => markChapterUpdated(prev, chapterNumber, result.chapter));
-        showToast(`Chapter ${chapterNumber} updated.`, 'success', 1800, 'top-center');
+        showToast(result.message || `Chapter ${chapterNumber} content update queued.`, 'success', 1800, 'top-center');
       } else {
         const notFound = result.message.toLowerCase().includes('not found') || result.message.includes('404');
         const display = notFound
@@ -835,35 +833,6 @@ function EmptyPanel(props: Readonly<{ isDark: boolean }>) {
       <p className="text-sm">No chapters to show.</p>
     </div>
   );
-}
-
-function markChapterUpdated(
-  prev: ContentUpdateScanResponse | null,
-  chapterNumber: number,
-  updatedChapter?: ContentUpdateChapterStatus | null,
-): ContentUpdateScanResponse | null {
-  if (!prev) return prev;
-  const oldChapter = prev.chapters.find((ch) => ch.chapterNumber === chapterNumber);
-  const wasReady = oldChapter?.status === 'ready';
-  return {
-    ...prev,
-    summary: {
-      ...prev.summary,
-      different: wasReady ? Math.max(0, prev.summary.different - 1) : prev.summary.different,
-      same: wasReady ? prev.summary.same + 1 : prev.summary.same,
-    },
-    chapters: prev.chapters.map((ch) =>
-      ch.chapterNumber === chapterNumber
-        ? {
-            ...ch,
-            ...(updatedChapter ?? null),
-            status: 'updated' as const,
-            message: 'Updated from Drive.',
-            serverLength: updatedChapter?.serverLength ?? ch.driveLength,
-          }
-        : ch,
-    ),
-  };
 }
 
 function getChapterStatus(status: ContentUpdateChapterStatus['status'], isDark: boolean) {

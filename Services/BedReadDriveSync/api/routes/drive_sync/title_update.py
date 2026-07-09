@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -52,6 +53,8 @@ class TitleUpdateChapterResponse(BaseModel):
     success: bool
     message: str
     chapter: Optional[TitleChapterEntry] = None
+    job_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 class TitleUpdateChapterResult(BaseModel):
@@ -70,6 +73,8 @@ class TitleFolderUpdateResult(BaseModel):
     stop_reason: Optional[str] = None
     success_count: int = 0
     failed_count: int = 0
+    job_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 class BatchTitleUpdateRequest(BaseModel):
@@ -207,8 +212,39 @@ async def get_folder_detail(folder_id: str) -> TitleFolderEntry:
 async def update_chapter_title(story_id: str, folder_id: str, chapter_number: int) -> TitleUpdateChapterResponse:
     """Push a single chapter's title from Drive to the main BE."""
     service = get_drive_sync_service()
-    if service.get_config() is None:
+    config = service.get_config()
+    if config is None:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    folder_name, display_name = _title_history_names(service, folder_id)
+    try:
+        job, created = service.create_job_once(
+            kind=JobKind.TITLE_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if created:
+        threading.Thread(
+            target=service.sync_title_folder_update_as_job,
+            args=(job.id, story_id, chapter_number),
+            daemon=True,
+        ).start()
+
+    return TitleUpdateChapterResponse(
+        success=True,
+        message=(
+            f"Chapter {chapter_number} title update queued."
+            if created
+            else f"Chapter {chapter_number} title update already queued or running."
+        ),
+        job_id=job.id,
+        status=job.status,
+    )
 
     try:
         result = await asyncio.to_thread(
@@ -259,8 +295,42 @@ async def update_chapter_title(story_id: str, folder_id: str, chapter_number: in
 async def update_folder_titles(story_id: str, folder_id: str) -> TitleFolderUpdateResult:
     """Update every can_update chapter in one folder (sequential, 404 stops)."""
     service = get_drive_sync_service()
-    if service.get_config() is None:
+    config = service.get_config()
+    if config is None:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
+
+    folder_name, display_name = _title_history_names(service, folder_id)
+    try:
+        job, created = service.create_job_once(
+            kind=JobKind.TITLE_UPDATE,
+            folder_id=folder_id,
+            folder_name=folder_name,
+            display_name=display_name,
+            main_be_api_base_url=config.main_be_api_base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if created:
+        threading.Thread(
+            target=service.sync_title_folder_update_as_job,
+            args=(job.id, story_id),
+            daemon=True,
+        ).start()
+
+    return TitleFolderUpdateResult(
+        folder_id=folder_id,
+        folder_name=folder_name,
+        story_id=story_id,
+        story_title=display_name,
+        stop_reason=(
+            f"Title update queued for '{display_name}'."
+            if created
+            else f"Title update already queued or running for '{display_name}'."
+        ),
+        job_id=job.id,
+        status=job.status,
+    )
 
     try:
         result = await asyncio.to_thread(service.update_folder_titles, story_id, folder_id)
@@ -330,6 +400,67 @@ async def batch_update(body: BatchTitleUpdateRequest) -> BatchTitleUpdateRespons
         raise HTTPException(status_code=400, detail="No folder IDs provided.")
 
     concurrency = body.concurrency or 2
+    queued_results: list[TitleFolderUpdateResult] = []
+    for folder_id in folder_ids:
+        try:
+            detail = await asyncio.to_thread(service.get_title_update_detail_for_folder, folder_id)
+        except Exception as exc:
+            queued_results.append(
+                TitleFolderUpdateResult(
+                    folder_id=folder_id,
+                    folder_name=folder_id,
+                    stop_reason=str(exc),
+                    failed_count=1,
+                )
+            )
+            continue
+
+        story_id = detail.get("story_id")
+        if not story_id:
+            queued_results.append(
+                TitleFolderUpdateResult(
+                    folder_id=folder_id,
+                    folder_name=detail.get("folder_name", folder_id),
+                    story_title=detail.get("story_title", ""),
+                    stop_reason="Story not found on server.",
+                    failed_count=1,
+                )
+            )
+            continue
+
+        folder_name = detail.get("folder_name", folder_id)
+        story_title = detail.get("story_title", folder_name)
+        try:
+            job, created = service.create_job_once(
+                kind=JobKind.TITLE_UPDATE,
+                folder_id=folder_id,
+                folder_name=folder_name,
+                display_name=f"{story_title} - Title update",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        if created:
+            threading.Thread(
+                target=service.sync_title_folder_update_as_job,
+                args=(job.id, story_id),
+                daemon=True,
+            ).start()
+
+        queued_results.append(
+            TitleFolderUpdateResult(
+                folder_id=folder_id,
+                folder_name=folder_name,
+                story_id=story_id,
+                story_title=story_title,
+                stop_reason="Queued." if created else "Already queued or running.",
+                job_id=job.id,
+                status=job.status,
+            )
+        )
+
+    return BatchTitleUpdateResponse(results=queued_results)
+
     try:
         result = await asyncio.to_thread(
             service.batch_update_folders_titles, folder_ids, concurrency

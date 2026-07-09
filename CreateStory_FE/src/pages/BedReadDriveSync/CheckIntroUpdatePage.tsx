@@ -132,7 +132,7 @@ export function CheckIntroUpdatePage({ themeMode }: CheckIntroUpdatePageProps) {
         setUploadResults((prev) => new Map(prev).set(folderId, { success: result.success, message: result.message }));
       }
       if (result.success) {
-        showToast('Intro updated successfully.', 'success', 2000, 'top-center');
+        showToast(result.message || 'Intro update queued.', 'success', 2000, 'top-center');
       } else {
         showToast(`Intro update failed: ${result.message}`, 'error', 4000, 'top-center');
       }

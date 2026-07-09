@@ -22,6 +22,8 @@ from api.services.drive_service._paths import (
     _RE_STATUS_PREFIX,
 )
 
+_UPDATE_JOB_SEMAPHORE = threading.BoundedSemaphore(2)
+
 
 class HistoryJobsMixin:
     """
@@ -604,7 +606,11 @@ class HistoryJobsMixin:
         """Create a new sync job. Returns the created job."""
         from api.models.drive_sync import JobKind, JobStatus, SyncJob
 
-        _JOB_KINDS_VALID = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE}
+        _JOB_KINDS_VALID = {
+            JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
+            JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
+            JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+        }
         if kind not in _JOB_KINDS_VALID:
             raise ValueError(f"Invalid job kind: {kind}")
 
@@ -642,7 +648,11 @@ class HistoryJobsMixin:
         """Create a job unless an equivalent active job already exists."""
         from api.models.drive_sync import JobKind, JobStatus, SyncJob
 
-        _JOB_KINDS_VALID = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE}
+        _JOB_KINDS_VALID = {
+            JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
+            JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
+            JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+        }
         if kind not in _JOB_KINDS_VALID:
             raise ValueError(f"Invalid job kind: {kind}")
 
@@ -1165,6 +1175,282 @@ class HistoryJobsMixin:
     # -------------------------------------------------------------------------
     # sync_update_as_job — background chapter update
     # -------------------------------------------------------------------------
+
+    def _run_limited_update_job(self, job_id: str, runner: "Callable[[], None]") -> None:
+        """Run one folder-scoped update while keeping at most two update jobs active."""
+        self.append_job_log(job_id, "info", "Waiting for update worker slot...")
+        _UPDATE_JOB_SEMAPHORE.acquire()
+        try:
+            runner()
+        finally:
+            _UPDATE_JOB_SEMAPHORE.release()
+
+    def sync_cover_update_as_job(self, job_id: str, story_id: str, cover_filename: str = "cover1.jpg") -> None:
+        """Run a cover-image update as a background job."""
+        from api.models.drive_sync import JobStatus
+
+        def _runner() -> None:
+            self.update_job(job_id, status=JobStatus.RUNNING, started_at=datetime.now(timezone.utc).isoformat())
+            if self._config is not None:
+                self.update_job(job_id, main_be_api_base_url=self._config.main_be_api_base_url)
+            try:
+                job = self.get_job(job_id)
+                if job is None:
+                    self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error="Job not found")
+                    return
+                self.append_job_log(job_id, "info", f"Starting cover update: {cover_filename}")
+                folder_name, story_title = self._resolve_job_folder_names(job.folder_id, job.folder_name)
+                success, result = self._upload_story_cover_from_folder(story_id, job.folder_id, cover_filename)
+                now = datetime.now(timezone.utc).isoformat()
+                if success:
+                    self._record_cover_update(story_id=story_id, story_title=story_title, folder_id=job.folder_id, folder_name=folder_name, status="updated", cover_file_name=cover_filename, cover_url=result)
+                    self.append_job_log(job_id, "info", f"Cover uploaded: {cover_filename}")
+                    self.update_job(job_id, status=JobStatus.SUCCESS, finished_at=now, result_message=f"Cover '{cover_filename}' uploaded successfully.")
+                else:
+                    error = result or "Upload failed."
+                    self._record_cover_update(story_id=story_id, story_title=story_title, folder_id=job.folder_id, folder_name=folder_name, status="error", cover_file_name=cover_filename, error=error)
+                    self.append_job_log(job_id, "error", error)
+                    self.update_job(job_id, status=JobStatus.ERROR, finished_at=now, error=error)
+            except Exception as exc:
+                self.append_job_log(job_id, "error", f"Cover update failed: {exc}")
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc))
+
+        self._run_limited_update_job(job_id, _runner)
+
+    def sync_banner_update_as_job(self, job_id: str, story_id: str, banner_filename: str = "banner1.jpg") -> None:
+        """Run a banner-image update as a background job."""
+        from api.models.drive_sync import JobStatus
+
+        def _runner() -> None:
+            self.update_job(job_id, status=JobStatus.RUNNING, started_at=datetime.now(timezone.utc).isoformat())
+            if self._config is not None:
+                self.update_job(job_id, main_be_api_base_url=self._config.main_be_api_base_url)
+            try:
+                job = self.get_job(job_id)
+                if job is None:
+                    self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error="Job not found")
+                    return
+                self.append_job_log(job_id, "info", f"Starting banner update: {banner_filename}")
+                folder_name, story_title = self._resolve_job_folder_names(job.folder_id, job.folder_name)
+                success, result = self._upload_story_banner_from_folder(story_id, job.folder_id, banner_filename)
+                now = datetime.now(timezone.utc).isoformat()
+                if success:
+                    self._record_banner_update(story_id=story_id, story_title=story_title, folder_id=job.folder_id, folder_name=folder_name, status="updated", banner_file_name=banner_filename, banner_url=result)
+                    self.append_job_log(job_id, "info", f"Banner uploaded: {banner_filename}")
+                    self.update_job(job_id, status=JobStatus.SUCCESS, finished_at=now, result_message=f"Banner '{banner_filename}' uploaded successfully.")
+                else:
+                    error = result or "Upload failed."
+                    self._record_banner_update(story_id=story_id, story_title=story_title, folder_id=job.folder_id, folder_name=folder_name, status="error", banner_file_name=banner_filename, error=error)
+                    self.append_job_log(job_id, "error", error)
+                    self.update_job(job_id, status=JobStatus.ERROR, finished_at=now, error=error)
+            except Exception as exc:
+                self.append_job_log(job_id, "error", f"Banner update failed: {exc}")
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc))
+
+        self._run_limited_update_job(job_id, _runner)
+
+    def _resolve_job_folder_names(self, folder_id: str, fallback_folder_name: str) -> tuple[str, str]:
+        drive_service = self._build_drive_service()
+
+        def _get_folder() -> dict:
+            return drive_service.files().get(fileId=folder_id, fields="id, name").execute()
+
+        folder_info = self._retry_drive_call(_get_folder)
+        folder_name = folder_info.get("name") or fallback_folder_name
+        return folder_name, self._extract_story_name(folder_name)
+
+    def _metadata_payload_from_differences(self, differences: list[dict]) -> dict:
+        category_name_to_id = {
+            "fantasy": "154971fe-7da7-41c4-91ee-b2a9613d6fa0",
+            "werewolf": "2d2614d9-2b25-4d1f-bb0a-fb333193de19",
+            "romance": "17c9779b-7107-4b24-a020-df735e1dd6cb",
+            "billionaire": "1550cd02-d20b-4fc3-9dce-6c8c5ccaba11",
+            "lgbtq+": "8dabb3e8-3e6c-4b20-9b48-cb7bd028cecf",
+        }
+        payload: dict[str, Any] = {}
+        for diff in differences:
+            field = diff.get("field")
+            value = diff.get("folder_value")
+            if field == "category" and isinstance(value, dict):
+                main_id = category_name_to_id.get(str(value.get("main_category") or "").strip().lower())
+                sub_id = category_name_to_id.get(str(value.get("sub_category") or "").strip().lower())
+                if main_id:
+                    payload["mainCategoryId"] = main_id
+                if sub_id:
+                    payload["subCategoryIds"] = [sub_id]
+            elif field == "free_chapters_count":
+                payload["freeChaptersCount"] = int(value) if value is not None else 0
+            elif field == "push" and isinstance(value, dict):
+                payload["notificationConfig"] = {"title": value.get("title") or "", "content": value.get("content") or ""}
+            elif field == "synopsis":
+                payload["synopsis"] = str(value) if value is not None else ""
+            elif field == "tags" and isinstance(value, list):
+                payload["tags"] = value
+            elif field == "max_chapter":
+                payload["maxChapter"] = int(value) if value is not None else 0
+        return payload
+
+    def sync_metadata_update_as_job(self, job_id: str, story_id: str, differences: list[dict]) -> None:
+        """Run a metadata update as a background job."""
+        from api.models.drive_sync import JobStatus
+
+        def _runner() -> None:
+            self.update_job(job_id, status=JobStatus.RUNNING, started_at=datetime.now(timezone.utc).isoformat())
+            if self._config is not None:
+                self.update_job(job_id, main_be_api_base_url=self._config.main_be_api_base_url)
+            try:
+                job = self.get_job(job_id)
+                if job is None:
+                    self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error="Job not found")
+                    return
+                if self._config is None:
+                    raise RuntimeError("Drive sync config not set.")
+                requested_fields = [str(d.get("field")) for d in differences if d.get("field")]
+                try:
+                    payload = self.build_metadata_update_payload_from_folder(job.folder_id, requested_fields)
+                except Exception:
+                    payload = self._metadata_payload_from_differences(differences)
+                if not payload:
+                    self.update_job(job_id, status=JobStatus.SUCCESS, finished_at=datetime.now(timezone.utc).isoformat(), result_message="No differences to update.")
+                    return
+                url = f"{self._config.main_be_api_base_url.rstrip('/')}/api/v1/story/{story_id}"
+                headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self._config.main_be_bearer_token}", "x-user-id": self._config.main_be_user_id or ""}
+                with self._main_be_client(timeout=120.0) as client:
+                    resp = client.put(url, content=self._json_body(payload), headers=headers)
+                if resp.status_code not in (200, 201):
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+                self.append_job_log(job_id, "info", f"Updated fields: {', '.join(payload.keys())}")
+                self.update_job(job_id, status=JobStatus.SUCCESS, finished_at=datetime.now(timezone.utc).isoformat(), result_message=f"Metadata updated: {', '.join(payload.keys())}.")
+            except Exception as exc:
+                self.append_job_log(job_id, "error", f"Metadata update failed: {exc}")
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc))
+
+        self._run_limited_update_job(job_id, _runner)
+
+    def sync_title_folder_update_as_job(self, job_id: str, story_id: str, chapter_number: Optional[int] = None) -> None:
+        """Run a title update for one chapter or one folder as a background job."""
+        from api.models.drive_sync import JobStatus
+
+        def _runner() -> None:
+            self.update_job(job_id, status=JobStatus.RUNNING, started_at=datetime.now(timezone.utc).isoformat())
+            try:
+                job = self.get_job(job_id)
+                if job is None:
+                    self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error="Job not found")
+                    return
+                if chapter_number is None:
+                    result = self.update_folder_titles(story_id, job.folder_id)
+                    success_count = int(result.get("success_count", 0))
+                    failed_count = int(result.get("failed_count", 0))
+                    stop_reason = result.get("stop_reason")
+                    self.update_job(job_id, status=JobStatus.ERROR if stop_reason else JobStatus.SUCCESS, finished_at=datetime.now(timezone.utc).isoformat(), result_message=f"Titles updated: {success_count} succeeded, {failed_count} failed.", chapters_added=success_count, chapters_skipped=failed_count, error=stop_reason if stop_reason else None)
+                else:
+                    self.update_chapter_title_from_drive(story_id, job.folder_id, chapter_number)
+                    self.update_job(job_id, status=JobStatus.SUCCESS, finished_at=datetime.now(timezone.utc).isoformat(), result_message=f"Chapter {chapter_number} title updated.", chapters_added=1)
+            except Exception as exc:
+                self.append_job_log(job_id, "error", f"Title update failed: {exc}")
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc))
+
+        self._run_limited_update_job(job_id, _runner)
+
+    def sync_content_update_as_job(self, job_id: str, story_id: str, chapter_number: Optional[int] = None) -> None:
+        """Run a chapter-content update for one chapter or one folder as a background job."""
+        from api.models.drive_sync import JobStatus
+
+        def _runner() -> None:
+            self.update_job(job_id, status=JobStatus.RUNNING, started_at=datetime.now(timezone.utc).isoformat())
+            if self._config is not None:
+                self.update_job(job_id, main_be_api_base_url=self._config.main_be_api_base_url)
+            try:
+                job = self.get_job(job_id)
+                if job is None:
+                    self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error="Job not found")
+                    return
+                if chapter_number is None:
+                    result = self.batch_update_folders_content([job.folder_name])
+                    folder_result = (result.get("results") or [{}])[0]
+                    updates = folder_result.get("update_results") or []
+                    success_count = sum(1 for item in updates if item.get("success"))
+                    failed_count = sum(1 for item in updates if not item.get("success"))
+                    stop_reason = folder_result.get("stop_reason")
+                    self.update_job(job_id, status=JobStatus.ERROR if stop_reason else JobStatus.SUCCESS, finished_at=datetime.now(timezone.utc).isoformat(), result_message=f"Content updated: {success_count} succeeded, {failed_count} failed.", chapters_added=success_count, chapters_skipped=failed_count, error=stop_reason if stop_reason else None)
+                else:
+                    self.update_server_chapter_from_drive(story_id, chapter_number, job.folder_id)
+                    self.update_job(job_id, status=JobStatus.SUCCESS, finished_at=datetime.now(timezone.utc).isoformat(), result_message=f"Chapter {chapter_number} content updated from Drive.", chapters_added=1)
+            except Exception as exc:
+                self.append_job_log(job_id, "error", f"Content update failed: {exc}")
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc))
+
+        self._run_limited_update_job(job_id, _runner)
+
+    def sync_intro_update_as_job(self, job_id: str, story_id: str, intro_filename: str = "intro1.jpg") -> None:
+        """Run an intro-image update as a background job. Updates job status on completion."""
+        from api.models.drive_sync import JobStatus
+
+        self.append_job_log(job_id, "info", "Waiting for update worker slot...")
+        _UPDATE_JOB_SEMAPHORE.acquire()
+
+        try:
+            self.update_job(job_id, status=JobStatus.RUNNING, started_at=datetime.now(timezone.utc).isoformat())
+            if self._config is not None:
+                self.update_job(job_id, main_be_api_base_url=self._config.main_be_api_base_url)
+
+            job = self.get_job(job_id)
+            if job is None:
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error="Job not found")
+                return
+
+            self.append_job_log(job_id, "info", f"Starting intro update: {intro_filename}")
+            try:
+                drive_service = self._build_drive_service()
+
+                def _get_folder() -> dict:
+                    return drive_service.files().get(fileId=job.folder_id, fields="id, name").execute()
+
+                folder_info = self._retry_drive_call(_get_folder)
+                folder_name = folder_info.get("name") or job.folder_name
+                story_title = self._extract_story_name(folder_name)
+            except Exception as exc:
+                raise RuntimeError(f"Failed to get Drive folder info: {exc}")
+
+            success, result = self._upload_story_intro_from_folder(story_id, job.folder_id, intro_filename)
+            now = datetime.now(timezone.utc).isoformat()
+
+            if success:
+                self._record_intro_update(
+                    story_id=story_id,
+                    story_title=story_title,
+                    folder_id=job.folder_id,
+                    folder_name=folder_name,
+                    status="updated",
+                    intro_file_name=intro_filename,
+                    intro_url=result,
+                )
+                self.append_job_log(job_id, "info", f"Intro uploaded: {intro_filename}")
+                self.update_job(
+                    job_id,
+                    status=JobStatus.SUCCESS,
+                    finished_at=now,
+                    result_message=f"Intro '{intro_filename}' uploaded successfully.",
+                )
+            else:
+                error = result or "Upload failed."
+                self._record_intro_update(
+                    story_id=story_id,
+                    story_title=story_title,
+                    folder_id=job.folder_id,
+                    folder_name=folder_name,
+                    status="error",
+                    intro_file_name=intro_filename,
+                    error=error,
+                )
+                self.append_job_log(job_id, "error", error)
+                self.update_job(job_id, status=JobStatus.ERROR, finished_at=now, error=error)
+        except Exception as exc:
+            self.append_job_log(job_id, "error", f"Intro update failed: {exc}")
+            self.update_job(job_id, status=JobStatus.ERROR, finished_at=datetime.now(timezone.utc).isoformat(), error=str(exc))
+        finally:
+            _UPDATE_JOB_SEMAPHORE.release()
 
     def sync_update_as_job(self, job_id: str) -> None:
         """Run the update-chapters work as a background job. Updates job status on completion."""

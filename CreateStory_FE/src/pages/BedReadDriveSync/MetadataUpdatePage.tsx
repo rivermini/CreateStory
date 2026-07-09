@@ -81,7 +81,7 @@ export function MetadataUpdatePage({ themeMode }: MetadataUpdatePageProps) {
         setUpdateResults((prev) => new Map(prev).set(folderId, { success: result.success, message: result.message }));
       }
       if (result.success) {
-        showToast('Metadata updated successfully.', 'success', 2000, 'top-center');
+        showToast(result.message || 'Metadata update queued.', 'success', 2000, 'top-center');
       } else {
         showToast(`Metadata update failed: ${result.message}`, 'error', 4000, 'top-center');
       }

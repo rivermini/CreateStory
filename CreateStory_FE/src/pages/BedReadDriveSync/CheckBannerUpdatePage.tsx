@@ -132,7 +132,7 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
         setUploadResults((prev) => new Map(prev).set(folderId, { success: result.success, message: result.message }));
       }
       if (result.success) {
-        showToast('Banner updated successfully.', 'success', 2000, 'top-center');
+        showToast(result.message || 'Banner update queued.', 'success', 2000, 'top-center');
       } else {
         showToast(`Banner update failed: ${result.message}`, 'error', 4000, 'top-center');
       }
