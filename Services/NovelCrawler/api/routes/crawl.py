@@ -479,6 +479,22 @@ async def pause_inkitt_batch(batch_id: str, http_request: Request) -> dict:
     return service.get_status(state.batch_id)
 
 
+@router.post("/inkitt-batch/{batch_id}/retry-failed")
+async def retry_failed_inkitt_batch_rows(batch_id: str, payload: dict, http_request: Request) -> dict:
+    """Move failed Inkitt stories to the front of the next crawl queue."""
+    require_operator_identity(http_request)
+    service = _require_inkitt_batch_owner(batch_id, http_request)
+    row_index_raw = payload.get("row_index") if isinstance(payload, dict) else None
+    try:
+        row_index = int(row_index_raw) if row_index_raw is not None else None
+        state = service.retry_failed(batch_id, row_index=row_index)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
 @router.get("/inkitt-batch")
 async def list_inkitt_batches(request: Request) -> list[dict]:
     """Return Inkitt batch history for the current user."""

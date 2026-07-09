@@ -276,6 +276,7 @@ export interface InkittBatchSummary {
   processed_count: number;
   total_chapters: number;
   crawled_chapters: number;
+  crawl_estimate?: InkittBatchCrawlEstimate;
   download_ready: boolean;
   error_message: string;
   created_at: string;
@@ -289,6 +290,21 @@ export interface InkittBatchSummary {
   crawl_runs: InkittBatchCrawlRun[];
   cancel_requested: boolean;
   log_lines: string[];
+}
+
+export interface InkittBatchCrawlEstimate {
+  remaining_stories: number;
+  remaining_chapters: number;
+  known_remaining_chapters: number;
+  estimated_total_chapters: number;
+  known_total_chapters: number;
+  elapsed_seconds: number;
+  chapters_per_hour: number | null;
+  recent_chapters_per_hour: number | null;
+  stories_per_hour: number | null;
+  estimated_remaining_seconds: number | null;
+  estimated_finished_at: string | null;
+  source: 'recent_chapters' | 'all_time_chapters' | 'all_time_stories' | 'complete' | 'insufficient_data' | string;
 }
 
 export interface InkittBatchCrawlRun {
@@ -313,6 +329,7 @@ export interface InkittBatchRow {
   story_id: string;
   author: string;
   status: InkittBatchRowStatus;
+  retry_priority?: number;
   completion_status: string;
   total_chapters: number | null;
   crawled_chapters: number;

@@ -14,7 +14,7 @@ import {
   type InkittBatchRow,
   type InkittBatchSummary,
 } from '../../api';
-import { downloadWithAuth } from '../../api/client';
+import { apiFetch, downloadWithAuth } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 import { getInkittLogTone, inkittLogToneClass, splitInkittLogLine } from './inkittLogUtils';
@@ -68,6 +68,53 @@ function downloadJsonFile(payload: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+async function retryInkittFailedStories(batchId: string, rowIndex?: number): Promise<InkittBatchSummary> {
+  return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/retry-failed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rowIndex ? { row_index: rowIndex } : {}),
+    timeout: 60000,
+  });
+}
+
+function formatDuration(seconds?: number | null): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '-';
+  const total = Math.max(0, Math.round(seconds));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${total}s`;
+}
+
+function formatRate(value?: number | null): string {
+  if (!value || !Number.isFinite(value) || value <= 0) return '-';
+  return `${Math.round(value).toLocaleString()} ch/h`;
+}
+
+function formatStoryRate(value?: number | null): string {
+  if (!value || !Number.isFinite(value) || value <= 0) return '-';
+  return `${Math.round(value).toLocaleString()} stories/h`;
+}
+
+function formatEstimateSpeed(chaptersPerHour?: number | null, storiesPerHour?: number | null): string {
+  const chapterRate = formatRate(chaptersPerHour);
+  return chapterRate !== '-' ? chapterRate : formatStoryRate(storiesPerHour);
+}
+
+function estimateSourceLabel(source?: string): string {
+  const labels: Record<string, string> = {
+    recent_chapters: 'Recent speed',
+    all_time_chapters: 'All-time speed',
+    all_time_stories: 'Story speed',
+    complete: 'Complete',
+    insufficient_data: 'Waiting for data',
+  };
+  return labels[source || ''] || 'Estimate';
+}
+
 export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('');
@@ -93,15 +140,18 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [deleteTarget, setDeleteTarget] = useState<InkittBatchSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState('');
+  const [retryTarget, setRetryTarget] = useState('');
   const [error, setError] = useState('');
   const syncedBatchIdRef = useRef('');
   const catalogFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
-  const progressPercent = summary && summary.total_chapters > 0
-    ? Math.round((summary.crawled_chapters / summary.total_chapters) * 100)
+  const estimateTotalChapters = summary?.crawl_estimate?.estimated_total_chapters || summary?.total_chapters || 0;
+  const crawlEstimate = summary?.crawl_estimate;
+  const progressPercent = summary && estimateTotalChapters > 0
+    ? Math.round((summary.crawled_chapters / estimateTotalChapters) * 1000) / 10
     : summary && summary.total_stories > 0
-    ? Math.round((summary.processed_count / summary.total_stories) * 100)
+    ? Math.round((summary.processed_count / summary.total_stories) * 1000) / 10
     : active ? 5 : 0;
   const selectedGenreLabels = useMemo(
     () => GENRES.filter(([slug]) => selectedGenres.includes(slug)).map(([, label]) => label),
@@ -176,7 +226,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     });
   };
 
-  const handleStart = async (crawlAfterDiscovery = true) => {
+  const handleDiscoverSelected = async () => {
     if (selectedGenres.length === 0) {
       setError('Select at least one Inkitt genre.');
       return;
@@ -191,7 +241,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
         discover_concurrency: discoverConcurrency,
         crawl_concurrency: crawlConcurrency,
         request_delay_seconds: requestDelaySeconds,
-        crawl_after_discovery: crawlAfterDiscovery,
+        crawl_after_discovery: false,
       });
       setBatchId(response.batch_id);
       setSummary(response);
@@ -200,7 +250,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       setRowFilter('all');
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start Inkitt batch.');
+      setError(err instanceof Error ? err.message : 'Failed to discover Inkitt stories.');
     } finally {
       setIsStarting(false);
     }
@@ -267,6 +317,24 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       setError(err instanceof Error ? err.message : 'Failed to pause Inkitt crawl.');
     } finally {
       setIsPausing(false);
+    }
+  };
+
+  const handleRetryFailed = async (rowIndex?: number) => {
+    if (!batchId) return;
+    const target = rowIndex ? `row:${rowIndex}` : 'all';
+    setRetryTarget(target);
+    setError('');
+    try {
+      const response = await retryInkittFailedStories(batchId, rowIndex);
+      setSummary(response);
+      setRows([]);
+      fetchRows(0);
+      fetchHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to queue failed Inkitt stories for retry.');
+    } finally {
+      setRetryTarget('');
     }
   };
 
@@ -482,17 +550,17 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => handleStart(true)}
-                  disabled={isStarting || active || selectedGenres.length === 0}
+                  onClick={handleCrawlSelected}
+                  disabled={isStarting || active || !summary || summary.phase === 'completed' || summary.total_stories === 0}
                   className="inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                   style={{ background: primary, color: '#fff' }}
                 >
                   {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.play} className="h-4 w-4" />}
-                  Start batch
+                  Start/Resume crawl
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleStart(false)}
+                  onClick={handleDiscoverSelected}
                   disabled={isStarting || active || selectedGenres.length === 0}
                   className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                   style={{ borderColor: panelBorder, background: muted, color: text }}
@@ -509,16 +577,6 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 >
                   {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.search} className="h-4 w-4" />}
                   Discover all free completed
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCrawlSelected}
-                  disabled={isStarting || active || !summary || summary.phase === 'completed' || summary.total_stories === 0}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ borderColor: panelBorder, background: muted, color: text }}
-                >
-                  {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.play} className="h-4 w-4" />}
-                  Start/Resume crawl
                 </button>
                 <button
                   type="button"
@@ -584,11 +642,29 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 <Stat label="Skipped" value={summary?.skipped_count ?? 0} />
                 <Stat label="Failed" value={summary?.failed_count ?? 0} />
                 <Stat label="Genres" value={selectedGenres.length} />
-                <Stat label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${(summary?.total_chapters ?? 0).toLocaleString()}`} />
+                <Stat className="col-span-2" label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${(summary?.total_chapters ?? 0).toLocaleString()}`} />
               </div>
               <div className="mt-4">
                 <Progress label="Progress" value={progressPercent} />
               </div>
+              {summary && crawlEstimate && (
+                <div className="mt-4 border-t pt-4" style={{ borderColor: panelBorder }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold" style={{ color: text }}>Time estimate</h3>
+                    <span className="rounded border px-2 py-1 text-xs font-medium" style={{ borderColor: panelBorder, background: muted, color: soft }}>
+                      {estimateSourceLabel(crawlEstimate.source)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <Stat label="Remaining stories" value={crawlEstimate.remaining_stories} />
+                    <Stat label="Remaining chapters" value={crawlEstimate.remaining_chapters} />
+                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.stories_per_hour)} />
+                    <Stat label="Elapsed" value={formatDuration(crawlEstimate.elapsed_seconds)} />
+                    <Stat label="ETA" value={formatDuration(crawlEstimate.estimated_remaining_seconds)} />
+                    <Stat className="col-span-2" label="Finish" value={crawlEstimate.estimated_finished_at || '-'} />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -713,12 +789,26 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                   <h2 className="text-base font-semibold" style={{ color: text }}>Stories</h2>
                   <p className="text-sm" style={{ color: soft }}>Showing {rows.length.toLocaleString()} of {rowTotal.toLocaleString()} rows</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {FILTERS.map((filter) => (
-                    <button key={filter.value} type="button" onClick={() => { setRowFilter(filter.value); setRows([]); setRowTotal(0); }} className="rounded-md border px-2.5 py-1.5 text-xs font-medium" style={{ borderColor: panelBorder, background: rowFilter === filter.value ? 'var(--cs-primary-soft)' : muted, color: rowFilter === filter.value ? primary : soft }}>
-                      {filter.label}
+                <div className="flex flex-wrap items-center gap-2">
+                  {summary.failed_count > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { void handleRetryFailed(); }}
+                      disabled={active || Boolean(retryTarget)}
+                      className="inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                      style={{ borderColor: panelBorder, background: muted, color: text }}
+                    >
+                      <Icon icon={retryTarget === 'all' ? appIcons.spinner : appIcons.refresh} className={`h-3.5 w-3.5 ${retryTarget === 'all' ? 'animate-spin' : ''}`} />
+                      Retry failed
                     </button>
-                  ))}
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {FILTERS.map((filter) => (
+                      <button key={filter.value} type="button" onClick={() => { setRowFilter(filter.value); setRows([]); setRowTotal(0); }} className="rounded-md border px-2.5 py-1.5 text-xs font-medium" style={{ borderColor: panelBorder, background: rowFilter === filter.value ? 'var(--cs-primary-soft)' : muted, color: rowFilter === filter.value ? primary : soft }}>
+                        {filter.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -752,7 +842,21 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                         <td className="px-4 py-3" style={{ color: soft }}>
                           {row.crawled_chapters || 0}/{row.total_chapters ?? '-'}
                         </td>
-                        <td className="px-4 py-3" style={{ color: soft }}>{row.output_file || row.error || '-'}</td>
+                        <td className="px-4 py-3" style={{ color: soft }}>
+                          <div>{row.output_file || row.error || '-'}</div>
+                          {row.status === 'failed' && (
+                            <button
+                              type="button"
+                              onClick={() => { void handleRetryFailed(row.index); }}
+                              disabled={active || Boolean(retryTarget)}
+                              className="mt-2 inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                              style={{ borderColor: panelBorder, background: muted, color: text }}
+                            >
+                              <Icon icon={retryTarget === `row:${row.index}` ? appIcons.spinner : appIcons.refresh} className={`h-3.5 w-3.5 ${retryTarget === `row:${row.index}` ? 'animate-spin' : ''}`} />
+                              Retry
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -799,19 +903,24 @@ function DecimalField({ label, value, min, max, step, onChange }: { readonly lab
   );
 }
 
-function Stat({ label, value }: { readonly label: string; readonly value: number | string }) {
+function Stat({ label, value, className = '' }: { readonly label: string; readonly value: number | string; readonly className?: string }) {
   return (
-    <div className="rounded-md border px-3 py-2" style={{ borderColor: 'var(--cs-border)', background: 'var(--cs-surface-muted)' }}>
+    <div className={`min-w-0 rounded-md border px-3 py-2 ${className}`} style={{ borderColor: 'var(--cs-border)', background: 'var(--cs-surface-muted)' }}>
       <div className="text-xs" style={{ color: 'var(--cs-text-faint)' }}>{label}</div>
-      <div className="mt-1 text-lg font-semibold" style={{ color: 'var(--cs-text)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      <div className="mt-1 break-words text-base font-semibold leading-tight sm:text-lg" style={{ color: 'var(--cs-text)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
     </div>
   );
+}
+
+function formatProgressPercent(value: number): string {
+  if (value > 0 && value < 0.1) return '<0.1%';
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
 }
 
 function Progress({ label, value }: { readonly label: string; readonly value: number }) {
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-xs" style={{ color: 'var(--cs-text-soft)' }}><span>{label}</span><span>{value}%</span></div>
+      <div className="mb-1 flex items-center justify-between text-xs" style={{ color: 'var(--cs-text-soft)' }}><span>{label}</span><span>{formatProgressPercent(value)}</span></div>
       <div className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--cs-surface-muted)' }}>
         <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, value))}%`, background: 'var(--cs-primary)' }} />
       </div>

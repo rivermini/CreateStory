@@ -38,8 +38,11 @@ INKITT_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_MAX_S
 INKITT_DISCOVER_RETRY_HTTP_CODES = {429, 500, 502, 503, 504}
 INKITT_RENDERED_FALLBACK = os.getenv("INKITT_RENDERED_FALLBACK", "1").strip().lower() not in {"0", "false", "no"}
 INKITT_RENDERED_FALLBACK_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_WORDS", "120"))
+INKITT_RENDERED_FALLBACK_TINY_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_TINY_WORDS", "12"))
 INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS", "800"))
 INKITT_BATCH_MEMORY_LOG_LINES = int(os.getenv("INKITT_BATCH_MEMORY_LOG_LINES", "10000"))
+INKITT_PROGRESS_SAMPLE_LIMIT = int(os.getenv("INKITT_PROGRESS_SAMPLE_LIMIT", "500"))
+INKITT_RECENT_ESTIMATE_SECONDS = int(os.getenv("INKITT_RECENT_ESTIMATE_SECONDS", "3600"))
 
 BatchPhase = Literal["discovering", "ready", "crawling", "completed", "failed"]
 RowStatus = Literal["discovered", "queued", "crawling", "completed", "skipped", "failed"]
@@ -76,6 +79,7 @@ class InkittBatchRow:
     story_id: str
     author: str = ""
     status: RowStatus = "discovered"
+    retry_priority: int = 0
     completion_status: str = "Complete"
     total_chapters: int | None = None
     crawled_chapters: int = 0
@@ -124,6 +128,7 @@ class InkittBatchState:
     cancel_requested: bool = False
     log_lines: list[str] = field(default_factory=list)
     log_file: str = ""
+    progress_samples: list[dict[str, Any]] = field(default_factory=list)
 
     def add_log(self, message: str) -> None:
         line = f"{datetime.now().strftime('%H:%M:%S')} {message}"
@@ -209,9 +214,7 @@ class InkittBatchService:
             state = self._get_state_locked(batch_id)
             if state.phase in {"discovering", "crawling"}:
                 raise ValueError("This Inkitt batch is already active.")
-            available_rows = [row for row in state.rows if row.status in {"queued", "discovered", "failed"}]
-            if max_stories is not None:
-                available_rows = available_rows[:max(1, int(max_stories))]
+            available_rows = self._available_rows_for_crawl_locked(state, max_stories)
             if not available_rows:
                 raise ValueError("This Inkitt batch has no queued stories to crawl.")
             run_id = uuid.uuid4().hex[:8]
@@ -240,6 +243,36 @@ class InkittBatchService:
         thread = threading.Thread(target=self._crawl_thread, args=(batch_id, run_id), daemon=True)
         thread.start()
         return state
+
+    def retry_failed(self, batch_id: str, row_index: int | None = None) -> InkittBatchState:
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            if state.phase in {"discovering", "crawling"}:
+                raise ValueError("Pause or wait for the active Inkitt batch before retrying failed stories.")
+            if row_index is not None:
+                if row_index < 1 or row_index > len(state.rows):
+                    raise ValueError("Story row was not found in this Inkitt batch.")
+                failed_rows = [state.rows[row_index - 1]] if state.rows[row_index - 1].status == "failed" else []
+            else:
+                failed_rows = [row for row in state.rows if row.status == "failed"]
+            if not failed_rows:
+                raise ValueError("This Inkitt batch has no failed stories to retry.")
+            next_priority = max((int(row.retry_priority or 0) for row in state.rows), default=0) + 1
+            for offset, row in enumerate(failed_rows):
+                row.status = "queued"
+                row.retry_priority = next_priority + offset
+                row.error = ""
+                row.output_file = ""
+                row.metadata_file = ""
+                row.crawled_chapters = 0
+                row.completed_at = ""
+                row.crawl_run_id = ""
+            if state.phase in {"completed", "failed"}:
+                state.phase = "ready"
+                state.finished_at = None
+            state.add_log(f"Queued {len(failed_rows)} failed story/stories at the top of the next crawl run.")
+            self._persist_locked(force=True)
+            return state
 
     def pause_crawl(self, batch_id: str) -> InkittBatchState:
         with self._lock:
@@ -816,10 +849,12 @@ class InkittBatchService:
     def _crawl_rows(self, batch_id: str, run_id: str | None = None) -> None:
         with self._lock:
             state = self._get_state_locked(batch_id)
-            pending_indices = [
-                row.index for row in state.rows
+            pending_rows = [
+                row for row in state.rows
                 if row.status == "queued" and (run_id is None or row.crawl_run_id == run_id)
             ]
+            pending_rows.sort(key=lambda row: (0 if int(row.retry_priority or 0) > 0 else 1, -int(row.retry_priority or 0), row.index))
+            pending_indices = [row.index for row in pending_rows]
             max_workers = state.crawl_concurrency
             output_dir = Path(state.output_dir).resolve()
             delay = state.request_delay_seconds
@@ -861,6 +896,8 @@ class InkittBatchService:
                     persisted_row = state.rows[row.index - 1]
                     for key, value in update.items():
                         setattr(persisted_row, key, value)
+                    if persisted_row.status != "queued":
+                        persisted_row.retry_priority = 0
                     if persisted_row.status == "completed":
                         persisted_row.completed_at = persisted_row.completed_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         self._record_exported_story(persisted_row, batch_id)
@@ -876,24 +913,25 @@ class InkittBatchService:
             return {"status": "queued", "error": ""}
         row.status = "crawling"
         spider = InkittSpider(novel=row.url, limit=10000)
-        story_html = self._fetch_spider_html(spider, row.url, delay)
-        if self._is_cancel_requested(batch_id):
-            return {"status": "queued", "error": ""}
-        story_soup = BeautifulSoup(story_html, "html.parser")
-        metadata = spider._extract_novel_metadata(story_soup, row.story_id, row.url)
-        metadata.update(extract_story_quality(story_soup))
-
-        status = extract_label_value(story_soup, "Status") or row.completion_status
-        if status.lower() != "complete":
-            return {"status": "skipped", "completion_status": status, "error": "Story is not complete."}
-
-        chapter_links = spider._collect_chapter_links(story_soup, row.story_id, row.url)
-        if not chapter_links:
-            return {"status": "skipped", "error": "No chapter list found."}
-        self._update_row_progress(batch_id, row.index, status="crawling", total_chapters=len(chapter_links), crawled_chapters=0)
 
         chapters: list[tuple[int, str, str, str]] = []
         try:
+            story_html = self._fetch_spider_html(spider, row.url, delay)
+            if self._is_cancel_requested(batch_id):
+                return {"status": "queued", "error": ""}
+            story_soup = BeautifulSoup(story_html, "html.parser")
+            metadata = spider._extract_novel_metadata(story_soup, row.story_id, row.url)
+            metadata.update(extract_story_quality(story_soup))
+
+            status = extract_label_value(story_soup, "Status") or row.completion_status
+            if status.lower() != "complete":
+                return {"status": "skipped", "completion_status": status, "error": "Story is not complete."}
+
+            chapter_links = spider._collect_chapter_links(story_soup, row.story_id, row.url)
+            if not chapter_links:
+                return {"status": "skipped", "total_chapters": 0, "crawled_chapters": 0, "error": "No chapter list found."}
+            self._update_row_progress(batch_id, row.index, status="crawling", total_chapters=len(chapter_links), crawled_chapters=0)
+
             for link in chapter_links:
                 if self._is_cancel_requested(batch_id):
                     return {
@@ -936,10 +974,7 @@ class InkittBatchService:
                         force=len(chapters) == len(chapter_links),
                     )
         except RuntimeError as exc:
-            message = str(exc)
-            if "requires login" in message.lower() or "subscription" in message.lower():
-                return {"status": "skipped", "error": "Skipped paid/login-gated story."}
-            return {"status": "failed", "error": message}
+            return classify_inkitt_crawl_error(str(exc))
 
         genre_dir = output_dir / sanitize_filename(row.genre)
         story_folder = f"{row.index:04d}_{sanitize_filename(metadata.get('title') or row.title)}_{row.story_id}"
@@ -1071,9 +1106,15 @@ class InkittBatchService:
                     "Open the story in a browser and save cookies before retrying."
                 )
             if spider._is_login_gated_response(response.text):
+                saved_count = int(getattr(spider, "_saved_cookie_count", 0) or 0)
+                cookie_state = (
+                    f"Loaded {saved_count} saved Inkitt cookie(s), but Inkitt still asked for login."
+                    if saved_count
+                    else "No saved Inkitt cookies were loaded."
+                )
                 raise RuntimeError(
-                    "[inkitt] This chapter requires login. "
-                    "Log in to Inkitt and save cookies before retrying."
+                    f"[inkitt] Login required for this free/adult-gated page. {cookie_state} "
+                    "Refresh Inkitt user_credentials/cf_clearance in Settings from the same VPN/IP, then retry."
                 )
             return response.text
         raise RuntimeError(f"{last_error}; retry limit reached. Increase delay seconds and retry the batch.")
@@ -1385,6 +1426,162 @@ class InkittBatchService:
             logger.warning("Failed to read Inkitt batch log: %s", exc)
             return []
 
+    def _normalize_progress_samples(self, samples: Any) -> list[dict[str, Any]]:
+        if not isinstance(samples, list):
+            return []
+        clean: list[dict[str, Any]] = []
+        for sample in samples[-INKITT_PROGRESS_SAMPLE_LIMIT:]:
+            if not isinstance(sample, dict):
+                continue
+            try:
+                at = float(sample.get("at") or 0)
+                crawled_chapters = int(sample.get("crawled_chapters") or 0)
+                processed_count = int(sample.get("processed_count") or 0)
+            except (TypeError, ValueError):
+                continue
+            if at > 0:
+                clean.append({
+                    "at": at,
+                    "crawled_chapters": max(0, crawled_chapters),
+                    "processed_count": max(0, processed_count),
+                })
+        return clean
+
+    def _append_progress_sample_locked(
+        self,
+        state: InkittBatchState,
+        crawled_chapters: int,
+        processed_count: int,
+    ) -> None:
+        if crawled_chapters <= 0 and processed_count <= 0:
+            return
+        now = time.time()
+        sample = {
+            "at": now,
+            "crawled_chapters": int(crawled_chapters),
+            "processed_count": int(processed_count),
+        }
+        last = state.progress_samples[-1] if state.progress_samples else None
+        if (
+            isinstance(last, dict)
+            and int(last.get("crawled_chapters") or 0) == sample["crawled_chapters"]
+            and int(last.get("processed_count") or 0) == sample["processed_count"]
+        ):
+            return
+        state.progress_samples.append(sample)
+        if len(state.progress_samples) > INKITT_PROGRESS_SAMPLE_LIMIT:
+            state.progress_samples = state.progress_samples[-INKITT_PROGRESS_SAMPLE_LIMIT:]
+
+    def _crawl_elapsed_seconds(self, state: InkittBatchState, now_dt: datetime) -> float:
+        elapsed = 0.0
+        for run in state.crawl_runs:
+            if not isinstance(run, dict):
+                continue
+            started = parse_local_datetime(run.get("started_at"))
+            if started is None:
+                continue
+            finished = parse_local_datetime(run.get("finished_at"))
+            if finished is None and run.get("status") == "crawling" and state.phase == "crawling":
+                finished = now_dt
+            if finished is None:
+                continue
+            elapsed += max(0.0, (finished - started).total_seconds())
+        return elapsed
+
+    def _recent_chapters_per_second(self, state: InkittBatchState, now_ts: float) -> float | None:
+        samples = self._normalize_progress_samples(state.progress_samples)
+        if len(samples) < 2:
+            return None
+        latest = samples[-1]
+        cutoff = now_ts - INKITT_RECENT_ESTIMATE_SECONDS
+        candidates = [sample for sample in samples if sample["at"] >= cutoff]
+        if len(candidates) < 2:
+            candidates = samples[-min(len(samples), 20):]
+        for first in candidates:
+            delta_chapters = latest["crawled_chapters"] - first["crawled_chapters"]
+            delta_seconds = latest["at"] - first["at"]
+            if delta_chapters >= 5 and delta_seconds >= 30:
+                return delta_chapters / delta_seconds
+        return None
+
+    def _estimate_crawl_progress_locked(
+        self,
+        state: InkittBatchState,
+        total: int,
+        completed: int,
+        skipped: int,
+        failed: int,
+        total_chapters: int,
+        crawled_chapters: int,
+    ) -> dict[str, Any]:
+        now_dt = datetime.now()
+        now_ts = time.time()
+        processed_count = completed + skipped + failed
+        remaining_stories = max(0, total - processed_count)
+        known_story_totals = [int(row.total_chapters or 0) for row in state.rows if int(row.total_chapters or 0) > 0]
+        average_known_chapters = (sum(known_story_totals) / len(known_story_totals)) if known_story_totals else 0.0
+        known_remaining_chapters = 0
+        unknown_remaining_stories = 0
+        for row in state.rows:
+            if row.status in {"completed", "skipped", "failed"}:
+                continue
+            row_total = int(row.total_chapters or 0)
+            if row_total > 0:
+                known_remaining_chapters += max(0, row_total - int(row.crawled_chapters or 0))
+            else:
+                unknown_remaining_stories += 1
+        estimated_unknown_chapters = int(round(unknown_remaining_stories * average_known_chapters))
+        estimated_remaining_chapters = max(0, known_remaining_chapters + estimated_unknown_chapters)
+        estimated_total_chapters = crawled_chapters + estimated_remaining_chapters
+        elapsed_seconds = self._crawl_elapsed_seconds(state, now_dt)
+        all_time_chapters_per_second = (
+            crawled_chapters / elapsed_seconds
+            if elapsed_seconds >= 30 and crawled_chapters > 0
+            else None
+        )
+        all_time_stories_per_second = (
+            processed_count / elapsed_seconds
+            if elapsed_seconds >= 30 and processed_count > 0
+            else None
+        )
+        self._append_progress_sample_locked(state, crawled_chapters, processed_count)
+        recent_chapters_per_second = self._recent_chapters_per_second(state, now_ts)
+
+        remaining_seconds: int | None = None
+        source = "insufficient_data"
+        if remaining_stories == 0 or estimated_remaining_chapters == 0:
+            remaining_seconds = 0
+            source = "complete"
+        elif recent_chapters_per_second:
+            remaining_seconds = int(round(estimated_remaining_chapters / recent_chapters_per_second))
+            source = "recent_chapters"
+        elif all_time_chapters_per_second:
+            remaining_seconds = int(round(estimated_remaining_chapters / all_time_chapters_per_second))
+            source = "all_time_chapters"
+        elif all_time_stories_per_second:
+            remaining_seconds = int(round(remaining_stories / all_time_stories_per_second))
+            source = "all_time_stories"
+
+        finished_at = (
+            datetime.fromtimestamp(now_ts + remaining_seconds).strftime("%Y-%m-%d %H:%M:%S")
+            if remaining_seconds is not None and remaining_seconds > 0
+            else None
+        )
+        return {
+            "remaining_stories": remaining_stories,
+            "remaining_chapters": estimated_remaining_chapters,
+            "known_remaining_chapters": known_remaining_chapters,
+            "estimated_total_chapters": estimated_total_chapters,
+            "known_total_chapters": total_chapters,
+            "elapsed_seconds": int(round(elapsed_seconds)),
+            "chapters_per_hour": round(all_time_chapters_per_second * 3600, 2) if all_time_chapters_per_second else None,
+            "recent_chapters_per_hour": round(recent_chapters_per_second * 3600, 2) if recent_chapters_per_second else None,
+            "stories_per_hour": round(all_time_stories_per_second * 3600, 2) if all_time_stories_per_second else None,
+            "estimated_remaining_seconds": remaining_seconds,
+            "estimated_finished_at": finished_at,
+            "source": source,
+        }
+
     def _summary_locked(self, state: InkittBatchState) -> dict[str, Any]:
         total = len(state.rows)
         completed = sum(1 for row in state.rows if row.status == "completed")
@@ -1393,6 +1590,15 @@ class InkittBatchService:
         crawled_or_done = completed + skipped + failed
         total_chapters = sum(int(row.total_chapters or 0) for row in state.rows)
         crawled_chapters = sum(int(row.crawled_chapters or 0) for row in state.rows)
+        crawl_estimate = self._estimate_crawl_progress_locked(
+            state,
+            total=total,
+            completed=completed,
+            skipped=skipped,
+            failed=failed,
+            total_chapters=total_chapters,
+            crawled_chapters=crawled_chapters,
+        )
         return {
             "batch_id": state.batch_id,
             "batch_name": state.batch_name,
@@ -1405,6 +1611,7 @@ class InkittBatchService:
             "processed_count": crawled_or_done,
             "total_chapters": total_chapters,
             "crawled_chapters": crawled_chapters,
+            "crawl_estimate": crawl_estimate,
             "download_ready": completed > 0 or self._has_downloadable_files(state),
             "error_message": state.error_message,
             "created_at": state.created_at,
@@ -1426,6 +1633,17 @@ class InkittBatchService:
         if status_filter in {"completed", "skipped", "failed", "queued", "crawling", "discovered"}:
             return [row for row in state.rows if row.status == status_filter]
         return state.rows
+
+    def _available_rows_for_crawl_locked(
+        self,
+        state: InkittBatchState,
+        max_stories: int | None,
+    ) -> list[InkittBatchRow]:
+        available_rows = [row for row in state.rows if row.status in {"queued", "discovered", "failed"}]
+        available_rows.sort(key=lambda row: (0 if int(row.retry_priority or 0) > 0 else 1, -int(row.retry_priority or 0), row.index))
+        if max_stories is not None:
+            return available_rows[:max(1, int(max_stories))]
+        return available_rows
 
     def _has_downloadable_files(self, state: InkittBatchState) -> bool:
         output_dir = Path(state.output_dir).resolve() if state.output_dir else self._batch_root / state.batch_id
@@ -1494,6 +1712,7 @@ class InkittBatchService:
                     cancel_requested=cancel_requested,
                     log_lines=log_lines[-INKITT_BATCH_MEMORY_LOG_LINES:],
                     log_file=entry.get("log_file") or str(self._log_file_for_batch(batch_id)),
+                    progress_samples=self._normalize_progress_samples(entry.get("progress_samples")),
                 )
                 self._seed_log_file_if_missing(state)
                 self._batches[batch_id] = state
@@ -1526,6 +1745,49 @@ class InkittBatchService:
             tmp_path.replace(self._index_file)
         except Exception as exc:
             logger.warning("Failed to persist Inkitt batch index: %s", exc)
+
+
+def classify_inkitt_crawl_error(message: str) -> dict[str, str]:
+    lowered = message.lower()
+    if is_inkitt_subscription_gate(lowered):
+        return {"status": "skipped", "error": "Skipped paid/subscription-gated story."}
+    if is_inkitt_login_gate(lowered):
+        return {
+            "status": "failed",
+            "error": (
+                "Inkitt needs fresh login cookies for this story. "
+                "Save Inkitt user_credentials/cf_clearance in Settings from the same VPN/IP, then retry this row."
+            ),
+        }
+    return {"status": "failed", "error": message}
+
+
+def is_inkitt_login_gate(lowered_message: str) -> bool:
+    login_markers = (
+        "requires login",
+        "login required",
+        "asked for login",
+        "log in to inkitt",
+        "log in to continue",
+        "login to continue",
+        "please log in",
+        "please login",
+        "sign up to continue",
+        "user_credentials",
+    )
+    return any(marker in lowered_message for marker in login_markers)
+
+
+def is_inkitt_subscription_gate(lowered_message: str) -> bool:
+    subscription_markers = (
+        "subscription",
+        "patron",
+        "patrons only",
+        "paid chapter",
+        "paid story",
+        "requires payment",
+    )
+    return any(marker in lowered_message for marker in subscription_markers)
 
 
 def extract_completed_story_refs(soup: BeautifulSoup, genre_slug: str, genre_label: str) -> list[dict[str, Any]]:
@@ -1620,7 +1882,7 @@ def extract_story_quality(soup: BeautifulSoup) -> dict[str, Any]:
     if rating_raw:
         rating_match = re.search(r"(\d+(?:\.\d+)?)", rating_raw)
         review_match = re.search(r"([\d,]+)\s+reviews?", rating_raw, re.IGNORECASE)
-        rating = float(rating_match.group(1)) if rating_match else None
+        rating = parse_float(rating_match.group(1)) if rating_match else None
         review_count = int(review_match.group(1).replace(",", "")) if review_match else None
 
     text = clean_text(soup.get_text(" ", strip=True))
@@ -1721,10 +1983,20 @@ def normalize_catalog_ref(ref: Any) -> dict[str, Any] | None:
     return normalized
 
 
-def parse_compact_number(value: str, suffix: str | None) -> int:
-    number = float(value.replace(",", ""))
+def parse_compact_number(value: str, suffix: str | None) -> int | None:
+    try:
+        number = float(value.replace(",", ""))
+    except ValueError:
+        return None
     multiplier = {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000}.get((suffix or "").upper(), 1)
     return int(number * multiplier)
+
+
+def parse_float(value: Any) -> float | None:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_retry_after(value: str | None) -> float | None:
@@ -1736,13 +2008,20 @@ def parse_retry_after(value: str | None) -> float | None:
         return None
 
 
+def parse_local_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
 def should_use_rendered_fallback(content: str) -> bool:
     text = clean_text(content)
     if not text:
         return True
     words = text.split()
-    if len(words) < INKITT_RENDERED_FALLBACK_WORDS:
-        return True
     if len(words) > INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS:
         return False
     suspicious = (
@@ -1753,7 +2032,11 @@ def should_use_rendered_fallback(content: str) -> bool:
         "next chapter",
     )
     lowered = text.lower()
-    return any(marker in lowered for marker in suspicious)
+    if any(marker in lowered for marker in suspicious):
+        return True
+    if len(words) < INKITT_RENDERED_FALLBACK_TINY_WORDS:
+        return True
+    return False
 
 
 def clean_text(text: str) -> str:

@@ -199,6 +199,15 @@ export async function pauseInkittBatch(batchId: string): Promise<InkittBatchSumm
   });
 }
 
+export async function retryInkittFailedStories(batchId: string, rowIndex?: number): Promise<InkittBatchSummary> {
+  return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/retry-failed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rowIndex ? { row_index: rowIndex } : {}),
+    timeout: 60000,
+  });
+}
+
 export async function listInkittBatches(): Promise<InkittBatchSummary[]> {
   return apiFetch<InkittBatchSummary[]>('/api/crawl/inkitt-batch');
 }

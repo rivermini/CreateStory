@@ -249,9 +249,15 @@ class InkittSpider(BaseSpider):
                 "Open the story in a browser and save cookies before retrying."
             )
         if self._is_login_gated_response(response.text):
+            saved_count = int(getattr(self, "_saved_cookie_count", 0) or 0)
+            cookie_state = (
+                f"Loaded {saved_count} saved Inkitt cookie(s), but Inkitt still asked for login."
+                if saved_count
+                else "No saved Inkitt cookies were loaded."
+            )
             raise RuntimeError(
-                "[inkitt] This chapter requires login. "
-                "Log in to Inkitt and save cookies to handlers/selenium_cookies_www_inkitt_com.json before retrying."
+                f"[inkitt] Login required for this free/adult-gated page. {cookie_state} "
+                "Refresh Inkitt user_credentials/cf_clearance in Settings from the same VPN/IP, then retry."
             )
         return response.text
 
@@ -387,8 +393,6 @@ class InkittSpider(BaseSpider):
             }
 
         current_chapter = self._extract_chapter_number(page_url)
-        if current_chapter is None and story_id == self._extract_story_id(page_url):
-            current_chapter = 1
 
         if current_chapter is not None and current_chapter not in links_by_number:
             links_by_number[current_chapter] = {

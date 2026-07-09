@@ -31,11 +31,13 @@ from api.services.inkitt_batch_service import (
     InkittBatchRow,
     InkittBatchService,
     InkittBatchState,
+    classify_inkitt_crawl_error,
     extract_completed_story_refs,
     extract_completed_story_refs_from_api,
     extract_story_quality,
     should_use_rendered_fallback,
 )
+from spiders.inkitt import InkittSpider
 
 
 def test_extract_completed_story_refs_skips_ongoing() -> None:
@@ -439,9 +441,12 @@ def test_rendered_fallback_skips_long_static_chapter_with_ui_markers(monkeypatch
 
 def test_rendered_fallback_keeps_short_and_suspicious_chapters_safe(monkeypatch) -> None:
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_WORDS", 120)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_TINY_WORDS", 12)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS", 800)
 
-    assert should_use_rendered_fallback(" ".join(["short"] * 80)) is True
+    short_real_chapter = "I hope that you all enjoyed reading this book. Maybe I will continue the story later. Thank you for reading."
+    assert should_use_rendered_fallback(short_real_chapter) is False
+    assert should_use_rendered_fallback("Tiny text only") is True
     assert should_use_rendered_fallback(" ".join(["word"] * 200) + " About the Author") is True
 
 
@@ -593,6 +598,238 @@ def test_export_batch_catalog_only_includes_selected_batch() -> None:
     assert export["story_count"] == 1
     assert export["selected_genres"] == ["action"]
     assert [story["story_id"] for story in export["stories"]] == ["111"]
+
+
+def test_retry_failed_rows_are_prioritized_for_next_crawl(tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._lock = threading.Lock()
+    service._batches = {}
+    service._batch_root = tmp_path
+    service._index_file = tmp_path / "batch_index.json"
+    service._last_persist_at = 0.0
+    service._history_lock = threading.Lock()
+    rows = [
+        InkittBatchRow(
+            index=1,
+            genre="Action",
+            genre_slug="action",
+            title="Normal Queued",
+            url="https://www.inkitt.com/stories/1",
+            story_id="1",
+            status="queued",
+        ),
+        InkittBatchRow(
+            index=2,
+            genre="Action",
+            genre_slug="action",
+            title="Failed Story",
+            url="https://www.inkitt.com/stories/2",
+            story_id="2",
+            status="failed",
+            error="No readable free chapter content.",
+        ),
+    ]
+    state = InkittBatchState(
+        batch_id="aaaaaaaa",
+        created_by_user_id=None,
+        rows=rows,
+        phase="ready",
+        output_dir=str(tmp_path / "aaaaaaaa"),
+    )
+    service._batches[state.batch_id] = state
+
+    service.retry_failed("aaaaaaaa", row_index=2)
+    available = service._available_rows_for_crawl_locked(state, max_stories=2)
+
+    assert rows[1].status == "queued"
+    assert rows[1].error == ""
+    assert rows[1].retry_priority > rows[0].retry_priority
+    assert [row.index for row in available] == [2, 1]
+
+
+def test_login_gate_during_story_fetch_is_retryable_failed_row(monkeypatch, tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._is_cancel_requested = lambda _batch_id: False
+
+    class FakeSpider:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    def fake_fetch(*_args, **_kwargs):
+        raise RuntimeError("[inkitt] Login required for this free/adult-gated page.")
+
+    monkeypatch.setattr("api.services.inkitt_batch_service.InkittSpider", FakeSpider)
+    service._fetch_spider_html = fake_fetch
+
+    row = InkittBatchRow(
+        index=1,
+        genre="Action",
+        genre_slug="action",
+        title="Beautiful Killer",
+        url="https://www.inkitt.com/stories/317829",
+        story_id="317829",
+        status="queued",
+    )
+
+    result = service._crawl_one("aaaaaaaa", row, tmp_path, 0)
+
+    assert result["status"] == "failed"
+    assert "fresh login cookies" in result["error"]
+    assert "same VPN/IP" in result["error"]
+
+
+def test_subscription_gate_is_skipped_not_retried() -> None:
+    result = classify_inkitt_crawl_error("[inkitt] subscription required to read this page.")
+
+    assert result["status"] == "skipped"
+    assert "paid/subscription" in result["error"]
+
+
+def test_inkitt_story_landing_page_without_chapter_links_does_not_create_fake_chapter() -> None:
+    spider = InkittSpider.__new__(InkittSpider)
+    spider.selector_config = types.SimpleNamespace(chapter_list="a[href*='/stories/'][href*='/chapters/']")
+    html = """
+    <main>
+      <h1>Beautiful Killer</h1>
+      <article id="story-text-container">
+        <h2>Summary</h2>
+        <p>This is only a story summary, not a readable chapter.</p>
+      </article>
+    </main>
+    """
+
+    links = spider._collect_chapter_links(
+        BeautifulSoup(html, "html.parser"),
+        "317829",
+        "https://www.inkitt.com/stories/317829",
+    )
+
+    assert links == []
+
+
+def test_inkitt_direct_chapter_url_is_kept_when_no_chapter_list_is_visible() -> None:
+    spider = InkittSpider.__new__(InkittSpider)
+    spider.selector_config = types.SimpleNamespace(chapter_list="a[href*='/stories/'][href*='/chapters/']")
+    html = """
+    <article id="story-text-container">
+      <h2>Not A Chapter</h2>
+      <p>I hope that you all enjoyed reading this book.</p>
+    </article>
+    """
+
+    links = spider._collect_chapter_links(
+        BeautifulSoup(html, "html.parser"),
+        "317829",
+        "https://www.inkitt.com/stories/317829/chapters/42",
+    )
+
+    assert len(links) == 1
+    assert links[0]["chapter_number"] == 42
+    assert links[0]["url"] == "https://www.inkitt.com/stories/317829/chapters/42"
+
+
+def test_story_without_chapter_list_is_skipped_with_zero_chapters(monkeypatch, tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._is_cancel_requested = lambda _batch_id: False
+    service._fetch_spider_html = lambda *_args, **_kwargs: "<html><h1>No Chapters</h1></html>"
+
+    class FakeSpider:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def _extract_novel_metadata(self, *_args, **_kwargs) -> dict:
+            return {"title": "No Chapters"}
+
+        def _collect_chapter_links(self, *_args, **_kwargs) -> list:
+            return []
+
+    monkeypatch.setattr("api.services.inkitt_batch_service.InkittSpider", FakeSpider)
+    row = InkittBatchRow(
+        index=1,
+        genre="Action",
+        genre_slug="action",
+        title="No Chapters",
+        url="https://www.inkitt.com/stories/317829",
+        story_id="317829",
+        total_chapters=1,
+        status="queued",
+    )
+
+    result = service._crawl_one("aaaaaaaa", row, tmp_path, 0)
+
+    assert result["status"] == "skipped"
+    assert result["total_chapters"] == 0
+    assert result["crawled_chapters"] == 0
+    assert result["error"] == "No chapter list found."
+
+
+def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._batch_root = tmp_path
+    rows = [
+        InkittBatchRow(
+            index=1,
+            genre="Action",
+            genre_slug="action",
+            title="Done",
+            url="https://www.inkitt.com/stories/1",
+            story_id="1",
+            status="completed",
+            total_chapters=10,
+            crawled_chapters=10,
+        ),
+        InkittBatchRow(
+            index=2,
+            genre="Action",
+            genre_slug="action",
+            title="Partial",
+            url="https://www.inkitt.com/stories/2",
+            story_id="2",
+            status="queued",
+            total_chapters=20,
+            crawled_chapters=5,
+        ),
+        InkittBatchRow(
+            index=3,
+            genre="Action",
+            genre_slug="action",
+            title="Waiting",
+            url="https://www.inkitt.com/stories/3",
+            story_id="3",
+            status="queued",
+            total_chapters=30,
+            crawled_chapters=0,
+        ),
+    ]
+    state = InkittBatchState(
+        batch_id="aaaaaaaa",
+        created_by_user_id=None,
+        rows=rows,
+        phase="ready",
+        output_dir=str(tmp_path / "aaaaaaaa"),
+        crawl_runs=[{
+            "run_id": "run123",
+            "started_at": "2026-07-09 10:00:00",
+            "finished_at": "2026-07-09 10:10:00",
+            "target_stories": 3,
+            "completed_count": 1,
+            "failed_count": 0,
+            "skipped_count": 0,
+            "status": "completed",
+        }],
+    )
+
+    summary = service._summary_locked(state)
+    estimate = summary["crawl_estimate"]
+
+    assert summary["crawled_chapters"] == 15
+    assert estimate["remaining_stories"] == 2
+    assert estimate["remaining_chapters"] == 45
+    assert estimate["estimated_total_chapters"] == 60
+    assert estimate["elapsed_seconds"] == 600
+    assert estimate["chapters_per_hour"] == 90.0
+    assert estimate["estimated_remaining_seconds"] == 1800
+    assert estimate["source"] == "all_time_chapters"
 
 
 def test_crawl_rows_stops_taking_new_rows_after_pause(tmp_path, monkeypatch) -> None:

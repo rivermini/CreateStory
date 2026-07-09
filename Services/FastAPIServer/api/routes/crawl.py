@@ -148,6 +148,12 @@ async def pause_inkitt_batch(batch_id: str) -> JSONResponse:
     return await _forward_request("POST", f"/api/crawl/inkitt-batch/{batch_id}/pause", json_body={})
 
 
+@router.post("/inkitt-batch/{batch_id}/retry-failed", dependencies=[Depends(require_operator)])
+async def retry_failed_inkitt_batch_rows(batch_id: str, request: dict | None = Body(default=None)) -> JSONResponse:
+    """Move failed Inkitt stories to the front of the next crawl queue."""
+    return await _forward_request("POST", f"/api/crawl/inkitt-batch/{batch_id}/retry-failed", json_body=request or {})
+
+
 @router.get("/inkitt-batch/{batch_id}/rows")
 async def list_inkitt_batch_rows(
     batch_id: str,
