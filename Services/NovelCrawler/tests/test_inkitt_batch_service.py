@@ -832,6 +832,83 @@ def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> 
     assert estimate["source"] == "all_time_chapters"
 
 
+def test_summary_adjusts_remaining_chapters_by_observed_yield(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_ESTIMATE_YIELD_CONFIDENCE_STORIES", 3)
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._batch_root = tmp_path
+    rows = [
+        InkittBatchRow(
+            index=1,
+            genre="Action",
+            genre_slug="action",
+            title="Done 1",
+            url="https://www.inkitt.com/stories/1",
+            story_id="1",
+            status="completed",
+            total_chapters=10,
+            crawled_chapters=10,
+        ),
+        InkittBatchRow(
+            index=2,
+            genre="Action",
+            genre_slug="action",
+            title="Done 2",
+            url="https://www.inkitt.com/stories/2",
+            story_id="2",
+            status="completed",
+            total_chapters=10,
+            crawled_chapters=10,
+        ),
+        InkittBatchRow(
+            index=3,
+            genre="Action",
+            genre_slug="action",
+            title="Skipped",
+            url="https://www.inkitt.com/stories/3",
+            story_id="3",
+            status="skipped",
+            total_chapters=0,
+            crawled_chapters=0,
+        ),
+        InkittBatchRow(
+            index=4,
+            genre="Action",
+            genre_slug="action",
+            title="Remaining",
+            url="https://www.inkitt.com/stories/4",
+            story_id="4",
+            status="queued",
+            total_chapters=90,
+            crawled_chapters=0,
+        ),
+    ]
+    state = InkittBatchState(
+        batch_id="aaaaaaaa",
+        created_by_user_id=None,
+        rows=rows,
+        phase="ready",
+        output_dir=str(tmp_path / "aaaaaaaa"),
+        crawl_runs=[{
+            "run_id": "run123",
+            "started_at": "2026-07-09 10:00:00",
+            "finished_at": "2026-07-09 10:10:00",
+            "target_stories": 4,
+            "completed_count": 2,
+            "failed_count": 0,
+            "skipped_count": 1,
+            "status": "completed",
+        }],
+    )
+
+    estimate = service._summary_locked(state)["crawl_estimate"]
+
+    assert estimate["known_remaining_chapters"] == 90
+    assert estimate["raw_remaining_chapters"] == 90
+    assert estimate["chapter_yield_ratio"] == 0.6667
+    assert estimate["remaining_chapters"] == 60
+    assert estimate["estimated_total_chapters"] == 80
+
+
 def test_crawl_rows_stops_taking_new_rows_after_pause(tmp_path, monkeypatch) -> None:
     service = InkittBatchService.__new__(InkittBatchService)
     service._lock = threading.Lock()

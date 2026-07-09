@@ -106,13 +106,26 @@ function formatEstimateSpeed(chaptersPerHour?: number | null, storiesPerHour?: n
 
 function estimateSourceLabel(source?: string): string {
   const labels: Record<string, string> = {
+    blended_chapters: 'Blended speed',
     recent_chapters: 'Recent speed',
     all_time_chapters: 'All-time speed',
+    recent_stories: 'Recent story speed',
     all_time_stories: 'Story speed',
     complete: 'Complete',
     insufficient_data: 'Waiting for data',
   };
   return labels[source || ''] || 'Estimate';
+}
+
+function formatPercentRatio(value?: number | null): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatRemainingChapters(value: number, rawValue?: number): string {
+  const formatted = value.toLocaleString();
+  if (!rawValue || rawValue <= value) return formatted;
+  return `${formatted} est`;
 }
 
 export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
@@ -657,8 +670,9 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <Stat label="Remaining stories" value={crawlEstimate.remaining_stories} />
-                    <Stat label="Remaining chapters" value={crawlEstimate.remaining_chapters} />
-                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.stories_per_hour)} />
+                    <Stat label="Remaining chapters" value={formatRemainingChapters(crawlEstimate.remaining_chapters, crawlEstimate.raw_remaining_chapters)} />
+                    <Stat label="Chapter yield" value={formatPercentRatio(crawlEstimate.chapter_yield_ratio)} />
+                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.effective_chapters_per_hour ?? crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.recent_stories_per_hour ?? crawlEstimate.stories_per_hour)} />
                     <Stat label="Elapsed" value={formatDuration(crawlEstimate.elapsed_seconds)} />
                     <Stat label="ETA" value={formatDuration(crawlEstimate.estimated_remaining_seconds)} />
                     <Stat className="col-span-2" label="Finish" value={crawlEstimate.estimated_finished_at || '-'} />

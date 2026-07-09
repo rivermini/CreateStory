@@ -43,6 +43,7 @@ INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS = int(os.getenv("INKITT_RENDERED_FALLB
 INKITT_BATCH_MEMORY_LOG_LINES = int(os.getenv("INKITT_BATCH_MEMORY_LOG_LINES", "10000"))
 INKITT_PROGRESS_SAMPLE_LIMIT = int(os.getenv("INKITT_PROGRESS_SAMPLE_LIMIT", "500"))
 INKITT_RECENT_ESTIMATE_SECONDS = int(os.getenv("INKITT_RECENT_ESTIMATE_SECONDS", "3600"))
+INKITT_ESTIMATE_YIELD_CONFIDENCE_STORIES = int(os.getenv("INKITT_ESTIMATE_YIELD_CONFIDENCE_STORIES", "500"))
 
 BatchPhase = Literal["discovering", "ready", "crawling", "completed", "failed"]
 RowStatus = Literal["discovered", "queued", "crawling", "completed", "skipped", "failed"]
@@ -901,6 +902,10 @@ class InkittBatchService:
                     if persisted_row.status == "completed":
                         persisted_row.completed_at = persisted_row.completed_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         self._record_exported_story(persisted_row, batch_id)
+                    total_chapters = sum(int(item.total_chapters or 0) for item in state.rows)
+                    crawled_chapters = sum(int(item.crawled_chapters or 0) for item in state.rows)
+                    processed_count = sum(1 for item in state.rows if item.status in {"completed", "skipped", "failed"})
+                    self._append_progress_sample_locked(state, crawled_chapters, processed_count, total_chapters)
                     self._persist_locked()
 
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -1032,6 +1037,10 @@ class InkittBatchService:
             row = state.rows[row_index - 1]
             for key, value in updates.items():
                 setattr(row, key, value)
+            total_chapters = sum(int(item.total_chapters or 0) for item in state.rows)
+            crawled_chapters = sum(int(item.crawled_chapters or 0) for item in state.rows)
+            processed_count = sum(1 for item in state.rows if item.status in {"completed", "skipped", "failed"})
+            self._append_progress_sample_locked(state, crawled_chapters, processed_count, total_chapters)
             self._persist_locked()
 
     def _fetch_rendered_chapter_content(self, url: str, delay: float) -> str:
@@ -1437,6 +1446,7 @@ class InkittBatchService:
                 at = float(sample.get("at") or 0)
                 crawled_chapters = int(sample.get("crawled_chapters") or 0)
                 processed_count = int(sample.get("processed_count") or 0)
+                total_chapters = int(sample.get("total_chapters") or 0)
             except (TypeError, ValueError):
                 continue
             if at > 0:
@@ -1444,6 +1454,7 @@ class InkittBatchService:
                     "at": at,
                     "crawled_chapters": max(0, crawled_chapters),
                     "processed_count": max(0, processed_count),
+                    "total_chapters": max(0, total_chapters),
                 })
         return clean
 
@@ -1452,6 +1463,7 @@ class InkittBatchService:
         state: InkittBatchState,
         crawled_chapters: int,
         processed_count: int,
+        total_chapters: int,
     ) -> None:
         if crawled_chapters <= 0 and processed_count <= 0:
             return
@@ -1460,12 +1472,14 @@ class InkittBatchService:
             "at": now,
             "crawled_chapters": int(crawled_chapters),
             "processed_count": int(processed_count),
+            "total_chapters": int(total_chapters),
         }
         last = state.progress_samples[-1] if state.progress_samples else None
         if (
             isinstance(last, dict)
             and int(last.get("crawled_chapters") or 0) == sample["crawled_chapters"]
             and int(last.get("processed_count") or 0) == sample["processed_count"]
+            and int(last.get("total_chapters") or 0) == sample["total_chapters"]
         ):
             return
         state.progress_samples.append(sample)
@@ -1488,21 +1502,41 @@ class InkittBatchService:
             elapsed += max(0.0, (finished - started).total_seconds())
         return elapsed
 
-    def _recent_chapters_per_second(self, state: InkittBatchState, now_ts: float) -> float | None:
+    def _recent_rates(self, state: InkittBatchState, now_ts: float) -> dict[str, float | None]:
         samples = self._normalize_progress_samples(state.progress_samples)
         if len(samples) < 2:
-            return None
+            return {"chapters_per_second": None, "stories_per_second": None, "window_seconds": None}
         latest = samples[-1]
         cutoff = now_ts - INKITT_RECENT_ESTIMATE_SECONDS
         candidates = [sample for sample in samples if sample["at"] >= cutoff]
         if len(candidates) < 2:
             candidates = samples[-min(len(samples), 20):]
-        for first in candidates:
-            delta_chapters = latest["crawled_chapters"] - first["crawled_chapters"]
-            delta_seconds = latest["at"] - first["at"]
-            if delta_chapters >= 5 and delta_seconds >= 30:
-                return delta_chapters / delta_seconds
-        return None
+        first = candidates[0]
+        delta_seconds = latest["at"] - first["at"]
+        if delta_seconds < 30:
+            return {"chapters_per_second": None, "stories_per_second": None, "window_seconds": delta_seconds}
+        delta_chapters = latest["crawled_chapters"] - first["crawled_chapters"]
+        delta_stories = latest["processed_count"] - first["processed_count"]
+        chapters_per_second = (delta_chapters / delta_seconds) if delta_chapters >= 5 else None
+        stories_per_second = (delta_stories / delta_seconds) if delta_stories >= 2 else None
+        return {
+            "chapters_per_second": chapters_per_second,
+            "stories_per_second": stories_per_second,
+            "window_seconds": delta_seconds,
+        }
+
+    def _chapter_yield_ratio(
+        self,
+        completed: int,
+        skipped: int,
+        failed: int,
+    ) -> float:
+        processed_count = completed + skipped + failed
+        if processed_count <= 0:
+            return 1.0
+        raw_success_ratio = completed / processed_count
+        confidence = min(1.0, processed_count / max(1, INKITT_ESTIMATE_YIELD_CONFIDENCE_STORIES))
+        return max(0.05, min(1.0, 1.0 - ((1.0 - raw_success_ratio) * confidence)))
 
     def _estimate_crawl_progress_locked(
         self,
@@ -1518,20 +1552,43 @@ class InkittBatchService:
         now_ts = time.time()
         processed_count = completed + skipped + failed
         remaining_stories = max(0, total - processed_count)
-        known_story_totals = [int(row.total_chapters or 0) for row in state.rows if int(row.total_chapters or 0) > 0]
+        completed_story_totals = [
+            int(row.crawled_chapters or 0)
+            for row in state.rows
+            if row.status == "completed" and int(row.crawled_chapters or 0) > 0
+        ]
+        known_story_totals = [
+            int(row.total_chapters or 0)
+            for row in state.rows
+            if int(row.total_chapters or 0) > 0
+        ]
+        average_exported_chapters = (sum(completed_story_totals) / len(completed_story_totals)) if completed_story_totals else 0.0
         average_known_chapters = (sum(known_story_totals) / len(known_story_totals)) if known_story_totals else 0.0
-        known_remaining_chapters = 0
+        average_unknown_chapters = average_exported_chapters or average_known_chapters
+        active_remaining_chapters = 0
+        queued_known_remaining_chapters = 0
         unknown_remaining_stories = 0
         for row in state.rows:
             if row.status in {"completed", "skipped", "failed"}:
                 continue
             row_total = int(row.total_chapters or 0)
             if row_total > 0:
-                known_remaining_chapters += max(0, row_total - int(row.crawled_chapters or 0))
+                row_remaining = max(0, row_total - int(row.crawled_chapters or 0))
+                if row.status == "crawling":
+                    active_remaining_chapters += row_remaining
+                else:
+                    queued_known_remaining_chapters += row_remaining
             else:
                 unknown_remaining_stories += 1
-        estimated_unknown_chapters = int(round(unknown_remaining_stories * average_known_chapters))
-        estimated_remaining_chapters = max(0, known_remaining_chapters + estimated_unknown_chapters)
+        raw_known_remaining_chapters = active_remaining_chapters + queued_known_remaining_chapters
+        chapter_yield_ratio = self._chapter_yield_ratio(completed, skipped, failed)
+        estimated_unknown_chapters = int(round(unknown_remaining_stories * average_unknown_chapters * chapter_yield_ratio))
+        estimated_remaining_chapters = max(
+            0,
+            active_remaining_chapters
+            + int(round(queued_known_remaining_chapters * chapter_yield_ratio))
+            + estimated_unknown_chapters,
+        )
         estimated_total_chapters = crawled_chapters + estimated_remaining_chapters
         elapsed_seconds = self._crawl_elapsed_seconds(state, now_dt)
         all_time_chapters_per_second = (
@@ -1544,23 +1601,32 @@ class InkittBatchService:
             if elapsed_seconds >= 30 and processed_count > 0
             else None
         )
-        self._append_progress_sample_locked(state, crawled_chapters, processed_count)
-        recent_chapters_per_second = self._recent_chapters_per_second(state, now_ts)
+        self._append_progress_sample_locked(state, crawled_chapters, processed_count, total_chapters)
+        recent_rates = self._recent_rates(state, now_ts)
+        recent_chapters_per_second = recent_rates["chapters_per_second"]
+        recent_stories_per_second = recent_rates["stories_per_second"]
+        estimate_chapters_per_second = recent_chapters_per_second or all_time_chapters_per_second
+        source = "insufficient_data"
+        if recent_chapters_per_second and all_time_chapters_per_second:
+            estimate_chapters_per_second = (recent_chapters_per_second * 0.65) + (all_time_chapters_per_second * 0.35)
+            source = "blended_chapters"
+        elif recent_chapters_per_second:
+            source = "recent_chapters"
+        elif all_time_chapters_per_second:
+            source = "all_time_chapters"
 
         remaining_seconds: int | None = None
-        source = "insufficient_data"
         if remaining_stories == 0 or estimated_remaining_chapters == 0:
             remaining_seconds = 0
             source = "complete"
-        elif recent_chapters_per_second:
-            remaining_seconds = int(round(estimated_remaining_chapters / recent_chapters_per_second))
-            source = "recent_chapters"
-        elif all_time_chapters_per_second:
-            remaining_seconds = int(round(estimated_remaining_chapters / all_time_chapters_per_second))
-            source = "all_time_chapters"
+        elif estimate_chapters_per_second:
+            remaining_seconds = int(round(estimated_remaining_chapters / estimate_chapters_per_second))
         elif all_time_stories_per_second:
             remaining_seconds = int(round(remaining_stories / all_time_stories_per_second))
             source = "all_time_stories"
+        elif recent_stories_per_second:
+            remaining_seconds = int(round(remaining_stories / recent_stories_per_second))
+            source = "recent_stories"
 
         finished_at = (
             datetime.fromtimestamp(now_ts + remaining_seconds).strftime("%Y-%m-%d %H:%M:%S")
@@ -1570,13 +1636,19 @@ class InkittBatchService:
         return {
             "remaining_stories": remaining_stories,
             "remaining_chapters": estimated_remaining_chapters,
-            "known_remaining_chapters": known_remaining_chapters,
+            "known_remaining_chapters": raw_known_remaining_chapters,
+            "raw_remaining_chapters": raw_known_remaining_chapters + int(round(unknown_remaining_stories * average_unknown_chapters)),
+            "active_remaining_chapters": active_remaining_chapters,
+            "chapter_yield_ratio": round(chapter_yield_ratio, 4),
             "estimated_total_chapters": estimated_total_chapters,
             "known_total_chapters": total_chapters,
             "elapsed_seconds": int(round(elapsed_seconds)),
             "chapters_per_hour": round(all_time_chapters_per_second * 3600, 2) if all_time_chapters_per_second else None,
             "recent_chapters_per_hour": round(recent_chapters_per_second * 3600, 2) if recent_chapters_per_second else None,
+            "effective_chapters_per_hour": round(estimate_chapters_per_second * 3600, 2) if estimate_chapters_per_second else None,
             "stories_per_hour": round(all_time_stories_per_second * 3600, 2) if all_time_stories_per_second else None,
+            "recent_stories_per_hour": round(recent_stories_per_second * 3600, 2) if recent_stories_per_second else None,
+            "recent_window_seconds": int(round(recent_rates["window_seconds"] or 0)) if recent_rates["window_seconds"] else None,
             "estimated_remaining_seconds": remaining_seconds,
             "estimated_finished_at": finished_at,
             "source": source,

@@ -296,15 +296,21 @@ export interface InkittBatchCrawlEstimate {
   remaining_stories: number;
   remaining_chapters: number;
   known_remaining_chapters: number;
+  raw_remaining_chapters?: number;
+  active_remaining_chapters?: number;
+  chapter_yield_ratio?: number;
   estimated_total_chapters: number;
   known_total_chapters: number;
   elapsed_seconds: number;
   chapters_per_hour: number | null;
   recent_chapters_per_hour: number | null;
+  effective_chapters_per_hour?: number | null;
   stories_per_hour: number | null;
+  recent_stories_per_hour?: number | null;
+  recent_window_seconds?: number | null;
   estimated_remaining_seconds: number | null;
   estimated_finished_at: string | null;
-  source: 'recent_chapters' | 'all_time_chapters' | 'all_time_stories' | 'complete' | 'insufficient_data' | string;
+  source: 'blended_chapters' | 'recent_chapters' | 'all_time_chapters' | 'recent_stories' | 'all_time_stories' | 'complete' | 'insufficient_data' | string;
 }
 
 export interface InkittBatchCrawlRun {
