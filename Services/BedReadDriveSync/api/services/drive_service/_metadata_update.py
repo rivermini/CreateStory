@@ -7,6 +7,7 @@ import re
 import ssl
 import threading
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional
 
@@ -70,16 +71,42 @@ class _Phase:
 # -------------------------------------------------------------------------
 
 
+def _strip_invisible(value: str) -> str:
+    """Remove Unicode format (Cf) and control (Cc) characters that carry no
+    visible meaning -- zero-width space/joiners, BOM, word joiner, soft hyphen.
+
+    These survive a plain ``.strip()`` and hide inside hand-typed metadata (e.g.
+    a tags.md typed with an IME or copied from the web), making an otherwise
+    identical value compare unequal against the DB copy. Whitespace controls
+    (newline/tab) are already folded to spaces by the caller before this runs,
+    so they are gone by the time we drop the remaining invisibles.
+    """
+    return "".join(ch for ch in value if unicodedata.category(ch) not in ("Cf", "Cc"))
+
+
 def _normalize_for_compare(value: str | None) -> str:
     if value is None:
         return ""
-    value = value.strip()
-    return re.sub(r"\s+", " ", value)
+    # NFKC folds compatibility forms (NBSP -> space, full-width -> ASCII, etc.),
+    # then collapse whitespace and drop invisible format/control characters so
+    # visually identical values compare equal regardless of source quirks.
+    value = unicodedata.normalize("NFKC", value)
+    value = re.sub(r"\s+", " ", value)
+    value = _strip_invisible(value)
+    return value.strip()
+
+
+def _normalize_tag(value: str | None) -> str:
+    """Case-insensitive variant of :func:`_normalize_for_compare` for tag/category
+    tokens (which are matched without regard to case)."""
+    return _normalize_for_compare(value).lower()
 
 
 def _tags_match(folder_tags: list[str], server_tags: list[str]) -> bool:
-    folder_set = {t.strip().lower() for t in folder_tags if t.strip()}
-    server_set = {t.strip().lower() for t in server_tags if t.strip()}
+    folder_set = {_normalize_tag(t) for t in folder_tags}
+    server_set = {_normalize_tag(t) for t in server_tags}
+    folder_set.discard("")
+    server_set.discard("")
     return folder_set == server_set
 
 
@@ -89,8 +116,10 @@ def _categories_match(
     server_main: str | None,
     server_subs: list[str],
 ) -> bool:
-    folder_cats = {c.strip().lower() for c in [folder_main, folder_sub] if c and c.strip()}
-    server_cats = {c.strip().lower() for c in [server_main] + server_subs if c and c.strip()}
+    folder_cats = {_normalize_tag(c) for c in (folder_main, folder_sub)}
+    server_cats = {_normalize_tag(c) for c in (server_main, *server_subs)}
+    folder_cats.discard("")
+    server_cats.discard("")
     return folder_cats == server_cats
 
 
