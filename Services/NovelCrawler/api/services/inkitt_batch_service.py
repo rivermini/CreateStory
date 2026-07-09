@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 INKITT_BATCH_MAX_PAGES = int(os.getenv("INKITT_BATCH_MAX_PAGES", "1000"))
 INKITT_BATCH_MAX_STORIES = int(os.getenv("INKITT_BATCH_MAX_STORIES", "100000"))
 INKITT_BATCH_MAX_DISCOVER_WORKERS = int(os.getenv("INKITT_BATCH_MAX_DISCOVER_WORKERS", "6"))
-INKITT_BATCH_MAX_CRAWL_WORKERS = int(os.getenv("INKITT_BATCH_MAX_CRAWL_WORKERS", "10"))
+INKITT_BATCH_MAX_CRAWL_WORKERS = int(os.getenv("INKITT_BATCH_MAX_CRAWL_WORKERS", "5"))
 INKITT_DISCOVER_RETRY_TIMES = int(os.getenv("INKITT_DISCOVER_RETRY_TIMES", "6"))
 INKITT_DISCOVER_RETRY_BASE_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_BASE_SECONDS", "15"))
 INKITT_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_MAX_SECONDS", "120"))
@@ -120,8 +120,8 @@ class InkittBatchState:
     finished_at: str | None = None
     max_pages_per_genre: int = 3
     discover_concurrency: int = 4
-    crawl_concurrency: int = 1
-    request_delay_seconds: float = 2.0
+    crawl_concurrency: int = 4
+    request_delay_seconds: float = 1.0
     output_dir: str = ""
     selected_genres: list[str] = field(default_factory=list)
     crawl_runs: list[dict[str, Any]] = field(default_factory=list)
@@ -1704,8 +1704,8 @@ class InkittBatchService:
                     finished_at=entry.get("finished_at"),
                     max_pages_per_genre=int(entry.get("max_pages_per_genre") or 3),
                     discover_concurrency=int(entry.get("discover_concurrency") or 4),
-                    crawl_concurrency=int(entry.get("crawl_concurrency") or 1),
-                    request_delay_seconds=float(entry.get("request_delay_seconds") or 2.0),
+                    crawl_concurrency=int(entry.get("crawl_concurrency") or 4),
+                    request_delay_seconds=float(entry.get("request_delay_seconds") or 1.0),
                     output_dir=entry.get("output_dir") or str(self._batch_root / batch_id),
                     selected_genres=list(entry.get("selected_genres") or [slug for slug, _label in INKITT_GENRES]),
                     crawl_runs=list(entry.get("crawl_runs") or []),

@@ -121,8 +121,8 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [selectedGenres, setSelectedGenres] = useState<string[]>(() => GENRES.map(([slug]) => slug));
   const [maxPages, setMaxPages] = useState(3);
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
-  const [crawlConcurrency, setCrawlConcurrency] = useState(1);
-  const [requestDelaySeconds, setRequestDelaySeconds] = useState(2);
+  const [crawlConcurrency, setCrawlConcurrency] = useState(4);
+  const [requestDelaySeconds, setRequestDelaySeconds] = useState(1);
   const [storiesPerRun, setStoriesPerRun] = useState(200);
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('inkitt_batch_id') || '');
   const [summary, setSummary] = useState<InkittBatchSummary | null>(null);
@@ -165,8 +165,8 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setSelectedGenres(summary.selected_genres?.length ? summary.selected_genres : ALL_GENRE_SLUGS);
     setMaxPages(summary.max_pages_per_genre || 3);
     setDiscoverConcurrency(summary.discover_concurrency || 4);
-    setCrawlConcurrency(summary.crawl_concurrency || 1);
-    setRequestDelaySeconds(summary.request_delay_seconds || 2);
+    setCrawlConcurrency(summary.crawl_concurrency || 4);
+    setRequestDelaySeconds(summary.request_delay_seconds || 1);
   }, [summary]);
 
   const fetchHistory = useCallback(() => {
@@ -542,9 +542,9 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
               <div className="flex flex-wrap items-end gap-3">
                 <NumberField label="Pages/genre" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
                 <NumberField label="Discover workers" value={discoverConcurrency} min={1} max={6} onChange={setDiscoverConcurrency} />
-                <NumberField label="Crawl workers" value={crawlConcurrency} min={1} max={10} onChange={setCrawlConcurrency} />
+                <NumberField label="Crawl workers" value={crawlConcurrency} min={1} max={5} onChange={setCrawlConcurrency} />
                 <NumberField label="Stories/run" value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
-                <DecimalField label="Delay seconds" value={requestDelaySeconds} min={1} max={15} step={0.25} onChange={setRequestDelaySeconds} />
+                <DecimalField label="Delay seconds" value={requestDelaySeconds} min={1} max={5} step={0.25} onChange={setRequestDelaySeconds} />
               </div>
 
               <div className="flex flex-wrap gap-2">
