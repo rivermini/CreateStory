@@ -167,13 +167,264 @@ def test_discover_genre_reports_stop_reason_and_keeps_partial_results(monkeypatc
     monkeypatch.setattr("api.services.inkitt_batch_service.random.uniform", lambda _start, _end: 0)
     monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
 
-    result = service._discover_genre("action", "Action", 1000, 2)
+    result = service._discover_genre(None, "action", "Action", 1000, 2)
 
     assert len(result.refs) == 20
     assert result.pages_checked == 2
     assert result.raw_stories_seen == 20
     assert result.stop_reason == "HTTP 429 on page 2 (Retry-After: 60) after 2 retries"
     assert session.calls == 4
+
+
+def test_discover_genre_retries_transient_500(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._request_lock = threading.Lock()
+    service._last_request_at = 0.0
+
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict) -> None:
+            self.status_code = status_code
+            self._payload = payload
+            self.headers = {}
+
+        def json(self) -> dict:
+            return self._payload
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, *_args, **_kwargs) -> FakeResponse:
+            self.calls += 1
+            if self.calls == 1:
+                return FakeResponse(500, {})
+            return FakeResponse(
+                200,
+                {
+                    "stories": [
+                        {
+                            "id": 111,
+                            "title": "Recovered Story",
+                            "story_status": "complete",
+                            "for_patrons_only": False,
+                            "chapters_count": 10,
+                        }
+                    ],
+                },
+            )
+
+    session = FakeSession()
+    monkeypatch.setattr(service, "_make_session", lambda: session)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_DISCOVER_RETRY_TIMES", 2)
+    monkeypatch.setattr("api.services.inkitt_batch_service.random.uniform", lambda _start, _end: 0)
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
+
+    result = service._discover_genre(None, "action", "Action", 1000, 2)
+
+    assert len(result.refs) == 1
+    assert result.refs[0]["story_id"] == "111"
+    assert result.stop_reason == "short page 1 (1 story row(s))"
+    assert session.calls == 2
+
+
+def test_discover_genre_can_resume_from_later_page(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._request_lock = threading.Lock()
+    service._last_request_at = 0.0
+
+    class FakeResponse:
+        status_code = 200
+        headers: dict = {}
+
+        def json(self) -> dict:
+            return {
+                "stories": [
+                    {
+                        "id": 444,
+                        "title": "Resume Story",
+                        "story_status": "complete",
+                        "for_patrons_only": False,
+                        "chapters_count": 10,
+                    }
+                ]
+            }
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.pages: list[int] = []
+
+        def get(self, *_args, **kwargs) -> FakeResponse:
+            self.pages.append(int(kwargs["params"]["page"]))
+            return FakeResponse()
+
+    session = FakeSession()
+    monkeypatch.setattr(service, "_make_session", lambda: session)
+
+    result = service._discover_genre(None, "action", "Action", 1000, 1, start_page=4)
+
+    assert session.pages == [4]
+    assert result.start_page == 4
+    assert result.last_success_page == 4
+    assert result.stop_reason == "short page 4 (1 story row(s))"
+    assert result.terminal is True
+
+
+def test_discover_genre_writes_live_progress_logs(tmp_path, monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._lock = threading.Lock()
+    service._batches = {}
+    service._index_file = tmp_path / "batch_index.json"
+    service._last_persist_at = 0.0
+    service._request_lock = threading.Lock()
+    service._last_request_at = 0.0
+    service._history_lock = threading.Lock()
+    service._discovery_progress_file = tmp_path / "discovery_progress.json"
+    state = InkittBatchState(batch_id="aaaaaaaa", created_by_user_id=None)
+    service._batches[state.batch_id] = state
+
+    class FakeResponse:
+        status_code = 200
+        headers: dict = {}
+
+        def __init__(self, page: int) -> None:
+            self.page = page
+
+        def json(self) -> dict:
+            count = 20 if self.page < 26 else 1
+            return {
+                "stories": [
+                    {
+                        "id": self.page * 1000 + index,
+                        "title": f"Story {self.page}-{index}",
+                        "story_status": "complete",
+                        "for_patrons_only": False,
+                        "chapters_count": 10,
+                    }
+                    for index in range(count)
+                ]
+            }
+
+    class FakeSession:
+        def get(self, *_args, **kwargs) -> FakeResponse:
+            return FakeResponse(int(kwargs["params"]["page"]))
+
+    monkeypatch.setattr(service, "_make_session", lambda: FakeSession())
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
+
+    result = service._discover_genre("aaaaaaaa", "action", "Action", 1000, 1)
+
+    assert result.last_success_page == 26
+    assert any("Action: discovery worker started" in line for line in state.log_lines)
+    assert any("Action: scanning page 1/1000" in line for line in state.log_lines)
+    assert any("Action: scanning page 25/1000" in line for line in state.log_lines)
+    progress = service._load_discovery_progress()
+    assert progress["action"]["last_success_page"] == 25
+    assert progress["action"]["stop_reason"] == "in progress at page 25"
+
+
+def test_discover_genre_labels_page_cap_500(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._request_lock = threading.Lock()
+    service._last_request_at = 0.0
+
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict) -> None:
+            self.status_code = status_code
+            self._payload = payload
+            self.headers = {}
+
+        def json(self) -> dict:
+            return self._payload
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, *_args, **_kwargs) -> FakeResponse:
+            self.calls += 1
+            if self.calls <= 500:
+                return FakeResponse(
+                    200,
+                    {
+                        "stories": [
+                            {
+                                "id": self.calls * 1000 + index,
+                                "title": f"Story {self.calls}-{index}",
+                                "story_status": "complete",
+                                "for_patrons_only": False,
+                                "chapters_count": 10,
+                            }
+                            for index in range(20)
+                        ],
+                    },
+                )
+            return FakeResponse(500, {})
+
+    session = FakeSession()
+    monkeypatch.setattr(service, "_make_session", lambda: session)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_DISCOVER_RETRY_TIMES", 0)
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
+
+    result = service._discover_genre(None, "drama", "Drama", 1000, 1)
+
+    assert len(result.refs) == 10_000
+    assert result.pages_checked == 501
+    assert result.raw_stories_seen == 10_000
+    assert result.stop_reason == "probable Inkitt page cap at page 501 after 10000 API story row(s)"
+
+
+def test_record_discovery_progress_persists_terminal_state(tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._history_lock = threading.Lock()
+    service._discovery_progress_file = tmp_path / "discovery_progress.json"
+
+    service._record_discovery_progress(
+        "drama",
+        "Drama",
+        result=type(
+            "Result",
+            (),
+            {
+                "start_page": 1,
+                "pages_checked": 501,
+                "raw_stories_seen": 10_000,
+                "last_success_page": 500,
+                "stop_reason": "probable Inkitt page cap at page 501 after 10000 API story row(s)",
+                "terminal": True,
+            },
+        )(),
+    )
+
+    progress = service._load_discovery_progress()
+
+    assert progress["drama"]["last_success_page"] == 500
+    assert progress["drama"]["terminal"] is True
+    assert "page cap" in progress["drama"]["stop_reason"]
+
+
+def test_rendered_fallback_uses_global_request_delay(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._request_lock = threading.Lock()
+    service._last_request_at = 10.0
+
+    class FakeBrowser:
+        def fetch_with_retry(self, *_args, **_kwargs):
+            return "<html></html>", 200, "", {}, ["Rendered chapter text"]
+
+    fake_module = types.ModuleType("handlers.selenium_handler")
+    fake_module._get_browser = lambda: FakeBrowser()
+    monkeypatch.setitem(sys.modules, "handlers.selenium_handler", fake_module)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK", True)
+    monotonic_values = iter([12.0, 15.0])
+    slept: list[float] = []
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", slept.append)
+
+    content = service._fetch_rendered_chapter_content("https://www.inkitt.com/stories/1/chapters/1", 5.0)
+
+    assert content == "Rendered chapter text"
+    assert slept == [3.0]
+    assert service._last_request_at == 15.0
 
 
 def test_crawl_rows_stops_taking_new_rows_after_pause(tmp_path, monkeypatch) -> None:

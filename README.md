@@ -100,7 +100,7 @@ Instead of compiling everything into a single monolithic backend, the system is 
 * **Scale-to-Hardware Matching**:
   * The TTS service (`BedReadVoices`) can be deployed on a node with an Nvidia GPU for CUDA acceleration, while the gateway and scrapers can run on lightweight, cheaper CPU-only nodes.
 * **Network & Security Egress Boundaries**:
-  * `NovelCrawler` frequently routes traffic through external proxy lines to prevent IP bans during scraping. `BedReadDriveSync` requires connection to Google APIs. Separating them allows fine-grained security policies, dedicated routing tables, and isolated proxy settings for each egress path.
+  * `NovelCrawler` can use conservative rate limits and approved egress routing separate from services such as `BedReadDriveSync`, which connects to Google APIs. Separating them allows fine-grained security policies, dedicated routing tables, and auditable outbound settings for each egress path.
 
 ### 2. Request Lifecycles & End-to-End Tracing
 Here is how data flows through the pipeline under the two most common user requests:

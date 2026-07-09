@@ -35,6 +35,7 @@ INKITT_BATCH_MAX_CRAWL_WORKERS = int(os.getenv("INKITT_BATCH_MAX_CRAWL_WORKERS",
 INKITT_DISCOVER_RETRY_TIMES = int(os.getenv("INKITT_DISCOVER_RETRY_TIMES", "6"))
 INKITT_DISCOVER_RETRY_BASE_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_BASE_SECONDS", "15"))
 INKITT_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_MAX_SECONDS", "120"))
+INKITT_DISCOVER_RETRY_HTTP_CODES = {429, 500, 502, 503, 504}
 INKITT_RENDERED_FALLBACK = os.getenv("INKITT_RENDERED_FALLBACK", "1").strip().lower() not in {"0", "false", "no"}
 INKITT_RENDERED_FALLBACK_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_WORDS", "120"))
 
@@ -92,9 +93,12 @@ class InkittBatchRow:
 @dataclass
 class InkittDiscoveryResult:
     refs: list[dict[str, Any]]
+    start_page: int = 1
     pages_checked: int = 0
     raw_stories_seen: int = 0
+    last_success_page: int = 0
     stop_reason: str = ""
+    terminal: bool = False
 
 
 @dataclass
@@ -134,6 +138,7 @@ class InkittBatchService:
         self._index_file = self._batch_root / "batch_index.json"
         self._discovered_story_index_file = self._batch_root / "discovered_story_index.json"
         self._exported_story_index_file = self._batch_root / "exported_story_index.json"
+        self._discovery_progress_file = self._batch_root / "discovery_progress.json"
         self._last_persist_at = 0.0
         self._request_lock = threading.Lock()
         self._last_request_at = 0.0
@@ -434,12 +439,27 @@ class InkittBatchService:
             delay = state.request_delay_seconds
 
         discovered_this_run: dict[str, dict[str, Any]] = {}
+        added_during_run = 0
+        progress = self._load_discovery_progress()
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(self._discover_genre, slug, label, max_pages, delay): (slug, label)
-                for slug, label in INKITT_GENRES
-                if slug in selected
-            }
+            futures = {}
+            for slug, label in INKITT_GENRES:
+                if slug not in selected:
+                    continue
+                genre_progress = progress.get(slug, {})
+                if genre_progress.get("terminal"):
+                    with self._lock:
+                        state = self._batches.get(batch_id)
+                        if state:
+                            state.add_log(
+                                f"{label}: skipped; prior scan reached terminal stop at page "
+                                f"{genre_progress.get('last_success_page') or '?'} "
+                                f"({genre_progress.get('stop_reason') or 'complete'})."
+                            )
+                            self._persist_locked()
+                    continue
+                start_page = max(1, int(genre_progress.get("last_success_page") or 0) + 1)
+                futures[pool.submit(self._discover_genre, batch_id, slug, label, max_pages, delay, start_page)] = (slug, label)
             for future in as_completed(futures):
                 slug, label = futures[future]
                 try:
@@ -455,6 +475,9 @@ class InkittBatchService:
                             state.add_log(f"{label}: discovery failed: {exc}")
                 for ref in refs:
                     discovered_this_run.setdefault(ref["story_id"], ref)
+                added_so_far, catalog_refs_so_far = self._merge_discovered_story_refs(refs, selected)
+                added_during_run += added_so_far
+                self._record_discovery_progress(slug, label, result)
                 with self._lock:
                     state = self._batches.get(batch_id)
                     if state:
@@ -463,12 +486,19 @@ class InkittBatchService:
                             f"from {result.raw_stories_seen} API story row(s) "
                             f"across {result.pages_checked} page(s)"
                         )
+                        if result.start_page > 1:
+                            detail += f" starting at page {result.start_page}"
                         if result.stop_reason:
                             detail += f"; stopped: {result.stop_reason}"
+                        if refs:
+                            detail += (
+                                f"; catalog +{added_so_far}, "
+                                f"{len(catalog_refs_so_far)} total selected"
+                            )
                         state.add_log(detail)
                         self._persist_locked()
 
-        added_count, catalog_refs = self._merge_discovered_story_refs(discovered_this_run.values(), selected)
+        _final_added_count, catalog_refs = self._merge_discovered_story_refs(discovered_this_run.values(), selected)
         exported_story_ids = self._load_exported_story_ids()
         refs = [ref for ref in catalog_refs if ref["story_id"] not in exported_story_ids]
         skipped_exported = len(catalog_refs) - len(refs)
@@ -476,7 +506,7 @@ class InkittBatchService:
             state = self._batches.get(batch_id)
             if state:
                 state.add_log(
-                    f"System catalog updated: {added_count} new, "
+                    f"System catalog updated: {added_during_run} new, "
                     f"{len(catalog_refs)} total for selected genre(s)."
                 )
                 if skipped_exported:
@@ -486,19 +516,38 @@ class InkittBatchService:
 
     def _discover_genre(
         self,
+        batch_id: str | None,
         genre_slug: str,
         genre_label: str,
         max_pages: int,
         delay: float = 2.0,
+        start_page: int = 1,
     ) -> InkittDiscoveryResult:
         session = self._make_session()
         refs_by_id: dict[str, dict[str, Any]] = {}
         pages_checked = 0
         raw_stories_seen = 0
+        last_success_page = max(0, start_page - 1)
+        terminal = False
         stop_reason = f"reached max page limit ({max_pages})"
-        for page in range(1, max_pages + 1):
+        next_row_log_at = 1_000
+        if start_page > max_pages:
+            return InkittDiscoveryResult(
+                refs=[],
+                start_page=start_page,
+                pages_checked=0,
+                raw_stories_seen=0,
+                last_success_page=max_pages,
+                stop_reason=f"already scanned through requested max page limit ({max_pages})",
+                terminal=False,
+            )
+        self._log_batch(
+            batch_id,
+            f"{genre_label}: discovery worker started at page {start_page}/{max_pages} with {delay:g}s delay.",
+        )
+        for page in range(start_page, max_pages + 1):
             url = f"https://www.inkitt.com/1/genres/{genre_slug}"
-            pages_checked = page
+            pages_checked += 1
             request_kwargs = {
                 "params": {"page": page, "sorting": "popular_all_time", "story_type": "original"},
                 "headers": {
@@ -517,23 +566,38 @@ class InkittBatchService:
                     if attempt >= INKITT_DISCOVER_RETRY_TIMES:
                         response = None
                         break
-                    time.sleep(self._discover_retry_wait(None, attempt))
+                    wait = self._discover_retry_wait(None, attempt)
+                    self._log_batch(
+                        batch_id,
+                        f"{genre_label}: request failed on page {page} ({exc.__class__.__name__}); "
+                        f"retry {attempt + 1}/{INKITT_DISCOVER_RETRY_TIMES} in {wait:.1f}s.",
+                    )
+                    time.sleep(wait)
                     continue
-                if response.status_code != 429:
+                if response.status_code not in INKITT_DISCOVER_RETRY_HTTP_CODES:
                     break
                 retry_after = response.headers.get("Retry-After")
-                stop_reason = f"HTTP 429 on page {page}"
+                stop_reason = f"HTTP {response.status_code} on page {page}"
                 if retry_after:
                     stop_reason += f" (Retry-After: {retry_after})"
                 if attempt >= INKITT_DISCOVER_RETRY_TIMES:
                     stop_reason += f" after {INKITT_DISCOVER_RETRY_TIMES} retries"
                     break
-                time.sleep(self._discover_retry_wait(response, attempt))
+                wait = self._discover_retry_wait(response, attempt)
+                self._log_batch(
+                    batch_id,
+                    f"{genre_label}: HTTP {response.status_code} on page {page}; "
+                    f"retry {attempt + 1}/{INKITT_DISCOVER_RETRY_TIMES} in {wait:.1f}s.",
+                )
+                time.sleep(wait)
             if response is None:
                 break
             if response.status_code != 200:
                 stop_reason = f"HTTP {response.status_code} on page {page}"
-                if response.status_code == 429:
+                if response.status_code == 500 and page > 500 and raw_stories_seen >= 10_000:
+                    stop_reason = f"probable Inkitt page cap at page {page} after {raw_stories_seen} API story row(s)"
+                    terminal = True
+                elif response.status_code in INKITT_DISCOVER_RETRY_HTTP_CODES:
                     retry_after = response.headers.get("Retry-After")
                     if retry_after:
                         stop_reason += f" (Retry-After: {retry_after})"
@@ -547,19 +611,42 @@ class InkittBatchService:
             stories = payload.get("stories") or []
             if not stories:
                 stop_reason = f"empty page {page}"
+                terminal = True
                 break
             raw_stories_seen += len(stories)
+            last_success_page = page
             refs = extract_completed_story_refs_from_api(payload, genre_slug, genre_label)
             for ref in refs:
                 refs_by_id.setdefault(ref["story_id"], ref)
+            if page == start_page or page % 25 == 0 or raw_stories_seen >= next_row_log_at:
+                self._log_batch(
+                    batch_id,
+                    f"{genre_label}: scanning page {page}/{max_pages}; "
+                    f"{raw_stories_seen:,} API rows, {len(refs_by_id):,} completed candidates so far.",
+                )
+                self._checkpoint_discovery_progress(
+                    genre_slug=genre_slug,
+                    genre_label=genre_label,
+                    start_page=start_page,
+                    pages_checked=pages_checked,
+                    raw_stories_seen=raw_stories_seen,
+                    last_success_page=last_success_page,
+                    stop_reason=f"in progress at page {page}",
+                )
+                while raw_stories_seen >= next_row_log_at:
+                    next_row_log_at += 1_000
             if len(stories) < 20:
                 stop_reason = f"short page {page} ({len(stories)} story row(s))"
+                terminal = True
                 break
         return InkittDiscoveryResult(
             refs=list(refs_by_id.values()),
+            start_page=start_page,
             pages_checked=pages_checked,
             raw_stories_seen=raw_stories_seen,
+            last_success_page=last_success_page,
             stop_reason=stop_reason,
+            terminal=terminal,
         )
 
     def _crawl_rows(self, batch_id: str, run_id: str | None = None) -> None:
@@ -664,7 +751,12 @@ class InkittBatchService:
                 content = spider._extract_chapter_content(soup)
                 cleaned = clean_chapter_content(content, self._promo_patterns)
                 if should_use_rendered_fallback(cleaned):
-                    rendered = self._fetch_rendered_chapter_content(chapter_url)
+                    self._log_batch(
+                        batch_id,
+                        f"{row.title}: rendered fallback for chapter {link['chapter_number']} "
+                        f"after static content returned {len(cleaned.split())} word(s).",
+                    )
+                    rendered = self._fetch_rendered_chapter_content(chapter_url, delay)
                     rendered_cleaned = clean_chapter_content(rendered, self._promo_patterns)
                     if len(rendered_cleaned.split()) > len(cleaned.split()):
                         cleaned = rendered_cleaned
@@ -673,6 +765,12 @@ class InkittBatchService:
                 title = spider._extract_chapter_title(soup) or link.get("title") or f"Chapter {link['chapter_number']}"
                 chapters.append((int(link["chapter_number"]), title, cleaned, chapter_url))
                 self._update_row_progress(batch_id, row.index, crawled_chapters=len(chapters))
+                if len(chapters) == 1 or len(chapters) % 25 == 0 or len(chapters) == len(chapter_links):
+                    self._log_batch(
+                        batch_id,
+                        f"{row.title}: crawled {len(chapters)}/{len(chapter_links)} chapter(s).",
+                        force=len(chapters) == len(chapter_links),
+                    )
         except RuntimeError as exc:
             message = str(exc)
             if "requires login" in message.lower() or "subscription" in message.lower():
@@ -737,19 +835,22 @@ class InkittBatchService:
                 setattr(row, key, value)
             self._persist_locked()
 
-    def _fetch_rendered_chapter_content(self, url: str) -> str:
+    def _fetch_rendered_chapter_content(self, url: str, delay: float) -> str:
         if not INKITT_RENDERED_FALLBACK:
             return ""
         try:
             from handlers.selenium_handler import _get_browser
 
             browser = _get_browser()
-            html, status, _body, _headers, paragraphs = browser.fetch_with_retry(
-                url,
-                timeout=60,
-                skip_scroll=False,
-                max_retries=1,
-            )
+            with self._request_lock:
+                self._wait_for_request_slot_locked(delay)
+                html, status, _body, _headers, paragraphs = browser.fetch_with_retry(
+                    url,
+                    timeout=60,
+                    skip_scroll=False,
+                    max_retries=1,
+                )
+                self._last_request_at = time.monotonic()
             if status and status >= 400:
                 return ""
             if paragraphs:
@@ -773,6 +874,16 @@ class InkittBatchService:
             run["total_chapters"] = sum(int(row.total_chapters or 0) for row in run_rows)
             run["status"] = status
             return
+
+    def _log_batch(self, batch_id: str | None, message: str, force: bool = False) -> None:
+        if not batch_id:
+            return
+        with self._lock:
+            state = self._batches.get(batch_id)
+            if state is None:
+                return
+            state.add_log(message)
+            self._persist_locked(force=force)
 
     def _fetch_spider_html(self, spider: InkittSpider, url: str, delay: float, attempts: int = 5) -> str:
         last_error = ""
@@ -810,15 +921,18 @@ class InkittBatchService:
         return wait + random.uniform(0.5, 2.0)
 
     def _throttled_get(self, session: requests.Session, url: str, delay: float, **kwargs: Any) -> requests.Response:
-        min_delay = max(1.0, float(delay or 0))
         with self._request_lock:
-            elapsed = time.monotonic() - self._last_request_at
-            if elapsed < min_delay:
-                time.sleep(min_delay - elapsed)
+            self._wait_for_request_slot_locked(delay)
             kwargs.setdefault("timeout", 30)
             response = session.get(url, **kwargs)
             self._last_request_at = time.monotonic()
             return response
+
+    def _wait_for_request_slot_locked(self, delay: float) -> None:
+        min_delay = max(1.0, float(delay or 0))
+        elapsed = time.monotonic() - self._last_request_at
+        if elapsed < min_delay:
+            time.sleep(min_delay - elapsed)
 
     def _load_exported_story_ids(self) -> set[str]:
         with self._history_lock:
@@ -849,6 +963,99 @@ class InkittBatchService:
                 if ref.get("genre_slug") in selected
             ]
             return len(set(index.keys()) - original_ids), catalog_refs
+
+    def _load_discovery_progress(self) -> dict[str, dict[str, Any]]:
+        with self._history_lock:
+            return self._load_discovery_progress_unlocked()
+
+    def _record_discovery_progress(self, genre_slug: str, genre_label: str, result: InkittDiscoveryResult) -> None:
+        if result.last_success_page <= 0 and not result.terminal:
+            return
+        self._checkpoint_discovery_progress(
+            genre_slug=genre_slug,
+            genre_label=genre_label,
+            start_page=result.start_page,
+            pages_checked=result.pages_checked,
+            raw_stories_seen=result.raw_stories_seen,
+            last_success_page=result.last_success_page,
+            stop_reason=result.stop_reason,
+            terminal=result.terminal,
+        )
+
+    def _checkpoint_discovery_progress(
+        self,
+        genre_slug: str,
+        genre_label: str,
+        start_page: int,
+        pages_checked: int,
+        raw_stories_seen: int,
+        last_success_page: int,
+        stop_reason: str,
+        terminal: bool = False,
+    ) -> None:
+        if last_success_page <= 0 and not terminal:
+            return
+        if not hasattr(self, "_history_lock") or not hasattr(self, "_discovery_progress_file"):
+            return
+        with self._history_lock:
+            progress = self._load_discovery_progress_unlocked()
+            current = progress.get(genre_slug, {})
+            current_last_page = int(current.get("last_success_page") or 0)
+            progress[genre_slug] = {
+                "genre": genre_label,
+                "last_success_page": max(current_last_page, int(last_success_page or 0)),
+                "last_start_page": start_page,
+                "last_pages_checked": pages_checked,
+                "last_raw_stories_seen": raw_stories_seen,
+                "stop_reason": stop_reason,
+                "terminal": bool(terminal or current.get("terminal")),
+                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            self._write_discovery_progress_unlocked(progress)
+
+    def _load_discovery_progress_unlocked(self) -> dict[str, dict[str, Any]]:
+        if not self._discovery_progress_file.exists():
+            return {}
+        try:
+            payload = json.loads(self._discovery_progress_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Failed to load Inkitt discovery progress: %s", exc)
+            return {}
+        progress = payload.get("genres") if isinstance(payload, dict) else payload
+        if not isinstance(progress, dict):
+            return {}
+        allowed = {slug for slug, _label in INKITT_GENRES}
+        clean: dict[str, dict[str, Any]] = {}
+        for slug, entry in progress.items():
+            if slug not in allowed or not isinstance(entry, dict):
+                continue
+            try:
+                last_success_page = max(0, int(entry.get("last_success_page") or 0))
+            except (TypeError, ValueError):
+                last_success_page = 0
+            clean[slug] = {
+                "genre": clean_text(str(entry.get("genre") or dict(INKITT_GENRES).get(slug) or slug)),
+                "last_success_page": last_success_page,
+                "last_start_page": entry.get("last_start_page") or 1,
+                "last_pages_checked": entry.get("last_pages_checked") or 0,
+                "last_raw_stories_seen": entry.get("last_raw_stories_seen") or 0,
+                "stop_reason": clean_text(str(entry.get("stop_reason") or "")),
+                "terminal": bool(entry.get("terminal") or False),
+                "updated_at": clean_text(str(entry.get("updated_at") or "")),
+            }
+        return clean
+
+    def _write_discovery_progress_unlocked(self, progress: dict[str, dict[str, Any]]) -> None:
+        tmp_path = self._discovery_progress_file.with_suffix(".tmp")
+        payload = {
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "genres": dict(sorted(progress.items(), key=lambda item: item[0])),
+        }
+        try:
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_path.replace(self._discovery_progress_file)
+        except Exception as exc:
+            logger.warning("Failed to persist Inkitt discovery progress: %s", exc)
 
     def _load_discovered_story_index_unlocked(self) -> dict[str, dict[str, Any]]:
         if not self._discovered_story_index_file.exists():
@@ -1032,7 +1239,7 @@ class InkittBatchService:
             "selected_genres": state.selected_genres,
             "crawl_runs": list(reversed(state.crawl_runs[-20:])),
             "cancel_requested": state.cancel_requested,
-            "log_lines": state.log_lines[-60:],
+            "log_lines": state.log_lines[-180:],
         }
 
     def _filtered_rows(self, state: InkittBatchState, status_filter: str) -> list[InkittBatchRow]:

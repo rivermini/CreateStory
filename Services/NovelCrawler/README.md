@@ -86,6 +86,12 @@ The server starts on **http://localhost:8002**. API docs are at **http://localho
 | `SCRIBBLEHUB_DOWNLOAD_DELAY` | `0.35` | Seconds between ScribbleHub chapter requests (raise to reduce 429s) |
 | `SCRIBBLEHUB_RETRY_COOLDOWN` | `45` | Seconds before each retry round for rate-limited chapters |
 | `SCRIBBLEHUB_RETRY_ROUNDS` | `40` | Max retry rounds to recover rate-limited chapters (completeness) |
+| `INKITT_BATCH_MAX_DISCOVER_WORKERS` | `2` in Docker | Upper bound for concurrent Inkitt genre discovery workers |
+| `INKITT_BATCH_MAX_CRAWL_WORKERS` | `2` in Docker | Upper bound for concurrent Inkitt story crawl workers |
+| `INKITT_DISCOVER_RETRY_TIMES` | `6` | Retry attempts for transient Inkitt discovery HTTP errors |
+| `INKITT_DISCOVER_RETRY_BASE_SECONDS` | `15` | Base cooldown for Inkitt discovery retries |
+| `INKITT_DISCOVER_RETRY_MAX_SECONDS` | `120` | Maximum cooldown for Inkitt discovery retries |
+| `INKITT_RENDERED_FALLBACK` | `1` | Enables browser fallback when static Inkitt chapter HTML is incomplete |
 
 ---
 
@@ -203,6 +209,27 @@ crawler handles it so a full novel always finishes with every chapter:
 
 Tip: heavy back-to-back crawls deplete ScribbleHub's rate-limit bucket; if a run spends a long time
 in retry rounds, wait a few minutes (or raise `SCRIBBLEHUB_DOWNLOAD_DELAY`) before the next crawl.
+
+### Inkitt batch crawling
+
+The Inkitt batch tool is built for long, resumable runs over free completed stories. Discovery writes a
+persistent catalog (`output/inkitt_batch/discovered_story_index.json`) and per-genre checkpoints
+(`discovery_progress.json`), so a full catalog can be built over multiple sessions. Crawling writes each
+completed story into the final export set as soon as it finishes, and already exported story IDs are
+remembered in `exported_story_index.json`.
+
+Cloudflare Tunnel protects inbound access to CreateStory, but it does not make outbound Inkitt requests
+leave through Cloudflare. Requests from the `novel_crawler` container use the server/container's normal
+egress route unless your infrastructure explicitly routes them elsewhere.
+
+Recommended production posture:
+
+- Keep Inkitt crawl workers at `1` or `2`.
+- Use a `5` to `10` second request delay for long runs.
+- Crawl in small runs, for example `50` to `200` stories, then download or resume later.
+- Treat HTTP `429` and `403` as slow-down signals: pause, raise the delay, and resume after a cooldown.
+- Keep `INKITT_RENDERED_FALLBACK=1` only when needed; browser fallback is now under the same global
+  request delay gate as static fetches, but it is still heavier than plain HTML fetches.
 
 ---
 
