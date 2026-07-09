@@ -126,6 +126,7 @@ class MainBEClientMixin:
         notification_config: Optional[dict] = None,
         free_chapters_count: int = 0,
         job_id: Optional[str] = None,
+        length: Optional[str] = None,
     ) -> tuple[Optional[str], str]:
         """POST to main BE /api/v1/story/. Returns (storyId, error_message)."""
         if self._config is None:
@@ -153,6 +154,8 @@ class MainBEClientMixin:
             payload["referencePlatform"] = reference_platform
         if notification_config:
             payload["notificationConfig"] = notification_config
+        if length:
+            payload["length"] = length
         self._append_log("info", f"Story POST payload: {payload}", title)
         if job_id:
             self.append_job_log(job_id, "info", f"Story POST payload: {payload}")

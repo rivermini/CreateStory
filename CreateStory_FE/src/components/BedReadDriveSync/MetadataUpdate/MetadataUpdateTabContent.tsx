@@ -493,6 +493,7 @@ function fieldLabel(field: string): string {
     synopsis: 'Synopsis',
     tags: 'Tags',
     max_chapter: 'Max Chapter',
+    length: 'Story Length',
   };
   return labels[field] ?? field;
 }

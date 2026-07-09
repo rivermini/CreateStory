@@ -1002,7 +1002,7 @@ export interface IntroUpdateUploadResponse {
 // ---------------------------------------------------------------------------
 
 export interface MetadataFieldDifference {
-  field: 'category' | 'free_chapters_count' | 'push' | 'synopsis' | 'tags';
+  field: 'category' | 'free_chapters_count' | 'push' | 'synopsis' | 'tags' | 'max_chapter' | 'length';
   file_name?: string | null;
   folder_value: unknown;
   server_value: unknown;
@@ -1024,6 +1024,7 @@ export interface MetadataStoryValues {
   push_content: string | null;
   synopsis: string | null;
   tags: string[];
+  length: string | null;
 }
 
 export interface MetadataFolderValues {
@@ -1034,6 +1035,7 @@ export interface MetadataFolderValues {
   push_content: string | null;
   synopsis: string | null;
   tags: string[];
+  length: string | null;
 }
 
 export interface MetadataUpdateEntry {

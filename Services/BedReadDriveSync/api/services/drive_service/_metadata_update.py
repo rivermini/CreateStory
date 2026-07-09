@@ -26,8 +26,8 @@ _METADATA_DOWNLOAD_CONCURRENCY = _positive_int_from_env(
     _METADATA_UPDATE_WORKERS,
 )
 _METADATA_DOWNLOAD_SEMAPHORE = threading.BoundedSemaphore(_METADATA_DOWNLOAD_CONCURRENCY)
-_METADATA_FILE_NAMES = ("Category.md", "free.md", "Push.md", "Synopsis.md", "synopsis.md", "tags.md", "max_chapter.md")
-_METADATA_FIELDS = ("category", "free_chapters_count", "push", "synopsis", "tags", "max_chapter")
+_METADATA_FILE_NAMES = ("Category.md", "free.md", "Push.md", "Synopsis.md", "synopsis.md", "tags.md", "max_chapter.md", "length.md")
+_METADATA_FIELDS = ("category", "free_chapters_count", "push", "synopsis", "tags", "max_chapter", "length")
 _METADATA_FIELD_FILES = {
     "category": ("category.md",),
     "free_chapters_count": ("free.md",),
@@ -35,6 +35,7 @@ _METADATA_FIELD_FILES = {
     "synopsis": ("synopsis.md",),
     "tags": ("tags.md",),
     "max_chapter": ("max_chapter.md",),
+    "length": ("length.md",),
 }
 _METADATA_FIELD_PRIMARY_FILE = {
     "category": "Category.md",
@@ -43,6 +44,7 @@ _METADATA_FIELD_PRIMARY_FILE = {
     "synopsis": "Synopsis.md",
     "tags": "tags.md",
     "max_chapter": "max_chapter.md",
+    "length": "length.md",
 }
 _METADATA_CACHE_SETTING_KEY = "metadata_update_content_cache"
 _METADATA_CACHE_MAX_ENTRIES = 5000
@@ -232,6 +234,20 @@ def _parse_max_chapter_content(content: str | None) -> Optional[int]:
         return None
 
 
+def _parse_length_content(content: str | None) -> Optional[str]:
+    """Parse length.md content -> normalized "long"/"short" (or None if absent/invalid)."""
+    if not content:
+        return None
+    stripped = content.strip().strip("﻿")
+    if not stripped:
+        return None
+    value = stripped.split("\n")[0].strip().lower()
+    if value in ("long", "short"):
+        return value
+    logger.warning(f"length.md contains unrecognized value: {stripped!r}")
+    return None
+
+
 # -------------------------------------------------------------------------
 # Category ID <-> name lookup
 # -------------------------------------------------------------------------
@@ -351,6 +367,8 @@ def _parse_file_content(fname_lower: str, content: str | None) -> Any:
         return _parse_tags_content(content)
     elif fname_lower == "max_chapter.md":
         return _parse_max_chapter_content(content)
+    elif fname_lower == "length.md":
+        return _parse_length_content(content)
     return content
 
 
@@ -502,7 +520,7 @@ def _batch_get_server_values(
         cache_key = _server_values_cache_key(story_ref)
         with cache_lock:
             cached = cache.get(cache_key)
-        if isinstance(cached, dict) and "max_chapter" in cached:
+        if isinstance(cached, dict) and "max_chapter" in cached and "length" in cached:
             values_by_id[story_id] = cached
         else:
             refs_to_fetch.append(story_ref)
@@ -804,6 +822,10 @@ def _extract_folder_values(
     else:
         max_ch = None
 
+    length_val = _val("length.md")
+    if not isinstance(length_val, str):
+        length_val = None
+
     return {
         "main_category": main_cat_name,
         "sub_category": sub_cat_names[0] if sub_cat_names else None,
@@ -813,6 +835,7 @@ def _extract_folder_values(
         "synopsis": synopsis,
         "tags": tags,
         "max_chapter": max_ch,
+        "length": length_val,
     }
 
 
@@ -827,6 +850,7 @@ def _extract_server_values(story: dict) -> dict:
         "synopsis": story.get("synopsis"),
         "tags": story.get("tags") or [],
         "max_chapter": story.get("maxChapter") or 0,
+        "length": story.get("length"),
     }
 
 
@@ -905,6 +929,16 @@ def _compute_differences(folder_vals: dict, server_vals: dict) -> list[dict]:
                 "server_value": server_vals.get("max_chapter", 0),
             })
 
+    if folder_vals.get("length") is not None:
+        folder_length = str(folder_vals.get("length")).strip().lower()
+        server_length = str(server_vals.get("length") or "").strip().lower()
+        if folder_length != server_length:
+            diffs.append({
+                "field": "length",
+                "folder_value": folder_vals.get("length"),
+                "server_value": server_vals.get("length"),
+            })
+
     return diffs
 
 
@@ -939,6 +973,9 @@ def _extract_field_detail(field: str, folder_vals: dict, server_vals: dict) -> d
     elif field == "max_chapter":
         folder_value = folder_vals.get("max_chapter")
         server_value = server_vals.get("max_chapter", 0)
+    elif field == "length":
+        folder_value = folder_vals.get("length")
+        server_value = server_vals.get("length")
     else:
         folder_value = None
         server_value = None
@@ -980,6 +1017,9 @@ def _build_metadata_payload_from_folder_values(folder_vals: dict, fields: list[s
     if "max_chapter" in fields and folder_vals.get("max_chapter") is not None:
         payload["maxChapter"] = int(folder_vals["max_chapter"])
 
+    if "length" in fields and folder_vals.get("length") is not None:
+        payload["length"] = str(folder_vals["length"]).strip().lower()
+
     return payload
 
 
@@ -993,6 +1033,7 @@ def _empty_server_values() -> dict:
         "synopsis": None,
         "tags": [],
         "max_chapter": 0,
+        "length": None,
     }
 
 
@@ -1006,6 +1047,7 @@ def _empty_folder_values() -> dict:
         "synopsis": None,
         "tags": [],
         "max_chapter": None,
+        "length": None,
     }
 
 

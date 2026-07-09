@@ -39,6 +39,7 @@ class MetadataServerValues(BaseModel):
     synopsis: Optional[str] = None
     tags: list[str] = []
     max_chapter: Optional[int] = None
+    length: Optional[str] = None
 
 
 class MetadataFolderValues(BaseModel):
@@ -50,6 +51,7 @@ class MetadataFolderValues(BaseModel):
     synopsis: Optional[str] = None
     tags: list[str] = []
     max_chapter: Optional[int] = None
+    length: Optional[str] = None
 
 
 class MetadataUpdateEntry(BaseModel):
@@ -167,6 +169,10 @@ def _build_put_payload(differences: list[dict]) -> dict:
         elif field == "max_chapter":
             payload["maxChapter"] = int(fv) if fv is not None else 0
 
+        elif field == "length":
+            if fv is not None:
+                payload["length"] = str(fv).strip().lower()
+
     return payload
 
 
@@ -259,6 +265,7 @@ async def check_all() -> MetadataCheckAllResponse:
             synopsis=server_data.get("synopsis"),
             tags=server_data.get("tags") or [],
             max_chapter=server_data.get("max_chapter") or 0,
+            length=server_data.get("length"),
         )
 
         folder_model = MetadataFolderValues(
@@ -270,6 +277,7 @@ async def check_all() -> MetadataCheckAllResponse:
             synopsis=folder_data.get("synopsis"),
             tags=folder_data.get("tags") or [],
             max_chapter=folder_data.get("max_chapter"),
+            length=folder_data.get("length"),
         )
 
         diffs = [

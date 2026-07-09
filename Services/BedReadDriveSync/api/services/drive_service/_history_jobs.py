@@ -163,6 +163,10 @@ class HistoryJobsMixin:
             except Exception as exc:
                 self._append_log("warning", f"Failed to read free.md: {exc}", display_name)
 
+        story_length = self._parse_length_file(drive_service, folder_id, display_name)
+        if story_length:
+            self._append_log("info", f"Story length from length.md: {story_length}", display_name)
+
         target_id = folder_id
         chapters_ext = self._find_chapters_extended_folder(drive_service, folder_id)
         if chapters_ext:
@@ -185,6 +189,7 @@ class HistoryJobsMixin:
                 display_name, synopsis, is_completed, author_id,
                 main_cat_id, sub_cat_ids, tags, reference_platform,
                 notification_config, free_chapters_count,
+                length=story_length,
             )
 
         if not story_id:
@@ -1042,6 +1047,10 @@ class HistoryJobsMixin:
         else:
             self.append_job_log(job_id, "info", "free.md not found — freeChaptersCount will be 0")
 
+        story_length = self._parse_length_file(drive_service, folder_id, display_name, job_id=job_id)
+        if story_length:
+            self.append_job_log(job_id, "info", f"Story length from length.md: {story_length}")
+
         author_id = random.choice(_RANDOM_AUTHOR_IDS)
 
         existing_id = self._find_story_by_title(display_name)
@@ -1062,6 +1071,7 @@ class HistoryJobsMixin:
                 notification_config,
                 free_chapters_count,
                 job_id,
+                length=story_length,
             )
 
         if not story_id:
@@ -1288,6 +1298,9 @@ class HistoryJobsMixin:
                 payload["tags"] = value
             elif field == "max_chapter":
                 payload["maxChapter"] = int(value) if value is not None else 0
+            elif field == "length":
+                if value is not None:
+                    payload["length"] = str(value).strip().lower()
         return payload
 
     def sync_metadata_update_as_job(self, job_id: str, story_id: str, differences: list[dict]) -> None:

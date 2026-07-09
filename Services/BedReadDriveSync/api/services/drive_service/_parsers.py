@@ -423,6 +423,37 @@ class ParsersMixin:
             self._append_log("warning", f"max_chapter.md contains invalid integer: {stripped!r}", display_name, job_id=job_id)
             return None
 
+    def _parse_length_file(
+        self, drive_service: Any, folder_id: str, display_name: str, job_id: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Find and parse 'length.md' inside a story folder.
+        Returns normalized "long"/"short", or None if the file is missing,
+        empty, or contains an unrecognized value (reported to the log).
+        """
+        length_file = self._find_metadata_file(drive_service, folder_id, "length.md")
+        if not length_file:
+            self._append_log("info", "length.md not found — length will not be set/updated", display_name, job_id=job_id)
+            return None
+
+        try:
+            content = DriveAPIMixin._get_file_content(self, drive_service, length_file["id"])
+        except Exception as exc:
+            self._append_log("warning", f"Failed to read length.md: {exc}", display_name, job_id=job_id)
+            return None
+
+        stripped = content.strip().strip("﻿")
+        if not stripped:
+            self._append_log("info", "length.md is empty — length will not be set/updated", display_name, job_id=job_id)
+            return None
+
+        value = stripped.split("\n")[0].strip().lower()
+        if value in ("long", "short"):
+            return value
+
+        self._append_log("warning", f"length.md contains unrecognized value: {stripped!r}", display_name, job_id=job_id)
+        return None
+
 
 
 from api.services.drive_service._drive_api import DriveAPIMixin
