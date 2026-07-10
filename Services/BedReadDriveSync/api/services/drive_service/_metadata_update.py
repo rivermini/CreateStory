@@ -520,7 +520,16 @@ def _batch_get_server_values(
         cache_key = _server_values_cache_key(story_ref)
         with cache_lock:
             cached = cache.get(cache_key)
-        if isinstance(cached, dict) and "max_chapter" in cached and "length" in cached:
+        # Require the numeric fields to be real ints. Entries persisted before the
+        # int-coercion fix stored maxChapter / freeChaptersCount as strings, which
+        # keep reporting a phantom "can update" diff; treating them as a miss
+        # refetches with coercion and self-heals the persisted cache.
+        if (
+            isinstance(cached, dict)
+            and isinstance(cached.get("max_chapter"), int)
+            and isinstance(cached.get("free_chapters_count"), int)
+            and "length" in cached
+        ):
             values_by_id[story_id] = cached
         else:
             refs_to_fetch.append(story_ref)
@@ -742,8 +751,6 @@ def _fetch_story_impl(service: Any, story_id: str) -> dict:
     headers_web = service._main_be_headers()
     headers_web.pop("x-platform", None)
 
-    from concurrent.futures import ThreadPoolExecutor
-
     def _fetch(headers: dict) -> dict:
         with service._main_be_client(timeout=60.0) as client:
             resp = client.get(url, headers=headers)
@@ -754,11 +761,15 @@ def _fetch_story_impl(service: Any, story_id: str) -> dict:
                 return body.get("data", {})
             return body
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        f_android = executor.submit(_fetch, headers_android)
-        f_web = executor.submit(_fetch, headers_web)
-        data_android = f_android.result()
-        data_web = f_web.result()
+    # Fetch the two platform variants sequentially on the caller's own thread so we
+    # reuse its keep-alive HTTP client. Spawning a per-story ThreadPoolExecutor here
+    # meant every story built a fresh thread-local httpx client (40-connection pool)
+    # in each throwaway thread — on a 200-story scan that burst hundreds of short-lived
+    # connections, exhausting Windows ephemeral ports and freezing the service until
+    # TIME_WAIT sockets drained. The 12-way parallelism across stories (the caller's
+    # thread pool) is preserved.
+    data_android = _fetch(headers_android)
+    data_web = _fetch(headers_web)
 
     merged = {**data_web, **data_android}
     if "id" not in merged and "storyId" in merged:
@@ -839,17 +850,36 @@ def _extract_folder_values(
     }
 
 
+def _as_int(value: Any) -> int:
+    """Coerce an API numeric field to int.
+
+    The Main BE sometimes returns ``maxChapter`` / ``freeChaptersCount`` as a
+    string (or float). The folder side is always ``int`` (see _extract_folder_values),
+    so without this a server ``"30"`` compares unequal to a folder ``30`` and the
+    field is wrongly reported as "can update" even though the numbers match.
+    """
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return 0
+
+
 def _extract_server_values(story: dict) -> dict:
     notif = story.get("notificationConfig") or {}
     return {
         "main_category": (story.get("mainCategory") or {}).get("name"),
         "sub_categories": [c.get("name") for c in (story.get("categories") or []) if c.get("name")],
-        "free_chapters_count": story.get("freeChaptersCount") or 0,
+        "free_chapters_count": _as_int(story.get("freeChaptersCount")),
         "push_title": notif.get("title"),
         "push_content": notif.get("content"),
         "synopsis": story.get("synopsis"),
         "tags": story.get("tags") or [],
-        "max_chapter": story.get("maxChapter") or 0,
+        "max_chapter": _as_int(story.get("maxChapter")),
         "length": story.get("length"),
     }
 

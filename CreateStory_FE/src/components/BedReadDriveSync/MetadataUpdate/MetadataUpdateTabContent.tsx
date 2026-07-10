@@ -67,12 +67,18 @@ export function MetadataUpdateTabContent({
     if (bulkUpdating || availableUpdateEntries.length === 0) return;
     setBulkUpdating(true);
     try {
-      const batchSize = 20;
+      // Update gently: 2 stories at a time with a pause between batches, so a bulk
+      // metadata update doesn't spike backend load while AutoAudio / crawling run.
+      const batchSize = 2;
+      const delayMs = 1500;
       for (let i = 0; i < availableUpdateEntries.length; i += batchSize) {
         const batch = availableUpdateEntries.slice(i, i + batchSize);
         await Promise.allSettled(
           batch.map((entry) => onUpdateMetadata(entry.folder_id, entry.story_id!, entry.differences)),
         );
+        if (i + batchSize < availableUpdateEntries.length) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
       }
     } finally {
       setBulkUpdating(false);
