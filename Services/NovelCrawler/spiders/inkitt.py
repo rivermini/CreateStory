@@ -452,9 +452,7 @@ class InkittSpider(BaseSpider):
         )
 
     def _extract_chapter_content(self, soup: BeautifulSoup) -> str:
-        article = soup.select_one("article#story-text-container")
-        if article is None:
-            article = soup.select_one("article.default-style")
+        article = self._select_best_chapter_article(soup)
         if article is None:
             return ""
 
@@ -473,6 +471,34 @@ class InkittSpider(BaseSpider):
         text = article.get_text("\n", strip=True)
         lines = [self._clean_text(line) for line in text.splitlines()]
         return "\n\n".join(line for line in lines if line)
+
+    def _select_best_chapter_article(self, soup: BeautifulSoup) -> Tag | None:
+        candidates: list[Tag] = []
+        for selector in (
+            "article#story-text-container",
+            "article.default-style",
+            "article",
+            "[data-testid*='chapter']",
+            "[class*='chapter-content']",
+            "[class*='story-text']",
+        ):
+            for candidate in soup.select(selector):
+                if isinstance(candidate, Tag) and candidate not in candidates:
+                    candidates.append(candidate)
+
+        best: Tag | None = None
+        best_score = 0
+        for candidate in candidates:
+            paragraph_text = " ".join(
+                self._clean_text(paragraph.get_text(" ", strip=True))
+                for paragraph in candidate.select("p[data-content], p")
+            )
+            all_text = self._clean_text(candidate.get_text(" ", strip=True))
+            score = max(len(paragraph_text.split()), len(all_text.split()))
+            if score > best_score:
+                best = candidate
+                best_score = score
+        return best
 
     def _extract_novel_metadata(self, soup: BeautifulSoup, story_id: str, source_url: str) -> dict:
         json_ld = self._extract_article_json_ld(soup)

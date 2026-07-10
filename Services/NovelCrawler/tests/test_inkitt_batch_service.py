@@ -431,6 +431,64 @@ def test_rendered_fallback_uses_global_request_delay(monkeypatch) -> None:
     assert service._last_request_at == 15.0
 
 
+def test_rendered_fallback_extracts_from_returned_body_when_paragraph_list_is_empty(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._request_lock = threading.Lock()
+    service._last_request_at = 0.0
+
+    html = """
+    <html>
+      <body>
+        <article id="story-text-container">
+          <h2>Chapter 2</h2>
+          <p data-content="true">This rendered body has real readable chapter text.</p>
+          <p data-content="true">The fallback should parse this body instead of the final URL.</p>
+        </article>
+      </body>
+    </html>
+    """
+
+    class FakeBrowser:
+        def fetch_with_retry(self, *_args, **_kwargs):
+            return "https://www.inkitt.com/stories/98825/chapters/2", 200, html.encode("utf-8"), {}, None
+
+    fake_module = types.ModuleType("handlers.selenium_handler")
+    fake_module._get_browser = lambda: FakeBrowser()
+    monkeypatch.setitem(sys.modules, "handlers.selenium_handler", fake_module)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK", True)
+
+    class FakeInkittSpider:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def _extract_chapter_content(self, soup: BeautifulSoup) -> str:
+            return "\n\n".join(paragraph.get_text(" ", strip=True) for paragraph in soup.select("article p"))
+
+    monkeypatch.setattr("api.services.inkitt_batch_service.InkittSpider", FakeInkittSpider)
+
+    content = service._fetch_rendered_chapter_content("https://www.inkitt.com/stories/98825/chapters/2", 0)
+
+    assert "real readable chapter text" in content
+    assert "final URL" in content
+
+
+def test_inkitt_extractor_prefers_article_with_real_prose() -> None:
+    spider = InkittSpider.__new__(InkittSpider)
+    html = """
+    <article id="story-text-container"><h2>Chapter 1</h2></article>
+    <article id="story-text-container" class="default-style">
+      <h2>Chapter 1</h2>
+      <p data-content="true">The real chapter starts here with enough prose to win selection.</p>
+      <p data-content="true">A second paragraph keeps this article ahead of the title-only copy.</p>
+    </article>
+    """
+
+    content = spider._extract_chapter_content(BeautifulSoup(html, "html.parser"))
+
+    assert "real chapter starts here" in content
+    assert "second paragraph" in content
+
+
 def test_rendered_fallback_skips_long_static_chapter_with_ui_markers(monkeypatch) -> None:
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_WORDS", 120)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS", 800)
@@ -761,6 +819,80 @@ def test_story_without_chapter_list_is_skipped_with_zero_chapters(monkeypatch, t
     assert result["total_chapters"] == 0
     assert result["crawled_chapters"] == 0
     assert result["error"] == "No chapter list found."
+
+
+def test_empty_inkitt_chapter_does_not_fail_story_when_later_chapters_are_readable(monkeypatch, tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._promo_patterns = None
+    service._is_cancel_requested = lambda _batch_id: False
+    service._update_row_progress = lambda *_args, **_kwargs: None
+    logs: list[str] = []
+    service._log_batch = lambda _batch_id, message, force=False: logs.append(message)
+    service._fetch_rendered_chapter_content = lambda *_args, **_kwargs: ""
+
+    story_html = "<html><h1>Map Then Story</h1><p>Status Complete</p></html>"
+    chapter_one_html = "<article id='story-text-container'><h2>World Map</h2></article>"
+    chapter_two_html = """
+    <article id="story-text-container">
+      <h2>Chapter 2</h2>
+      <p data-content="true">This readable chapter should keep the story exportable.</p>
+      <p data-content="true">The crawler should not fail the whole story because chapter one is blank.</p>
+    </article>
+    """
+
+    def fake_fetch(_spider, url, _delay):
+        if url.endswith("/chapters/1"):
+            return chapter_one_html
+        if url.endswith("/chapters/2"):
+            return chapter_two_html
+        return story_html
+
+    service._fetch_spider_html = fake_fetch
+
+    class FakeSpider:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def _extract_novel_metadata(self, *_args, **_kwargs) -> dict:
+            return {"title": "Map Then Story", "authors": ["Author"]}
+
+        def _collect_chapter_links(self, *_args, **_kwargs) -> list[dict]:
+            return [
+                {"chapter_number": 1, "title": "World Map", "url": "https://www.inkitt.com/stories/1/chapters/1"},
+                {"chapter_number": 2, "title": "Chapter 2", "url": "https://www.inkitt.com/stories/1/chapters/2"},
+            ]
+
+        def _same_url(self, first: str, second: str) -> bool:
+            return first == second
+
+        def _extract_chapter_content(self, soup: BeautifulSoup) -> str:
+            return "\n\n".join(paragraph.get_text(" ", strip=True) for paragraph in soup.select("article p"))
+
+        def _extract_chapter_title(self, soup: BeautifulSoup) -> str:
+            title = soup.select_one("h2")
+            return title.get_text(" ", strip=True) if title else ""
+
+    monkeypatch.setattr("api.services.inkitt_batch_service.InkittSpider", FakeSpider)
+    row = InkittBatchRow(
+        index=1,
+        genre="Action",
+        genre_slug="action",
+        title="Map Then Story",
+        url="https://www.inkitt.com/stories/1",
+        story_id="1",
+        status="queued",
+    )
+
+    result = service._crawl_one("aaaaaaaa", row, tmp_path, 0)
+
+    assert result["status"] == "completed"
+    assert result["total_chapters"] == 2
+    assert result["crawled_chapters"] == 1
+    assert result["error"] == ""
+    assert any("skipped chapter 1" in line for line in logs)
+
+    info = json.loads((tmp_path / result["metadata_file"]).read_text(encoding="utf-8"))
+    assert info["skipped_chapters"][0]["chapter_number"] == 1
 
 
 def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> None:

@@ -940,6 +940,7 @@ class InkittBatchService:
                 return {"status": "skipped", "total_chapters": 0, "crawled_chapters": 0, "error": "No chapter list found."}
             self._update_row_progress(batch_id, row.index, status="crawling", total_chapters=len(chapter_links), crawled_chapters=0)
 
+            skipped_chapters: list[dict[str, Any]] = []
             for link in chapter_links:
                 if self._is_cancel_requested(batch_id):
                     return {
@@ -970,9 +971,19 @@ class InkittBatchService:
                     rendered_cleaned = clean_chapter_content(rendered, self._promo_patterns)
                     if len(rendered_cleaned.split()) > len(cleaned.split()):
                         cleaned = rendered_cleaned
-                if not cleaned:
-                    raise RuntimeError("No readable free chapter content.")
                 title = spider._extract_chapter_title(soup) or link.get("title") or f"Chapter {link['chapter_number']}"
+                if not cleaned:
+                    skipped_chapters.append({
+                        "chapter_number": int(link["chapter_number"]),
+                        "title": title,
+                        "url": chapter_url,
+                        "reason": "No readable free chapter content.",
+                    })
+                    self._log_batch(
+                        batch_id,
+                        f"{row.title}: skipped chapter {link['chapter_number']} ({title}) because no readable text was found.",
+                    )
+                    continue
                 chapters.append((int(link["chapter_number"]), title, cleaned, chapter_url))
                 self._update_row_progress(batch_id, row.index, crawled_chapters=len(chapters))
                 if len(chapters) == 1 or len(chapters) % 25 == 0 or len(chapters) == len(chapter_links):
@@ -981,6 +992,8 @@ class InkittBatchService:
                         f"{row.title}: crawled {len(chapters)}/{len(chapter_links)} chapter(s).",
                         force=len(chapters) == len(chapter_links),
                     )
+            if not chapters:
+                raise RuntimeError("No readable free chapter content.")
         except RuntimeError as exc:
             return classify_inkitt_crawl_error(str(exc))
 
@@ -1005,6 +1018,7 @@ class InkittBatchService:
             "read_count": metadata.get("read_count"),
             "chapters": len(chapter_links),
             "crawled_chapters": len(chapters),
+            "skipped_chapters": skipped_chapters,
             "description": metadata.get("description"),
             "tags": metadata.get("tags"),
         }
@@ -1055,7 +1069,7 @@ class InkittBatchService:
             browser = _get_browser()
             with self._request_lock:
                 self._wait_for_request_slot_locked(delay)
-                html, status, _body, _headers, paragraphs = browser.fetch_with_retry(
+                _final_url, status, body, _headers, paragraphs = browser.fetch_with_retry(
                     url,
                     timeout=60,
                     skip_scroll=False,
@@ -1066,7 +1080,11 @@ class InkittBatchService:
                 return ""
             if paragraphs:
                 return "\n\n".join(clean_text(str(paragraph)) for paragraph in paragraphs if clean_text(str(paragraph)))
-            soup = BeautifulSoup(html or "", "html.parser")
+            if isinstance(body, bytes):
+                html = body.decode("utf-8", errors="replace")
+            else:
+                html = str(body or "")
+            soup = BeautifulSoup(html, "html.parser")
             return InkittSpider(novel=url, limit=1)._extract_chapter_content(soup)
         except Exception as exc:
             logger.warning("[inkitt-batch] rendered fallback failed for %s: %s", url, exc)
