@@ -310,27 +310,43 @@ class DriveSyncRepository:
                 before: dict[str, "SyncJob"] = {
                     row.id: SyncJob(**self._job_row_to_dict(row)) for row in rows
                 }
+                # The callback mutates these models in place. Keep serialized
+                # snapshots so the diff can distinguish changed rows.
+                before_data = {
+                    job_id: job.model_dump(mode="json")
+                    for job_id, job in before.items()
+                }
 
                 after = fn(list(before.values()))
+                after_ids = {job.id for job in after}
+                ids_to_delete = set(before) - after_ids
 
-            # Determine the minimal diff to apply outside the transaction.
-            # (Smallest safe scope — avoids holding the row lock longer than needed.)
-            before_ids = set(before)
-            after_ids = {job.id for job in after}
+                if ids_to_delete:
+                    db.execute(
+                        delete(DriveSyncJobRecord).where(
+                            DriveSyncJobRecord.id.in_(ids_to_delete)
+                        )
+                    )
 
-            ids_to_delete = before_ids - after_ids
-            jobs_to_insert = [job for job in after if job.id not in before_ids]
-            jobs_to_update = [job for job in after if job.id in before_ids]
+                # Apply only changed rows while SELECT FOR UPDATE locks are
+                # still held. Writing every row after releasing those locks
+                # allowed concurrent log updates to restore stale statuses.
+                for job in after:
+                    serialized = job.model_dump(mode="json")
+                    if job.id in before_data and serialized == before_data[job.id]:
+                        continue
 
-        # Apply deletes (outside the DB transaction — safe to fail silently)
-        for job_id in ids_to_delete:
-            self._delete_job_by_id(job_id)
-
-        # Apply inserts and updates (each is its own small transaction)
-        for job in jobs_to_insert:
-            self._upsert_job(job)
-        for job in jobs_to_update:
-            self._upsert_job(job)
+                    data = _job_to_row_data(job)
+                    data["updated_at"] = utcnow()
+                    update_data = {k: v for k, v in data.items() if k != "id"}
+                    if job.id in before_data:
+                        update_data["version"] = DriveSyncJobRecord.version + 1
+                    db.execute(
+                        insert(DriveSyncJobRecord).values(data).on_conflict_do_update(
+                            index_elements=["id"],
+                            set_=update_data,
+                        )
+                    )
 
         return after
 

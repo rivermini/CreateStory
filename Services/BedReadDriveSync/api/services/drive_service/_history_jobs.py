@@ -957,7 +957,24 @@ class HistoryJobsMixin:
         display_name = self._extract_story_name(folder_name)
         folder = {"id": job.folder_id, "name": folder_name}
 
-        chapters_added, chapters_skipped, story_created, story_error = self._process_story_folder_with_job(drive_service, folder, job_id)
+        try:
+            chapters_added, chapters_skipped, story_created, story_error = self._process_story_folder_with_job(
+                drive_service,
+                folder,
+                job_id,
+            )
+        except Exception as exc:
+            # The worker is a daemon thread. An exception escaping here would
+            # otherwise leave the persisted job in RUNNING indefinitely.
+            err = f"Upload failed unexpectedly: {exc}"
+            self.append_job_log(job_id, "error", err)
+            self.update_job(
+                job_id,
+                status=JobStatus.ERROR,
+                finished_at=datetime.now(timezone.utc).isoformat(),
+                error=err,
+            )
+            return self.get_job(job_id) or job
 
         if not story_created:
             self.update_job(
