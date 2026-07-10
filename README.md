@@ -46,6 +46,8 @@ task start:fresh
 3. **Builds and starts** all 5 services + PostgreSQL + FlareSolverr + the Nginx frontend.
 4. **Creates your admin account** — you'll be prompted for an **email** and a **password (min 12 characters)**. That is your login.
 
+> **Optional — skip the model download for a faster setup:** If you already have the two Kokoro model files, drop them into `Services/BedReadVoices/api/models/` **before** running `task start:fresh` — `kokoro-v1.0.onnx` (~310 MB) and `voices-v1.0.bin` (~25 MB). The setup detects valid files (by size) and skips the download automatically. You can grab them from the repo's **Releases → `models-v1.0`** tag.
+
 > **Model download fails with a 404?** The models live on a GitHub Release that may be private. Run `gh auth login` once, then re-run `task start:fresh` (or just `task models:check`).
 
 ### 4. Open the app
