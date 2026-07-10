@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from api.auth import enforce_job_rate, get_current_user
+from api.auth import get_current_user
 from api.models.db_models import User
 from api.routes.drive_sync import (
     config,
@@ -35,9 +35,6 @@ def require_drive_access(
     is_debug_listing = any(request.url.path.endswith(s) for s in _DRIVE_DEBUG_SUFFIXES)
     if (is_write or is_debug_listing) and current_user.role not in {"operator", "admin"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator or admin role required.")
-    if is_write:
-        # Rate-limit the Google-API-costly drive-sync writes (L4).
-        enforce_job_rate(str(current_user.id))
     return current_user
 
 

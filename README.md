@@ -4,6 +4,91 @@ CreateStory is a unified local operations system for crawling novels, generating
 
 ---
 
+## Quick Start (Docker)
+
+The entire backend runs in **Docker** — you do **not** install Python, FFmpeg, or Chrome on your machine. They are already baked into the service images. A fresh PC needs only a few tools, then **one command** brings up the whole stack.
+
+> **Platform:** Windows 10/11. The setup scripts are PowerShell and write secrets to `C:\ProgramData\CreateStory\secrets\`. Give Docker Desktop ~16 GB RAM (BedReadVoices alone is capped at 4 GB).
+
+### 1. Install prerequisites
+
+Install these, then **restart your terminal** so `PATH` refreshes:
+
+| Tool | Why | Install |
+|---|---|---|
+| **Git** | clone the repo | `winget install Git.Git` |
+| **Docker Desktop** | runs the whole stack (enable the WSL2 backend) | [Download](https://www.docker.com/products/docker-desktop/) |
+| **Task (go-task)** | one-command setup + runner | `winget install Task.Task` |
+| **GitHub CLI** *(only if this repo is private)* | authenticates the TTS model download | `winget install GitHub.cli` |
+
+> **Node.js is optional** — needed only for the live-reload frontend dev server (step 5). The app itself is served by an Nginx container, so you don't need Node just to run CreateStory.
+
+### 2. Clone the repo
+
+```powershell
+git clone https://github.com/nguyenriver/CreateStory
+cd CreateStory
+```
+
+### 3. Start everything (one command)
+
+From the `Services` folder:
+
+```powershell
+cd Services
+task start:fresh
+```
+
+`task start:fresh` performs the entire first-time setup for you:
+
+1. **Generates secrets** in `C:\ProgramData\CreateStory\secrets\` (Postgres password, DB URL, JWT key, internal token, cookie key) — nothing to edit by hand.
+2. **Downloads the Kokoro TTS models** (~335 MB) into `BedReadVoices/api/models/`.
+3. **Builds and starts** all 5 services + PostgreSQL + FlareSolverr + the Nginx frontend.
+4. **Creates your admin account** — you'll be prompted for an **email** and a **password (min 12 characters)**. That is your login.
+
+> **Model download fails with a 404?** The models live on a GitHub Release that may be private. Run `gh auth login` once, then re-run `task start:fresh` (or just `task models:check`).
+
+### 4. Open the app
+
+| What | URL |
+|---|---|
+| **Frontend** | http://localhost:5173 |
+| **API gateway** | http://localhost:8000/api |
+
+Log in with the admin email/password from step 3. Crawling and TTS work out of the box.
+
+### 5. Everyday commands
+
+Run these from the `Services` folder:
+
+```powershell
+task --list          # show every available task
+task start:bg        # rebuild + start in the background
+task start           # rebuild + start in the foreground (watch logs)
+task update:all      # rebuild the frontend + all services
+task update:gateway  # rebuild one service (also :voices, :crawler, :sync, :audio)
+task clean           # stop everything, remove containers + volumes
+```
+
+> ⚠️ `task start:fresh` wipes the secrets **and the database** — use it only for the very first run or a full reset. Afterward, use `task start` / `task update:all`.
+
+**Live frontend development** (hot reload on http://localhost:5173):
+
+```powershell
+cd CreateStory_FE
+npm install
+npm run dev
+```
+
+### 6. Optional integrations
+
+Crawling and TTS need no extra credentials. These two features do, and the app still boots without them:
+
+- **Google Drive Sync** — a Google **service-account JSON** (set `GOOGLE_SERVICE_ACCOUNT_JSON` in `Services/BedReadDriveSync/.env`); give that service account Viewer access to your shared Drive folder.
+- **AutoAudio publishing** — the Main BE API base URL + token.
+
+---
+
 ## System Architecture
 
 CreateStory is designed as a modular system consisting of a React SPA (served via Nginx) and a central FastAPI Gateway proxying requests to specialized downstream services.
@@ -81,7 +166,6 @@ CreateStory/
     FastAPIServer/             Central API gateway
     NovelCrawler/              Novel crawling (Scrapy, Selenium, FlareSolverr)
   Exports/                     Archived configuration files and build exports
-  start_frontend.bat           Quickstart script to run the frontend in development
 ```
 
 ---
@@ -177,103 +261,6 @@ Here is how data flows through the pipeline under the two most common user reque
 * **Key Roles**:
   * Background daemon that discovers stories missing audio in three distinct phases (Priority Dashboard -> Paginated Discovery -> Recently Updated).
   * Generates raw WAV chapters via `BedReadVoices`, compresses them using FFmpeg to Opus format (targeted at ~48kbps, capped at 20MB), and uploads them directly to the remote backend using presigned URLs.
-
----
-
-## Getting Started
-
-### Prerequisites
-
-1. **Python 3.10+** (for non-Docker development)
-2. **Docker Desktop** (for running the services stack)
-3. **Google Chrome** (required for host-run crawlers)
-4. **FFmpeg** (installed and in PATH, or bundled in `BedReadVoices/vendor/`)
-
----
-
-### Step 1: Provisioning Secrets
-
-CreateStory requires several secrets to boot. These live outside the workspace directory to prevent accidental Git commits:
-
-```text
-C:\ProgramData\CreateStory\secrets\postgres_password
-C:\ProgramData\CreateStory\secrets\database_url
-C:\ProgramData\CreateStory\secrets\jwt_secret_key
-C:\ProgramData\CreateStory\secrets\internal_service_token
-```
-
-On a fresh Windows machine, you do not need to create these manually. Simply navigate to the `Services/` directory and run:
-
-```powershell
-task secrets:ensure
-```
-
-This runs the PowerShell secret builder script (`setup_secrets.ps1`) that generates secure random keys and passwords for any missing files without overwriting existing ones.
-
----
-
-### Step 2: Set Up Kokoro Model Files
-
-The Kokoro TTS engine requires model weights to synthesize audio. These weights are large and are excluded from the repository.
-
-1. **Folder Structure**: Keep model files inside `Services/BedReadVoices/api/models/`:
-   ```text
-   Services/BedReadVoices/api/models/
-     ├─ kokoro-v1.0.onnx
-     └─ voices-v1.0.bin
-   ```
-2. **Download Model Files**:
-   Navigate to `Services/BedReadVoices` and run:
-   ```powershell
-   powershell scripts/download-models.ps1
-   ```
-   *Note: If `KOKORO_MODELS_DIR` is not specified, it defaults to `./BedReadVoices/api/models`.*
-
----
-
-### Step 3: Running the Stack
-
-#### Prerequisite: Install Task
-This project uses **go-task** (Task) to run developer setup and running commands. Install it using the [official Task installation guide](https://taskfile.dev/docs/installation) or run:
-* **Windows**: `winget install Task.Task` *(restart your terminal afterward)*
-* **macOS**: `brew install go-task`
-* **Linux**: `sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d`
-
----
-
-#### Running the Backend (Docker Compose via Taskfile)
-In the `Services` directory, run:
-```powershell
-# List all available tasks
-task --list
-
-# Start the stack for the first time (Clean -> Reset Secrets -> Verify Models -> Start Background Stack -> Setup Admin)
-task start:fresh
-
-# Rebuild and reload all services normally in the foreground
-task start
-
-# Rebuild and reload all services (including rebuilding frontend)
-task update:all
-
-# Rebuild and reload all services, skipping frontend compilation
-task update:all-noFE
-
-# Rebuild and reload all backend services (no frontend build)
-task update:backend
-
-# Update a single service (no-deps build, e.g. gateway or voices)
-task update:gateway
-task update:voices
-```
-
-#### Running the Frontend (Local Development)
-To launch a fast Vite development server (port `5173` with HMR):
-From the root workspace, run:
-```powershell
-.\start_frontend.bat
-```
-*(Alternatively, execute `cd CreateStory_FE; npm install; npm run dev`)*
 
 ---
 
