@@ -192,6 +192,11 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
       }
 
       uploadLocksRef.current.add(folder.id);
+      setUploadResults((prev) => {
+        const next = new Map(prev);
+        next.delete(folder.id);
+        return next;
+      });
       setUploadingJobs((prev) => new Map(prev).set(folder.id, 'pending'));
 
       try {
@@ -242,6 +247,11 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         continue;
       }
       uploadLocksRef.current.add(folder.id);
+      setUploadResults((prev) => {
+        const next = new Map(prev);
+        next.delete(folder.id);
+        return next;
+      });
       setUploadingJobs((prev) => new Map(prev).set(folder.id, 'pending'));
       try {
         const response = await createJob({

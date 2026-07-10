@@ -99,16 +99,16 @@ export function UploadTab({
           </span>
         </div>
         <div className="overflow-x-auto rounded-xl border border-[var(--cs-border)] bg-[var(--cs-surface)] mt-2 shadow-sm">
-          <table className="w-full text-left border-collapse text-sm" style={{ tableLayout: 'fixed' }}>
+          <table className="min-w-[1050px] w-full table-fixed text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-[var(--cs-border)] text-xs font-bold uppercase tracking-wider text-[var(--cs-text-muted)] bg-[var(--cs-surface-muted)]/40">
-                <th className="pl-6 pr-2 py-4 text-center" style={{ width: 48, minWidth: 48 }}>#</th>
-                <th className="px-6 py-4" style={{ width: 220, minWidth: 220 }}>Story Name</th>
-                <th className="px-6 py-4" style={{ width: 450, minWidth: 450 }}>Drive Folder Name</th>
-                <th className="px-6 py-4" style={{ width: 120, minWidth: 120 }}>Status</th>
-                <th className="px-6 py-4" style={{ width: 160, minWidth: 160 }}>Chapters</th>
-                <th className="px-6 py-4" style={{ width: 350, minWidth: 350 }}>Validation Logs / Errors</th>
-                <th className="px-6 py-4 text-right" style={{ width: 140, minWidth: 140 }}>Actions</th>
+                <th className="w-12 py-4 pl-4 pr-2 text-center">#</th>
+                <th className="w-[15%] px-4 py-4">Story Name</th>
+                <th className="w-[25%] px-4 py-4">Drive Folder Name</th>
+                <th className="w-24 px-4 py-4">Status</th>
+                <th className="w-28 px-4 py-4">Chapters</th>
+                <th className="px-4 py-4">Validation Logs / Errors</th>
+                <th className="sticky right-0 w-32 border-l border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-4 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--cs-border)]">
@@ -129,30 +129,32 @@ export function UploadTab({
                     className="hover:bg-[var(--cs-surface-muted)]/50 transition-colors group"
                   >
                     {/* Row index number starting from 1 */}
-                    <td className="pl-6 pr-2 py-5 text-center text-xs font-medium text-[var(--cs-text-faint)] whitespace-nowrap" style={{ width: 48, minWidth: 48 }}>
+                    <td className="py-5 pl-4 pr-2 text-center text-xs font-medium text-[var(--cs-text-faint)] whitespace-nowrap">
                       {index + 1}
                     </td>
 
                     {/* Story Name */}
-                    <td className="px-6 py-5 font-semibold text-[13px] text-[var(--cs-text)] group-hover:text-[var(--cs-primary)] transition-colors" style={{ width: 220, minWidth: 220 }}>
-                      {folder.display_name}
+                    <td className="px-4 py-5 font-semibold text-[13px] text-[var(--cs-text)] group-hover:text-[var(--cs-primary)] transition-colors">
+                      <span className="block break-words">{folder.display_name}</span>
                     </td>
 
                     {/* Drive Folder Name */}
-                    <td className="px-6 py-5 text-[11px] font-mono text-[var(--cs-text-faint)] truncate" style={{ width: 450, minWidth: 450, maxWidth: 450 }} title={folder.name}>
-                      {folder.name}
+                    <td className="px-4 py-5 text-[11px] font-mono text-[var(--cs-text-faint)]" title={folder.name}>
+                      <span className="block truncate">{folder.name}</span>
                     </td>
 
                     {/* Status */}
-                    <td className="px-6 py-5 whitespace-nowrap" style={{ width: 120, minWidth: 120 }}>
-                      {status === 'ready' && <StatusBadge prefix="READY" isDark={isDark} />}
-                      {status === 'invalid' && <StatusBadge prefix="ERROR" isDark={isDark} />}
-                      {status === 'notReady' && <StatusBadge prefix={folder.prefix || 'ING'} isDark={isDark} />}
-                      {status === 'already' && <StatusBadge prefix="DONE" isDark={isDark} />}
+                    <td className="px-4 py-5 whitespace-nowrap">
+                      {isFailed ? <StatusBadge prefix="ERROR" isDark={isDark} /> : null}
+                      {!isFailed && isSuccess ? <StatusBadge prefix="DONE" isDark={isDark} /> : null}
+                      {!isFailed && !isSuccess && status === 'ready' && <StatusBadge prefix={isUploading ? 'UPLOADING' : 'READY'} isDark={isDark} />}
+                      {!isFailed && !isSuccess && status === 'invalid' && <StatusBadge prefix="ERROR" isDark={isDark} />}
+                      {!isFailed && !isSuccess && status === 'notReady' && <StatusBadge prefix={folder.prefix || 'ING'} isDark={isDark} />}
+                      {!isFailed && !isSuccess && status === 'already' && <StatusBadge prefix="DONE" isDark={isDark} />}
                     </td>
 
                     {/* Chapters */}
-                    <td className="px-6 py-5 whitespace-nowrap" style={{ width: 160, minWidth: 160 }}>
+                    <td className="px-4 py-5 whitespace-nowrap">
                       {status !== 'invalid' ? (
                         <span className="text-[10px] font-bold text-[var(--cs-text-soft)] bg-[var(--cs-surface-muted)] px-2.5 py-0.5 rounded-full border border-[var(--cs-border)] uppercase tracking-wider whitespace-nowrap">
                           {folder.extended_chapter_count ?? 0} Chapters
@@ -163,11 +165,11 @@ export function UploadTab({
                     </td>
 
                     {/* Validation Logs / Errors */}
-                    <td className="px-6 py-5 text-xs" style={{ width: 350, minWidth: 350 }}>
+                    <td className="px-4 py-5 text-xs">
                       {displayErrors.length > 0 ? (
                         <div className="flex items-start gap-1.5 text-[var(--cs-danger)] font-medium leading-relaxed max-w-md">
                           <Icon icon={appIcons.error} className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                          <span>{displayErrors.map(formatUploadValidationMessage).join(', ')}</span>
+                          <span className="break-words">{displayErrors.map(formatUploadValidationMessage).join(', ')}</span>
                         </div>
                       ) : result?.success ? (
                         <div className="flex items-center gap-1.5 text-[var(--cs-success)] font-medium">
@@ -186,7 +188,7 @@ export function UploadTab({
                     </td>
 
                     {/* Inline Actions */}
-                    <td className="px-6 py-5 text-right whitespace-nowrap">
+                    <td className="sticky right-0 border-l border-[var(--cs-border)] bg-[var(--cs-surface)] px-4 py-5 text-right whitespace-nowrap group-hover:bg-[var(--cs-surface-muted)]">
                       {isUploading && (
                         <div className="inline-flex items-center gap-1.5 text-xs text-[var(--cs-warning)] font-semibold">
                           <LoadingAppIcon isDark={isDark} color="var(--cs-warning)" />
@@ -199,19 +201,13 @@ export function UploadTab({
                           <span>Done</span>
                         </div>
                       )}
-                      {isFailed && !hasPreUploadError && (
-                        <div className="inline-flex items-center gap-1 text-xs text-[var(--cs-danger)] font-semibold">
-                          <Icon icon={appIcons.close} className="h-4 w-4" />
-                          <span>Failed</span>
-                        </div>
-                      )}
                       {status === 'ready' && !isUploading && !isSuccess && !hasPreUploadError && (
                         <button
                           onClick={() => onUploadSingle(folder)}
                           className="inline-flex items-center gap-1 rounded-full bg-[var(--cs-primary-soft)] hover:bg-[var(--cs-primary)] border border-[var(--cs-primary-soft)] px-4 py-1.5 text-xs font-semibold text-[var(--cs-primary)] hover:text-[var(--cs-active-text)] transition-all"
                         >
                           <Icon icon={appIcons.uploadFile} className="h-3.5 w-3.5" />
-                          <span>Upload</span>
+                          <span>{isFailed ? 'Retry' : 'Upload'}</span>
                         </button>
                       )}
                     </td>

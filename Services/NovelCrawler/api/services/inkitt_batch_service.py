@@ -236,6 +236,9 @@ class InkittBatchService:
                 "completed_count": 0,
                 "failed_count": 0,
                 "skipped_count": 0,
+                "processed_count": 0,
+                "crawled_chapters": 0,
+                "total_chapters": 0,
                 "status": "crawling",
             })
             state.add_log(f"Started crawl run {run_id} for {len(available_rows)} story/stories.")
@@ -1078,6 +1081,7 @@ class InkittBatchService:
             run["completed_count"] = sum(1 for row in run_rows if row.status == "completed")
             run["failed_count"] = sum(1 for row in run_rows if row.status == "failed")
             run["skipped_count"] = sum(1 for row in run_rows if row.status == "skipped")
+            run["processed_count"] = run["completed_count"] + run["failed_count"] + run["skipped_count"]
             run["crawled_chapters"] = sum(int(row.crawled_chapters or 0) for row in run_rows)
             run["total_chapters"] = sum(int(row.total_chapters or 0) for row in run_rows)
             run["status"] = status
@@ -1694,10 +1698,39 @@ class InkittBatchService:
             "crawl_concurrency": state.crawl_concurrency,
             "request_delay_seconds": state.request_delay_seconds,
             "selected_genres": state.selected_genres,
-            "crawl_runs": list(reversed(state.crawl_runs[-20:])),
+            "crawl_runs": self._crawl_run_summaries_locked(state),
             "cancel_requested": state.cancel_requested,
             "log_lines": state.log_lines[-180:],
         }
+
+    def _crawl_run_summaries_locked(self, state: InkittBatchState) -> list[dict[str, Any]]:
+        """Return recent runs with live counters for the active crawl.
+
+        Stored run totals are finalized when a run ends. While it is active,
+        derive them from its rows so status polling can show per-story and
+        per-chapter progress immediately.
+        """
+        summaries: list[dict[str, Any]] = []
+        for stored_run in state.crawl_runs[-20:]:
+            run = dict(stored_run)
+            run["processed_count"] = int(
+                run.get("processed_count")
+                or int(run.get("completed_count") or 0)
+                + int(run.get("failed_count") or 0)
+                + int(run.get("skipped_count") or 0)
+            )
+            if run.get("status") == "crawling" and not run.get("finished_at"):
+                run_rows = [row for row in state.rows if row.crawl_run_id == run.get("run_id")]
+                run["completed_count"] = sum(1 for row in run_rows if row.status == "completed")
+                run["failed_count"] = sum(1 for row in run_rows if row.status == "failed")
+                run["skipped_count"] = sum(1 for row in run_rows if row.status == "skipped")
+                run["processed_count"] = (
+                    run["completed_count"] + run["failed_count"] + run["skipped_count"]
+                )
+                run["crawled_chapters"] = sum(int(row.crawled_chapters or 0) for row in run_rows)
+                run["total_chapters"] = sum(int(row.total_chapters or 0) for row in run_rows)
+            summaries.append(run)
+        return list(reversed(summaries))
 
     def _filtered_rows(self, state: InkittBatchState, status_filter: str) -> list[InkittBatchRow]:
         if status_filter == "all":

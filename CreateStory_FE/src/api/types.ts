@@ -321,6 +321,7 @@ export interface InkittBatchCrawlRun {
   completed_count: number;
   failed_count: number;
   skipped_count: number;
+  processed_count?: number;
   crawled_chapters?: number;
   total_chapters?: number;
   status: string;

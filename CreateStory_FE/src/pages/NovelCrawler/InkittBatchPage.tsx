@@ -12,6 +12,7 @@ import {
   removeInkittBatch,
   startInkittBatch,
   type InkittBatchRow,
+  type InkittBatchCrawlRun,
   type InkittBatchSummary,
 } from '../../api';
 import { apiFetch, downloadWithAuth } from '../../api/client';
@@ -128,6 +129,15 @@ function formatRemainingChapters(value: number, rawValue?: number): string {
   return `${formatted} est`;
 }
 
+function runProcessedCount(run: InkittBatchCrawlRun): number {
+  return run.processed_count ?? run.completed_count + run.failed_count + run.skipped_count;
+}
+
+function runProgressPercent(run: InkittBatchCrawlRun): number {
+  if (run.target_stories <= 0) return 0;
+  return Math.min(100, (runProcessedCount(run) / run.target_stories) * 100);
+}
+
 export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('');
@@ -154,6 +164,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState('');
   const [retryTarget, setRetryTarget] = useState('');
+  const [showAllRuns, setShowAllRuns] = useState(false);
   const [error, setError] = useState('');
   const syncedBatchIdRef = useRef('');
   const catalogFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -161,6 +172,10 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
   const estimateTotalChapters = summary?.crawl_estimate?.estimated_total_chapters || summary?.total_chapters || 0;
   const crawlEstimate = summary?.crawl_estimate;
+  const crawlRuns = summary?.crawl_runs ?? [];
+  const activeRun = crawlRuns.find((run) => run.status === 'crawling' && !run.finished_at) ?? null;
+  const previousRuns = crawlRuns.filter((run) => run !== activeRun);
+  const visiblePreviousRuns = showAllRuns ? previousRuns : previousRuns.slice(0, 5);
   const progressPercent = summary && estimateTotalChapters > 0
     ? Math.round((summary.crawled_chapters / estimateTotalChapters) * 1000) / 10
     : summary && summary.total_stories > 0
@@ -256,6 +271,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
         request_delay_seconds: requestDelaySeconds,
         crawl_after_discovery: false,
       });
+      setShowAllRuns(false);
       setBatchId(response.batch_id);
       setSummary(response);
       setRows([]);
@@ -284,6 +300,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       });
       setSelectedGenres(ALL_GENRE_SLUGS);
       setMaxPages(DISCOVER_ALL_MAX_PAGES);
+      setShowAllRuns(false);
       setBatchId(response.batch_id);
       setSummary(response);
       setRows([]);
@@ -414,6 +431,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       const payload = JSON.parse(await file.text()) as unknown;
       const response = await importInkittDiscoveredCatalog(payload);
       syncedBatchIdRef.current = '';
+      setShowAllRuns(false);
       setBatchId(response.batch.batch_id);
       setSummary(response.batch);
       setRows([]);
@@ -434,6 +452,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
 
   const handleSelectBatch = (batch: InkittBatchSummary) => {
     syncedBatchIdRef.current = '';
+    setShowAllRuns(false);
     setBatchId(batch.batch_id);
     setSummary(batch);
     setRows([]);
@@ -766,33 +785,88 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
             <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-base font-semibold" style={{ color: text }}>Crawl runs</h2>
-                  <p className="text-sm" style={{ color: soft }}>Download one run or the full accumulated batch.</p>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold" style={{ color: text }}>Crawl runs</h2>
+                    <span className="rounded-full border px-2 py-0.5 text-xs tabular-nums" style={{ borderColor: panelBorder, background: muted, color: soft }}>{crawlRuns.length}</span>
+                  </div>
+                  <p className="text-sm" style={{ color: soft }}>Live progress for the current run, with compact access to previous exports.</p>
                 </div>
-                <button type="button" onClick={handleDownload} disabled={!summary.download_ready || Boolean(downloadTarget)} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                <button type="button" onClick={handleDownload} disabled={!summary.download_ready || Boolean(downloadTarget)} className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
                   <Icon icon={downloadTarget === 'all' ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${downloadTarget === 'all' ? 'animate-spin' : ''}`} />
                   {downloadTarget === 'all' ? 'Preparing ZIP' : 'Download all'}
                 </button>
               </div>
-              <div className="mt-4 grid gap-2">
-                {(summary.crawl_runs || []).length > 0 ? summary.crawl_runs.map((run) => (
-                  <div key={run.run_id} className="grid gap-2 rounded-md border px-3 py-3 md:grid-cols-[minmax(140px,1fr)_120px_120px_120px_auto] md:items-center" style={{ borderColor: panelBorder, background: muted, color: text }}>
+
+              {activeRun && (
+                <div className="mt-4 rounded-lg border p-4" style={{ borderColor: 'var(--cs-primary)', background: 'var(--cs-primary-soft)', color: text }}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold">{run.started_at}</p>
-                      <p className="text-xs" style={{ color: soft }}>{run.run_id}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--cs-primary)] opacity-50" />
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--cs-primary)]" />
+                        </span>
+                        <span className="text-sm font-semibold">Active run</span>
+                        <span className="font-mono text-xs" style={{ color: soft }}>{activeRun.run_id}</span>
+                      </div>
+                      <p className="mt-1 text-xs" style={{ color: soft }}>Started {activeRun.started_at} · refreshes every 2.5 seconds</p>
                     </div>
-                    <span className="text-xs" style={{ color: soft }}>{run.status}</span>
-                    <span className="text-xs tabular-nums" style={{ color: soft }}>{run.completed_count.toLocaleString()}/{run.target_stories.toLocaleString()} stories</span>
-                    <span className="text-xs tabular-nums" style={{ color: soft }}>{(run.crawled_chapters ?? 0).toLocaleString()}/{(run.total_chapters ?? 0).toLocaleString()} chapters</span>
-                    <button type="button" onClick={() => { void handleDownloadRun(run.run_id); }} disabled={run.completed_count === 0 || Boolean(downloadTarget)} className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold disabled:opacity-60" style={{ borderColor: panelBorder, background: panelBg, color: text }}>
-                      <Icon icon={downloadTarget === `run:${run.run_id}` ? appIcons.spinner : appIcons.download} className={`h-3.5 w-3.5 ${downloadTarget === `run:${run.run_id}` ? 'animate-spin' : ''}`} />
-                      {downloadTarget === `run:${run.run_id}` ? 'Preparing' : 'Download run'}
-                    </button>
+                    <span className="w-fit rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide" style={{ borderColor: 'var(--cs-primary)', color: primary }}>Crawling</span>
                   </div>
-                )) : (
-                  <div className="rounded-md border px-3 py-4 text-sm" style={{ borderColor: panelBorder, color: soft }}>No crawl runs yet.</div>
-                )}
-              </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <RunMetric label="Stories processed" value={`${runProcessedCount(activeRun).toLocaleString()} / ${activeRun.target_stories.toLocaleString()}`} />
+                    <RunMetric label="Exported" value={activeRun.completed_count.toLocaleString()} />
+                    <RunMetric label="Chapters" value={`${(activeRun.crawled_chapters ?? 0).toLocaleString()} / ${(activeRun.total_chapters ?? 0).toLocaleString()}`} />
+                    <RunMetric label="Skipped / failed" value={`${activeRun.skipped_count.toLocaleString()} / ${activeRun.failed_count.toLocaleString()}`} />
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <Progress label="Stories processed" value={runProgressPercent(activeRun)} />
+                    <Progress label="Known chapters crawled" value={(activeRun.total_chapters ?? 0) > 0 ? ((activeRun.crawled_chapters ?? 0) / (activeRun.total_chapters ?? 1)) * 100 : 0} />
+                  </div>
+                </div>
+              )}
+
+              {previousRuns.length > 0 ? (
+                <div className="mt-4 overflow-hidden rounded-lg border" style={{ borderColor: panelBorder }}>
+                  <div className="flex items-center justify-between border-b px-3 py-2.5" style={{ borderColor: panelBorder, background: muted }}>
+                    <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: soft }}>Previous runs</span>
+                    <span className="text-xs tabular-nums" style={{ color: faint }}>{previousRuns.length} saved</span>
+                  </div>
+                  {visiblePreviousRuns.map((run, index) => (
+                    <div key={run.run_id} className="grid gap-3 px-3 py-3 md:grid-cols-[minmax(170px,1fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_auto] md:items-center" style={{ borderTop: index === 0 ? 'none' : `1px solid ${panelBorder}`, color: text }}>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{run.started_at}</p>
+                        <div className="mt-1 flex items-center gap-2 text-xs" style={{ color: soft }}>
+                          <span className="font-mono">{run.run_id}</span>
+                          <span>·</span>
+                          <span className="capitalize">{run.status}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs tabular-nums" style={{ color: soft }}>
+                        <p>{runProcessedCount(run).toLocaleString()} / {run.target_stories.toLocaleString()} processed</p>
+                        <p className="mt-1">{run.completed_count.toLocaleString()} exported · {run.skipped_count.toLocaleString()} skipped · {run.failed_count.toLocaleString()} failed</p>
+                      </div>
+                      <div className="text-xs tabular-nums" style={{ color: soft }}>
+                        <p>{(run.crawled_chapters ?? 0).toLocaleString()} / {(run.total_chapters ?? 0).toLocaleString()} chapters</p>
+                        <p className="mt-1">Finished {run.finished_at || '-'}</p>
+                      </div>
+                      <button type="button" onClick={() => { void handleDownloadRun(run.run_id); }} disabled={run.completed_count === 0 || Boolean(downloadTarget)} className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                        <Icon icon={downloadTarget === `run:${run.run_id}` ? appIcons.spinner : appIcons.download} className={`h-3.5 w-3.5 ${downloadTarget === `run:${run.run_id}` ? 'animate-spin' : ''}`} />
+                        {downloadTarget === `run:${run.run_id}` ? 'Preparing' : 'Download'}
+                      </button>
+                    </div>
+                  ))}
+                  {previousRuns.length > 5 && (
+                    <button type="button" onClick={() => setShowAllRuns((value) => !value)} className="flex w-full items-center justify-center gap-2 border-t px-3 py-2.5 text-xs font-semibold" style={{ borderColor: panelBorder, background: muted, color: soft }}>
+                      {showAllRuns ? 'Show recent 5' : `Show all ${previousRuns.length} runs`}
+                      <Icon icon={appIcons.chevronDown} className={`h-3.5 w-3.5 transition-transform ${showAllRuns ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                </div>
+              ) : !activeRun ? (
+                <div className="mt-4 rounded-md border px-3 py-4 text-sm" style={{ borderColor: panelBorder, color: soft }}>No crawl runs yet.</div>
+              ) : null}
             </section>
           )}
 
@@ -922,6 +996,15 @@ function Stat({ label, value, className = '' }: { readonly label: string; readon
     <div className={`min-w-0 rounded-md border px-3 py-2 ${className}`} style={{ borderColor: 'var(--cs-border)', background: 'var(--cs-surface-muted)' }}>
       <div className="text-xs" style={{ color: 'var(--cs-text-faint)' }}>{label}</div>
       <div className="mt-1 break-words text-base font-semibold leading-tight sm:text-lg" style={{ color: 'var(--cs-text)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
+    </div>
+  );
+}
+
+function RunMetric({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border px-3 py-2" style={{ borderColor: 'var(--cs-border)', background: 'var(--cs-surface)' }}>
+      <div className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--cs-text-faint)' }}>{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold tabular-nums" style={{ color: 'var(--cs-text)' }} title={value}>{value}</div>
     </div>
   );
 }
