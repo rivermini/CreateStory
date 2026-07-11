@@ -25,7 +25,7 @@ try {
     }
 
     function Invoke-MigrationContainer([string]$MigrationMode) {
-        Invoke-Compose --profile migration run --rm -e "MIGRATION_MODE=$MigrationMode" database_migrator
+        Invoke-Compose --profile migration run --rm --env "MIGRATION_MODE=$MigrationMode" database_migrator
     }
 
     function Wait-Healthy([string]$Container, [string]$Label) {
@@ -86,7 +86,7 @@ try {
             Invoke-Compose build @AppServices
 
             Write-Host '[migration] Provisioning five private databases and roles...'
-            Invoke-Compose run --rm -e ALLOW_LEGACY_WITH_EMPTY_TARGETS=1 database_provisioner
+            Invoke-Compose run --rm --env ALLOW_LEGACY_WITH_EMPTY_TARGETS=1 database_provisioner
 
             Write-Host '[migration] Applying each service-owned Alembic chain to its empty target...'
             foreach ($service in $AppServices) {

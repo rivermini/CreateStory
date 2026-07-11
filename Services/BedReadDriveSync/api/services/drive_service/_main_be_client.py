@@ -1118,32 +1118,60 @@ class MainBEClientMixin:
     def resolve_server_chapter_max(self, story_id: str, fallback: int = 0) -> int:
         """Return the highest chapter currently present on the server.
 
-        Some list/detail endpoints omit maxChapter for stories whose actual chapters
-        already exist. Update checks must use chapter presence, otherwise Drive files
-        1..N look like all-new chapters when only N-M are pending.
+        Uses actual chapter presence — the live chapter list, then the story's
+        chapterCount — and NEVER the maxChapter field. maxChapter is the target
+        the story will eventually reach (set from max_chapter.md, e.g. 1198) and
+        can be far above the chapters actually uploaded (e.g. 6); flooring with it
+        would hide pending chapters and wrongly report the story as up-to-date.
+
+        The ``fallback`` argument is the caller's maxChapter and is intentionally
+        NOT used as a floor; it is ignored so an inflated maxChapter can never mask
+        real pending chapters.
         """
-        resolved = max(0, int(fallback or 0))
+        # 1. Authoritative: highest actual chapter index from the live chapter list.
+        #    Pass max_chapter=0 so an empty list is NOT back-filled to 1..maxChapter
+        #    (see get_server_chapter_data).
         try:
-            chapter_data = self.get_server_chapter_data(story_id, max_chapter=resolved)
+            chapter_data = self.get_server_chapter_data(story_id, max_chapter=0)
             numbers = chapter_data.get("numbers", []) if isinstance(chapter_data, dict) else []
-            numeric: list[int] = []
-            for number in numbers:
-                try:
-                    value = int(number)
-                except Exception:
-                    continue
-                if value > 0:
-                    numeric.append(value)
+            numeric = [n for n in numbers if isinstance(n, int) and n > 0]
             if numeric:
-                resolved = max(resolved, max(numeric))
+                return max(numeric)
         except Exception as exc:
             self._append_log("debug", f"Resolve server chapter list for {story_id[:8]}... failed: {exc}")
 
+        # 2. Fallback: chapterCount from the story detail (actual count, not maxChapter).
         try:
-            resolved = max(resolved, self._get_story_max_chapter(story_id))
+            count = self._get_story_chapter_count(story_id)
+            if count > 0:
+                return count
         except Exception as exc:
-            self._append_log("debug", f"Resolve story maxChapter for {story_id[:8]}... failed: {exc}")
-        return resolved
+            self._append_log("debug", f"Resolve story chapterCount for {story_id[:8]}... failed: {exc}")
+
+        # 3. Last resort: nothing reliable — treat as no chapters (safe under-estimate
+        #    that surfaces as "can update"; the update job's re-upload guard prevents
+        #    duplicates). Never fall back to the inflated maxChapter.
+        return 0
+
+    def _get_story_chapter_count(self, story_id: str) -> int:
+        """GET /api/v1/story/{id} and return chapterCount (actual uploaded chapters)."""
+        if self._config is None:
+            return 0
+        url = f"{self._config.main_be_api_base_url}/api/v1/story/{story_id}"
+        try:
+            with self._main_be_client(timeout=600.0) as client:
+                resp = client.get(url, headers=self._main_be_headers())
+                if resp.status_code in (200, 201):
+                    data = self._unwrap_api_data(resp.json())
+                    if isinstance(data, dict):
+                        val = self._coerce_int(data.get("chapterCount"))
+                        if val is not None:
+                            return max(0, val)
+                else:
+                    self._append_log("debug", f"GET story chapterCount for {story_id[:8]}... failed {resp.status_code}")
+        except Exception as exc:
+            self._append_log("debug", f"GET story chapterCount for {story_id[:8]}... exception: {exc}")
+        return 0
 
     def _posted_chapter_exists(self, story_id: str, index: int, expected_content: str) -> tuple[bool, str]:
         """Check whether a failed POST still created the chapter on the server."""
