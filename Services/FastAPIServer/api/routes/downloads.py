@@ -108,6 +108,10 @@ async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse
     finally:
         reset_request_identity(identity_token)
 
+    # Marker cookie polled by the frontend (downloadWithAuth) so button loading
+    # states stay up until the worker has finished preparing the file (large
+    # batch exports spend minutes zipping before this response even starts).
+    marker_cookie = f"cs_download_{token}"
     if response.status_code < 400:
         orig_disposition = response.headers.get("content-disposition")
         if orig_disposition:
@@ -120,10 +124,13 @@ async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse
                 response.headers["Content-Disposition"] = "attachment"
         else:
             response.headers["Content-Disposition"] = "attachment"
+        response.set_cookie(marker_cookie, "1", max_age=300, path="/", samesite="lax")
     else:
-        # Prevent downloading error responses (like 404 or 401) as files
-        response.headers.pop("Content-Disposition", None)
-        response.headers.pop("content-disposition", None)
+        # Prevent downloading error responses (like 404 or 401) as files.
+        # (MutableHeaders has no .pop(); the del is case-insensitive.)
+        if "content-disposition" in response.headers:
+            del response.headers["content-disposition"]
+        response.set_cookie(marker_cookie, "error", max_age=300, path="/", samesite="lax")
 
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"

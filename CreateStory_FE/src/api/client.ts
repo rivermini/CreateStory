@@ -244,11 +244,15 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}, allo
 
 /**
  * Downloads a file from a URL that requires Authorization: Bearer header.
- * Uses fetch + Blob to avoid exposing the token in the URL.
+ * Exchanges the path for a short-lived download ticket and triggers a native
+ * browser download, then resolves only once the download has actually started:
+ * the gateway sets a `cs_download_<ticket>` cookie when the file response
+ * begins (large batch exports spend minutes zipping first), so callers can
+ * keep their loading state up until the browser download is triggered.
  */
 export async function downloadWithAuth(url: string, filename: string): Promise<void> {
   const parsed = new URL(url, window.location.origin);
-  const ticket = await apiFetch<{ download_url: string }>('/api/download-ticket', {
+  const ticket = await apiFetch<{ ticket: string; download_url: string }>('/api/download-ticket', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: `${parsed.pathname}${parsed.search}` }),
@@ -260,6 +264,41 @@ export async function downloadWithAuth(url: string, filename: string): Promise<v
   document.body.appendChild(a);
   a.click();
   a.remove();
+  await waitForDownloadStart(ticket.ticket);
+}
+
+const DOWNLOAD_START_POLL_MS = 500;
+const DOWNLOAD_START_TIMEOUT_MS = 30 * 60_000;
+
+function readDownloadMarker(ticket: string): string | null {
+  const name = `cs_download_${ticket}=`;
+  const entry = document.cookie.split('; ').find((part) => part.startsWith(name));
+  return entry ? entry.slice(name.length) : null;
+}
+
+function clearDownloadMarker(ticket: string): void {
+  document.cookie = `cs_download_${ticket}=; path=/; max-age=0`;
+}
+
+/**
+ * Resolves when the gateway marks the ticket's download response as started
+ * ("1" = file streaming, "error" = server rejected it). Times out silently
+ * after 30 minutes so a lost response can never pin the UI forever.
+ */
+async function waitForDownloadStart(ticket: string): Promise<void> {
+  const deadline = Date.now() + DOWNLOAD_START_TIMEOUT_MS;
+  for (;;) {
+    const marker = readDownloadMarker(ticket);
+    if (marker !== null) {
+      clearDownloadMarker(ticket);
+      if (marker === 'error') {
+        throw new Error('The server could not prepare the download.');
+      }
+      return;
+    }
+    if (Date.now() >= deadline) return;
+    await new Promise((resolve) => setTimeout(resolve, DOWNLOAD_START_POLL_MS));
+  }
 }
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {

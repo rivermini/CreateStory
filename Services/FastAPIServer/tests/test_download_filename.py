@@ -73,3 +73,64 @@ def test_worker_url_allows_inkitt_batch_download_with_run_id(monkeypatch) -> Non
     url = _worker_url("/api/results/inkitt-batch/abc123ef/download?run_id=feedbeef")
 
     assert url == "http://novelcrawler.local/api/results/inkitt-batch/abc123ef/download?run_id=feedbeef"
+
+
+def test_redeem_download_ticket_sets_start_marker_cookie(monkeypatch) -> None:
+    """Successful downloads set cs_download_<token>=1 so the frontend can hold
+    its loading state until the (possibly slow to prepare) file starts."""
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    mock_ticket = MagicMock()
+    mock_ticket.upstream_url = "http://localhost:8002/api/results/123/download"
+    mock_ticket.user_id = "test-user"
+    mock_ticket.role = "admin"
+    mock_ticket.expires_at = time.monotonic() + 100
+
+    _tickets["test-token-cookie"] = mock_ticket
+
+    monkeypatch.setattr("api.routes.downloads.set_request_identity", lambda uid, role: "identity-token")
+    monkeypatch.setattr("api.routes.downloads.reset_request_identity", lambda token: None)
+
+    async def mock_streaming_proxy(method, url, timeout):
+        async def content_gen():
+            yield b"file content"
+        return StreamingResponse(content_gen(), headers={"content-disposition": 'attachment; filename="x.zip"'})
+
+    monkeypatch.setattr("api.routes.downloads.streaming_proxy", mock_streaming_proxy)
+
+    response = client.get("/api/download/test-token-cookie")
+    assert response.status_code == 200
+    assert response.cookies.get("cs_download_test-token-cookie") == "1"
+
+
+def test_redeem_download_ticket_sets_error_marker_cookie(monkeypatch) -> None:
+    """Upstream failures set cs_download_<token>=error so the frontend can stop
+    its loading state and surface the failure instead of timing out."""
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    mock_ticket = MagicMock()
+    mock_ticket.upstream_url = "http://localhost:8002/api/results/123/download"
+    mock_ticket.user_id = "test-user"
+    mock_ticket.role = "admin"
+    mock_ticket.expires_at = time.monotonic() + 100
+
+    _tickets["test-token-err"] = mock_ticket
+
+    monkeypatch.setattr("api.routes.downloads.set_request_identity", lambda uid, role: "identity-token")
+    monkeypatch.setattr("api.routes.downloads.reset_request_identity", lambda token: None)
+
+    async def mock_streaming_proxy(method, url, timeout):
+        async def content_gen():
+            yield b'{"detail":"no files"}'
+        return StreamingResponse(content_gen(), status_code=409)
+
+    monkeypatch.setattr("api.routes.downloads.streaming_proxy", mock_streaming_proxy)
+
+    response = client.get("/api/download/test-token-err")
+    assert response.status_code == 409
+    assert response.cookies.get("cs_download_test-token-err") == "error"
+    assert "content-disposition" not in response.headers
