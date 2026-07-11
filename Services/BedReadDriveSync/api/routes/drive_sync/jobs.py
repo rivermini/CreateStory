@@ -1,12 +1,16 @@
 """Job management endpoints for drive sync."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from api.models.drive_sync import (
     JobCreateRequest,
     JobCreateResponse,
+    JobBatchCreateRequest,
+    JobBatchCreateResponse,
     JobListResponse,
+    JobQueryRequest,
+    JobQueryResponse,
     JobResponse,
 )
 from api.services.drive_service import get_drive_sync_service
@@ -42,7 +46,7 @@ async def delete_jobs_bulk(body: BulkDeleteRequest) -> JobDeleteResponse:
 async def create_job(body: JobCreateRequest) -> JobCreateResponse:
     """
     Enqueue a new sync job. The job is created in 'queued' status and a
-    background thread is spawned to execute it immediately.
+    a bounded persistent worker will claim it.
     """
     service = get_drive_sync_service()
     if service.get_config() is None:
@@ -68,18 +72,6 @@ async def create_job(body: JobCreateRequest) -> JobCreateResponse:
         chapters_count=body.chapters_count,
     )
 
-    import threading
-
-    def run_job():
-        if body.kind == JobKind.UPDATE_SINGLE:
-            service.sync_update_as_job(job.id)
-        else:
-            service.sync_folder_as_job(job.id)
-
-    if created:
-        thread = threading.Thread(target=run_job, daemon=True)
-        thread.start()
-
     return JobCreateResponse(
         id=job.id,
         status=job.status,
@@ -91,13 +83,54 @@ async def create_job(body: JobCreateRequest) -> JobCreateResponse:
     )
 
 
+@router.post("/jobs/batch", response_model=JobBatchCreateResponse, tags=["Drive Sync"])
+async def create_job_batch(body: JobBatchCreateRequest) -> JobBatchCreateResponse:
+    service = get_drive_sync_service()
+    if service.get_config() is None:
+        raise HTTPException(status_code=400, detail="Drive sync not configured. POST /api/drive-sync/config first.")
+    try:
+        jobs, created = service.create_job_batch(body.client_batch_id, body.jobs)
+    except ValueError as exc:
+        raise HTTPException(status_code=409 if "500 active" in str(exc) else 400, detail=str(exc)) from exc
+    responses = [
+        JobCreateResponse(
+            id=job.id,
+            status=job.status,
+            message=(
+                f"Job enqueued. Will sync '{job.display_name}' shortly."
+                if created
+                else f"Job already exists in batch '{body.client_batch_id}'."
+            ),
+        )
+        for job in jobs
+    ]
+    return JobBatchCreateResponse(client_batch_id=body.client_batch_id, jobs=responses)
+
+
+@router.post("/jobs/query", response_model=JobQueryResponse, tags=["Drive Sync"])
+async def query_jobs(body: JobQueryRequest) -> JobQueryResponse:
+    if not body.ids or len(body.ids) > 500:
+        raise HTTPException(status_code=400, detail="ids must contain between 1 and 500 job IDs.")
+    return JobQueryResponse(jobs=get_drive_sync_service().get_jobs_by_ids(body.ids))
+
+
 # GET /api/drive-sync/jobs
 @router.get("/jobs", response_model=JobListResponse, tags=["Drive Sync"])
-async def list_jobs(limit: int = 100, offset: int = 0) -> JobListResponse:
+async def list_jobs(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    status: list[str] | None = Query(None),
+    kind: list[str] | None = Query(None),
+) -> JobListResponse:
     """Return all sync jobs (newest first)."""
     service = get_drive_sync_service()
-    jobs, total = service.list_jobs(limit=limit, offset=offset)
-    return JobListResponse(jobs=jobs, total=total)
+    jobs, total, metrics = service.list_jobs(
+        limit=limit,
+        offset=offset,
+        statuses=status,
+        kinds=kind,
+    )
+    return JobListResponse(jobs=jobs, total=total, **metrics)
 
 
 # GET /api/drive-sync/jobs/{job_id}

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from api.routes.drive_sync import (
     config,
+    credentials,
     folders,
     uploadability,
     history,
@@ -26,6 +27,7 @@ router = APIRouter(
     dependencies=[Depends(validate_drive_id_path_params)],
 )
 router.include_router(config.router)
+router.include_router(credentials.router)
 router.include_router(folders.router)
 router.include_router(uploadability.router)
 router.include_router(history.router)

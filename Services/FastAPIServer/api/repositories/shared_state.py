@@ -1,4 +1,4 @@
-"""DB-backed shared settings, credentials, and JSON document storage."""
+"""DB-backed Gateway settings and migration-archive storage."""
 
 from __future__ import annotations
 
@@ -9,12 +9,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.models.db_models import AppSetting, ExternalCredential, MigrationAudit, SharedJsonDocument
+from api.models.db_models import AppSetting, MigrationAudit, SharedJsonDocument
 
 SETTINGS_KEY = "user_settings"
-DRIVE_SYNC_CONFIG_KEY = "drive_sync_config"
-DRIVE_CREDENTIAL_NAME = "google_service_account"
-DRIVE_CREDENTIAL_FILENAME = "google-service-account.json"
 
 
 class SharedStateRepository:
@@ -34,28 +31,6 @@ class SharedStateRepository:
             row.value = value
         self.db.commit()
         return value
-
-    def get_drive_config(self) -> dict[str, Any] | None:
-        return self.get_setting(DRIVE_SYNC_CONFIG_KEY)
-
-    def upsert_drive_config(self, value: dict[str, Any]) -> dict[str, Any]:
-        return self.upsert_setting(DRIVE_SYNC_CONFIG_KEY, value)
-
-    def upsert_credential(self, name: str, filename: str, content: bytes, content_type: str | None = None) -> ExternalCredential:
-        row = self.db.scalar(select(ExternalCredential).where(ExternalCredential.name == name))
-        if row is None:
-            row = ExternalCredential(name=name, filename=filename, content=content, content_type=content_type)
-            self.db.add(row)
-        else:
-            row.filename = filename
-            row.content = content
-            row.content_type = content_type
-        self.db.commit()
-        self.db.refresh(row)
-        return row
-
-    def get_credential(self, name: str) -> ExternalCredential | None:
-        return self.db.scalar(select(ExternalCredential).where(ExternalCredential.name == name))
 
     def upsert_json_document(self, namespace: str, key: str, data: dict | list, source_path: Path | None = None) -> SharedJsonDocument:
         row = self.db.scalar(
@@ -78,22 +53,10 @@ class SharedStateRepository:
         self.db.commit()
 
 
-def drive_config_path() -> Path:
-    from api.app_config import DATA_DIR
-
-    return DATA_DIR / "drive_sync_config.json"
-
-
 def settings_path() -> Path:
     from api.app_config import DATA_DIR
 
     return DATA_DIR / "user_settings.json"
-
-
-def drive_credentials_path() -> Path:
-    from api.app_config import DATA_DIR
-
-    return DATA_DIR / "credentials" / DRIVE_CREDENTIAL_FILENAME
 
 
 def read_json_file(path: Path) -> dict[str, Any] | list[Any] | None:

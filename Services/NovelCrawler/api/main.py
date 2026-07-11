@@ -115,10 +115,15 @@ def api_info() -> dict:
 @app.post("/api/dev/reset-state", tags=["Development"])
 def reset_runtime_state() -> dict:
     """Reset runtime state. Only available when DEV_MODE=true."""
-    if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
+    if (
+        os.getenv("DEV_MODE", "false").lower() not in ("true", "1")
+        or os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod")
+    ):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
+    from api.dev_reset import clear_owned_runtime_data
     from api.services.crawler_service import get_crawl_service
 
     get_crawl_service().reset_runtime_state()
-    return {"reset": True}
+    result = clear_owned_runtime_data()
+    return {"reset": True, **result}

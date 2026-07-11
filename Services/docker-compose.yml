@@ -42,6 +42,40 @@ services:
       retries: 5
       start_period: 10s
 
+  # Idempotently provisions one private role/database per application service.
+  # Application containers wait for this one-shot service before running their
+  # own Alembic migration chain.
+  database_provisioner:
+    image: postgres:18
+    container_name: create-story-database-provisioner
+    restart: "no"
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: create_story
+      PGDATABASE: create_story
+    secrets:
+      - postgres_password
+      - gateway_database_password
+      - crawler_database_password
+      - voices_database_password
+      - drive_sync_database_password
+      - auto_audio_database_password
+    volumes:
+      - ./scripts/provision_databases.sh:/opt/create-story/provision_databases.sh:ro
+    command:
+      - sh
+      - -c
+      - sed 's/\r$//' /opt/create-story/provision_databases.sh > /tmp/provision_databases.sh && sh /tmp/provision_databases.sh
+    networks:
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   fastapi_gateway:
     image: services-fastapi-gateway:latest
     build:
@@ -67,7 +101,7 @@ services:
       # "production" hard-disables the dev factory-reset routes (regardless of
       # DEV_MODE) and enables strict security headers (see api/middleware.py).
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      DATABASE_URL_FILE: /run/secrets/database_url
+      DATABASE_URL_FILE: /run/secrets/gateway_database_url
       JWT_SECRET_KEY_FILE: /run/secrets/jwt_secret_key
       INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
       # Browser CORS allowlist. Only localhost (Vite dev) is needed: in deployed
@@ -81,7 +115,7 @@ services:
       SERVICE_URLS_BedReadDriveSync: http://bedread_drive_sync:8003
       SERVICE_URLS: '{"FastAPIServer":"http://fastapi_gateway:8000","NovelCrawler":"http://novel_crawler:8002","BedReadVoices":"http://bedread_voices:8001","AutoAudio":"http://auto_audio:8004","BedReadDriveSync":"http://bedread_drive_sync:8003"}'
     secrets:
-      - database_url
+      - gateway_database_url
       - jwt_secret_key
       - internal_service_token
     ports:
@@ -93,14 +127,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      novel_crawler:
-        condition: service_healthy
-      bedread_voices:
-        condition: service_healthy
-      bedread_drive_sync:
-        condition: service_healthy
-      auto_audio:
-        condition: service_healthy
+      database_provisioner:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api', timeout=5)\""]
       interval: 10s
@@ -131,9 +159,10 @@ services:
       TZ: Asia/Bangkok
       # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
       DEV_MODE: ${DEV_MODE:-false}
-      DATABASE_URL_FILE: /run/secrets/database_url
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL_FILE: /run/secrets/voices_database_url
       INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
-      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
+      SERVICE_URLS_BedReadDriveSync: http://bedread_drive_sync:8003
       # Global TTS admission cap (jobs in queued+processing across all users).
       # BedReadService now submits chapters in a window sized to the free slots,
       # so a story with more chapters than this no longer loses its overflow —
@@ -142,7 +171,7 @@ services:
       # keep it bounded.
       MAX_QUEUED_JOBS_GLOBAL: ${MAX_QUEUED_JOBS_GLOBAL:-300}
     secrets:
-      - database_url
+      - voices_database_url
       - internal_service_token
     volumes:
       # Kokoro model files are located inside the repo by default:
@@ -159,6 +188,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      database_provisioner:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api', timeout=5)\""]
       interval: 10s
@@ -190,10 +221,10 @@ services:
       TZ: Asia/Bangkok
       # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
       DEV_MODE: ${DEV_MODE:-false}
-      DATABASE_URL_FILE: /run/secrets/database_url
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL_FILE: /run/secrets/crawler_database_url
       INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
       NOVEL_CRAWLER_COOKIE_ENCRYPTION_KEY_FILE: /run/secrets/cookie_encryption_key
-      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
       CHROME_BIN: /usr/bin/chromium
       FLARESOLVERR_URL: http://flaresolverr:8191/v1
       INKITT_BATCH_MAX_DISCOVER_WORKERS: ${INKITT_BATCH_MAX_DISCOVER_WORKERS:-2}
@@ -204,7 +235,7 @@ services:
       INKITT_RENDERED_FALLBACK: ${INKITT_RENDERED_FALLBACK:-1}
       INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS: ${INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS:-800}
     secrets:
-      - database_url
+      - crawler_database_url
       - internal_service_token
       - cookie_encryption_key
     volumes:
@@ -215,6 +246,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      database_provisioner:
+        condition: service_completed_successfully
       flaresolverr:
         condition: service_started
     healthcheck:
@@ -268,20 +301,26 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          # 32 metadata workers + 32 concurrent downloads buffer in memory.
+          # Bounded queue and nested work protect the host during 200-story runs.
+          pids: 256
           memory: 1536m
+    pids_limit: 256
     command: sh -c "alembic upgrade head && python main.py"
     environment:
       TZ: Asia/Bangkok
       # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
       DEV_MODE: ${DEV_MODE:-false}
-      DATABASE_URL_FILE: /run/secrets/database_url
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL_FILE: /run/secrets/drive_sync_database_url
       INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
-      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
-      DRIVE_SYNC_METADATA_WORKERS: 32
-      DRIVE_SYNC_METADATA_DOWNLOAD_CONCURRENCY: 32
+      DRIVE_SYNC_JOB_WORKERS: ${DRIVE_SYNC_JOB_WORKERS:-2}
+      DRIVE_SYNC_CHAPTER_PREFETCH_WORKERS: ${DRIVE_SYNC_CHAPTER_PREFETCH_WORKERS:-4}
+      DRIVE_SYNC_CHAPTER_WINDOW_SIZE: ${DRIVE_SYNC_CHAPTER_WINDOW_SIZE:-8}
+      DRIVE_SYNC_DRIVE_CONCURRENCY: ${DRIVE_SYNC_DRIVE_CONCURRENCY:-6}
+      DRIVE_SYNC_METADATA_WORKERS: ${DRIVE_SYNC_METADATA_WORKERS:-8}
+      DRIVE_SYNC_METADATA_DOWNLOAD_CONCURRENCY: ${DRIVE_SYNC_METADATA_DOWNLOAD_CONCURRENCY:-8}
     secrets:
-      - database_url
+      - drive_sync_database_url
       - internal_service_token
     networks:
       - services
@@ -289,6 +328,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      database_provisioner:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/api', timeout=5)\""]
       interval: 10s
@@ -316,11 +357,12 @@ services:
       TZ: Asia/Bangkok
       # Enable admin-only POST /api/dev/reset-state for Dev Cleanup.
       DEV_MODE: ${DEV_MODE:-false}
-      DATABASE_URL_FILE: /run/secrets/database_url
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL_FILE: /run/secrets/auto_audio_database_url
       INTERNAL_SERVICE_TOKEN_FILE: /run/secrets/internal_service_token
       SERVICE_URLS: '{"BedReadVoices":"http://bedread_voices:8001","BedReadDriveSync":"http://bedread_drive_sync:8003"}'
     secrets:
-      - database_url
+      - auto_audio_database_url
       - internal_service_token
     volumes:
       - auto_audio_output:/app/output
@@ -330,10 +372,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      bedread_voices:
-        condition: service_healthy
-      bedread_drive_sync:
-        condition: service_healthy
+      database_provisioner:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/api', timeout=5)\""]
       interval: 10s
@@ -370,11 +410,63 @@ services:
       retries: 3
       start_period: 10s
 
+  # One-shot migration/validation utility. The profile keeps it out of normal
+  # stack starts; Task invokes it explicitly during the maintenance workflow.
+  database_migrator:
+    image: postgres:18
+    profiles: ["migration"]
+    restart: "no"
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MIGRATION_MODE: ${MIGRATION_MODE:-plan}
+    secrets:
+      - postgres_password
+      - database_url
+      - gateway_database_url
+      - crawler_database_url
+      - voices_database_url
+      - drive_sync_database_url
+      - auto_audio_database_url
+    volumes:
+      - ./scripts/migrate_databases.sh:/opt/create-story/migrate_databases.sh:ro
+      - C:/ProgramData/CreateStory/backups:/backups
+    command:
+      - sh
+      - -c
+      - sed 's/\r$//' /opt/create-story/migrate_databases.sh > /tmp/migrate_databases.sh && sh /tmp/migrate_databases.sh
+    networks:
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 secrets:
   postgres_password:
     file: C:/ProgramData/CreateStory/secrets/postgres_password
   database_url:
     file: C:/ProgramData/CreateStory/secrets/database_url
+  gateway_database_password:
+    file: C:/ProgramData/CreateStory/secrets/gateway_database_password
+  gateway_database_url:
+    file: C:/ProgramData/CreateStory/secrets/gateway_database_url
+  crawler_database_password:
+    file: C:/ProgramData/CreateStory/secrets/crawler_database_password
+  crawler_database_url:
+    file: C:/ProgramData/CreateStory/secrets/crawler_database_url
+  voices_database_password:
+    file: C:/ProgramData/CreateStory/secrets/voices_database_password
+  voices_database_url:
+    file: C:/ProgramData/CreateStory/secrets/voices_database_url
+  drive_sync_database_password:
+    file: C:/ProgramData/CreateStory/secrets/drive_sync_database_password
+  drive_sync_database_url:
+    file: C:/ProgramData/CreateStory/secrets/drive_sync_database_url
+  auto_audio_database_password:
+    file: C:/ProgramData/CreateStory/secrets/auto_audio_database_password
+  auto_audio_database_url:
+    file: C:/ProgramData/CreateStory/secrets/auto_audio_database_url
   jwt_secret_key:
     file: C:/ProgramData/CreateStory/secrets/jwt_secret_key
   internal_service_token:

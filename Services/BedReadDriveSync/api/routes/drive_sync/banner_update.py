@@ -1,7 +1,6 @@
 """Banner update endpoints for drive sync."""
 
 import logging
-import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -174,16 +173,10 @@ async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "b
             folder_name=folder_name,
             display_name=f"{story_title} - Banner update",
             main_be_api_base_url=config.main_be_api_base_url,
+            payload={"story_id": story_id, "filename": banner_filename},
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    if created:
-        threading.Thread(
-            target=service.sync_banner_update_as_job,
-            args=(job.id, story_id, banner_filename),
-            daemon=True,
-        ).start()
 
     return UploadBannerResponse(
         success=True,

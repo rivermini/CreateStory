@@ -54,5 +54,5 @@ def require_owner(request: Request, owner_id: str | None) -> None:
 
 
 def require_admin_identity(request: Request) -> None:
-    if getattr(request.state, "create_story_role", None) != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required.")
+    if getattr(request.state, "create_story_role", None) not in ("admin", "operator"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator role required.")

@@ -17,6 +17,7 @@ import httpx
 
 from api.services.drive_service._paths import (
     _CHAPTER_PREFETCH_WORKERS,
+    _CHAPTER_WINDOW_SIZE,
     _MAIN_BE_MAX_CONNECTIONS,
     _MAIN_BE_MAX_KEEPALIVE_CONNECTIONS,
 )
@@ -405,6 +406,15 @@ class MainBEClientMixin:
                 parsed.append(future.result())
         parsed.sort(key=lambda item: item["position"])
         return parsed
+
+    def _iter_download_and_parse_chapter_files(
+        self,
+        files: list[dict],
+    ) -> Iterator[dict[str, Any]]:
+        """Yield parsed chapters in bounded windows so story contents are released promptly."""
+        for start in range(0, len(files), _CHAPTER_WINDOW_SIZE):
+            window = files[start:start + _CHAPTER_WINDOW_SIZE]
+            yield from self._download_and_parse_chapter_files(window)
 
     def search_server_stories(self, keyword: str) -> list[dict]:
         """Search stories on the configured main BE using api/v1/story/?keyword=."""
@@ -1413,9 +1423,9 @@ class MainBEClientMixin:
                         job_id=job_id,
                     )
 
-        batch_size = len(candidate_files)
+        batch_size = min(_CHAPTER_WINDOW_SIZE, len(candidate_files))
         if chapters_count is not None:
-            batch_size = max(_CHAPTER_PREFETCH_WORKERS, chapters_count)
+            batch_size = min(batch_size, max(1, chapters_count))
         batch_size = max(1, batch_size)
 
         for batch_start in range(0, len(candidate_files), batch_size):

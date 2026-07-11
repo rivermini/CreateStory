@@ -8,16 +8,32 @@ from api.models.auto_audio import (
     AutoAudioHistoryEntry,
     AutoAudioPauseResponse,
     AutoAudioSessionResponse,
+    AutoAudioSettings,
+    AutoAudioSettingsUpdate,
     AutoScanStateResponse,
     BatchDeleteRequest,
     StartSessionRequest,
     StartSessionResponse,
     UpdateAutoScanRequest,
 )
+from core.config import get_owned_settings, update_owned_settings
 from core.service import get_auto_audio_service
 from api.service_auth import current_owner, require_owner
 
 router = APIRouter(prefix="/api/auto-audio", tags=["Auto Audio"])
+
+
+@router.get("/settings", response_model=AutoAudioSettings)
+def get_settings() -> AutoAudioSettings:
+    """Return settings owned and persisted by AutoAudio."""
+    return AutoAudioSettings(**get_owned_settings())
+
+
+@router.put("/settings", response_model=AutoAudioSettings)
+def update_settings(body: AutoAudioSettingsUpdate) -> AutoAudioSettings:
+    """Persist a partial AutoAudio settings update."""
+    updated = update_owned_settings(body.model_dump(exclude_none=True))
+    return AutoAudioSettings(**updated)
 
 
 @router.post("/start", response_model=StartSessionResponse)

@@ -36,40 +36,25 @@ class BedReadConfigError(Exception):
 
 def _get_external_api_config() -> tuple[str, dict]:
     """
-    Fetch the external API config from FastAPIServer at runtime.
-    The config is sourced from drive_sync_config.json (saved by the FE via FastAPIServer).
+    Fetch the external API config from its owning DriveSync service.
 
     Falls back to reading EXTERNAL_API_BASE_URL from env for backward compatibility.
     Raises BedReadConfigError if neither source provides a valid config.
     """
-    # Primary: fetch from FastAPIServer (config written by FE)
     try:
-        import httpx
-        fastapi_base = os.environ.get("SERVICE_URLS_FastAPIServer", "http://localhost:8000").rstrip("/")
-        url = f"{fastapi_base}/internal/v1/bedread/external-api-config"
-        service_token = os.environ.get("INTERNAL_SERVICE_TOKEN", "").strip()
-        service_token_file = os.environ.get("INTERNAL_SERVICE_TOKEN_FILE", "").strip()
-        if not service_token and service_token_file:
-            service_token = Path(service_token_file).read_text(encoding="utf-8").strip()
-        if not service_token:
-            raise BedReadConfigError("INTERNAL_SERVICE_TOKEN is not configured.")
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.get(url, headers={"Authorization": f"Bearer {service_token}"})
-            if resp.status_code == 200:
-                data = resp.json()
-                api_base = data.get("external_api_base_url", "").strip()
-                if api_base:
-                    headers: dict[str, str] = {}
-                    token = data.get("external_api_token", "").strip()
-                    if token:
-                        headers["Authorization"] = f"Bearer {token}"
-                    return api_base.rstrip("/"), headers
-    except BedReadConfigError:
-        raise
-    except Exception as exc:
-        logger.warning("Unable to load internal BedRead configuration: %s", exc)
+        from api.config import load_external_api_config
 
-    # Fallback: use env vars (for backward compatibility in dev environments)
+        data = load_external_api_config()
+        api_base = data["main_be_api_base_url"]
+        headers: dict[str, str] = {"x-user-id": data["main_be_user_id"]}
+        token = data.get("main_be_bearer_token", "")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return api_base, headers
+    except Exception as exc:
+        logger.warning("Unable to load DriveSync configuration: %s", exc)
+
+    # Standalone development fallback; production uses DriveSync ownership.
     api_base = _env_or_file("EXTERNAL_API_BASE_URL") or ""
     if not api_base:
         raise BedReadConfigError(

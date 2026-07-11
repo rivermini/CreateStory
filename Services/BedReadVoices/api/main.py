@@ -116,15 +116,24 @@ def api_info() -> dict:
 @app.post("/api/dev/reset-state", tags=["Development"])
 def reset_runtime_state() -> dict:
     """Reset runtime state. Only available when DEV_MODE=true."""
-    if os.getenv("DEV_MODE", "false").lower() not in ("true", "1"):
+    if (
+        os.getenv("DEV_MODE", "false").lower() not in ("true", "1")
+        or os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod")
+    ):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
+    from api.config import reset_external_config_cache
+    from api.dev_reset import clear_owned_runtime_data
     from api.services.bedread_service import get_bedread_service
-    from api.services.tts_service import get_tts_service
+    from api.services.tts_service import _default_concurrency, get_tts_service
 
     get_bedread_service().reset_runtime_state()
-    get_tts_service().reset_runtime_state()
+    tts_service = get_tts_service()
+    tts_service.reset_runtime_state()
     globals_dict = sys.modules["api.routes.bedread"].__dict__
     globals_dict["_stories_cache"] = None
     globals_dict["_stories_cache_time"] = 0.0
-    return {"reset": True}
+    result = clear_owned_runtime_data()
+    reset_external_config_cache()
+    tts_service.set_concurrency(_default_concurrency())
+    return {"reset": True, **result}

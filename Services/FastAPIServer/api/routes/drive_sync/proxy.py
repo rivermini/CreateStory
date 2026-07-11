@@ -38,6 +38,7 @@ async def drive_get(
         f"{drive_sync_url()}{path}",
         params=params or {},
         timeout=timeout,
+        unavailable_status=503,
     )
 
 
@@ -56,6 +57,7 @@ async def drive_post(
         json_body=json_body or {},
         headers=headers or {},
         timeout=timeout,
+        unavailable_status=503,
     )
 
 
@@ -72,6 +74,7 @@ async def drive_put(
         json_body=json_body or {},
         headers=headers or {},
         timeout=timeout,
+        unavailable_status=503,
     )
 
 
@@ -86,8 +89,14 @@ async def drive_patch(
         f"{drive_sync_url()}{path}",
         json_body=json_body or {},
         timeout=timeout,
+        unavailable_status=503,
     )
 
 
 async def drive_delete(path: str, *, timeout: float = 60.0) -> JSONResponse:
-    return await json_proxy("DELETE", f"{drive_sync_url()}{path}", timeout=timeout)
+    return await json_proxy(
+        "DELETE",
+        f"{drive_sync_url()}{path}",
+        timeout=timeout,
+        unavailable_status=503,
+    )

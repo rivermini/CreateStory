@@ -4,12 +4,19 @@ import {
   checkUpdatable,
   checkUpdatableReaderFinished,
   createJob,
+  createJobsBatch,
   getJob,
   getStoriesNeedingUpdate,
+  listActiveUploadJobs,
+  listJobs,
+  queryJobs,
   type DriveFolderEntry,
   type UpdatableStoryEntry,
   type CheckUploadableResponse,
   type CheckUpdatableResponse,
+  type DriveSyncUploadProgress,
+  type SyncJob,
+  type SyncJobStatus,
   type TrackedJob,
   type StoriesNeedingUpdateEntry,
 } from '../../api/BedReadDriveSync';
@@ -22,8 +29,76 @@ import type { ThemeMode } from '../../types/theme';
 import { PageShell, PageHeader, Surface } from '../../components/Shared/Primitives';
 
 
-function hasTrackedJobs(jobs: TrackedJob[]): boolean {
-  return jobs.length > 0;
+const UPLOAD_POLL_INTERVAL_MS = 4000;
+const UPLOAD_POLL_MAX_BACKOFF_MS = 30000;
+const UPLOAD_BATCH_SESSION_KEY = 'drivesync_active_upload_batch';
+
+interface StoredUploadBatch {
+  id: string;
+  folderIds: string[];
+}
+
+function readStoredUploadBatch(): StoredUploadBatch | null {
+  try {
+    const raw = sessionStorage.getItem(UPLOAD_BATCH_SESSION_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<StoredUploadBatch>;
+    if (typeof value.id !== 'string' || !Array.isArray(value.folderIds)) return null;
+    return {
+      id: value.id,
+      folderIds: value.folderIds.filter((item): item is string => typeof item === 'string'),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function storeUploadBatch(batch: StoredUploadBatch) {
+  sessionStorage.setItem(UPLOAD_BATCH_SESSION_KEY, JSON.stringify(batch));
+}
+
+function clearStoredUploadBatch(expectedId?: string) {
+  const stored = readStoredUploadBatch();
+  if (!expectedId || stored?.id === expectedId) {
+    sessionStorage.removeItem(UPLOAD_BATCH_SESSION_KEY);
+  }
+}
+
+function makeBatchId(): string {
+  const suffix = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `drive-upload-${suffix}`;
+}
+
+function getOrCreateBatch(folderIds: string[]): StoredUploadBatch {
+  const normalizedIds = [...folderIds].sort();
+  const stored = readStoredUploadBatch();
+  if (
+    stored
+    && stored.folderIds.length === normalizedIds.length
+    && stored.folderIds.every((id, index) => id === normalizedIds[index])
+  ) {
+    return stored;
+  }
+
+  const batch = { id: makeBatchId(), folderIds: normalizedIds };
+  storeUploadBatch(batch);
+  return batch;
+}
+
+function isActiveJobStatus(status: SyncJobStatus): status is 'queued' | 'running' {
+  return status === 'queued' || status === 'running';
+}
+
+function toTrackedJob(job: SyncJob): TrackedJob {
+  return {
+    jobId: job.id,
+    folderId: job.folder_id,
+    displayName: job.display_name,
+    status: job.status,
+    clientBatchId: job.client_batch_id,
+  };
 }
 
 const pollUpdate = (
@@ -63,49 +138,6 @@ const pollUpdate = (
   poll();
 };
 
-async function pollUploadResults(
-  trackedJobs: TrackedJob[],
-  setTrackedJobs: (fn: (prev: TrackedJob[]) => TrackedJob[]) => void,
-  setUploadResults: (fn: (prev: Map<string, { success: boolean; message: string }>) => Map<string, { success: boolean; message: string }>) => void,
-  setUploadingJobs: (fn: (prev: Map<string, string>) => Map<string, string>) => void,
-  uploadLocksRef: RefObject<Set<string>>,
-) {
-  const completedIds: string[] = [];
-
-  for (const tracked of trackedJobs) {
-    try {
-      const { job } = await getJob(tracked.jobId);
-
-      if (job.status === 'queued' || job.status === 'running') {
-        continue;
-      }
-
-      completedIds.push(tracked.jobId);
-
-      const uploadResult = {
-        success: job.status === 'success',
-        message: job.status === 'success' ? (job.result_message ?? 'Done') : (job.error ?? 'Upload failed'),
-      };
-      setUploadResults((prev) => new Map(prev).set(tracked.folderId, uploadResult));
-    } catch {
-      // ignore
-    }
-  }
-
-  if (completedIds.length > 0) {
-    setTrackedJobs((prev) => prev.filter((job) => !completedIds.includes(job.jobId)));
-    const jobsToRemove = trackedJobs.filter((t) => completedIds.includes(t.jobId));
-    setUploadingJobs((prev) => {
-      const next = new Map(prev);
-      for (const tracked of jobsToRemove) {
-        next.delete(tracked.folderId);
-        uploadLocksRef.current?.delete(tracked.folderId);
-      }
-      return next;
-    });
-  }
-}
-
 interface DriveSyncPageProps {
   readonly themeMode: ThemeMode;
 }
@@ -131,6 +163,10 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const [uploadableError, setUploadableError] = useState('');
   const [uploadResults, setUploadResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [uploadingJobs, setUploadingJobs] = useState<Map<string, string>>(new Map());
+  const [uploadBatchTotal, setUploadBatchTotal] = useState(
+    () => readStoredUploadBatch()?.folderIds.length ?? 0,
+  );
+  const [uploadPollingError, setUploadPollingError] = useState('');
   const uploadLocksRef = useRef<Set<string>>(new Set());
 
   const [updatableData, setUpdatableData] = useState<CheckUpdatableResponse | null>(null);
@@ -146,15 +182,173 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     trackedJobsRef.current = trackedJobs;
   }, [trackedJobs]);
 
-  const hasActiveTrackedJobs = hasTrackedJobs(trackedJobs);
+  const hasActiveTrackedJobs = trackedJobs.length > 0;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const rehydrate = async () => {
+      try {
+        const storedBatch = readStoredUploadBatch();
+        const { jobs } = storedBatch
+          ? await listJobs(500, 0, { kind: 'upload_single' })
+          : await listActiveUploadJobs();
+        if (cancelled) return;
+
+        const storedBatchJobs = storedBatch
+          ? jobs.filter((job) => job.client_batch_id === storedBatch.id)
+          : [];
+        const terminalBatchJobs = storedBatchJobs.filter((job) => !isActiveJobStatus(job.status));
+        if (terminalBatchJobs.length > 0) {
+          setUploadResults((prev) => {
+            const next = new Map(prev);
+            for (const job of terminalBatchJobs) {
+              next.set(job.folder_id, {
+                success: job.status === 'success',
+                message: job.status === 'success'
+                  ? (job.result_message ?? 'Done')
+                  : (job.error ?? (job.status === 'cancelled' ? 'Upload cancelled' : 'Upload failed')),
+              });
+            }
+            return next;
+          });
+        }
+
+        const activeJobs = jobs.filter((job) => isActiveJobStatus(job.status));
+        if (activeJobs.length === 0) {
+          if (trackedJobsRef.current.length === 0) {
+            clearStoredUploadBatch();
+            setUploadBatchTotal(storedBatchJobs.length);
+          }
+          return;
+        }
+
+        const restored = activeJobs.map(toTrackedJob);
+        for (const job of restored) uploadLocksRef.current.add(job.folderId);
+
+        setTrackedJobs((prev) => {
+          const byId = new Map(prev.map((job) => [job.jobId, job]));
+          for (const job of restored) byId.set(job.jobId, job);
+          const next = Array.from(byId.values());
+          trackedJobsRef.current = next;
+          return next;
+        });
+        setUploadingJobs((prev) => {
+          const next = new Map(prev);
+          for (const job of restored) next.set(job.folderId, job.jobId);
+          return next;
+        });
+        setUploadBatchTotal((prev) => Math.max(
+          prev,
+          storedBatch?.folderIds.length ?? 0,
+          storedBatchJobs.length,
+          restored.length,
+        ));
+      } catch (error) {
+        if (!cancelled) {
+          setUploadPollingError(
+            error instanceof Error
+              ? `Could not restore active uploads: ${error.message}`
+              : 'Could not restore active uploads.',
+          );
+        }
+      }
+    };
+
+    void rehydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasActiveTrackedJobs) return;
-    const interval = setInterval(
-      () => pollUploadResults(trackedJobsRef.current, setTrackedJobs, setUploadResults, setUploadingJobs, uploadLocksRef),
-      4000,
-    );
-    return () => clearInterval(interval);
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let consecutiveFailures = 0;
+
+    const schedule = (delay: number) => {
+      if (!cancelled && trackedJobsRef.current.length > 0) {
+        timeoutId = setTimeout(() => void poll(), delay);
+      }
+    };
+
+    const poll = async () => {
+      const snapshot = trackedJobsRef.current;
+      if (cancelled || snapshot.length === 0) return;
+
+      try {
+        const { jobs } = await queryJobs(snapshot.map((job) => job.jobId));
+        if (cancelled) return;
+
+        consecutiveFailures = 0;
+        setUploadPollingError('');
+        const returnedById = new Map(jobs.map((job) => [job.id, job]));
+        const terminalJobs: Array<{ tracked: TrackedJob; job: SyncJob }> = [];
+        const nextTracked = snapshot.flatMap((tracked) => {
+          const job = returnedById.get(tracked.jobId);
+          if (!job) return [tracked];
+          if (isActiveJobStatus(job.status)) {
+            return [{ ...tracked, status: job.status, clientBatchId: job.client_batch_id }];
+          }
+          terminalJobs.push({ tracked, job });
+          return [];
+        });
+
+        trackedJobsRef.current = nextTracked;
+        setTrackedJobs(nextTracked);
+
+        if (terminalJobs.length > 0) {
+          setUploadResults((prev) => {
+            const next = new Map(prev);
+            for (const { tracked, job } of terminalJobs) {
+              next.set(tracked.folderId, {
+                success: job.status === 'success',
+                message: job.status === 'success'
+                  ? (job.result_message ?? 'Done')
+                  : (job.error ?? (job.status === 'cancelled' ? 'Upload cancelled' : 'Upload failed')),
+              });
+            }
+            return next;
+          });
+          setUploadingJobs((prev) => {
+            const next = new Map(prev);
+            for (const { tracked } of terminalJobs) {
+              next.delete(tracked.folderId);
+              uploadLocksRef.current.delete(tracked.folderId);
+            }
+            return next;
+          });
+        }
+
+        if (nextTracked.length === 0) {
+          const batchId = snapshot.find((job) => job.clientBatchId)?.clientBatchId;
+          clearStoredUploadBatch(batchId ?? undefined);
+          return;
+        }
+
+        schedule(UPLOAD_POLL_INTERVAL_MS);
+      } catch (error) {
+        if (cancelled) return;
+        consecutiveFailures += 1;
+        const delay = Math.min(
+          UPLOAD_POLL_INTERVAL_MS * 2 ** Math.min(consecutiveFailures, 3),
+          UPLOAD_POLL_MAX_BACKOFF_MS,
+        );
+        const message = error instanceof Error ? error.message : 'Status request failed';
+        setUploadPollingError(
+          `Upload status refresh failed (${message}). Retrying in ${Math.ceil(delay / 1000)}s.`,
+        );
+        schedule(delay);
+      }
+    };
+
+    schedule(0);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [hasActiveTrackedJobs]);
 
   useEffect(() => {
@@ -198,6 +392,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         return next;
       });
       setUploadingJobs((prev) => new Map(prev).set(folder.id, 'pending'));
+      setUploadPollingError('');
+      setUploadBatchTotal((prev) => Math.max(prev, trackedJobsRef.current.length + 1));
 
       try {
         const response = await createJob({
@@ -211,7 +407,12 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         setTrackedJobs((prev) =>
           prev.some((job) => job.jobId === response.id)
             ? prev
-            : [...prev, { jobId: response.id, folderId: folder.id, displayName: folder.display_name }],
+            : [...prev, {
+                jobId: response.id,
+                folderId: folder.id,
+                displayName: folder.display_name,
+                status: response.status,
+              }],
         );
         setUploadingJobs((prev) => new Map(prev).set(folder.id, response.id));
         return response.id;
@@ -238,52 +439,99 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const handleUploadAll = useCallback(async () => {
     if (!uploadableData) return;
 
-    const folders = uploadableData.uploadable;
+    const folders = uploadableData.uploadable.filter(
+      (folder) => !uploadLocksRef.current.has(folder.id),
+    );
     if (folders.length === 0) return;
 
-    const newJobs: TrackedJob[] = [];
-    for (const folder of folders) {
-      if (uploadLocksRef.current.has(folder.id)) {
-        continue;
-      }
-      uploadLocksRef.current.add(folder.id);
-      setUploadResults((prev) => {
-        const next = new Map(prev);
-        next.delete(folder.id);
-        return next;
-      });
-      setUploadingJobs((prev) => new Map(prev).set(folder.id, 'pending'));
-      try {
-        const response = await createJob({
+    for (const folder of folders) uploadLocksRef.current.add(folder.id);
+    setUploadResults((prev) => {
+      const next = new Map(prev);
+      for (const folder of folders) next.delete(folder.id);
+      return next;
+    });
+    setUploadingJobs((prev) => {
+      const next = new Map(prev);
+      for (const folder of folders) next.set(folder.id, 'pending');
+      return next;
+    });
+    setUploadPollingError('');
+    setUploadBatchTotal(folders.length);
+
+    const batch = getOrCreateBatch(folders.map((folder) => folder.id));
+
+    try {
+      const response = await createJobsBatch({
+        client_batch_id: batch.id,
+        jobs: folders.map((folder) => ({
           kind: 'upload_single',
           folder_id: folder.id,
           folder_name: folder.name,
           display_name: folder.display_name,
           main_be_api_base_url: config?.main_be_api_base_url,
-        });
-        if (!newJobs.some((job) => job.jobId === response.id)) {
-          newJobs.push({ jobId: response.id, folderId: folder.id, displayName: folder.display_name });
+        })),
+      });
+
+      const returnedJobs = response.jobs.slice(0, folders.length);
+      const newJobs = returnedJobs.map((job, index): TrackedJob => ({
+        jobId: job.id,
+        folderId: folders[index].id,
+        displayName: folders[index].display_name,
+        status: job.status,
+        clientBatchId: response.client_batch_id,
+      }));
+
+      setTrackedJobs((prev) => {
+        const byId = new Map(prev.map((job) => [job.jobId, job]));
+        for (const job of newJobs) byId.set(job.jobId, job);
+        const next = Array.from(byId.values());
+        trackedJobsRef.current = next;
+        return next;
+      });
+      setUploadingJobs((prev) => {
+        const next = new Map(prev);
+        for (const [index, folder] of folders.entries()) {
+          const job = returnedJobs[index];
+          if (job) next.set(folder.id, job.id);
+          else next.delete(folder.id);
         }
-        setUploadingJobs((prev) => new Map(prev).set(folder.id, response.id));
-      } catch (e) {
-        uploadLocksRef.current.delete(folder.id);
-        setUploadingJobs((prev) => {
-          const next = new Map(prev);
-          next.delete(folder.id);
-          return next;
-        });
+        return next;
+      });
+
+      if (returnedJobs.length < folders.length) {
+        const missing = folders.slice(returnedJobs.length);
+        for (const folder of missing) uploadLocksRef.current.delete(folder.id);
         setUploadResults((prev) => {
-          const next = new Map(prev).set(folder.id, {
-            success: false,
-            message: e instanceof Error ? e.message : 'Failed to enqueue job',
-          });
+          const next = new Map(prev);
+          for (const folder of missing) {
+            next.set(folder.id, {
+              success: false,
+              message: 'The server did not return a job for this story.',
+            });
+          }
           return next;
         });
       }
-    }
-
-    if (newJobs.length > 0) {
-      setTrackedJobs((prev) => [...prev, ...newJobs]);
+    } catch (e) {
+      for (const folder of folders) uploadLocksRef.current.delete(folder.id);
+      setUploadingJobs((prev) => {
+        const next = new Map(prev);
+        for (const folder of folders) next.delete(folder.id);
+        return next;
+      });
+      setUploadResults((prev) => {
+        const next = new Map(prev);
+        for (const folder of folders) {
+          next.set(folder.id, {
+            success: false,
+            message: e instanceof Error ? e.message : 'Failed to enqueue upload batch',
+          });
+        }
+        return next;
+      });
+      setUploadPollingError(
+        'The batch request may have reached the server. Retrying Upload All will reuse the same batch ID and will not duplicate jobs.',
+      );
     }
   }, [uploadableData, config]);
 
@@ -382,6 +630,29 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     [handleUpdateSingle],
   );
 
+  const pendingUploadCount = Array.from(uploadingJobs.values()).filter(
+    (jobId) => jobId === 'pending',
+  ).length;
+  const queuedUploadCount = pendingUploadCount + trackedJobs.filter(
+    (job) => job.status !== 'running',
+  ).length;
+  const runningUploadCount = trackedJobs.filter((job) => job.status === 'running').length;
+  const completedUploadCount = Array.from(uploadResults.values()).filter((result) => result.success).length;
+  const failedUploadCount = Array.from(uploadResults.values()).filter((result) => !result.success).length;
+  const observedUploadTotal = queuedUploadCount
+    + runningUploadCount
+    + completedUploadCount
+    + failedUploadCount;
+  const uploadProgress: DriveSyncUploadProgress | null = uploadBatchTotal > 0 || observedUploadTotal > 0
+    ? {
+        total: Math.max(uploadBatchTotal, observedUploadTotal),
+        queued: queuedUploadCount,
+        running: runningUploadCount,
+        completed: completedUploadCount,
+        failed: failedUploadCount,
+      }
+    : null;
+
   return (
     <PageShell themeMode={themeMode}>
       <div className="flex w-full flex-col px-4 py-6 sm:px-6 lg:px-8">
@@ -455,6 +726,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               uploadableError={uploadableError}
               uploadResults={uploadResults}
               uploadingIds={new Set(uploadingJobs.keys())}
+              uploadProgress={uploadProgress}
+              uploadPollingError={uploadPollingError}
               onCheckUploadable={handleCheckUploadable}
               onUploadSingle={handleUploadSingle}
               onUploadAll={handleUploadAll}

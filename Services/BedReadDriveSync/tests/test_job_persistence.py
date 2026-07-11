@@ -68,6 +68,49 @@ class _FakeSession:
         return SimpleNamespace(rowcount=1)
 
 
+class _RetentionQuery:
+    def __init__(self, total: int, terminal_ids: list[str]) -> None:
+        self.total = total
+        self.terminal_ids = terminal_ids
+
+    def count(self) -> int:
+        return self.total
+
+    def filter(self, *_args):
+        return self
+
+    def order_by(self, *_args):
+        return self
+
+    def limit(self, _value: int):
+        return self
+
+    def all(self):
+        return [(job_id,) for job_id in self.terminal_ids]
+
+
+class _RetentionSession:
+    def __init__(self, total: int, terminal_ids: list[str]) -> None:
+        self.query_result = _RetentionQuery(total, terminal_ids)
+        self.deleted_ids: list[str] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def query(self, *_args):
+        return self.query_result
+
+    def execute(self, statement):
+        self.deleted_ids.extend(statement.compile().params["id_1"])
+        return SimpleNamespace(rowcount=len(self.deleted_ids))
+
+    def commit(self) -> None:
+        return None
+
+
 def test_job_mutation_writes_only_changed_row_before_releasing_lock():
     session = _FakeSession([
         _job_row("job-a", JobStatus.QUEUED),
@@ -84,6 +127,24 @@ def test_job_mutation_writes_only_changed_row_before_releasing_lock():
     assert next(job for job in result if job.id == "job-a").status == JobStatus.SUCCESS
     assert next(job for job in result if job.id == "job-b").status == JobStatus.RUNNING
     assert session.execute_transaction_states == [True]
+
+
+def test_history_retention_deletes_only_terminal_jobs():
+    session = _RetentionSession(503, ["success-old", "error-old", "cancelled-old"])
+    repo = DriveSyncRepository(session_factory=lambda: session)
+
+    repo._enforce_jobs_limit(500)
+
+    assert session.deleted_ids == ["success-old", "error-old", "cancelled-old"]
+
+
+def test_history_retention_never_deletes_active_jobs_when_no_terminal_rows_exist():
+    session = _RetentionSession(503, [])
+    repo = DriveSyncRepository(session_factory=lambda: session)
+
+    repo._enforce_jobs_limit(500)
+
+    assert session.deleted_ids == []
 
 
 def test_upload_worker_marks_unexpected_processing_exception_as_error():

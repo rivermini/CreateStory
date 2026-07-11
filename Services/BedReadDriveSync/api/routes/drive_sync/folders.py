@@ -1,6 +1,5 @@
 """Folder listing and preview endpoints for drive sync."""
 
-import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -195,7 +194,7 @@ class DriveSyncTriggerResponse(BaseModel):
 
 @router.post("/trigger", response_model=DriveSyncTriggerResponse, tags=["Drive Sync"])
 async def trigger_sync() -> DriveSyncTriggerResponse:
-    """Manually trigger a Google Drive sync immediately (background thread)."""
+    """Discover Drive stories and enqueue them in the persistent dispatcher."""
     service = get_drive_sync_service()
     if service.get_config() is None:
         raise HTTPException(
@@ -203,19 +202,16 @@ async def trigger_sync() -> DriveSyncTriggerResponse:
             detail="Drive sync not configured. POST /api/drive-sync/config first.",
         )
 
-    import threading
+    from starlette.concurrency import run_in_threadpool
 
-    sync_id = str(uuid.uuid4())[:8]
-
-    def run_sync():
-        service.sync_all()
-
-    thread = threading.Thread(target=run_sync, daemon=True)
-    thread.start()
-
-    status = service.get_status()
+    try:
+        sync_id, stories_found = await run_in_threadpool(service.enqueue_full_sync)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DriveSyncTriggerResponse(
-        message="Sync started in background.",
+        message="Sync jobs queued in the persistent dispatcher.",
         sync_id=sync_id,
-        stories_found=status.stories_found,
+        stories_found=stories_found,
     )

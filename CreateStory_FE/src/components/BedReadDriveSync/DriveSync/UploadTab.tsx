@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   type CheckUploadableResponse,
+  type DriveSyncUploadProgress,
   type DriveFolderEntry,
 } from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
@@ -13,6 +14,8 @@ interface UploadTabProps {
   readonly error: string;
   readonly uploadResults: Map<string, { success: boolean; message: string }>;
   readonly uploadingIds: Set<string>;
+  readonly uploadProgress: DriveSyncUploadProgress | null;
+  readonly uploadPollingError: string;
   readonly onCheck: () => void;
   readonly onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
   readonly onRequestUploadAll: () => void;
@@ -25,6 +28,8 @@ export function UploadTab({
   error,
   uploadResults,
   uploadingIds,
+  uploadProgress,
+  uploadPollingError,
   onCheck,
   onUploadSingle,
   onRequestUploadAll,
@@ -77,6 +82,12 @@ export function UploadTab({
   const isUploadingAny = uploadingCount > 0;
   const successCount = Array.from(uploadResults.values()).filter((result) => result.success).length;
   const failedCount = Array.from(uploadResults.values()).filter((result) => !result.success).length;
+  const processedCount = uploadProgress
+    ? uploadProgress.completed + uploadProgress.failed
+    : 0;
+  const progressPercent = uploadProgress && uploadProgress.total > 0
+    ? Math.min(100, Math.round((processedCount / uploadProgress.total) * 100))
+    : 0;
 
   function renderTableBlock(
     title: string,
@@ -293,6 +304,52 @@ export function UploadTab({
         </div>
       </div>
 
+      {(uploadProgress || uploadPollingError) && (
+        <div className="mt-3 rounded-xl border border-[var(--cs-border)] bg-[var(--cs-surface)] p-4 shadow-sm">
+          {uploadProgress && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--cs-text-muted)]">
+                    Upload queue
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--cs-text)]">
+                    {processedCount} of {uploadProgress.total} processed
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                  <ProgressPill label="Queued" value={uploadProgress.queued} color="var(--cs-warning)" />
+                  <ProgressPill label="Running" value={uploadProgress.running} color="var(--cs-primary)" />
+                  <ProgressPill label="Completed" value={uploadProgress.completed} color="var(--cs-success)" />
+                  <ProgressPill label="Failed" value={uploadProgress.failed} color="var(--cs-danger)" />
+                </div>
+              </div>
+              <div
+                className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--cs-surface-muted)]"
+                role="progressbar"
+                aria-label="Story upload progress"
+                aria-valuemin={0}
+                aria-valuemax={uploadProgress.total}
+                aria-valuenow={processedCount}
+              >
+                <div
+                  className="h-full rounded-full bg-[var(--cs-primary)] transition-[width] duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </>
+          )}
+          {uploadPollingError && (
+            <div
+              className={`${uploadProgress ? 'mt-3 border-t border-[var(--cs-border)] pt-3' : ''} flex items-start gap-2 text-xs text-[var(--cs-warning)]`}
+            >
+              <Icon icon={appIcons.info} className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{uploadPollingError}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="mt-3 flex items-center gap-3 rounded-xl border border-[var(--cs-danger)]/20 bg-[var(--cs-danger)]/5 text-[var(--cs-danger)] p-3 text-sm">
           <Icon icon={appIcons.error} className="h-5 w-5 shrink-0" />
@@ -468,6 +525,25 @@ export function UploadTab({
         )}
       </div>
     </div>
+  );
+}
+
+function ProgressPill({
+  label,
+  value,
+  color,
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly color: string;
+}) {
+  return (
+    <span
+      className="rounded-full border border-[var(--cs-border)] bg-[var(--cs-surface-muted)] px-2.5 py-1"
+      style={{ color }}
+    >
+      {label}: {value}
+    </span>
   );
 }
 

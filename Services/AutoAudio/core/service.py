@@ -692,6 +692,7 @@ class AutoAudioService:
 
     def reset_runtime_state(self) -> None:
         """Clear in-memory AutoAudio state after development cleanup."""
+        self._scheduler.stop()
         if self._active_session is not None:
             self._active_session.request_stop()
         self._active_session = None

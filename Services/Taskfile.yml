@@ -11,11 +11,13 @@ tasks:
 
   start:
     desc: "Build and start the backend compose stack in the foreground"
+    deps: ["secrets:ensure"]
     cmds:
       - docker compose up --build {{.CLI_ARGS}}
 
   start:bg:
     desc: "Build and start the backend compose stack in the background"
+    deps: ["secrets:ensure"]
     cmds:
       - docker compose up -d --build {{.CLI_ARGS}}
 
@@ -23,7 +25,7 @@ tasks:
     desc: "Force stop all containers and remove volumes, networks, and local images"
     cmds:
       - docker compose down -v --rmi local --remove-orphans
-      - docker rm -f create-story-fastapi-gateway create-story-bedread-voices create-story-bedread-drive-sync create-story-novel-crawler create-story-auto-audio create-story-flaresolverr create-story-frontend create-story-postgres 2>nul
+      - docker rm -f create-story-database-provisioner create-story-fastapi-gateway create-story-bedread-voices create-story-bedread-drive-sync create-story-novel-crawler create-story-auto-audio create-story-flaresolverr create-story-frontend create-story-postgres 2>nul
 
   start:fresh:
     desc: "Clean everything, reset secrets, verify models, start stack, and run admin setup"
@@ -51,6 +53,37 @@ tasks:
     cmds:
       - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_secrets.ps1 -Mode reset
 
+  "secrets:ci":
+    desc: "Generate an ignored .ci-secrets directory for the CI Compose override"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_secrets.ps1 -Mode ensure -SecretDirectory ./.ci-secrets
+
+  "database:provision":
+    desc: "Idempotently create/update the five service databases and restricted roles"
+    deps: ["secrets:ensure"]
+    cmds:
+      - docker compose run --rm database_provisioner
+
+  "migration:plan":
+    desc: "Read-only inventory of legacy rows and their target service database"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_migration.ps1 -Mode plan
+
+  "migration:apply":
+    desc: "Backup, copy, validate, and cut over to database-per-service"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_migration.ps1 -Mode apply
+
+  "migration:validate":
+    desc: "Validate row hashes, owned schemas, and cross-database role denial"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_migration.ps1 -Mode validate
+
+  "migration:rollback":
+    desc: "Pre-reopening rollback: reconnect all services to untouched legacy database"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_migration.ps1 -Mode rollback
+
   "models:check":
     desc: "Verify presence and integrity of Kokoro models (downloads if missing/corrupt)"
     cmds:
@@ -77,6 +110,7 @@ tasks:
 
   "update:all":
     desc: "Build frontend, rebuild, and reload all compose services"
+    deps: ["secrets:ensure"]
     cmds:
       - task: "build:frontend"
       - docker compose up -d --build
@@ -84,42 +118,49 @@ tasks:
 
   "update:all-noFE":
     desc: "Rebuild and reload all compose services, skipping frontend compilation"
+    deps: ["secrets:ensure"]
     cmds:
       - docker compose up -d --build
       - docker image prune -f 2>nul || true
 
   "update:backend":
     desc: "Rebuild and reload all backend compose services (no frontend build)"
+    deps: ["secrets:ensure"]
     cmds:
       - docker compose up -d --build postgres fastapi_gateway bedread_voices novel_crawler flaresolverr bedread_drive_sync auto_audio
       - docker image prune -f 2>nul || true
 
   "update:gateway":
     desc: "Update fastapi_gateway service (no-deps rebuild)"
+    deps: ["secrets:ensure", "database:provision"]
     cmds:
       - docker compose up -d --build --no-deps fastapi_gateway
       - docker image prune -f 2>nul || true
 
   "update:voices":
     desc: "Update bedread_voices service (no-deps rebuild)"
+    deps: ["secrets:ensure", "database:provision"]
     cmds:
       - docker compose up -d --build --no-deps bedread_voices
       - docker image prune -f 2>nul || true
 
   "update:crawler":
     desc: "Update novel_crawler service (no-deps rebuild)"
+    deps: ["secrets:ensure", "database:provision"]
     cmds:
       - docker compose up -d --build --no-deps novel_crawler
       - docker image prune -f 2>nul || true
 
   "update:sync":
     desc: "Update bedread_drive_sync service (no-deps rebuild)"
+    deps: ["secrets:ensure", "database:provision"]
     cmds:
       - docker compose up -d --build --no-deps bedread_drive_sync
       - docker image prune -f 2>nul || true
 
   "update:audio":
     desc: "Update auto_audio service (no-deps rebuild)"
+    deps: ["secrets:ensure", "database:provision"]
     cmds:
       - docker compose up -d --build --no-deps auto_audio
       - docker image prune -f 2>nul || true

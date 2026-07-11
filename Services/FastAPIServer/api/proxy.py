@@ -63,6 +63,7 @@ async def json_proxy(
     json_body: Any = None,
     headers: dict[str, str] | None = None,
     timeout: float = 120.0,
+    unavailable_status: int = 502,
 ) -> JSONResponse:
     client = get_shared_http_client()
     try:
@@ -77,7 +78,10 @@ async def json_proxy(
     except httpx.TimeoutException:
         return JSONResponse(status_code=504, content=_error_body("Upstream request timed out.", "upstream_timeout"))
     except httpx.RequestError:
-        return JSONResponse(status_code=502, content=_error_body("Upstream service is unavailable.", "upstream_unavailable"))
+        return JSONResponse(
+            status_code=unavailable_status,
+            content=_error_body("Upstream service is unavailable.", "upstream_unavailable"),
+        )
 
     if response.status_code >= 400:
         return _upstream_error(response)

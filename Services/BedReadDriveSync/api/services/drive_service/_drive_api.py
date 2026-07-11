@@ -8,13 +8,11 @@ import ssl
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     pass
 
-from google.auth import load_credentials_from_file
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -28,7 +26,6 @@ from api.services.drive_service._paths import (
     _DRIVE_QUERY_BATCH_SIZE,
     _MD_FILES_CACHE_TTL,
     _RE_STATUS_PREFIX,
-    _SHARED_CREDENTIALS_DIR,
     _SUBFOLDER_CACHE_TTL,
 )
 
@@ -71,6 +68,7 @@ class DriveAPIMixin:
         self._server_cache: Optional[tuple[float, list[dict]]] = None
         self._tls = threading.local()
         self._build_lock = threading.Lock()
+        self._credential_generation = 0
         # TTL caches for title-update scans
         # {f"{subfolder_name}:{parent_id}": (expires_at, file_dict)}
         self._subfolder_cache: dict[str, tuple[float, Optional[dict]]] = {}
@@ -81,44 +79,47 @@ class DriveAPIMixin:
         """
         Build an authenticated Google Drive service object.
         Each thread gets its own httplib2 transport to prevent SSL session corruption.
-        Uses the DB-stored service account first, with legacy file paths as fallback.
+        Credentials are loaded exclusively from DriveSync's database.
         """
         service = getattr(self._tls, "drive_service", None)
-        if service is not None:
+        if (
+            service is not None
+            and getattr(self._tls, "credential_generation", -1) == self._credential_generation
+        ):
             return service
         with self._build_lock:
             service = getattr(self._tls, "drive_service", None)
-            if service is not None:
+            if (
+                service is not None
+                and getattr(self._tls, "credential_generation", -1) == self._credential_generation
+            ):
                 return service
             if self._config is None:
                 raise RuntimeError("Drive sync config not set.")
 
-            if hasattr(self, "_repo"):
-                stored_credential = self._repo.load_drive_credential()
-                if stored_credential is not None:
-                    _filename, content = stored_credential
-                    info = json.loads(content.decode("utf-8"))
-                    creds = service_account.Credentials.from_service_account_info(
-                        info,
-                        scopes=list(_DRIVE_SCOPES),
-                    )
-                    self._tls.drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
-                    return self._tls.drive_service
-
-            creds_path = Path(self._config.service_account_json_path)
-            if creds_path.is_absolute():
-                pass  # use as-is
-            elif creds_path.name:
-                # Legacy fallback for old data/credentials paths.
-                stripped = creds_path.name
-                creds_path = _SHARED_CREDENTIALS_DIR / stripped
-            if not creds_path.is_file():
+            stored_credential = self._repo.load_drive_credential()
+            if stored_credential is None:
                 raise FileNotFoundError(
-                    f"Service account JSON not found at configured path or {_SHARED_CREDENTIALS_DIR}"
+                    "Google Drive service-account credentials are not configured in DriveSync."
                 )
-            creds, _ = load_credentials_from_file(str(creds_path))
+            _filename, content = stored_credential
+            info = json.loads(content.decode("utf-8"))
+            creds = service_account.Credentials.from_service_account_info(
+                info,
+                scopes=list(_DRIVE_SCOPES),
+            )
             self._tls.drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
+            self._tls.credential_generation = self._credential_generation
             return self._tls.drive_service
+
+    def invalidate_drive_credentials(self) -> None:
+        """Make every dispatcher thread rebuild its Drive client on next use."""
+        with self._build_lock:
+            self._credential_generation += 1
+        if hasattr(self._tls, "drive_service"):
+            delattr(self._tls, "drive_service")
+        if hasattr(self._tls, "credential_generation"):
+            delattr(self._tls, "credential_generation")
 
     def _retry_drive_call(self, func: Callable[..., Any]) -> Any:
         """

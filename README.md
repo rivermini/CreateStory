@@ -41,7 +41,7 @@ task start:fresh
 
 `task start:fresh` performs the entire first-time setup for you:
 
-1. **Generates secrets** in `C:\ProgramData\CreateStory\secrets\` (Postgres password, DB URL, JWT key, internal token, cookie key) — nothing to edit by hand.
+1. **Generates secrets** in `C:\ProgramData\CreateStory\secrets\` (Postgres admin password, five private service DB URLs/role passwords, legacy rollback URL, JWT key, internal token, cookie key) — nothing to edit by hand.
 2. **Downloads the Kokoro TTS models** (~335 MB) into `BedReadVoices/api/models/`.
 3. **Builds and starts** all 5 services + PostgreSQL + FlareSolverr + the Nginx frontend.
 4. **Creates your admin account** — you'll be prompted for an **email** and a **password (min 12 characters)**. That is your login.
@@ -116,7 +116,14 @@ graph TD
         DS[BedReadDriveSync - Port 8003]
         AA[AutoAudio Orchestration - Port 8004]
         FS[FlareSolverr - Port 8191]
-        DB[(PostgreSQL - Port 5432)]
+    end
+
+    subgraph Data [One PostgreSQL Server - Five Logical Databases]
+        GDB[(Gateway DB)]
+        CDB[(Crawler DB)]
+        VDB[(Voices DB)]
+        DDB[(DriveSync DB)]
+        ADB[(AutoAudio DB)]
     end
 
     subgraph External [External Integrations]
@@ -145,14 +152,20 @@ graph TD
     AA -->|Drive Status Updates| DS
     AA -->|Push Compiled Audio| EXT_API
 
-    %% Shared Databases
-    Gateway & BV & NC & DS & AA -->|Relational Data| DB
+    %% Private data ownership
+    Gateway --> GDB
+    NC --> CDB
+    BV --> VDB
+    DS --> DDB
+    AA --> ADB
 ```
 
 ### Communication Flow
 1. **Frontend**: The React application sends requests either directly to `localhost:8000` (in dev) or via the Nginx-proxied `/api` endpoint.
 2. **Gateway**: `FastAPIServer` handles CORS, security headers, token-based authentication, and maps all `/api/drive-sync/*`, `/api/tts/*`, `/api/crawl/*`, and `/api/auto-audio/*` paths to their respective backend services.
-3. **Database**: PostgreSQL handles state for all services. Only the Gateway has a mapped external port on `127.0.0.1:5432`; downstream workers connect to the DB via internal Docker networks.
+3. **Database ownership**: One PostgreSQL server hosts five logical databases. Each service has a restricted role that can connect only to its own database, owns its migrations, and obtains another service's data through protected APIs.
+
+This is the recognized **API Gateway + Database-per-Service microservices** pattern. A physical PostgreSQL process remains shared for operational simplicity; logical database and role boundaries prevent table-level coupling.
 
 ---
 
@@ -227,7 +240,7 @@ Here is how data flows through the pipeline under the two most common user reque
 * **Technology**: FastAPI, Pydantic, Alembic
 * **Key Roles**:
   * Proxies API endpoints to downstream microservices.
-  * Manages centralized user settings (`user_settings.json`) and Drive sync configurations (`drive_sync_config.json`).
+  * Owns authentication plus UI/crawler preferences and composes the public settings contract from worker-owned settings.
   * Hosts development utilities (e.g. database reset/cleanup endpoints in non-production environments).
 
 ### 2. BedReadVoices (Text-to-Speech Engine)
@@ -277,12 +290,23 @@ If you need custom variables (such as changing the model directory path), copy `
 | `MAX_QUEUED_JOBS_GLOBAL` | `300` | Global TTS worker queue limit |
 | `DEV_MODE` | `false` | Enables database cleanup/dev routes |
 | `ENVIRONMENT` | `development` | Setting to `production` hard-disables all dev API routes |
+| `DRIVE_SYNC_JOB_WORKERS` | `2` | Stories processed concurrently by the persistent DriveSync queue |
+| `DRIVE_SYNC_CHAPTER_PREFETCH_WORKERS` | `4` | Per-story chapter prefetch workers |
+| `DRIVE_SYNC_CHAPTER_WINDOW_SIZE` | `8` | Chapters retained in each bounded processing window |
+| `DRIVE_SYNC_METADATA_WORKERS` | `8` | Metadata update worker limit |
+| `DRIVE_SYNC_METADATA_DOWNLOAD_CONCURRENCY` | `8` | Metadata download limit |
 
 ### Downstream Service URL Overrides
 Downstream endpoints can be adjusted in the gateway environment via a JSON string or direct env variables:
 ```env
 SERVICE_URLS={"FastAPIServer":"http://fastapi_gateway:8000","NovelCrawler":"http://novel_crawler:8002","BedReadVoices":"http://bedread_voices:8001","AutoAudio":"http://auto_audio:8004","BedReadDriveSync":"http://bedread_drive_sync:8003"}
 ```
+
+Workers do not call FastAPIServer to continue their work. BedReadVoices and AutoAudio obtain external API configuration from DriveSync's protected internal API; AutoAudio calls Voices and DriveSync directly. A Gateway rebuild therefore pauses new frontend requests and polling but does not stop active worker jobs.
+
+### Migrating an existing shared database
+
+From `Services`, use `task migration:plan`, then schedule a maintenance window and run `task migration:apply` before any routine rebuild with this version. The apply task refuses active jobs/non-empty targets, captures the currently running images for rollback, creates a checksummed backup in `C:\ProgramData\CreateStory\backups`, copies and validates all owned data, and keeps the legacy DB untouched. Before reopening traffic, a failed cutover can be restored with `task migration:rollback`. Full details are in [`Services/README.md`](Services/README.md#shared-database-migration-runbook).
 
 ---
 

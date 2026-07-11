@@ -1,72 +1,78 @@
-"""Credential upload for Drive Sync, backed by PostgreSQL."""
+"""Credential proxy; Google Drive credentials are owned by DriveSync."""
 
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
 
 from api.auth import require_active_user, require_operator
-from api.db import get_db
-from api.middleware import MAX_REQUEST_BODY_BYTES
-from api.repositories.shared_state import DRIVE_CREDENTIAL_NAME, SharedStateRepository
-
-logger = logging.getLogger(__name__)
+from api.middleware import MAX_REQUEST_BODY_BYTES, get_shared_http_client
 
 router = APIRouter(tags=["Drive Sync"])
-
-_FIXED_CREDENTIALS_FILENAME = "google-service-account.json"
 _UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+def _drive_url() -> str:
+    import os
+
+    return os.environ.get("SERVICE_URLS_BedReadDriveSync", "http://localhost:8003").rstrip("/")
 
 
 @router.post("/credentials/upload")
 async def upload_credentials(
-    db: Annotated[Session, Depends(get_db)],
+    client: Annotated[httpx.AsyncClient, Depends(get_shared_http_client)],
     _operator=Depends(require_operator),
     file: UploadFile = File(...),
 ) -> JSONResponse:
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided.")
-
-    if not file.filename.endswith(".json"):
+    if not file.filename or not file.filename.lower().endswith(".json"):
         raise HTTPException(status_code=400, detail="Only .json files are allowed.")
-
-    # Streamed size cap: read in bounded chunks so a chunked upload without a
-    # Content-Length header cannot bypass the gateway body limit (L9).
-    contents = b""
+    chunks: list[bytes] = []
+    total = 0
     while chunk := await file.read(_UPLOAD_CHUNK_BYTES):
-        contents += chunk
-        if len(contents) > MAX_REQUEST_BODY_BYTES:
+        total += len(chunk)
+        if total > MAX_REQUEST_BODY_BYTES:
             raise HTTPException(status_code=413, detail="Uploaded file exceeds the size limit.")
-
+        chunks.append(chunk)
     try:
-        SharedStateRepository(db).upsert_credential(
-            DRIVE_CREDENTIAL_NAME,
-            _FIXED_CREDENTIALS_FILENAME,
-            contents,
-            file.content_type or "application/json",
+        response = await client.post(
+            f"{_drive_url()}/api/drive-sync/credentials/upload",
+            files={
+                "file": (
+                    file.filename,
+                    b"".join(chunks),
+                    file.content_type or "application/json",
+                )
+            },
+            timeout=60.0,
         )
-    except Exception as exc:
-        logger.exception("Failed to save Drive credentials")
-        raise HTTPException(status_code=500, detail="Failed to save credentials.") from exc
-
-    return JSONResponse(content={
-        "success": True,
-        "filename": _FIXED_CREDENTIALS_FILENAME,
-        "path": f"db://external_credentials/{_FIXED_CREDENTIALS_FILENAME}",
-    })
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail="Drive Sync service is unavailable.") from exc
+    try:
+        content = response.json()
+    except ValueError:
+        content = {"detail": response.text or "Invalid Drive Sync response."}
+    return JSONResponse(status_code=response.status_code, content=content)
 
 
 @router.get("/credentials/exists")
-def check_credentials_exists(
+async def check_credentials_exists(
     filename: str,
-    db: Annotated[Session, Depends(get_db)],
+    client: Annotated[httpx.AsyncClient, Depends(get_shared_http_client)],
     _user=Depends(require_active_user),
 ) -> JSONResponse:
-    stored = SharedStateRepository(db).get_credential(DRIVE_CREDENTIAL_NAME)
-    if stored is not None:
-        return JSONResponse(content={"exists": True, "filename": _FIXED_CREDENTIALS_FILENAME})
-    return JSONResponse(content={"exists": False, "filename": _FIXED_CREDENTIALS_FILENAME})
+    try:
+        response = await client.get(
+            f"{_drive_url()}/api/drive-sync/credentials/exists",
+            params={"filename": filename},
+            timeout=30.0,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail="Drive Sync service is unavailable.") from exc
+    try:
+        content = response.json()
+    except ValueError:
+        content = {"detail": response.text or "Invalid Drive Sync response."}
+    return JSONResponse(status_code=response.status_code, content=content)

@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.db import SessionLocal
@@ -47,6 +48,13 @@ def _job_to_row_data(job: "SyncJob") -> dict:
         "logs": data.get("logs") or [],
         "main_be_api_base_url": data.get("main_be_api_base_url"),
         "chapters_count": data.get("chapters_count"),
+        "payload": data.get("payload") or {},
+        "client_batch_id": data.get("client_batch_id"),
+        "batch_item_index": data.get("batch_item_index"),
+        "attempt_count": data.get("attempt_count", 0),
+        "claimed_at": data.get("claimed_at"),
+        "last_heartbeat_at": data.get("last_heartbeat_at"),
+        "last_error": data.get("last_error"),
         "version": 0,
     }
 
@@ -160,8 +168,23 @@ def _intro_history_entry_to_row_data(entry: dict) -> dict:
 
 
 class DriveSyncRepository:
+    _QUEUE_ADMISSION_LOCK_ID = 2026071101
+
     def __init__(self, session_factory=SessionLocal) -> None:
         self.session_factory = session_factory
+
+    @classmethod
+    def _lock_queue_admission(cls, db: Session) -> None:
+        """Serialize queue-capacity checks across single and batch requests."""
+        try:
+            bind = db.get_bind()
+        except AttributeError:
+            return
+        if bind.dialect.name == "postgresql":
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": cls._QUEUE_ADMISSION_LOCK_ID},
+            )
 
     def load_status(self) -> dict | None:
         with self.session_factory() as db:
@@ -216,6 +239,39 @@ class DriveSyncRepository:
                 return None
             return row.filename, bytes(row.content)
 
+    def save_drive_credential(
+        self,
+        filename: str,
+        content: bytes,
+        content_type: str = "application/json",
+    ) -> None:
+        now = utcnow()
+        with self.session_factory() as db:
+            row = db.scalar(select(ExternalCredential).where(ExternalCredential.name == "google_service_account"))
+            if row is None:
+                db.add(ExternalCredential(
+                    name="google_service_account",
+                    filename=filename,
+                    content_type=content_type,
+                    content=content,
+                    created_at=now,
+                    updated_at=now,
+                ))
+            else:
+                row.filename = filename
+                row.content_type = content_type
+                row.content = content
+                row.updated_at = now
+            db.commit()
+
+    def drive_credential_exists(self) -> bool:
+        with self.session_factory() as db:
+            return db.scalar(
+                select(func.count()).select_from(ExternalCredential).where(
+                    ExternalCredential.name == "google_service_account"
+                )
+            ) > 0
+
     def load_history(self) -> list[dict]:
         with self.session_factory() as db:
             rows = db.scalars(select(DriveSyncHistoryRecord).order_by(DriveSyncHistoryRecord.timestamp.desc())).all()
@@ -263,8 +319,68 @@ class DriveSyncRepository:
             db.commit()
             return result.rowcount > 0
 
+    def get_job_by_id(self, job_id: str) -> "SyncJob | None":
+        """Load one job without materializing the rest of the queue."""
+        from api.models.drive_sync import SyncJob
+
+        with self.session_factory() as db:
+            row = db.get(DriveSyncJobRecord, job_id)
+            return SyncJob(**self._job_row_to_dict(row)) if row is not None else None
+
+    def update_job_fields(self, job_id: str, fields: dict) -> bool:
+        """Update one claimed job while holding a row-level lock."""
+        allowed = {
+            "status",
+            "started_at",
+            "finished_at",
+            "result_message",
+            "chapters_added",
+            "chapters_skipped",
+            "error",
+            "logs",
+            "main_be_api_base_url",
+            "last_heartbeat_at",
+            "last_error",
+        }
+        updates = {key: value for key, value in fields.items() if key in allowed}
+        if not updates:
+            return False
+        with self.session_factory() as db:
+            with db.begin():
+                row = db.scalar(
+                    select(DriveSyncJobRecord)
+                    .where(DriveSyncJobRecord.id == job_id)
+                    .with_for_update()
+                )
+                if row is None:
+                    return False
+                for key, value in updates.items():
+                    setattr(row, key, value)
+                row.version = int(row.version or 0) + 1
+                row.updated_at = utcnow()
+        return True
+
+    def append_job_log(self, job_id: str, entry: dict) -> bool:
+        """Append one log entry without reading or locking unrelated jobs."""
+        with self.session_factory() as db:
+            with db.begin():
+                row = db.scalar(
+                    select(DriveSyncJobRecord)
+                    .where(DriveSyncJobRecord.id == job_id)
+                    .with_for_update()
+                )
+                if row is None:
+                    return False
+                logs = list(row.logs or [])
+                logs.append(entry)
+                row.logs = logs
+                row.last_heartbeat_at = utcnow()
+                row.version = int(row.version or 0) + 1
+                row.updated_at = utcnow()
+        return True
+
     def _enforce_jobs_limit(self, max_entries: int) -> None:
-        """Delete oldest jobs if total exceeds max_entries."""
+        """Trim only terminal history; queued/running work is never deleted."""
         with self.session_factory() as db:
             total = db.query(DriveSyncJobRecord).count()
             if total <= max_entries:
@@ -272,6 +388,7 @@ class DriveSyncRepository:
             to_delete = total - max_entries
             oldest_ids = (
                 db.query(DriveSyncJobRecord.id)
+                .filter(DriveSyncJobRecord.status.in_(("success", "error", "cancelled")))
                 .order_by(DriveSyncJobRecord.created_at_text.asc())
                 .limit(to_delete)
                 .all()
@@ -283,6 +400,190 @@ class DriveSyncRepository:
                     )
                 )
             db.commit()
+
+    def count_active_jobs(self, db: Session | None = None) -> int:
+        def _count(session: Session) -> int:
+            return int(session.scalar(
+                select(func.count()).select_from(DriveSyncJobRecord).where(
+                    DriveSyncJobRecord.status.in_(("queued", "running"))
+                )
+            ) or 0)
+
+        if db is not None:
+            return _count(db)
+        with self.session_factory() as session:
+            return _count(session)
+
+    def insert_job_batch(self, jobs: list["SyncJob"], client_batch_id: str) -> tuple[list["SyncJob"], bool]:
+        """Insert a batch atomically, or return the original batch on retry."""
+        from api.models.drive_sync import SyncJob
+
+        try:
+            with self.session_factory() as db:
+                with db.begin():
+                    self._lock_queue_admission(db)
+                    existing_rows = db.scalars(
+                        select(DriveSyncJobRecord)
+                        .where(DriveSyncJobRecord.client_batch_id == client_batch_id)
+                        .order_by(DriveSyncJobRecord.batch_item_index.asc())
+                        .with_for_update()
+                    ).all()
+                    if existing_rows:
+                        return [SyncJob(**self._job_row_to_dict(row)) for row in existing_rows], False
+                    if self.count_active_jobs(db) + len(jobs) > 500:
+                        raise ValueError("Drive sync queue can contain at most 500 active jobs.")
+                    for index, job in enumerate(jobs):
+                        job.client_batch_id = client_batch_id
+                        job.batch_item_index = index
+                        db.execute(insert(DriveSyncJobRecord).values(_job_to_row_data(job)))
+        except IntegrityError:
+            # Two simultaneous retries can both observe no rows before either
+            # inserts. The unique batch-item constraint chooses one winner;
+            # the loser returns that committed original instead of a 500.
+            with self.session_factory() as db:
+                existing_rows = db.scalars(
+                    select(DriveSyncJobRecord)
+                    .where(DriveSyncJobRecord.client_batch_id == client_batch_id)
+                    .order_by(DriveSyncJobRecord.batch_item_index.asc())
+                ).all()
+                if existing_rows:
+                    return [SyncJob(**self._job_row_to_dict(row)) for row in existing_rows], False
+            raise
+        return jobs, True
+
+    def claim_next_job(self) -> "SyncJob | None":
+        """Atomically claim the oldest queued job using SKIP LOCKED."""
+        from api.models.drive_sync import SyncJob
+
+        now = utcnow()
+        with self.session_factory() as db:
+            with db.begin():
+                row = db.scalar(
+                    select(DriveSyncJobRecord)
+                    .where(DriveSyncJobRecord.status == "queued")
+                    .order_by(
+                        DriveSyncJobRecord.created_at_text.asc(),
+                        DriveSyncJobRecord.batch_item_index.asc().nulls_last(),
+                        DriveSyncJobRecord.id.asc(),
+                    )
+                    .with_for_update(skip_locked=True)
+                    .limit(1)
+                )
+                if row is None:
+                    return None
+                row.status = "running"
+                row.started_at = row.started_at or now.isoformat()
+                row.claimed_at = now
+                row.last_heartbeat_at = now
+                row.attempt_count = int(row.attempt_count or 0) + 1
+                row.last_error = None
+                row.version = int(row.version or 0) + 1
+                db.flush()
+                return SyncJob(**self._job_row_to_dict(row))
+
+    def recover_interrupted_jobs(
+        self,
+        max_attempts: int = 3,
+        retryable_kinds: set[str] | frozenset[str] = frozenset(),
+    ) -> tuple[int, int]:
+        """Requeue retry-safe interrupted jobs; fail unsafe or exhausted work."""
+        now = utcnow()
+        recovered = 0
+        exhausted = 0
+        with self.session_factory() as db:
+            with db.begin():
+                rows = db.scalars(
+                    select(DriveSyncJobRecord)
+                    .where(DriveSyncJobRecord.status == "running")
+                    .with_for_update()
+                ).all()
+                for row in rows:
+                    attempts = int(row.attempt_count or 0)
+                    if row.kind in retryable_kinds and attempts < max_attempts:
+                        message = "Interrupted by service restart; queued for retry."
+                        row.status = "queued"
+                        row.claimed_at = None
+                        row.last_heartbeat_at = now
+                        row.last_error = message
+                        row.error = None
+                        row.finished_at = None
+                        recovered += 1
+                    else:
+                        message = (
+                            "Interrupted by service restart after maximum attempts."
+                            if attempts >= max_attempts
+                            else "Interrupted by service restart; this operation cannot be retried safely."
+                        )
+                        row.status = "error"
+                        row.finished_at = now.isoformat()
+                        row.last_heartbeat_at = now
+                        row.last_error = message
+                        row.error = message
+                        exhausted += 1
+                    row.version = int(row.version or 0) + 1
+        return recovered, exhausted
+
+    def requeue_job(self, job_id: str, error: str, max_attempts: int = 3) -> bool:
+        now = utcnow()
+        with self.session_factory() as db:
+            row = db.get(DriveSyncJobRecord, job_id)
+            if row is None or row.status not in {"running", "error"} or int(row.attempt_count or 0) >= max_attempts:
+                return False
+            row.status = "queued"
+            row.claimed_at = None
+            row.finished_at = None
+            row.error = None
+            row.last_error = error
+            row.last_heartbeat_at = now
+            row.version = int(row.version or 0) + 1
+            db.commit()
+            return True
+
+    def get_jobs_by_ids(self, ids: list[str]) -> list["SyncJob"]:
+        from api.models.drive_sync import SyncJob
+
+        if not ids:
+            return []
+        with self.session_factory() as db:
+            rows = db.scalars(select(DriveSyncJobRecord).where(DriveSyncJobRecord.id.in_(ids))).all()
+            by_id = {row.id: SyncJob(**self._job_row_to_dict(row)) for row in rows}
+            return [by_id[job_id] for job_id in ids if job_id in by_id]
+
+    def list_jobs_filtered(
+        self,
+        limit: int,
+        offset: int,
+        statuses: list[str] | None = None,
+        kinds: list[str] | None = None,
+    ) -> tuple[list["SyncJob"], int, dict[str, int]]:
+        from api.models.drive_sync import SyncJob
+
+        filters = []
+        if statuses:
+            filters.append(DriveSyncJobRecord.status.in_(statuses))
+        if kinds:
+            filters.append(DriveSyncJobRecord.kind.in_(kinds))
+        with self.session_factory() as db:
+            query = select(DriveSyncJobRecord)
+            count_query = select(func.count()).select_from(DriveSyncJobRecord)
+            if filters:
+                query = query.where(*filters)
+                count_query = count_query.where(*filters)
+            rows = db.scalars(
+                query.order_by(DriveSyncJobRecord.created_at_text.desc()).offset(offset).limit(limit)
+            ).all()
+            total = int(db.scalar(count_query) or 0)
+            counts = dict(db.execute(
+                select(DriveSyncJobRecord.status, func.count())
+                .group_by(DriveSyncJobRecord.status)
+            ).all())
+        metrics = {
+            "queued": int(counts.get("queued", 0)),
+            "running": int(counts.get("running", 0)),
+            "completed": int(counts.get("success", 0)),
+            "failed": int(counts.get("error", 0)) + int(counts.get("cancelled", 0)),
+        }
+        return [SyncJob(**self._job_row_to_dict(row)) for row in rows], total, metrics
 
     def with_jobs_lock(self, fn: "Callable[[list[SyncJob]], list[SyncJob]]") -> list["SyncJob"]:
         """
@@ -300,6 +601,7 @@ class DriveSyncRepository:
 
         with self.session_factory() as db:
             with db.begin():
+                self._lock_queue_admission(db)
                 rows = (
                     db.scalars(
                         select(DriveSyncJobRecord)
@@ -399,6 +701,13 @@ class DriveSyncRepository:
             "logs": row.logs or [],
             "main_be_api_base_url": row.main_be_api_base_url,
             "chapters_count": row.chapters_count,
+            "payload": getattr(row, "payload", None) or {},
+            "client_batch_id": getattr(row, "client_batch_id", None),
+            "batch_item_index": getattr(row, "batch_item_index", None),
+            "attempt_count": getattr(row, "attempt_count", 0) or 0,
+            "claimed_at": getattr(row, "claimed_at", None),
+            "last_heartbeat_at": getattr(row, "last_heartbeat_at", None),
+            "last_error": getattr(row, "last_error", None),
         }
 
     def save_cover_update_history(self, entry: dict) -> None:

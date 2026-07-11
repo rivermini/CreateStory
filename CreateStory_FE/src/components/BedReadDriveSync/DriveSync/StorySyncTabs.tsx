@@ -3,6 +3,7 @@ import {
   type UpdatableStoryEntry,
   type CheckUploadableResponse,
   type CheckUpdatableResponse,
+  type DriveSyncUploadProgress,
   type DriveFolderEntry,
   type StoriesNeedingUpdateEntry,
   type ServerOnlyStoryEntry,
@@ -24,6 +25,8 @@ export interface StorySyncTabsProps {
   readonly uploadableError: string;
   readonly uploadResults: Map<string, { success: boolean; message: string }>;
   readonly uploadingIds: Set<string>;
+  readonly uploadProgress: DriveSyncUploadProgress | null;
+  readonly uploadPollingError: string;
   readonly onCheckUploadable: () => void;
   readonly onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
   readonly onUploadAll: () => void;
@@ -52,6 +55,8 @@ export function StorySyncTabs({
   uploadableError,
   uploadResults,
   uploadingIds,
+  uploadProgress,
+  uploadPollingError,
   onCheckUploadable,
   onUploadSingle,
   onUploadAll,
@@ -194,6 +199,8 @@ export function StorySyncTabs({
               error={uploadableError}
               uploadResults={uploadResults}
               uploadingIds={uploadingIds}
+              uploadProgress={uploadProgress}
+              uploadPollingError={uploadPollingError}
               onCheck={onCheckUploadable}
               onUploadSingle={onUploadSingle}
               onRequestUploadAll={() => setShowUploadConfirm(true)}

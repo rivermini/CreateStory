@@ -33,8 +33,7 @@ from api.middleware import (
 )
 from api.routes import admin, auth, auto_audio, bedread, crawl, dev, downloads, drive_sync, internal, results, settings, sites, tts
 from api.routes.auth import _limiter
-from api.routes.drive_sync.config import _DRIVE_SYNC_CONFIG_EXAMPLE
-from api.routes.settings import _SETTINGS_EXAMPLE
+from api.routes.settings import _GATEWAY_DEFAULTS
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -56,7 +55,7 @@ async def lifespan(app: FastAPI):
     _logger.info("FastAPIServer startup: initializing database...")
     init_db()
     with SessionLocal() as db:
-        import_existing_shared_state(db, _SETTINGS_EXAMPLE, _DRIVE_SYNC_CONFIG_EXAMPLE)
+        import_existing_shared_state(db, _GATEWAY_DEFAULTS)
     # Pre-populate caches on startup so first user requests don't pay cold-start cost.
     _logger.info("FastAPIServer startup: warming caches...")
     from services.orchestrator.auto_audio_service import get_auto_audio_service

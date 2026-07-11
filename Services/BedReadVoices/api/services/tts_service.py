@@ -194,6 +194,14 @@ class TTSService:
     RETRY_MAX_DEPTH: int = 4
 
     def __init__(self) -> None:
+        from api.config import load_tts_settings
+
+        persisted_concurrency = load_tts_settings().get("tts_concurrency")
+        if isinstance(persisted_concurrency, int):
+            self.CONCURRENCY = max(
+                MIN_KOKORO_CONCURRENCY,
+                min(MAX_KOKORO_CONCURRENCY, persisted_concurrency),
+            )
         self._jobs: dict[str, TTSJob] = {}
         self._queue: list[str] = []
         self._lock = Lock()

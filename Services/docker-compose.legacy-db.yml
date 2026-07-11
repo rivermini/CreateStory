@@ -1,0 +1,48 @@
+# Emergency rollback override. Use only through `task migration:rollback` or:
+#   docker compose -f docker-compose.yml -f docker-compose.legacy-db.yml up -d
+#
+# The dedicated URL secrets remain mounted, but DATABASE_URL_FILE is pointed at
+# the untouched legacy shared database for every application service.
+services:
+  database_provisioner:
+    environment:
+      ALLOW_LEGACY_WITH_EMPTY_TARGETS: "1"
+
+  fastapi_gateway:
+    image: create-story-rollback-fastapi-gateway:pre-db-split
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+    secrets:
+      - database_url
+
+  novel_crawler:
+    image: create-story-rollback-novel-crawler:pre-db-split
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
+    secrets:
+      - database_url
+
+  bedread_voices:
+    image: create-story-rollback-bedread-voices:pre-db-split
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
+    secrets:
+      - database_url
+
+  bedread_drive_sync:
+    image: create-story-rollback-bedread-drive-sync:pre-db-split
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      SERVICE_URLS_FastAPIServer: http://fastapi_gateway:8000
+    secrets:
+      - database_url
+
+  auto_audio:
+    image: create-story-rollback-auto-audio:pre-db-split
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      SERVICE_URLS: '{"FastAPIServer":"http://fastapi_gateway:8000","BedReadVoices":"http://bedread_voices:8001","BedReadDriveSync":"http://bedread_drive_sync:8003"}'
+    secrets:
+      - database_url

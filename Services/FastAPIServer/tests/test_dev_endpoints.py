@@ -1,5 +1,6 @@
 """Executable API tests for development endpoint containment."""
 
+import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -8,8 +9,11 @@ from fastapi.testclient import TestClient
 from api.auth import require_admin
 from api.db import get_db
 from api.routes.dev import (
+    RUNTIME_TABLES,
+    RESET_TARGETS,
     SERVICES_ROOT,
     _clear_directory_contents,
+    _reset_worker_services,
     router,
 )
 
@@ -60,3 +64,40 @@ def test_clear_directory_contents_outside_services_is_skipped() -> None:
 
     assert deleted == []
     assert skipped == [str(outside)]
+
+
+def test_gateway_runtime_tables_exclude_worker_owned_data() -> None:
+    assert RUNTIME_TABLES == [
+        "refresh_tokens",
+        "app_settings",
+        "shared_json_documents",
+    ]
+
+
+def test_gateway_orchestrates_reset_for_every_worker(monkeypatch) -> None:
+    requested_urls: list[str] = []
+
+    class _Response:
+        status_code = 200
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def post(self, url: str):
+            requested_urls.append(url)
+            return _Response()
+
+    monkeypatch.setattr("api.routes.dev.service_async_client", lambda **_kwargs: _Client())
+    monkeypatch.setenv("SERVICE_URLS", "{}")
+
+    reset_services = asyncio.run(_reset_worker_services())
+
+    assert reset_services == [name for name, _url in RESET_TARGETS]
+    assert requested_urls == [
+        f"{url}/api/dev/reset-state"
+        for _name, url in RESET_TARGETS
+    ]

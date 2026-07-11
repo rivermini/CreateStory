@@ -32,9 +32,29 @@ async def create_job(body: dict) -> JSONResponse:
     return await _proxy_post("/api/drive-sync/jobs", json_body=body)
 
 
+@router.post("/jobs/batch")
+async def create_job_batch(body: dict) -> JSONResponse:
+    return await _proxy_post("/api/drive-sync/jobs/batch", json_body=body)
+
+
+@router.post("/jobs/query")
+async def query_jobs(body: dict) -> JSONResponse:
+    return await _proxy_post("/api/drive-sync/jobs/query", json_body=body)
+
+
 @router.get("/jobs")
-async def list_jobs(limit: int = 100, offset: int = 0) -> JSONResponse:
-    return await _proxy_get("/api/drive-sync/jobs", params={"limit": limit, "offset": offset})
+async def list_jobs(
+    limit: int = 100,
+    offset: int = 0,
+    status: list[str] | None = None,
+    kind: list[str] | None = None,
+) -> JSONResponse:
+    params: dict = {"limit": limit, "offset": offset}
+    if status:
+        params["status"] = status
+    if kind:
+        params["kind"] = kind
+    return await _proxy_get("/api/drive-sync/jobs", params=params)
 
 
 @router.get("/jobs/{job_id}")

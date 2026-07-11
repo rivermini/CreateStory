@@ -45,6 +45,41 @@ class HistoryJobsMixin:
     # Sync orchestration
     # -------------------------------------------------------------------------
 
+    def enqueue_full_sync(self) -> tuple[str, int]:
+        """Discover story folders and persist them as one bounded upload batch."""
+        from api.models.drive_sync import DriveSyncStatus, JobCreateRequest
+
+        if self._config is None:
+            raise RuntimeError("Drive sync config is not set.")
+        drive_service = self._build_drive_service()
+        folders = self._list_folders(drive_service, self._config.folder_id)
+        story_folders = sorted(
+            (folder for folder in folders if _RE_STATUS_PREFIX.match(folder["name"])),
+            key=lambda folder: folder["name"],
+        )
+        sync_id = str(uuid.uuid4())[:8]
+        self._current_sync_id = sync_id
+        self._status = DriveSyncStatus(
+            enabled=self._config.enabled,
+            stories_found=len(story_folders),
+        )
+        self._save_status()
+        if not story_folders:
+            return sync_id, 0
+
+        requests = [
+            JobCreateRequest(
+                kind="upload_single",
+                folder_id=folder["id"],
+                folder_name=folder["name"],
+                display_name=self._extract_story_name(folder["name"]),
+                main_be_api_base_url=self._config.main_be_api_base_url,
+            )
+            for folder in story_folders
+        ]
+        self.create_job_batch(f"full-sync-{sync_id}", requests)
+        return sync_id, len(story_folders)
+
     def sync_all(self) -> "DriveSyncStatus":
         """Run a full sync: list folders from Drive, process each story, post to main BE."""
         from api.models.drive_sync import DriveSyncStatus
@@ -217,9 +252,7 @@ class HistoryJobsMixin:
 
         sorted_files = sorted(md_files, key=lambda f: f.get("name", ""))
         chapters_added = 0
-        parsed_chapters = self._download_and_parse_chapter_files(sorted_files)
-
-        for parsed in parsed_chapters:
+        for parsed in self._iter_download_and_parse_chapter_files(sorted_files):
             file_name = parsed["file_name"]
             title = parsed["title"]
             chapter_content = parsed["content"]
@@ -607,6 +640,7 @@ class HistoryJobsMixin:
         display_name: str,
         main_be_api_base_url: Optional[str] = None,
         chapters_count: Optional[int] = None,
+        payload: Optional[dict] = None,
     ) -> "SyncJob":
         """Create a new sync job. Returns the created job."""
         from api.models.drive_sync import JobKind, JobStatus, SyncJob
@@ -629,16 +663,19 @@ class HistoryJobsMixin:
             created_at=datetime.now(timezone.utc).isoformat(),
             main_be_api_base_url=main_be_api_base_url,
             chapters_count=chapters_count,
+            payload=payload or {},
         )
 
         def _mutate(jobs: list["SyncJob"]) -> list["SyncJob"]:
+            active_count = sum(1 for item in jobs if item.status in (JobStatus.QUEUED, JobStatus.RUNNING))
+            if active_count >= _MAX_JOBS_ENTRIES:
+                raise ValueError("Drive sync queue can contain at most 500 active jobs.")
             jobs.insert(0, job)
-            if len(jobs) > _MAX_JOBS_ENTRIES:
-                jobs = jobs[:_MAX_JOBS_ENTRIES]
             return jobs
 
         self._with_jobs_lock(_mutate)
         self._repo._enforce_jobs_limit(_MAX_JOBS_ENTRIES)
+        self.notify_job_dispatcher()
         return job
 
     def create_job_once(
@@ -649,6 +686,7 @@ class HistoryJobsMixin:
         display_name: str,
         main_be_api_base_url: Optional[str] = None,
         chapters_count: Optional[int] = None,
+        payload: Optional[dict] = None,
     ) -> tuple["SyncJob", bool]:
         """Create a job unless an equivalent active job already exists."""
         from api.models.drive_sync import JobKind, JobStatus, SyncJob
@@ -671,6 +709,7 @@ class HistoryJobsMixin:
             created_at=datetime.now(timezone.utc).isoformat(),
             main_be_api_base_url=main_be_api_base_url,
             chapters_count=chapters_count,
+            payload=payload or {},
         )
         selected_job = job
         created = True
@@ -686,30 +725,68 @@ class HistoryJobsMixin:
                     selected_job = existing
                     created = False
                     return jobs
+            active_count = sum(1 for item in jobs if item.status in (JobStatus.QUEUED, JobStatus.RUNNING))
+            if active_count >= _MAX_JOBS_ENTRIES:
+                raise ValueError("Drive sync queue can contain at most 500 active jobs.")
             jobs.insert(0, job)
-            if len(jobs) > _MAX_JOBS_ENTRIES:
-                jobs = jobs[:_MAX_JOBS_ENTRIES]
             return jobs
 
         self._with_jobs_lock(_mutate)
         if created:
             self._repo._enforce_jobs_limit(_MAX_JOBS_ENTRIES)
+            self.notify_job_dispatcher()
         return selected_job, created
+
+    def create_job_batch(self, client_batch_id: str, requests: list) -> tuple[list["SyncJob"], bool]:
+        """Atomically enqueue up to 500 upload/update jobs with request idempotency."""
+        from api.models.drive_sync import JobKind, JobStatus, SyncJob
+
+        batch_id = client_batch_id.strip()
+        if not batch_id:
+            raise ValueError("client_batch_id is required.")
+        if len(batch_id) > 128:
+            raise ValueError("client_batch_id must be 128 characters or fewer.")
+        if not requests or len(requests) > 500:
+            raise ValueError("A batch must contain between 1 and 500 jobs.")
+        allowed = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE}
+        created_at = datetime.now(timezone.utc).isoformat()
+        jobs: list["SyncJob"] = []
+        for request in requests:
+            if request.kind not in allowed:
+                raise ValueError(f"Job kind '{request.kind}' is not supported by the batch endpoint.")
+            jobs.append(SyncJob(
+                id=str(uuid.uuid4()),
+                kind=request.kind,
+                status=JobStatus.QUEUED,
+                folder_id=request.folder_id,
+                folder_name=request.folder_name,
+                display_name=request.display_name,
+                created_at=created_at,
+                main_be_api_base_url=request.main_be_api_base_url,
+                chapters_count=request.chapters_count,
+            ))
+        persisted, created = self._repo.insert_job_batch(jobs, batch_id)
+        if created:
+            self._repo._enforce_jobs_limit(_MAX_JOBS_ENTRIES)
+            self.notify_job_dispatcher()
+        return persisted, created
 
     def get_job(self, job_id: str) -> Optional["SyncJob"]:
         """Return a single job by ID, or None if not found."""
-        jobs = self._load_jobs_raw()
-        for job in jobs:
-            if job.id == job_id:
-                return job
-        return None
+        return self._repo.get_job_by_id(job_id)
 
-    def list_jobs(self, limit: int = 100, offset: int = 0) -> tuple[list["SyncJob"], int]:
+    def list_jobs(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        statuses: Optional[list[str]] = None,
+        kinds: Optional[list[str]] = None,
+    ) -> tuple[list["SyncJob"], int, dict[str, int]]:
         """Return a paginated list of all jobs, newest first."""
-        all_jobs = self._load_jobs_raw()
-        total = len(all_jobs)
-        paged = all_jobs[offset : offset + limit]
-        return (paged, total)
+        return self._repo.list_jobs_filtered(limit, offset, statuses, kinds)
+
+    def get_jobs_by_ids(self, ids: list[str]) -> list["SyncJob"]:
+        return self._repo.get_jobs_by_ids(ids)
 
     def get_last_update_time(self, folder_name: str) -> Optional[str]:
         """Return the finished_at of the most recent successful update_single job for the given folder_name."""
@@ -746,92 +823,49 @@ class HistoryJobsMixin:
         if status is not None and status not in _JOB_STATUS_VALID:
             raise ValueError(f"Invalid job status: {status}")
 
-        def _mutate(all_jobs: list["SyncJob"]) -> list["SyncJob"]:
-            for i, job in enumerate(all_jobs):
-                if job.id == job_id:
-                    if status is not None:
-                        all_jobs[i].status = status
-                    if started_at is not None:
-                        all_jobs[i].started_at = started_at
-                    if finished_at is not None:
-                        all_jobs[i].finished_at = finished_at
-                    if result_message is not None:
-                        all_jobs[i].result_message = result_message
-                    if chapters_added is not None:
-                        all_jobs[i].chapters_added = chapters_added
-                    if chapters_skipped is not None:
-                        all_jobs[i].chapters_skipped = chapters_skipped
-                    if error is not None:
-                        all_jobs[i].error = error
-                    if logs is not None:
-                        all_jobs[i].logs = logs
-                    if main_be_api_base_url is not None:
-                        all_jobs[i].main_be_api_base_url = main_be_api_base_url
-                    return all_jobs
-            return all_jobs
-
-        result = self._with_jobs_lock(_mutate)
-        for j in result:
-            if j.id == job_id:
-                return True
-        return False
+        changes = {
+            "status": status,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "result_message": result_message,
+            "chapters_added": chapters_added,
+            "chapters_skipped": chapters_skipped,
+            "error": error,
+            "logs": [entry.model_dump(mode="json") if hasattr(entry, "model_dump") else entry for entry in logs]
+            if logs is not None
+            else None,
+            "main_be_api_base_url": main_be_api_base_url,
+            "last_heartbeat_at": datetime.now(timezone.utc),
+            "last_error": error,
+        }
+        return self._repo.update_job_fields(
+            job_id,
+            {key: value for key, value in changes.items() if value is not None},
+        )
 
     def reconcile_interrupted_jobs(self) -> int:
-        """Mark jobs left QUEUED/RUNNING by a previous process as ERROR.
+        """Requeue interrupted work; only exhausted jobs become terminal errors."""
+        from api.services.drive_service._job_dispatcher import RETRYABLE_JOB_KINDS
 
-        Job workers are daemon threads that do not survive a process restart,
-        and the final status write can also be lost under DB lock/connection
-        pressure. Either way the job is orphaned: it stays "Running" forever in
-        the UI with no thread behind it. At startup there are no live workers
-        yet, so any QUEUED/RUNNING job is definitionally stale. Called once on
-        service startup. Returns the number of jobs reconciled.
-        """
-        from api.models.drive_sync import JobStatus
-
-        now = datetime.now(timezone.utc).isoformat()
-        reconciled: list[str] = []
-
-        def _mutate(all_jobs: list["SyncJob"]) -> list["SyncJob"]:
-            for job in all_jobs:
-                if job.status in (JobStatus.QUEUED, JobStatus.RUNNING):
-                    job.status = JobStatus.ERROR
-                    if not job.finished_at:
-                        job.finished_at = now
-                    prefix = f"{job.error} | " if job.error else ""
-                    job.error = f"{prefix}Interrupted: the service restarted (or the worker died) before this job finished."
-                    reconciled.append(job.id)
-            return all_jobs
-
-        self._with_jobs_lock(_mutate)
-        return len(reconciled)
+        recovered, exhausted = self._repo.recover_interrupted_jobs(
+            max_attempts=3,
+            retryable_kinds=RETRYABLE_JOB_KINDS,
+        )
+        return recovered + exhausted
 
     def append_job_log(self, job_id: str, level: str, message: str) -> None:
         """Append a log entry to a job. No-op if the job is not found."""
         from api.models.drive_sync import JobLogEntry
-
-        def _mutate(all_jobs: list["SyncJob"]) -> list["SyncJob"]:
-            for i, job in enumerate(all_jobs):
-                if job.id == job_id:
-                    if all_jobs[i].logs is None:
-                        all_jobs[i].logs = []
-                    all_jobs[i].logs.append(JobLogEntry(
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                        level=level,
-                        message=message,
-                    ))
-                    break
-            return all_jobs
-
-        self._with_jobs_lock(_mutate)
+        entry = JobLogEntry(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            level=level,
+            message=message,
+        )
+        self._repo.append_job_log(job_id, entry.model_dump(mode="json"))
 
     def delete_job(self, job_id: str) -> bool:
         """Delete a job by ID. Returns True if found and deleted."""
-        def _mutate(all_jobs: list["SyncJob"]) -> list["SyncJob"]:
-            return [j for j in all_jobs if j.id != job_id]
-
-        before = len(self._load_jobs_raw())
-        self._with_jobs_lock(_mutate)
-        return len(self._load_jobs_raw()) < before
+        return self._repo._delete_job_by_id(job_id)
 
     def record_completed_job(
         self,
@@ -890,8 +924,6 @@ class HistoryJobsMixin:
 
         def _mutate(jobs: list["SyncJob"]) -> list["SyncJob"]:
             jobs.insert(0, job)
-            if len(jobs) > _MAX_JOBS_ENTRIES:
-                jobs = jobs[:_MAX_JOBS_ENTRIES]
             return jobs
 
         self._with_jobs_lock(_mutate)
@@ -1150,9 +1182,7 @@ class HistoryJobsMixin:
 
         chapters_added = 0
         chapters_skipped = 0
-        parsed_chapters = self._download_and_parse_chapter_files(sorted_files)
-
-        for parsed in parsed_chapters:
+        for parsed in self._iter_download_and_parse_chapter_files(sorted_files):
             file_name = parsed["file_name"]
             title = parsed["title"]
             chapter_content = parsed["content"]

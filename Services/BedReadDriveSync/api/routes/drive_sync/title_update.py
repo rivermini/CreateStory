@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -224,16 +223,10 @@ async def update_chapter_title(story_id: str, folder_id: str, chapter_number: in
             folder_name=folder_name,
             display_name=display_name,
             main_be_api_base_url=config.main_be_api_base_url,
+            payload={"story_id": story_id, "chapter_number": chapter_number},
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    if created:
-        threading.Thread(
-            target=service.sync_title_folder_update_as_job,
-            args=(job.id, story_id, chapter_number),
-            daemon=True,
-        ).start()
 
     return TitleUpdateChapterResponse(
         success=True,
@@ -307,16 +300,10 @@ async def update_folder_titles(story_id: str, folder_id: str) -> TitleFolderUpda
             folder_name=folder_name,
             display_name=display_name,
             main_be_api_base_url=config.main_be_api_base_url,
+            payload={"story_id": story_id},
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    if created:
-        threading.Thread(
-            target=service.sync_title_folder_update_as_job,
-            args=(job.id, story_id),
-            daemon=True,
-        ).start()
 
     return TitleFolderUpdateResult(
         folder_id=folder_id,
@@ -436,16 +423,10 @@ async def batch_update(body: BatchTitleUpdateRequest) -> BatchTitleUpdateRespons
                 folder_id=folder_id,
                 folder_name=folder_name,
                 display_name=f"{story_title} - Title update",
+                payload={"story_id": story_id},
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-
-        if created:
-            threading.Thread(
-                target=service.sync_title_folder_update_as_job,
-                args=(job.id, story_id),
-                daemon=True,
-            ).start()
 
         queued_results.append(
             TitleFolderUpdateResult(

@@ -20,7 +20,7 @@ from api.services.drive_service._paths import (
     _positive_int_from_env,
 )
 
-_METADATA_UPDATE_WORKERS = _positive_int_from_env("DRIVE_SYNC_METADATA_WORKERS", 12)
+_METADATA_UPDATE_WORKERS = _positive_int_from_env("DRIVE_SYNC_METADATA_WORKERS", 8)
 _METADATA_DOWNLOAD_CONCURRENCY = _positive_int_from_env(
     "DRIVE_SYNC_METADATA_DOWNLOAD_CONCURRENCY",
     _METADATA_UPDATE_WORKERS,

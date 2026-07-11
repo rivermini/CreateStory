@@ -30,46 +30,20 @@ if str(SERVICES_ROOT) == "/":
 RUNTIME_TABLES = [
     "refresh_tokens",
     "app_settings",
-    "external_credentials",
     "shared_json_documents",
-    "crawl_output_files",
-    "crawl_sessions",
-    "generated_audio_files",
-    "bedread_audio_jobs",
-    "auto_audio_sessions",
-    "auto_audio_completed_stories",
-    "drive_sync_history",
-    "drive_sync_jobs",
-    "drive_sync_status",
 ]
 
-RUNTIME_DIRECTORIES = [
-    SERVICES_ROOT / "NovelCrawler" / "output" / "crawl",
-    SERVICES_ROOT / "BedReadVoices" / "output" / "bedread",
-    SERVICES_ROOT / "BedReadVoices" / "output" / "tts",
-    SERVICES_ROOT / "AutoAudio" / "output" / "auto_audio_logs",
-]
+RUNTIME_DIRECTORIES: list[Path] = []
 
 LOG_FILES = [
-    SERVICES_ROOT / "shared_data" / "logs" / "novel_crawler.log",
     SERVICES_ROOT / "shared_data" / "logs" / "fastapi_gateway.log",
-    SERVICES_ROOT / "shared_data" / "logs" / "bedread_voices.log",
-    SERVICES_ROOT / "shared_data" / "logs" / "bedread_drive_sync.log",
-    SERVICES_ROOT / "shared_data" / "logs" / "auto_audio.log",
 ]
 
 RUNTIME_INDEX_FILES = [
 ]
 
 RUNTIME_FILES_TO_DELETE = [
-    SERVICES_ROOT / "FastAPIServer" / "data" / "sync_jobs.lock",
-    SERVICES_ROOT / "FastAPIServer" / "data" / "sync_jobs.json",
     SERVICES_ROOT / "FastAPIServer" / "data" / "user_settings.json",
-    SERVICES_ROOT / "FastAPIServer" / "data" / "drive_sync_config.json",
-    SERVICES_ROOT / "FastAPIServer" / "data" / "credentials" / "google-service-account.json",
-    SERVICES_ROOT / "NovelCrawler" / "api" / "data" / "crawl_sessions.json",
-    SERVICES_ROOT / "BedReadVoices" / "output" / "bedread" / "jobs.json",
-    SERVICES_ROOT / "AutoAudio" / "output" / "auto_audio_logs" / "sessions.json",
 ]
 
 RESET_TARGETS = [
@@ -235,6 +209,9 @@ async def clear_backend_data(
             skipped_paths.append(str(log_file))
 
     reset_services = await _reset_worker_services()
+    from api.routes.settings import reset_worker_settings_cache
+
+    reset_worker_settings_cache()
 
     return ClearBackendDataResponse(
         cleared_tables=cleared_tables,

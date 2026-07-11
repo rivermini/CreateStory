@@ -5,36 +5,9 @@ All constants that need to be shared across _config_store, _drive_api, _parsers,
 _history_jobs, and drive_service live here.
 """
 
-from pathlib import Path
 import os
 import re
 import threading
-
-# -------------------------------------------------------------------------
-# File-system paths
-# -------------------------------------------------------------------------
-# Resolve from _paths.py location:
-#   _paths.py lives at: BedReadDriveSync/api/services/drive_service/_paths.py
-#   parents[0]=drive_service/, [1]=services/, [2]=api/, [3]=BedReadDriveSync/, [4]=Services/
-#   5 chained .parent calls = parents[4] = Services/
-# Shared data/config folder — points to the FastAPIServer's data directory
-# so that config is shared across all microservices.
-_DATA_DIR = (
-    Path(__file__).resolve().parent.parent.parent.parent.parent
-    / "FastAPIServer"
-    / "data"
-)
-_CONFIG_FILE = _DATA_DIR / "drive_sync_config.json"
-_STATUS_FILE = _DATA_DIR / "drive_sync_status.json"
-_HISTORY_FILE = _DATA_DIR / "drive_sync_history.json"
-_JOBS_FILE = _DATA_DIR / "sync_jobs.json"
-_JOBS_LOCK_FILE = _DATA_DIR / "sync_jobs.lock"
-
-# Shared credentials folder (Services/FastAPIServer/data/credentials/) — fallback when
-# the configured service_account_json_path is not found locally.
-_SHARED_CREDENTIALS_DIR = (
-    Path(__file__).resolve().parent.parent.parent.parent.parent / "FastAPIServer" / "data" / "credentials"
-)
 
 # -------------------------------------------------------------------------
 # Regex patterns (used by _parsers, _history_jobs, drive_service)
@@ -144,7 +117,8 @@ def _positive_int_from_env(name: str, default: int) -> int:
 _DRIVE_CALL_RETRIES = 5
 _DRIVE_CALL_BACKOFF_BASE = 0.5
 _DRIVE_CALL_CONCURRENCY = _positive_int_from_env("DRIVE_SYNC_DRIVE_CONCURRENCY", 6)
-_CHAPTER_PREFETCH_WORKERS = _positive_int_from_env("DRIVE_SYNC_CHAPTER_PREFETCH_WORKERS", 6)
+_CHAPTER_PREFETCH_WORKERS = _positive_int_from_env("DRIVE_SYNC_CHAPTER_PREFETCH_WORKERS", 4)
+_CHAPTER_WINDOW_SIZE = _positive_int_from_env("DRIVE_SYNC_CHAPTER_WINDOW_SIZE", 8)
 _CHECK_BATCH_CHUNK_SIZE = _positive_int_from_env("DRIVE_SYNC_CHECK_BATCH_CHUNK_SIZE", 25)
 _CHECK_BATCH_PAGE_SIZE = _positive_int_from_env("DRIVE_SYNC_CHECK_BATCH_PAGE_SIZE", 1000)
 _MAIN_BE_MAX_KEEPALIVE_CONNECTIONS = _positive_int_from_env("DRIVE_SYNC_MAIN_BE_KEEPALIVE_CONNECTIONS", 20)

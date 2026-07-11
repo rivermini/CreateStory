@@ -21,7 +21,7 @@ def _extract_json_name(service_account_json_path: str) -> Optional[str]:
     """Extract just the filename from a full path like 'credentials/foo.json'."""
     if not service_account_json_path:
         return None
-    return service_account_json_path.rsplit("/", 1)[-1]
+    return service_account_json_path.replace("\\", "/").rsplit("/", 1)[-1]
 
 
 class InitDriveSyncRequest(BaseModel):

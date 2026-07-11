@@ -13,11 +13,6 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
-_FASTAPI_ENV = _PROJECT_ROOT.parent / "FastAPIServer" / ".env"
-if _FASTAPI_ENV.exists():
-    load_dotenv(_FASTAPI_ENV, override=False)
-
-
 def _env_or_file(name: str) -> str | None:
     value = os.getenv(name)
     if value:

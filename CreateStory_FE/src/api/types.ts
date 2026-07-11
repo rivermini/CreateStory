@@ -885,12 +885,26 @@ export interface TrackedJob {
   jobId: string;
   folderId: string;
   displayName: string;
+  status?: SyncJobStatus;
+  clientBatchId?: string | null;
 }
+
+export type SyncJobKind =
+  | 'upload_single'
+  | 'update_single'
+  | 'chapter_content_update'
+  | 'metadata_update'
+  | 'cover_update'
+  | 'banner_update'
+  | 'intro_update'
+  | 'title_update';
+
+export type SyncJobStatus = 'queued' | 'running' | 'success' | 'error' | 'cancelled';
 
 export interface SyncJob {
   id: string;
-  kind: 'upload_single' | 'update_single' | 'chapter_content_update' | 'metadata_update' | 'cover_update' | 'banner_update' | 'intro_update' | 'title_update';
-  status: 'queued' | 'running' | 'success' | 'error' | 'cancelled';
+  kind: SyncJobKind;
+  status: SyncJobStatus;
   folder_id: string;
   folder_name: string;
   display_name: string;
@@ -904,6 +918,10 @@ export interface SyncJob {
   logs: JobLogEntry[];
   main_be_api_base_url?: string;
   chapters_count?: number;
+  client_batch_id?: string | null;
+  attempt_count?: number;
+  claimed_at?: string | null;
+  heartbeat_at?: string | null;
 }
 
 export interface JobLogEntry {
@@ -923,17 +941,52 @@ export interface JobCreateRequest {
 
 export interface JobCreateResponse {
   id: string;
-  status: string;
+  status: SyncJobStatus;
   message: string;
+}
+
+export interface JobBatchCreateRequest {
+  client_batch_id: string;
+  jobs: JobCreateRequest[];
+}
+
+export interface JobBatchCreateResponse {
+  client_batch_id: string;
+  jobs: JobCreateResponse[];
+}
+
+export interface JobQueryRequest {
+  ids: string[];
+}
+
+export interface JobQueryResponse {
+  jobs: SyncJob[];
+}
+
+export interface JobListFilters {
+  status?: SyncJobStatus | SyncJobStatus[];
+  kind?: SyncJobKind | SyncJobKind[];
 }
 
 export interface JobListResponse {
   jobs: SyncJob[];
   total: number;
+  queued?: number;
+  running?: number;
+  completed?: number;
+  failed?: number;
 }
 
 export interface JobResponse {
   job: SyncJob;
+}
+
+export interface DriveSyncUploadProgress {
+  total: number;
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
 }
 
 // ---------------------------------------------------------------------------

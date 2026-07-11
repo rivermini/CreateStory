@@ -1,7 +1,6 @@
 """Cover update endpoints for drive sync."""
 
 import logging
-import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -171,16 +170,10 @@ async def upload_cover(folder_id: str, story_id: str, cover_filename: str = "cov
             folder_name=folder_name,
             display_name=f"{story_title} - Cover update",
             main_be_api_base_url=config.main_be_api_base_url,
+            payload={"story_id": story_id, "filename": cover_filename},
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    if created:
-        threading.Thread(
-            target=service.sync_cover_update_as_job,
-            args=(job.id, story_id, cover_filename),
-            daemon=True,
-        ).start()
 
     return UploadCoverResponse(
         success=True,

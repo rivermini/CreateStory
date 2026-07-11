@@ -16,6 +16,10 @@ import type {
   TokenValidationResponse,
   UploadCredentialsResponse,
   JobCreateRequest,
+  JobBatchCreateRequest,
+  JobBatchCreateResponse,
+  JobQueryResponse,
+  JobListFilters,
   JobListResponse,
   JobResponse,
 } from '../types';
@@ -149,11 +153,53 @@ export async function createJob(req: JobCreateRequest): Promise<import('../types
   });
 }
 
-export async function listJobs(limit = 100, offset = 0): Promise<JobListResponse> {
+export async function createJobsBatch(req: JobBatchCreateRequest): Promise<JobBatchCreateResponse> {
+  return apiFetch<JobBatchCreateResponse>('/api/drive-sync/jobs/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+    timeout: 30000,
+  });
+}
+
+export async function queryJobs(ids: string[]): Promise<JobQueryResponse> {
+  return apiFetch<JobQueryResponse>('/api/drive-sync/jobs/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+    timeout: 15000,
+  });
+}
+
+function appendFilter(
+  params: URLSearchParams,
+  name: 'status' | 'kind',
+  value: JobListFilters[typeof name],
+) {
+  if (!value) return;
+  const values = Array.isArray(value) ? value : [value];
+  for (const item of values) params.append(name, item);
+}
+
+export async function listJobs(
+  limit = 100,
+  offset = 0,
+  filters: JobListFilters = {},
+): Promise<JobListResponse> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  appendFilter(params, 'status', filters.status);
+  appendFilter(params, 'kind', filters.kind);
   return apiFetch<JobListResponse>(
-    `/api/drive-sync/jobs?limit=${limit}&offset=${offset}`,
+    `/api/drive-sync/jobs?${params.toString()}`,
     { timeout: 15000 }
   );
+}
+
+export async function listActiveUploadJobs(limit = 500): Promise<JobListResponse> {
+  return listJobs(limit, 0, {
+    status: ['queued', 'running'],
+    kind: 'upload_single',
+  });
 }
 
 export async function getJob(jobId: string): Promise<JobResponse> {

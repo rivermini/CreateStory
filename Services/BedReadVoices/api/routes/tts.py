@@ -18,6 +18,7 @@ from api.services.tts_service import (
     TTSCapacityError,
 )
 from api.service_auth import current_owner, require_admin_identity, require_owner
+from api.config import save_tts_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tts", tags=["TTS"])
@@ -68,10 +69,20 @@ def update_concurrency(request: ConcurrencyRequest, http_request: Request) -> di
     service = get_tts_service()
     if request.concurrency is None:
         service.set_auto_concurrency()
-        return {"concurrency": service.get_concurrency(), "mode": "auto"}
+        result = {"concurrency": service.get_concurrency(), "mode": "auto"}
+        save_tts_settings({"tts_concurrency": result["concurrency"]})
+        return result
 
     service.set_concurrency(request.concurrency)
-    return {"concurrency": service.get_concurrency(), "mode": "manual"}
+    result = {"concurrency": service.get_concurrency(), "mode": "manual"}
+    save_tts_settings({"tts_concurrency": result["concurrency"]})
+    return result
+
+
+@router.get("/concurrency")
+def get_concurrency() -> dict:
+    service = get_tts_service()
+    return {"concurrency": service.get_concurrency()}
 
 
 @router.get("/voices", response_model=list[VoiceResponse])

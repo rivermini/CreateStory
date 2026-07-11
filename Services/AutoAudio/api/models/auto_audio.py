@@ -84,3 +84,19 @@ class UpdateAutoScanRequest(BaseModel):
     enabled: Optional[bool] = Field(default=None, description="Master ON/OFF for the auto-scan schedule.")
     interval_hours: Optional[float] = Field(default=None, gt=0, description="Hours between scheduled scans.")
     chapter_threshold: Optional[int] = Field(default=None, ge=0, description="Generate only if total missing chapters exceed this.")
+
+
+class AutoAudioSettings(BaseModel):
+    auto_audio_rest_seconds: int = Field(default=0, ge=0)
+    auto_audio_upload_workers: int = Field(default=3, ge=1, le=4)
+    auto_audio_batch_window: int = Field(default=2, ge=1, le=2)
+    auto_audio_external_api_base: str = ""
+    auto_audio_test_story_ids: list[str] = Field(default_factory=list)
+
+
+class AutoAudioSettingsUpdate(BaseModel):
+    auto_audio_rest_seconds: int | None = Field(default=None, ge=0)
+    auto_audio_upload_workers: int | None = Field(default=None, ge=1, le=4)
+    auto_audio_batch_window: int | None = Field(default=None, ge=1, le=2)
+    auto_audio_external_api_base: str | None = None
+    auto_audio_test_story_ids: list[str] | None = None

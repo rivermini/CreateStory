@@ -1,9 +1,9 @@
 """Pydantic models for the Drive Sync feature."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DriveSyncConfig(BaseModel):
@@ -35,7 +35,7 @@ class DriveSyncStatus(BaseModel):
     chapters_added: int = 0
     stories_created: int = 0
     last_sync_at: Optional[datetime] = None
-    errors: list[str] = []
+    errors: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +198,16 @@ class SyncJob(BaseModel):
     chapters_added: int = 0
     chapters_skipped: int = 0
     error: Optional[str] = None
-    logs: list[JobLogEntry] = []
+    logs: list[JobLogEntry] = Field(default_factory=list)
     main_be_api_base_url: Optional[str] = None
     chapters_count: Optional[int] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    client_batch_id: Optional[str] = None
+    batch_item_index: Optional[int] = None
+    attempt_count: int = 0
+    claimed_at: Optional[datetime] = None
+    last_heartbeat_at: Optional[datetime] = None
+    last_error: Optional[str] = None
 
 
 class JobCreateRequest(BaseModel):
@@ -229,6 +236,28 @@ class JobListResponse(BaseModel):
     """API response for GET /api/drive-sync/jobs."""
     jobs: list[SyncJob]
     total: int
+    queued: int = 0
+    running: int = 0
+    completed: int = 0
+    failed: int = 0
+
+
+class JobBatchCreateRequest(BaseModel):
+    client_batch_id: str
+    jobs: list[JobCreateRequest]
+
+
+class JobBatchCreateResponse(BaseModel):
+    client_batch_id: str
+    jobs: list[JobCreateResponse]
+
+
+class JobQueryRequest(BaseModel):
+    ids: list[str]
+
+
+class JobQueryResponse(BaseModel):
+    jobs: list[SyncJob]
 
 
 class TokenValidationResponse(BaseModel):

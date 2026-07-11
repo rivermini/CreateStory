@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -333,16 +332,13 @@ async def update_metadata(folder_id: str, story_id: str, body: MetadataUpdateReq
             folder_name=folder_name,
             display_name=display_name,
             main_be_api_base_url=config.main_be_api_base_url,
+            payload={
+                "story_id": story_id,
+                "differences": [difference.model_dump() for difference in body.differences],
+            },
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    if created:
-        threading.Thread(
-            target=service.sync_metadata_update_as_job,
-            args=(job.id, story_id, [d.model_dump() for d in body.differences]),
-            daemon=True,
-        ).start()
 
     return MetadataUpdateResponse(
         success=True,

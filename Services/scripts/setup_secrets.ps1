@@ -1,9 +1,9 @@
 <#
   Creates, deletes, or resets the CreateStory Docker secret files.
 
-  Default mode is idempotent: existing files are left untouched, so the Postgres
-  password and the password embedded in database_url stay in sync across runs
-  and across service restarts. Only missing files are generated.
+  Default mode is idempotent: existing files are left untouched, so PostgreSQL
+  passwords and their matching URL files stay in sync across runs and service
+  restarts. Only missing files are generated.
 
   Self-heals "directory stubs": when a secret source file is missing, Docker
   bind-mounts auto-create the source path as an EMPTY DIRECTORY on the host
@@ -17,15 +17,31 @@
 #>
 param(
     [ValidateSet('ensure', 'delete', 'reset')]
-    [string]$Mode = 'ensure'
+    [string]$Mode = 'ensure',
+
+    # CI can point this at ./.ci-secrets. Local Windows deployments keep the
+    # default outside the workspace so credentials can never be committed.
+    [string]$SecretDirectory = 'C:\ProgramData\CreateStory\secrets'
 )
 
 $ErrorActionPreference = 'Stop'
 
-$dir = 'C:\ProgramData\CreateStory\secrets'
+$dir = $SecretDirectory
 $secretNames = @(
     'postgres_password',
+    # Kept permanently as the source/rollback connection for the legacy
+    # shared create_story database.
     'database_url',
+    'gateway_database_password',
+    'gateway_database_url',
+    'crawler_database_password',
+    'crawler_database_url',
+    'voices_database_password',
+    'voices_database_url',
+    'drive_sync_database_password',
+    'drive_sync_database_url',
+    'auto_audio_database_password',
+    'auto_audio_database_url',
     'jwt_secret_key',
     'internal_service_token',
     'cookie_encryption_key'
@@ -104,9 +120,28 @@ if ($Mode -eq 'delete' -or $Mode -eq 'reset') {
     }
 }
 
-# postgres_password first, then reuse it inside database_url so they match.
+# The legacy URL is intentionally never rewritten in ensure mode. It remains
+# the immutable migration source and the quick rollback target.
 $pgpw = Ensure-Secret 'postgres_password' { New-Token 32 }
 Ensure-Secret 'database_url' { "postgresql+psycopg://create_story:$pgpw@postgres:5432/create_story" } | Out-Null
+
+# Each application role gets both a password (consumed only by the database
+# provisioner) and a URL (mounted only into its owning service).
+$gatewayPw = Ensure-Secret 'gateway_database_password' { New-Token 32 }
+Ensure-Secret 'gateway_database_url' { "postgresql+psycopg://create_story_gateway:$gatewayPw@postgres:5432/create_story_gateway" } | Out-Null
+
+$crawlerPw = Ensure-Secret 'crawler_database_password' { New-Token 32 }
+Ensure-Secret 'crawler_database_url' { "postgresql+psycopg://create_story_crawler:$crawlerPw@postgres:5432/create_story_crawler" } | Out-Null
+
+$voicesPw = Ensure-Secret 'voices_database_password' { New-Token 32 }
+Ensure-Secret 'voices_database_url' { "postgresql+psycopg://create_story_voices:$voicesPw@postgres:5432/create_story_voices" } | Out-Null
+
+$drivePw = Ensure-Secret 'drive_sync_database_password' { New-Token 32 }
+Ensure-Secret 'drive_sync_database_url' { "postgresql+psycopg://create_story_drive_sync:$drivePw@postgres:5432/create_story_drive_sync" } | Out-Null
+
+$autoAudioPw = Ensure-Secret 'auto_audio_database_password' { New-Token 32 }
+Ensure-Secret 'auto_audio_database_url' { "postgresql+psycopg://create_story_auto_audio:$autoAudioPw@postgres:5432/create_story_auto_audio" } | Out-Null
+
 Ensure-Secret 'jwt_secret_key' { New-Token 48 } | Out-Null
 Ensure-Secret 'internal_service_token' { New-Token 48 } | Out-Null
 Ensure-Secret 'cookie_encryption_key' { New-Token 48 } | Out-Null

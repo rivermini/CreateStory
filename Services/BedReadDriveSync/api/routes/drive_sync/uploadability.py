@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
@@ -952,15 +951,6 @@ async def update_chapters(folder_id: str) -> JobCreateResponse:
         display_name=display_name,
     )
 
-    import threading
-
-    def run_update():
-        service.sync_update_as_job(job.id)
-
-    if created:
-        thread = threading.Thread(target=run_update, daemon=True)
-        thread.start()
-
     return JobCreateResponse(
         id=job.id,
         status=job.status,
@@ -1121,16 +1111,10 @@ async def update_content_chapter(body: ContentUpdateChapterRequest) -> ContentUp
             folder_name=body.folder_id,
             display_name=f"{body.story_id} - Chapter {body.chapter_number} content update",
             main_be_api_base_url=config.main_be_api_base_url,
+            payload={"story_id": body.story_id, "chapter_number": body.chapter_number},
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    if created:
-        threading.Thread(
-            target=service.sync_content_update_as_job,
-            args=(job.id, body.story_id, body.chapter_number),
-            daemon=True,
-        ).start()
 
     return ContentUpdateChapterResponse(
         success=True,
@@ -1273,16 +1257,10 @@ async def batch_update_content_folders(body: BatchContentUpdateRequest) -> Batch
                 folder_name=folder_name,
                 display_name=f"{folder_name} - Content update",
                 main_be_api_base_url=config.main_be_api_base_url,
+                payload={"story_id": ""},
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-
-        if created:
-            threading.Thread(
-                target=service.sync_content_update_as_job,
-                args=(job.id, ""),
-                daemon=True,
-            ).start()
 
         queued_results.append(
             BatchFolderResult(
@@ -1295,12 +1273,3 @@ async def batch_update_content_folders(body: BatchContentUpdateRequest) -> Batch
         )
 
     return BatchContentUpdateResponse(results=queued_results)
-
-    try:
-        results = await asyncio.to_thread(service.batch_update_folders_content, folder_names)
-        return BatchContentUpdateResponse(**results)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        logger.exception("Batch update failed")
-        raise HTTPException(status_code=500, detail="Batch update failed.")

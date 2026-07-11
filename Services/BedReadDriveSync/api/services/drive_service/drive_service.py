@@ -106,9 +106,11 @@ from api.services.drive_service._banner_update import BannerUpdateMixin
 from api.services.drive_service._intro_update import IntroUpdateMixin
 from api.services.drive_service._metadata_update import MetadataUpdateMixin
 from api.services.drive_service._title_update import TitleUpdateMixin
+from api.services.drive_service._job_dispatcher import JobDispatcherMixin
 
 
 class DriveSyncService(
+    JobDispatcherMixin,
     ConfigStoreMixin,
     DriveAPIMixin,
     ParsersMixin,

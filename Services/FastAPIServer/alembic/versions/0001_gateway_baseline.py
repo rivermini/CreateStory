@@ -14,7 +14,6 @@ OWNED_TABLES = (
     "users",
     "refresh_tokens",
     "app_settings",
-    "external_credentials",
     "shared_json_documents",
     "migration_audit",
 )

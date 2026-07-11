@@ -1,7 +1,6 @@
 """Intro update endpoints for drive sync."""
 
 import logging
-import threading
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -171,17 +170,10 @@ async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "int
             folder_name=folder_name,
             display_name=f"{story_title} - Intro update",
             main_be_api_base_url=config.main_be_api_base_url,
+            payload={"story_id": story_id, "filename": intro_filename},
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    if created:
-        thread = threading.Thread(
-            target=service.sync_intro_update_as_job,
-            args=(job.id, story_id, intro_filename),
-            daemon=True,
-        )
-        thread.start()
 
     return UploadIntroResponse(
         success=True,

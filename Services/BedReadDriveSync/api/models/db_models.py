@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, LargeBinary, String, Text
+from sqlalchemy import DateTime, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,6 +42,9 @@ class DriveSyncHistoryRecord(Base):
 
 class DriveSyncJobRecord(Base):
     __tablename__ = "drive_sync_jobs"
+    __table_args__ = (
+        UniqueConstraint("client_batch_id", "batch_item_index", name="uq_drive_sync_jobs_batch_item"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -60,6 +63,13 @@ class DriveSyncJobRecord(Base):
     logs: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     main_be_api_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     chapters_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    client_batch_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    batch_item_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
