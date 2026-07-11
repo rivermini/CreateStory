@@ -18,7 +18,7 @@ from api.repositories.audio_repository import GeneratedAudioRepository
 
 logger = logging.getLogger(__name__)
 MIN_KOKORO_CONCURRENCY = 1
-MAX_KOKORO_CONCURRENCY = 2
+# MAX_KOKORO_CONCURRENCY is defined just below _env_int so it can read its env knob.
 MIN_KOKORO_MODEL_BYTES = 100 * 1024 * 1024
 MIN_KOKORO_VOICES_BYTES = 1 * 1024 * 1024
 
@@ -61,6 +61,53 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if not raw:
         return default
     return raw in {"1", "true", "yes", "y", "on"}
+
+
+# Ceiling on parallel TTS workers. Tunable per host via KOKORO_MAX_CONCURRENCY: a
+# many-core (or GPU) box can run more chapters in parallel. Keep
+# workers * KOKORO_INTRA_OP_THREADS within the container CPU budget (VOICES_CPUS).
+MAX_KOKORO_CONCURRENCY = _env_int("KOKORO_MAX_CONCURRENCY", 2, minimum=1)
+
+
+def _pin_ort_intra_op_threads() -> None:
+    """Pin onnxruntime intra-op threads so Kokoro's ONNX session does not
+    oversubscribe the container's CPU quota.
+
+    kokoro-onnx builds its InferenceSession with no SessionOptions, so ORT would
+    otherwise spawn one intra-op thread per *host* core (e.g. 8) even when the
+    container is capped at fewer cores — causing context-switch thrash. This
+    injects a SessionOptions with a fixed intra_op_num_threads via a one-time
+    monkeypatch. No-op unless KOKORO_INTRA_OP_THREADS > 0, and fully defensive:
+    any failure falls back to the stock session so TTS never breaks over a knob.
+    """
+    threads = _env_int("KOKORO_INTRA_OP_THREADS", 0, minimum=0)
+    if threads <= 0:
+        return
+    try:
+        import onnxruntime as ort
+    except Exception:
+        return
+    if getattr(ort.InferenceSession, "_intra_op_pinned", False):
+        return
+    _orig_init = ort.InferenceSession.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        try:
+            if "sess_options" not in kwargs and len(args) < 2:
+                so = ort.SessionOptions()
+                so.intra_op_num_threads = threads
+                so.inter_op_num_threads = 1
+                kwargs["sess_options"] = so
+        except Exception:
+            pass
+        return _orig_init(self, *args, **kwargs)
+
+    try:
+        ort.InferenceSession.__init__ = _patched_init
+        ort.InferenceSession._intra_op_pinned = True
+        logger.info("Pinned onnxruntime intra_op_num_threads=%d for Kokoro.", threads)
+    except Exception as exc:
+        logger.warning("Could not pin ORT intra-op threads: %s", exc)
 
 
 def _default_concurrency(ignore_env: bool = False) -> int:
@@ -196,12 +243,16 @@ class TTSService:
     def __init__(self) -> None:
         from api.config import load_tts_settings
 
-        persisted_concurrency = load_tts_settings().get("tts_concurrency")
-        if isinstance(persisted_concurrency, int):
-            self.CONCURRENCY = max(
-                MIN_KOKORO_CONCURRENCY,
-                min(MAX_KOKORO_CONCURRENCY, persisted_concurrency),
-            )
+        # An explicit KOKORO_CONCURRENCY env (ops/deploy knob) takes precedence
+        # over the persisted UI setting, so a host can be tuned to its core count
+        # without a DB write — and a stale persisted value can't pin it to 1.
+        if not os.environ.get("KOKORO_CONCURRENCY", "").strip():
+            persisted_concurrency = load_tts_settings().get("tts_concurrency")
+            if isinstance(persisted_concurrency, int):
+                self.CONCURRENCY = max(
+                    MIN_KOKORO_CONCURRENCY,
+                    min(MAX_KOKORO_CONCURRENCY, persisted_concurrency),
+                )
         self._jobs: dict[str, TTSJob] = {}
         self._queue: list[str] = []
         self._lock = Lock()
@@ -362,6 +413,7 @@ class TTSService:
             from kokoro_onnx import Kokoro
             provider = _detect_execution_provider()
             os.environ["ONNX_PROVIDER"] = provider
+            _pin_ort_intra_op_threads()
             try:
                 kokoro = Kokoro(str(model_path), str(voices_path))
             except Exception as exc:

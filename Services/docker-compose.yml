@@ -149,11 +149,17 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
+          # TTS (Kokoro) is the only CPU-heavy service; Auto Mode drives it.
+          # IMPORTANT: this value must be <= the CPUs the Docker Desktop VM is
+          # given (Settings > Resources > CPUs / .wslconfig 'processors'), or the
+          # daemon REFUSES to start the container. Default 6 is safe on an 8-CPU
+          # VM; raise VOICES_CPUS in .env (e.g. 10 on a 12-thread box) after
+          # confirming the VM has that many CPUs. Cap, not reservation.
+          cpus: "${VOICES_CPUS:-6.0}"
           # Generous ceiling: idle ~900 MiB (TTS models loaded); leaves room for
           # audio synthesis + the queued-job window. Bump if a large auto-mode
           # batch ever OOMs (auto mode drives this service).
-          memory: 4g
+          memory: ${VOICES_MEMORY:-4g}
     command: sh -c "alembic upgrade head && python main.py"
     environment:
       TZ: Asia/Bangkok
@@ -170,6 +176,18 @@ services:
       # with less waiting. Each queued job holds its chapter text in memory, so
       # keep it bounded.
       MAX_QUEUED_JOBS_GLOBAL: ${MAX_QUEUED_JOBS_GLOBAL:-300}
+      # --- Auto Mode / TTS throughput tuning (see .env.example) ---
+      # Parallel chapters synthesized at once. Wins over the persisted UI value.
+      KOKORO_CONCURRENCY: ${KOKORO_CONCURRENCY:-2}
+      # Upper bound the concurrency knob is allowed to reach (raise on big hosts).
+      KOKORO_MAX_CONCURRENCY: ${KOKORO_MAX_CONCURRENCY:-4}
+      # ONNX intra-op threads PER worker = VOICES_CPUS / KOKORO_CONCURRENCY, so the
+      # workers together fill the CPU budget without oversubscribing. Default 3
+      # pairs with the default VOICES_CPUS=6 (2 * 3 = 6); on the server set
+      # VOICES_CPUS=10 + KOKORO_INTRA_OP_THREADS=5 (2 * 5 = 10).
+      KOKORO_INTRA_OP_THREADS: ${KOKORO_INTRA_OP_THREADS:-3}
+      OMP_NUM_THREADS: ${KOKORO_INTRA_OP_THREADS:-3}
+      ORT_NUM_THREADS: ${KOKORO_INTRA_OP_THREADS:-3}
     secrets:
       - voices_database_url
       - internal_service_token
