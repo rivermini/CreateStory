@@ -177,8 +177,10 @@ services:
       # keep it bounded.
       MAX_QUEUED_JOBS_GLOBAL: ${MAX_QUEUED_JOBS_GLOBAL:-300}
       # --- Auto Mode / TTS throughput tuning (see .env.example) ---
-      # Parallel chapters synthesized at once. Wins over the persisted UI value.
-      KOKORO_CONCURRENCY: ${KOKORO_CONCURRENCY:-2}
+      # Parallel chapters synthesized at once. Left EMPTY here so it FOLLOWS the
+      # persisted UI concurrency setting; set KOKORO_CONCURRENCY in .env only to
+      # force/override the UI value from ops.
+      KOKORO_CONCURRENCY: ${KOKORO_CONCURRENCY:-}
       # Upper bound the concurrency knob is allowed to reach (raise on big hosts).
       KOKORO_MAX_CONCURRENCY: ${KOKORO_MAX_CONCURRENCY:-4}
       # ONNX intra-op threads PER worker = VOICES_CPUS / KOKORO_CONCURRENCY, so the
