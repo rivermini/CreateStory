@@ -930,7 +930,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 <table className="min-w-full text-left text-sm">
                   <thead style={{ color: faint }}>
                     <tr className="border-b" style={{ borderColor: panelBorder }}>
-                      <th className="w-16 px-4 py-3 font-medium">#</th>
+                      <th className="w-24 min-w-[6rem] whitespace-nowrap px-4 py-3 font-medium">#</th>
                       <th className="min-w-[110px] px-4 py-3 font-medium">Genre</th>
                       <th className="min-w-[260px] px-4 py-3 font-medium">Story</th>
                       <th className="min-w-[120px] px-4 py-3 font-medium">Rating</th>
@@ -941,7 +941,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                   <tbody>
                     {rows.map((row) => (
                       <tr key={`${row.story_id}-${row.index}`} className="border-b align-top last:border-b-0" style={{ borderColor: panelBorder }}>
-                        <td className="px-4 py-3" style={{ color: faint }}>{row.index}</td>
+                        <td className="w-24 min-w-[6rem] whitespace-nowrap px-4 py-3 tabular-nums" style={{ color: faint }}>{row.index}</td>
                         <td className="px-4 py-3" style={{ color: soft }}>{row.genre}</td>
                         <td className="px-4 py-3">
                           <a href={row.url} target="_blank" rel="noopener noreferrer" className="font-medium underline hover:no-underline" style={{ color: text }}>{row.title}</a>
