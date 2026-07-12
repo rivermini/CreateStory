@@ -89,9 +89,15 @@ Individual service URL overrides are also read directly:
 | `SERVICE_URLS_NovelCrawler` | `http://localhost:8002` | NovelCrawler base URL |
 | `SERVICE_URLS_BedReadVoices` | `http://localhost:8001` | BedReadVoices base URL |
 | `SERVICE_URLS_BedReadDriveSync` | `http://localhost:8003` | BedReadDriveSync base URL |
+| `DOWNLOAD_TICKET_TTL_SECONDS` | `3600` | Lifetime of native browser/IDM download tickets; tickets remain reusable for Range requests |
+| `DOWNLOAD_PREPARE_TIMEOUT_SECONDS` | `1800` | Maximum time the gateway waits for a worker to finish first-time archive preparation |
 | `BEDREADVOICES_ROOT` | *(auto-detected)* | Path to BedReadVoices directory (for FFmpeg lookup) |
 | `MAIN_BE_API_BASE_URL` | *(set in drive_sync_config.json)* | External story API base URL |
 | `MAIN_BE_API_TOKEN` | *(set in drive_sync_config.json)* | Bearer token for external API |
+
+Download endpoints exchange the logged-in API session for a short-lived native download ticket. The
+ticket status endpoint keeps frontend preparation indicators active until worker archive headers are
+ready, while reusable tickets and forwarded byte ranges support IDM resume/multi-connection downloads.
 
 ---
 

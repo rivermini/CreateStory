@@ -87,11 +87,17 @@ The server starts on **http://localhost:8002**. API docs are at **http://localho
 | `SCRIBBLEHUB_RETRY_COOLDOWN` | `45` | Seconds before each retry round for rate-limited chapters |
 | `SCRIBBLEHUB_RETRY_ROUNDS` | `40` | Max retry rounds to recover rate-limited chapters (completeness) |
 | `INKITT_BATCH_MAX_DISCOVER_WORKERS` | `2` in Docker | Upper bound for concurrent Inkitt genre discovery workers |
-| `INKITT_BATCH_MAX_CRAWL_WORKERS` | `5` in Docker | Upper bound for concurrent Inkitt story crawl workers |
+| `INKITT_BATCH_MAX_CRAWL_WORKERS` | `4` in Docker | Upper bound for concurrent Inkitt story workers; requests still use one serialized egress lane |
 | `INKITT_DISCOVER_RETRY_TIMES` | `6` | Retry attempts for transient Inkitt discovery HTTP errors |
 | `INKITT_DISCOVER_RETRY_BASE_SECONDS` | `15` | Base cooldown for Inkitt discovery retries |
 | `INKITT_DISCOVER_RETRY_MAX_SECONDS` | `120` | Maximum cooldown for Inkitt discovery retries |
-| `INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS` | `0.5` | Shared minimum spacing between Inkitt requests from this egress IP; increases automatically after HTTP 429 |
+| `INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | Minimum delay after one Inkitt response before the next serialized request |
+| `INKITT_RATE_LIMIT_BASE_COOLDOWN_SECONDS` | `60` | First global cooldown after HTTP 429; subsequent cooldowns increase exponentially |
+| `INKITT_RATE_LIMIT_MAX_COOLDOWN_SECONDS` | `900` | Maximum automatic global HTTP 429 cooldown |
+| `INKITT_RATE_LIMIT_MAX_EVENTS` | `8` | Repeated 429 events before safely pausing the run with unfinished stories queued |
+| `INKITT_RATE_LIMIT_RECOVERY_SUCCESSES` | `250` | Successful responses required before returning adaptive pacing toward the configured minimum |
+| `INKITT_ARCHIVE_PREPARE_DELAY_SECONDS` | `120` | Delay after a crawl run finishes before preparing reusable full/run ZIP caches in the background |
+| `INKITT_ARCHIVE_COMPRESSION_LEVEL` | `1` | Fast DEFLATE level for large cached Inkitt archives |
 | `INKITT_RENDERED_FALLBACK` | `1` | Enables FlareSolverr/Selenium fallback when static Inkitt chapter HTML is incomplete |
 | `INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS` | `800` | Only use browser fallback for suspicious static content at or below this word count |
 
@@ -226,13 +232,18 @@ egress route unless your infrastructure explicitly routes them elsewhere.
 
 Recommended production posture:
 
-- Keep Inkitt crawl workers at `5` with the shared `0.5` second limiter; lower the worker count for a constrained proxy.
-- Use the UI's `1` second per-story delay for normal runs; increase it for a heavily rate-limited egress IP.
+- Keep Inkitt crawl workers at `4` with a `1` second delay. Workers prepare separate stories, while all
+  Inkitt requests use one serialized lane; this is the production target for roughly 1,000 chapters/hour.
+- On HTTP `429`, the crawler globally pauses for `60`, `120`, `240` seconds and progressively slows the
+  request lane. It retries the current chapter instead of consuming and failing new story rows.
+- Partial stories are checkpointed after every chapter, so a pause, retry, or service restart resumes
+  without downloading their completed chapters again.
+- Full-batch and run-specific ZIP files are prepared in the background two minutes after a run ends,
+  cached beside the batch output, and rebuilt only when exported files change. Cached archives support
+  byte-range requests for browser download managers such as IDM.
 - Crawl in small runs, for example `50` to `200` stories, then download or resume later.
-- Treat HTTP `429` and `403` as slow-down signals: pause, raise the delay, and resume after a cooldown.
-- Keep `INKITT_RENDERED_FALLBACK=1`; static story workers are paced independently while the rendered fallback
-  delay gate as static fetches and is skipped for long static chapters by default, but it is still heavier
-  than plain HTML fetches.
+- Keep `INKITT_RENDERED_FALLBACK=1`; rendered requests use the same request lane and are skipped for long
+  static chapters by default, but remain heavier than plain HTML fetches.
 
 ---
 

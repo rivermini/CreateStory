@@ -18,6 +18,7 @@ import {
 import { apiFetch, downloadWithAuth } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
+import { CRAWL_MODE_PRESETS, resolveCrawlMode, type CrawlMode } from './inkittCrawlModes';
 import { getInkittLogTone, inkittLogToneClass, splitInkittLogLine } from './inkittLogUtils';
 
 interface InkittBatchPageProps {
@@ -144,8 +145,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [selectedGenres, setSelectedGenres] = useState<string[]>(() => GENRES.map(([slug]) => slug));
   const [maxPages, setMaxPages] = useState(3);
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
-  const [crawlConcurrency, setCrawlConcurrency] = useState(4);
-  const [requestDelaySeconds, setRequestDelaySeconds] = useState(1);
+  const [crawlMode, setCrawlMode] = useState<CrawlMode>('fast');
   const [storiesPerRun, setStoriesPerRun] = useState(200);
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('inkitt_batch_id') || '');
   const [summary, setSummary] = useState<InkittBatchSummary | null>(null);
@@ -185,6 +185,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     () => GENRES.filter(([slug]) => selectedGenres.includes(slug)).map(([, label]) => label),
     [selectedGenres],
   );
+  const crawlPreset = CRAWL_MODE_PRESETS[crawlMode];
 
   useEffect(() => {
     if (!summary || syncedBatchIdRef.current === summary.batch_id) return;
@@ -193,8 +194,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setSelectedGenres(summary.selected_genres?.length ? summary.selected_genres : ALL_GENRE_SLUGS);
     setMaxPages(summary.max_pages_per_genre || 3);
     setDiscoverConcurrency(summary.discover_concurrency || 4);
-    setCrawlConcurrency(summary.crawl_concurrency || 4);
-    setRequestDelaySeconds(summary.request_delay_seconds || 1);
+    setCrawlMode(resolveCrawlMode(summary.crawl_concurrency, summary.request_delay_seconds));
   }, [summary]);
 
   const fetchHistory = useCallback(() => {
@@ -267,8 +267,8 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
         genres: selectedGenres,
         max_pages_per_genre: maxPages,
         discover_concurrency: discoverConcurrency,
-        crawl_concurrency: crawlConcurrency,
-        request_delay_seconds: requestDelaySeconds,
+        crawl_concurrency: crawlPreset.workers,
+        request_delay_seconds: crawlPreset.delaySeconds,
         crawl_after_discovery: false,
       });
       setShowAllRuns(false);
@@ -294,8 +294,8 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
         genres: ALL_GENRE_SLUGS,
         max_pages_per_genre: DISCOVER_ALL_MAX_PAGES,
         discover_concurrency: discoverConcurrency,
-        crawl_concurrency: crawlConcurrency,
-        request_delay_seconds: requestDelaySeconds,
+        crawl_concurrency: crawlPreset.workers,
+        request_delay_seconds: crawlPreset.delaySeconds,
         crawl_after_discovery: false,
       });
       setSelectedGenres(ALL_GENRE_SLUGS);
@@ -320,8 +320,8 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setError('');
     try {
       const response = await crawlInkittBatch(batchId, {
-        crawl_concurrency: crawlConcurrency,
-        request_delay_seconds: requestDelaySeconds,
+        crawl_concurrency: crawlPreset.workers,
+        request_delay_seconds: crawlPreset.delaySeconds,
         max_stories: storiesPerRun,
       });
       setSummary(response);
@@ -574,9 +574,29 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
               <div className="flex flex-wrap items-end gap-3">
                 <NumberField label="Pages/genre" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
                 <NumberField label="Discover workers" value={discoverConcurrency} min={1} max={6} onChange={setDiscoverConcurrency} />
-                <NumberField label="Crawl workers" value={crawlConcurrency} min={1} max={5} onChange={setCrawlConcurrency} />
                 <NumberField label="Stories/run" value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
-                <DecimalField label="Delay seconds" value={requestDelaySeconds} min={1} max={5} step={0.25} onChange={setRequestDelaySeconds} />
+                <div className="min-w-[280px]">
+                  <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide" style={{ color: faint }}>Crawl mode</span>
+                  <div className="grid grid-cols-2 rounded-md border p-1" style={{ borderColor: panelBorder, background: muted }}>
+                    {(Object.keys(CRAWL_MODE_PRESETS) as CrawlMode[]).map((mode) => {
+                      const preset = CRAWL_MODE_PRESETS[mode];
+                      const selected = crawlMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setCrawlMode(mode)}
+                          className="rounded px-3 py-2 text-left transition-colors"
+                          style={{ background: selected ? primary : 'transparent', color: selected ? '#fff' : text }}
+                        >
+                          <span className="block text-sm font-semibold">{preset.label}</span>
+                          <span className="block text-[11px] opacity-80">{preset.detail}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -675,6 +695,12 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 <Stat label="Failed" value={summary?.failed_count ?? 0} />
                 <Stat label="Genres" value={selectedGenres.length} />
                 <Stat className="col-span-2" label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${(summary?.total_chapters ?? 0).toLocaleString()}`} />
+                {summary?.rate_limit && (
+                  <>
+                    <Stat label="Request lane" value={`${summary.rate_limit.request_interval_seconds.toFixed(1)}s serialized`} />
+                    <Stat label="429 cooldown" value={summary.rate_limit.cooldown_remaining_seconds > 0 ? formatDuration(summary.rate_limit.cooldown_remaining_seconds) : 'Ready'} />
+                  </>
+                )}
               </div>
               <div className="mt-4">
                 <Progress label="Progress" value={progressPercent} />
@@ -978,15 +1004,6 @@ function NumberField({ label, value, min, max, onChange }: { readonly label: str
     <label className="block">
       <span className="mb-1 block text-xs font-medium uppercase" style={{ color: 'var(--cs-text-faint)' }}>{label}</span>
       <input type="number" value={value} min={min} max={max} onChange={(event) => onChange(clampNumber(Number.parseInt(event.target.value) || min, min, max))} className="w-36 rounded-md border px-3 py-2 text-sm outline-none" style={{ background: 'var(--cs-surface-muted)', borderColor: 'var(--cs-border)', color: 'var(--cs-text)' }} />
-    </label>
-  );
-}
-
-function DecimalField({ label, value, min, max, step, onChange }: { readonly label: string; readonly value: number; readonly min: number; readonly max: number; readonly step: number; readonly onChange: (value: number) => void }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium uppercase" style={{ color: 'var(--cs-text-faint)' }}>{label}</span>
-      <input type="number" value={value} min={min} max={max} step={step} onChange={(event) => onChange(clampNumber(Number.parseFloat(event.target.value) || min, min, max))} className="w-36 rounded-md border px-3 py-2 text-sm outline-none" style={{ background: 'var(--cs-surface-muted)', borderColor: 'var(--cs-border)', color: 'var(--cs-text)' }} />
     </label>
   );
 }

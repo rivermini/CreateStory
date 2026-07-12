@@ -277,6 +277,7 @@ export interface InkittBatchSummary {
   total_chapters: number;
   crawled_chapters: number;
   crawl_estimate?: InkittBatchCrawlEstimate;
+  rate_limit?: InkittBatchRateLimit;
   download_ready: boolean;
   error_message: string;
   created_at: string;
@@ -290,6 +291,14 @@ export interface InkittBatchSummary {
   crawl_runs: InkittBatchCrawlRun[];
   cancel_requested: boolean;
   log_lines: string[];
+}
+
+export interface InkittBatchRateLimit {
+  events: number;
+  total: number;
+  request_interval_seconds: number;
+  cooldown_remaining_seconds: number;
+  last_rate_limit_at: string;
 }
 
 export interface InkittBatchCrawlEstimate {

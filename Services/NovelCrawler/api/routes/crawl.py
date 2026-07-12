@@ -186,13 +186,13 @@ class InkittBatchStartRequest(BaseModel):
     genres: list[str] | None = Field(default=None, description="Inkitt genre slugs. Empty means all supported genres.")
     max_pages_per_genre: int = Field(default=3, ge=1, le=1000)
     discover_concurrency: int = Field(default=4, ge=1, le=6)
-    crawl_concurrency: int = Field(default=4, ge=1, le=5)
+    crawl_concurrency: int = Field(default=4, ge=1, le=4)
     request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
     crawl_after_discovery: bool = Field(default=True)
 
 
 class InkittBatchCrawlRequest(BaseModel):
-    crawl_concurrency: int = Field(default=4, ge=1, le=5)
+    crawl_concurrency: int = Field(default=4, ge=1, le=4)
     request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
     max_stories: int | None = Field(default=None, ge=1, le=10000)
 

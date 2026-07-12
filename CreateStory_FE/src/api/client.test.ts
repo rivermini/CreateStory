@@ -8,6 +8,7 @@ import {
   AUTH_USER_KEY,
   REFRESH_TOKEN_KEY,
   apiFetch,
+  downloadWithAuth,
 } from './client';
 
 function seedAuth() {
@@ -83,5 +84,43 @@ describe('authentication refresh coordination', () => {
 
     expect(expiredEvents).toBe(1);
     expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+  });
+
+  it('uses a native IDM-visible link and waits for ticket readiness', async () => {
+    let statusCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/download-ticket')) {
+        return new Response(JSON.stringify({
+          ticket: 'download-token',
+          download_url: '/api/download/download-token',
+          status_url: '/api/download-ticket/download-token/status',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.endsWith('/api/download-ticket/download-token/status')) {
+        statusCalls += 1;
+        return new Response(JSON.stringify({ status: 'ready' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }));
+    let clickedHref = '';
+    let clickedDownloadAttribute: string | null = null;
+    let clickedTarget = '';
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function click(this: HTMLAnchorElement) {
+      clickedHref = this.href;
+      clickedDownloadAttribute = this.getAttribute('download');
+      clickedTarget = this.target;
+    });
+
+    await downloadWithAuth('/api/results/inkitt-batch/abc123ef/download', 'inkitt_batch_abc123ef.zip');
+
+    expect(clickSpy).toHaveBeenCalledOnce();
+    expect(clickedHref).toBe('http://localhost:8000/api/download/download-token');
+    expect(clickedDownloadAttribute).toBeNull();
+    expect(clickedTarget).toBe('_self');
+    expect(statusCalls).toBe(1);
   });
 });

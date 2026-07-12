@@ -252,19 +252,22 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}, allo
  */
 export async function downloadWithAuth(url: string, filename: string): Promise<void> {
   const parsed = new URL(url, window.location.origin);
-  const ticket = await apiFetch<{ ticket: string; download_url: string }>('/api/download-ticket', {
+  const ticket = await apiFetch<{ ticket: string; download_url: string; status_url: string }>('/api/download-ticket', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: `${parsed.pathname}${parsed.search}` }),
   });
   const a = document.createElement('a');
   a.href = `${BASE_URL}${ticket.download_url}`;
-  a.download = filename;
+  // Do not use the HTML download attribute: a normal attachment navigation is
+  // visible to browser download-manager integrations such as IDM.
+  a.title = `Download ${filename}`;
+  a.target = '_self';
   a.referrerPolicy = 'no-referrer';
   document.body.appendChild(a);
   a.click();
   a.remove();
-  await waitForDownloadStart(ticket.ticket);
+  await waitForDownloadStart(ticket.ticket, ticket.status_url);
 }
 
 const DOWNLOAD_START_POLL_MS = 500;
@@ -285,7 +288,7 @@ function clearDownloadMarker(ticket: string): void {
  * ("1" = file streaming, "error" = server rejected it). Times out silently
  * after 30 minutes so a lost response can never pin the UI forever.
  */
-async function waitForDownloadStart(ticket: string): Promise<void> {
+async function waitForDownloadStart(ticket: string, statusUrl: string): Promise<void> {
   const deadline = Date.now() + DOWNLOAD_START_TIMEOUT_MS;
   for (;;) {
     const marker = readDownloadMarker(ticket);
@@ -295,6 +298,28 @@ async function waitForDownloadStart(ticket: string): Promise<void> {
         throw new Error('The server could not prepare the download.');
       }
       return;
+    }
+    try {
+      const status = await apiFetch<{ status: string; error?: string }>(statusUrl);
+      if (status.status === 'ready') {
+        clearDownloadMarker(ticket);
+        return;
+      }
+      if (status.status === 'error') {
+        clearDownloadMarker(ticket);
+        throw new Error(status.error || 'The server could not prepare the download.');
+      }
+    } catch (error) {
+      // A reported preparation error is final. Short polling/network failures
+      // remain retryable until the ticket timeout.
+      if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        if (
+          message.includes('could not prepare')
+          || message.includes('invalid or expired')
+          || message.includes('not authenticated')
+        ) throw error;
+      }
     }
     if (Date.now() >= deadline) return;
     await new Promise((resolve) => setTimeout(resolve, DOWNLOAD_START_POLL_MS));

@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 import types
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from bs4 import BeautifulSoup
 
 
@@ -32,6 +34,7 @@ from api.services.inkitt_batch_service import (
     InkittBatchRow,
     InkittBatchService,
     InkittBatchState,
+    InkittCrawlPaused,
     classify_inkitt_crawl_error,
     extract_completed_story_refs,
     extract_completed_story_refs_from_api,
@@ -835,9 +838,12 @@ def test_stale_saved_cookies_fall_back_to_clean_anonymous_session(monkeypatch) -
     assert spider._saved_cookie_count == 0
 
 
-def test_static_story_sessions_can_download_concurrently() -> None:
+def test_static_story_sessions_share_one_serial_request_lane(monkeypatch) -> None:
     service = InkittBatchService.__new__(InkittBatchService)
-    barrier = threading.Barrier(2, timeout=2)
+    service._request_lock = threading.Lock()
+    service._rate_lock = threading.Lock()
+    service._last_request_at = 0.0
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", 0.0)
     state_lock = threading.Lock()
     active = 0
     max_active = 0
@@ -848,7 +854,7 @@ def test_static_story_sessions_can_download_concurrently() -> None:
             with state_lock:
                 active += 1
                 max_active = max(max_active, active)
-            barrier.wait()
+            time.sleep(0.02)
             with state_lock:
                 active -= 1
             return types.SimpleNamespace(status_code=200, text="ok", headers={})
@@ -858,7 +864,87 @@ def test_static_story_sessions_can_download_concurrently() -> None:
         responses = list(pool.map(lambda session: service._throttled_get(session, "https://example.test", 0), sessions))
 
     assert [response.status_code for response in responses] == [200, 200]
-    assert max_active == 2
+    assert max_active == 1
+
+
+def test_rate_limit_uses_global_cooldown_and_slower_adaptive_pacing(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._rate_lock = threading.Lock()
+    service._adaptive_request_interval = 1.0
+    service._rate_cooldown_until = 0.0
+    service._rate_limit_events = 0
+    service._rate_limit_total = 0
+    service._successes_since_rate_limit = 0
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.monotonic", lambda: 100.0)
+
+    response = types.SimpleNamespace(headers={})
+    service._register_rate_limit(response)
+    snapshot = service._rate_limit_snapshot()
+
+    assert snapshot["events"] == 1
+    assert snapshot["total"] == 1
+    assert snapshot["request_interval_seconds"] == 1.5
+    assert snapshot["cooldown_remaining_seconds"] == 60.0
+
+
+def test_repeated_rate_limits_pause_instead_of_failing_rows(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._rate_lock = threading.Lock()
+    service._rate_limit_events = 0
+    service._adaptive_request_interval = 1.0
+    service._rate_cooldown_until = 0.0
+    service._log_batch = lambda *_args, **_kwargs: None
+    pause_messages: list[str] = []
+    service._request_rate_limit_pause = lambda _batch_id, message: pause_messages.append(message)
+
+    class FakeSession:
+        pass
+
+    class FakeSpider:
+        _session = FakeSession()
+        _saved_cookie_count = 0
+
+    def fake_get(*_args, **_kwargs):
+        service._rate_limit_events += 1
+        return types.SimpleNamespace(status_code=429, text="", headers={})
+
+    monkeypatch.setattr(service, "_throttled_get", fake_get)
+
+    with pytest.raises(InkittCrawlPaused):
+        service._fetch_spider_html(FakeSpider(), "https://www.inkitt.com/stories/1", 1, batch_id="aaaaaaaa")
+
+    assert service._rate_limit_events == 8
+    assert len(pause_messages) == 1
+
+
+def test_http_429_classifier_keeps_story_queued() -> None:
+    result = classify_inkitt_crawl_error("[inkitt] HTTP 429; retry limit reached")
+
+    assert result["status"] == "queued"
+    assert "remains queued" in result["error"]
+
+
+def test_story_checkpoint_round_trip_preserves_downloaded_chapters(tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    row = InkittBatchRow(
+        index=12,
+        genre="Adventure",
+        genre_slug="adventure",
+        title="Checkpoint Story",
+        url="https://www.inkitt.com/stories/42",
+        story_id="42",
+    )
+    links = [
+        {"chapter_number": 1, "title": "One", "url": "https://www.inkitt.com/stories/42/chapters/1"},
+        {"chapter_number": 2, "title": "Two", "url": "https://www.inkitt.com/stories/42/chapters/2"},
+    ]
+    chapters = [(1, "One", "Saved chapter text", links[0]["url"])]
+
+    service._save_story_checkpoint(tmp_path, row, chapters, [])
+    restored, skipped = service._load_story_checkpoint(tmp_path, row, links)
+
+    assert restored == chapters
+    assert skipped == []
 
 
 def test_short_real_chapter_text_is_not_mistaken_for_login_gate() -> None:
@@ -1004,7 +1090,7 @@ def test_empty_inkitt_chapter_does_not_fail_story_when_later_chapters_are_readab
     </article>
     """
 
-    def fake_fetch(_spider, url, _delay):
+    def fake_fetch(_spider, url, _delay, **_kwargs):
         if url.endswith("/chapters/1"):
             return chapter_one_html
         if url.endswith("/chapters/2"):

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from threading import Lock
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -20,7 +20,10 @@ from api.proxy import streaming_proxy
 from api.service_client import reset_request_identity, set_request_identity
 
 router = APIRouter(tags=["Downloads"])
-_TICKET_TTL_SECONDS = 60
+_TICKET_TTL_SECONDS = max(300, int(os.getenv("DOWNLOAD_TICKET_TTL_SECONDS", "3600")))
+_DOWNLOAD_PREPARE_TIMEOUT_SECONDS = max(
+    300.0, float(os.getenv("DOWNLOAD_PREPARE_TIMEOUT_SECONDS", "1800"))
+)
 _tickets_lock = Lock()
 _tickets: dict[str, "DownloadTicket"] = {}
 
@@ -34,12 +37,14 @@ _BEDREAD_DOWNLOAD = re.compile(r"^/api/bedread/jobs/[0-9a-f]{8}/(?:download|zip)
 _TTS_DOWNLOAD = re.compile(r"^/api/tts/jobs/[0-9a-f-]+/audio$")
 
 
-@dataclass(frozen=True)
+@dataclass
 class DownloadTicket:
     upstream_url: str
     user_id: str
     role: str
     expires_at: float
+    status: str = "pending"
+    error: str = ""
 
 
 class DownloadTicketRequest(BaseModel):
@@ -49,6 +54,13 @@ class DownloadTicketRequest(BaseModel):
 class DownloadTicketResponse(BaseModel):
     ticket: str
     download_url: str
+    status_url: str
+    expires_in: int
+
+
+class DownloadTicketStatusResponse(BaseModel):
+    status: str
+    error: str = ""
     expires_in: int
 
 
@@ -91,12 +103,33 @@ def create_download_ticket(
     return DownloadTicketResponse(
         ticket=token,
         download_url=f"/api/download/{token}",
+        status_url=f"/api/download-ticket/{token}/status",
         expires_in=_TICKET_TTL_SECONDS,
     )
 
 
+@router.get("/api/download-ticket/{token}/status", response_model=DownloadTicketStatusResponse)
+def get_download_ticket_status(
+    token: str,
+    user: User = Depends(require_active_user),
+) -> DownloadTicketStatusResponse:
+    now = time.monotonic()
+    with _tickets_lock:
+        ticket = _tickets.get(token)
+        if ticket is None or ticket.expires_at <= now:
+            _tickets.pop(token, None)
+            raise HTTPException(status_code=404, detail="Download ticket is invalid or expired.")
+        if ticket.user_id != str(user.id):
+            raise HTTPException(status_code=404, detail="Download ticket is invalid or expired.")
+        return DownloadTicketStatusResponse(
+            status=ticket.status,
+            error=ticket.error,
+            expires_in=max(0, int(ticket.expires_at - now)),
+        )
+
+
 @router.get("/api/download/{token}", response_model=None)
-async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse:
+async def redeem_download_ticket(token: str, request: Request) -> StreamingResponse | JSONResponse:
     with _tickets_lock:
         ticket = _tickets.get(token, None)  # multi-use within its TTL to support download managers (e.g. IDM)
     if ticket is None or ticket.expires_at <= time.monotonic():
@@ -104,7 +137,17 @@ async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse
 
     identity_token = set_request_identity(ticket.user_id, ticket.role)
     try:
-        response = await streaming_proxy("GET", ticket.upstream_url, timeout=300.0)
+        forwarded_headers = {
+            name: value
+            for name in ("range", "if-range")
+            if (value := request.headers.get(name))
+        }
+        response = await streaming_proxy(
+            "GET",
+            ticket.upstream_url,
+            headers=forwarded_headers or None,
+            timeout=_DOWNLOAD_PREPARE_TIMEOUT_SECONDS,
+        )
     finally:
         reset_request_identity(identity_token)
 
@@ -113,6 +156,11 @@ async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse
     # batch exports spend minutes zipping before this response even starts).
     marker_cookie = f"cs_download_{token}"
     if response.status_code < 400:
+        with _tickets_lock:
+            current = _tickets.get(token)
+            if current is ticket:
+                current.status = "ready"
+                current.error = ""
         orig_disposition = response.headers.get("content-disposition")
         if orig_disposition:
             if "filename" in orig_disposition:
@@ -124,13 +172,18 @@ async def redeem_download_ticket(token: str) -> StreamingResponse | JSONResponse
                 response.headers["Content-Disposition"] = "attachment"
         else:
             response.headers["Content-Disposition"] = "attachment"
-        response.set_cookie(marker_cookie, "1", max_age=300, path="/", samesite="lax")
+        response.set_cookie(marker_cookie, "1", max_age=_TICKET_TTL_SECONDS, path="/", samesite="lax")
     else:
+        with _tickets_lock:
+            current = _tickets.get(token)
+            if current is ticket:
+                current.status = "error"
+                current.error = "The server could not prepare the download."
         # Prevent downloading error responses (like 404 or 401) as files.
         # (MutableHeaders has no .pop(); the del is case-insensitive.)
         if "content-disposition" in response.headers:
             del response.headers["content-disposition"]
-        response.set_cookie(marker_cookie, "error", max_age=300, path="/", samesite="lax")
+        response.set_cookie(marker_cookie, "error", max_age=_TICKET_TTL_SECONDS, path="/", samesite="lax")
 
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"

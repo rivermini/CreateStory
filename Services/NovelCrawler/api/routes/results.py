@@ -8,19 +8,22 @@ import tempfile
 import zipfile
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from api.models.crawl_request import CrawlResult, OutputFile
+from api.services.archive_cache import get_or_build_cached_zip
 from api.services.crawler_service import chapter_record_from_output_file, get_crawl_service
 from api.services.file_service import CrawlPathError, get_file_service
 from api.service_auth import require_owner
 from utils.sanitize import sanitize_filename
 
 logger = logging.getLogger(__name__)
+INKITT_ARCHIVE_COMPRESSION_LEVEL = max(0, min(int(os.getenv("INKITT_ARCHIVE_COMPRESSION_LEVEL", "1")), 9))
 
 
 class DeleteRequest(BaseModel):
@@ -248,8 +251,12 @@ async def download_goodnovel_batch(batch_id: str, request: Request) -> FileRespo
     return _zip_file_response(files, f"goodnovel_batch_{batch_id}.zip")
 
 
-@router.get("/inkitt-batch/{batch_id}/download")
-async def download_inkitt_batch(batch_id: str, request: Request, run_id: str | None = Query(default=None)) -> FileResponse:
+@router.get("/inkitt-batch/{batch_id}/download", response_model=None)
+def download_inkitt_batch(
+    batch_id: str,
+    request: Request,
+    run_id: str | None = Query(default=None),
+) -> FileResponse | StreamingResponse | Response:
     """Zip the genre-grouped combined files for a completed Inkitt batch."""
     from api.services.inkitt_batch_service import get_inkitt_batch_service
 
@@ -260,7 +267,7 @@ async def download_inkitt_batch(batch_id: str, request: Request, run_id: str | N
             user_id=getattr(request.state, "create_story_user_id", None),
             role=getattr(request.state, "create_story_role", None),
         )
-        _state, files = service.get_download_files(batch_id, run_id=run_id)
+        state, files = service.get_download_files(batch_id, run_id=run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -269,9 +276,81 @@ async def download_inkitt_batch(batch_id: str, request: Request, run_id: str | N
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     suffix = f"_{run_id}" if run_id else ""
-    return _zip_file_response(files, f"inkitt_batch_{batch_id}{suffix}.zip")
+    output_dir = Path(state.output_dir).resolve()
+    archive_path = get_or_build_cached_zip(
+        files,
+        output_dir / ".archives",
+        f"inkitt_batch_{batch_id}{suffix}",
+        compression_level=INKITT_ARCHIVE_COMPRESSION_LEVEL,
+    )
+    return _range_file_response(
+        archive_path,
+        f"inkitt_batch_{batch_id}{suffix}.zip",
+        request,
+    )
 
 
+def _attachment_disposition(filename: str) -> str:
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii").replace('"', "") or "download.zip"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+
+
+def _range_file_response(path: Path, filename: str, request: Request) -> FileResponse | StreamingResponse | Response:
+    """Serve a persistent archive with explicit single-range support for IDM."""
+    size = path.stat().st_size
+    range_header = request.headers.get("range")
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": _attachment_disposition(filename),
+    }
+    if not range_header:
+        return FileResponse(
+            path,
+            media_type="application/zip",
+            filename=filename,
+            headers={"Accept-Ranges": "bytes"},
+        )
+
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip(), flags=re.IGNORECASE)
+    if not match or (not match.group(1) and not match.group(2)) or size <= 0:
+        return Response(status_code=416, headers={**common_headers, "Content-Range": f"bytes */{size}"})
+
+    start_text, end_text = match.groups()
+    if start_text:
+        start = int(start_text)
+        end = min(int(end_text), size - 1) if end_text else size - 1
+    else:
+        suffix_length = int(end_text)
+        if suffix_length <= 0:
+            return Response(status_code=416, headers={**common_headers, "Content-Range": f"bytes */{size}"})
+        start = max(0, size - suffix_length)
+        end = size - 1
+    if start >= size or end < start:
+        return Response(status_code=416, headers={**common_headers, "Content-Range": f"bytes */{size}"})
+
+    length = end - start + 1
+
+    def stream_range():
+        with path.open("rb") as archive:
+            archive.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = archive.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    return StreamingResponse(
+        stream_range(),
+        status_code=206,
+        media_type="application/zip",
+        headers={
+            **common_headers,
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Content-Length": str(length),
+        },
+    )
 @router.get("/{crawl_id}/download-all")
 async def download_all_files(crawl_id: str, request: Request) -> FileResponse:
     """Zip all output files from a crawl session and stream as a single download."""
