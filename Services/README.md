@@ -1,6 +1,6 @@
 # CreateStory Services
 
-Docker Compose orchestration for the local CreateStory PC.
+Docker Compose orchestration for the local CreateStory PC
 
 Your current team access model is Cloudflare-managed routes on the existing `create story` tunnel:
 
