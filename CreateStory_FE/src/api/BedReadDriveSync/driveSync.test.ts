@@ -40,6 +40,31 @@ describe('DriveSync batch job API', () => {
     });
   });
 
+  it('submits update jobs as one idempotent batch with per-story limits', async () => {
+    const request = {
+      client_batch_id: 'drive-update-123',
+      jobs: [
+        {
+          kind: 'update_single' as const,
+          folder_id: 'folder-1',
+          folder_name: 'Story',
+          display_name: 'Story',
+          chapters_count: 4,
+        },
+      ],
+    };
+
+    await createJobsBatch(request);
+
+    expect(apiFetchMock).toHaveBeenCalledOnce();
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/drive-sync/jobs/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      timeout: 30000,
+    });
+  });
+
   it('queries all tracked job statuses in one request', async () => {
     await queryJobs(['job-1', 'job-2', 'job-3']);
 

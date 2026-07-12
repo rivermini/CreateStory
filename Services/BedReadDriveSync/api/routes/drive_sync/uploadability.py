@@ -24,10 +24,19 @@ from api.routes.drive_sync.utils import (
 logger = logging.getLogger(__name__)
 
 
-async def _load_drive_folders_and_server_stories(service) -> tuple[list[dict], list[dict]]:
+async def _load_drive_folders_and_server_stories(
+    service,
+    *,
+    refresh_drive_folders: bool = False,
+) -> tuple[list[dict], list[dict]]:
     """Fetch Drive folders and server stories concurrently for check endpoints."""
     drive_result, server_stories = await asyncio.gather(
-        asyncio.to_thread(service.list_drive_folders, limit=10000, offset=0),
+        asyncio.to_thread(
+            service.list_drive_folders,
+            limit=10000,
+            offset=0,
+            refresh=refresh_drive_folders,
+        ),
         asyncio.to_thread(service.get_all_server_stories),
     )
     drive_folders_raw, _ = drive_result
@@ -168,7 +177,10 @@ async def check_uploadable() -> CheckUploadableResponse:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
-        drive_folders_raw, server_stories = await _load_drive_folders_and_server_stories(service)
+        drive_folders_raw, server_stories = await _load_drive_folders_and_server_stories(
+            service,
+            refresh_drive_folders=True,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -286,7 +298,10 @@ async def check_updatable() -> CheckUpdatableResponse:
         raise HTTPException(status_code=400, detail="Drive sync not configured.")
 
     try:
-        drive_folders_raw, server_stories = await _load_drive_folders_and_server_stories(service)
+        drive_folders_raw, server_stories = await _load_drive_folders_and_server_stories(
+            service,
+            refresh_drive_folders=True,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

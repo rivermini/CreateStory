@@ -32,10 +32,16 @@ import { PageShell, PageHeader, Surface } from '../../components/Shared/Primitiv
 const UPLOAD_POLL_INTERVAL_MS = 4000;
 const UPLOAD_POLL_MAX_BACKOFF_MS = 30000;
 const UPLOAD_BATCH_SESSION_KEY = 'drivesync_active_upload_batch';
+const UPDATE_BATCH_SESSION_KEY = 'drivesync_active_update_batch';
 
 interface StoredUploadBatch {
   id: string;
   folderIds: string[];
+}
+
+interface StoredUpdateBatch {
+  id: string;
+  storyIds: string[];
 }
 
 function readStoredUploadBatch(): StoredUploadBatch | null {
@@ -64,11 +70,11 @@ function clearStoredUploadBatch(expectedId?: string) {
   }
 }
 
-function makeBatchId(): string {
+function makeBatchId(kind: 'upload' | 'update' = 'upload'): string {
   const suffix = typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `drive-upload-${suffix}`;
+  return `drive-${kind}-${suffix}`;
 }
 
 function getOrCreateBatch(folderIds: string[]): StoredUploadBatch {
@@ -85,6 +91,42 @@ function getOrCreateBatch(folderIds: string[]): StoredUploadBatch {
   const batch = { id: makeBatchId(), folderIds: normalizedIds };
   storeUploadBatch(batch);
   return batch;
+}
+
+function readStoredUpdateBatch(): StoredUpdateBatch | null {
+  try {
+    const raw = sessionStorage.getItem(UPDATE_BATCH_SESSION_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<StoredUpdateBatch>;
+    if (typeof value.id !== 'string' || !Array.isArray(value.storyIds)) return null;
+    return {
+      id: value.id,
+      storyIds: value.storyIds.filter((item): item is string => typeof item === 'string'),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getOrCreateUpdateBatch(storyIds: string[]): StoredUpdateBatch {
+  const normalizedIds = [...storyIds].sort();
+  const stored = readStoredUpdateBatch();
+  if (
+    stored
+    && stored.storyIds.length === normalizedIds.length
+    && stored.storyIds.every((id, index) => id === normalizedIds[index])
+  ) {
+    return stored;
+  }
+
+  const batch = { id: makeBatchId('update'), storyIds: normalizedIds };
+  sessionStorage.setItem(UPDATE_BATCH_SESSION_KEY, JSON.stringify(batch));
+  return batch;
+}
+
+function clearStoredUpdateBatch(expectedId: string) {
+  const stored = readStoredUpdateBatch();
+  if (stored?.id === expectedId) sessionStorage.removeItem(UPDATE_BATCH_SESSION_KEY);
 }
 
 function isActiveJobStatus(status: SyncJobStatus): status is 'queued' | 'running' {
@@ -622,12 +664,96 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
   const handleUpdateAll = useCallback(
     async (entries: UpdatableStoryEntry[], chapterInputs: Map<string, number>) => {
       if (entries.length === 0) return;
-      for (const entry of entries) {
-        const count = chapterInputs.get(entry.server_story.id) ?? 1;
-        handleUpdateSingle(entry, count);
+
+      const available = entries.filter((entry) => {
+        const lockKey = entry.server_story.id || entry.folder.id;
+        return !updateLocksRef.current.has(lockKey);
+      });
+      if (available.length === 0) return;
+
+      for (const entry of available) {
+        updateLocksRef.current.add(entry.server_story.id || entry.folder.id);
+      }
+      setUpdateResults((prev) => {
+        const next = new Map(prev);
+        for (const entry of available) next.delete(entry.server_story.id);
+        return next;
+      });
+      setUpdatingJobs((prev) => {
+        const next = new Map(prev);
+        for (const entry of available) next.set(entry.server_story.id, 'pending');
+        return next;
+      });
+
+      const batch = getOrCreateUpdateBatch(available.map((entry) => entry.server_story.id));
+
+      try {
+        const response = await createJobsBatch({
+          client_batch_id: batch.id,
+          jobs: available.map((entry) => ({
+            kind: 'update_single',
+            folder_id: entry.folder.id,
+            folder_name: entry.folder.display_name,
+            display_name: entry.folder.display_name,
+            main_be_api_base_url: config?.main_be_api_base_url,
+            chapters_count: chapterInputs.get(entry.server_story.id) ?? 1,
+          })),
+        });
+
+        const returnedJobs = response.jobs.slice(0, available.length);
+        setUpdatingJobs((prev) => {
+          const next = new Map(prev);
+          for (const [index, entry] of available.entries()) {
+            const job = returnedJobs[index];
+            if (job) next.set(entry.server_story.id, job.id);
+            else next.delete(entry.server_story.id);
+          }
+          return next;
+        });
+
+        for (const [index, job] of returnedJobs.entries()) {
+          const entry = available[index];
+          const lockKey = entry.server_story.id || entry.folder.id;
+          pollUpdate(job.id, entry.server_story.id, lockKey, setUpdateResults, setUpdatingJobs, updateLocksRef);
+        }
+
+        if (returnedJobs.length < available.length) {
+          setUpdateResults((prev) => {
+            const next = new Map(prev);
+            for (const entry of available.slice(returnedJobs.length)) {
+              updateLocksRef.current.delete(entry.server_story.id || entry.folder.id);
+              next.set(entry.server_story.id, {
+                success: false,
+                message: 'The server did not return a job for this story.',
+              });
+            }
+            return next;
+          });
+        }
+
+        clearStoredUpdateBatch(response.client_batch_id);
+      } catch (error) {
+        for (const entry of available) {
+          updateLocksRef.current.delete(entry.server_story.id || entry.folder.id);
+        }
+        setUpdatingJobs((prev) => {
+          const next = new Map(prev);
+          for (const entry of available) next.delete(entry.server_story.id);
+          return next;
+        });
+        setUpdateResults((prev) => {
+          const next = new Map(prev);
+          for (const entry of available) {
+            next.set(entry.server_story.id, {
+              success: false,
+              message: error instanceof Error ? error.message : 'Failed to enqueue update batch',
+            });
+          }
+          return next;
+        });
       }
     },
-    [handleUpdateSingle],
+    [config],
   );
 
   const pendingUploadCount = Array.from(uploadingJobs.values()).filter(

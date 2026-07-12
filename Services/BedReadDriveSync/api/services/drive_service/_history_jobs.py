@@ -293,16 +293,21 @@ class HistoryJobsMixin:
     # Browse / preview
     # -------------------------------------------------------------------------
 
-    def list_drive_folders(self, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
+    def list_drive_folders(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        refresh: bool = False,
+    ) -> tuple[list[dict], int]:
         """
         List story folders (DONE_/EXTENDED_/ING_/INCOMPLETE_) sorted by name.
-        Results are cached for 60 seconds.
+        Results are cached for 60 seconds unless ``refresh`` is true.
         """
         import time as _time
 
         cache_key = ("_all_story_folders", self._config.folder_id)
 
-        cached_sorted = self._folder_cache.get(cache_key)
+        cached_sorted = None if refresh else self._folder_cache.get(cache_key)
         if cached_sorted is not None:
             cached_ts, sorted_folders = cached_sorted
             if _time.time() - cached_ts < 60.0:
