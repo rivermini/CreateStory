@@ -17,7 +17,7 @@ Your current team access model is Cloudflare-managed routes on the existing `cre
 The gateway is the only public backend entry point. Worker APIs stay internal;
 PostgreSQL is bound to `127.0.0.1` for local administration and is not exposed
 to the LAN. Restarting the Gateway interrupts new browser requests only; queued
-and running worker jobs continue in their owning service.
+and running worker jobs continue in their owning service
 
 ## Database ownership
 
