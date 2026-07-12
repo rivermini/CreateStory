@@ -78,8 +78,12 @@ class _RetryTransport(httpx.AsyncBaseTransport):
                     and attempt < self._retries
                     and response.status_code in self._retry_on
                 ):
+                    # Release the discarded response's connection back to the
+                    # pool before retrying, or each retry leaks a pool slot
+                    # until every proxied request blocks forever.
+                    await response.aclose()
                     await asyncio.sleep(self._backoff_factor * (2**attempt))
-                    request = request.copy()
+                    # Idempotent methods are body-less; the request is safe to resend as-is.
                     continue
                 return response
             except (
@@ -91,7 +95,6 @@ class _RetryTransport(httpx.AsyncBaseTransport):
                 last_exc = exc
                 if is_idempotent and attempt < self._retries:
                     await asyncio.sleep(self._backoff_factor * (2**attempt))
-                    request = request.copy()
                     continue
                 raise
         raise last_exc or RuntimeError("RetryTransport: unexpected retry exhaustion")
