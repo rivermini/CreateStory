@@ -1,5 +1,6 @@
 import {
   type MetadataCheckAllResponse,
+  type MetadataUpdateEntry,
 } from '../../../api';
 import { MetadataUpdateTabContent } from './MetadataUpdateTabContent';
 import type { ThemeMode } from '../../../types/theme';
@@ -12,6 +13,7 @@ export interface MetadataUpdateTabsProps {
   updatingIds: Set<string>;
   onCheckAll: () => void;
   onUpdateMetadata: (folderId: string, storyId: string, differences: import('../../../api/types').MetadataFieldDifference[]) => Promise<void>;
+  onUpdateAllMetadata: (entries: MetadataUpdateEntry[]) => Promise<void>;
   themeMode: ThemeMode;
 }
 
@@ -23,6 +25,7 @@ export function MetadataUpdateTabs({
   updatingIds,
   onCheckAll,
   onUpdateMetadata,
+  onUpdateAllMetadata,
   themeMode,
 }: Readonly<MetadataUpdateTabsProps>) {
   const isDark = themeMode === 'dark';
@@ -80,6 +83,7 @@ export function MetadataUpdateTabs({
           updatingIds={updatingIds}
           onCheckAll={onCheckAll}
           onUpdateMetadata={onUpdateMetadata}
+          onUpdateAllMetadata={onUpdateAllMetadata}
           themeMode={themeMode}
         />
       </div>

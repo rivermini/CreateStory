@@ -1,8 +1,12 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   checkMetadataUpdateAll,
+  createJobsBatch,
+  listJobs,
+  queryJobs,
   updateMetadata,
   type MetadataCheckAllResponse,
+  type MetadataUpdateEntry,
 } from '../../api/BedReadDriveSync';
 import { MetadataUpdateTabs } from '../../components/BedReadDriveSync/MetadataUpdate/MetadataUpdateTabs';
 import { Icon, appIcons } from '../../components/Shared/Icon';
@@ -15,6 +19,35 @@ import type { MetadataFieldDifference } from '../../api/types';
 
 interface MetadataUpdatePageProps {
   readonly themeMode: ThemeMode;
+}
+
+const METADATA_BATCH_SESSION_KEY = 'drivesync_active_metadata_batch';
+
+interface StoredMetadataBatch {
+  id: string;
+  folderIds: string[];
+}
+
+function readStoredMetadataBatch(): StoredMetadataBatch | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(METADATA_BATCH_SESSION_KEY) ?? 'null') as Partial<StoredMetadataBatch> | null;
+    if (!value || typeof value.id !== 'string' || !Array.isArray(value.folderIds)) return null;
+    return { id: value.id, folderIds: value.folderIds.filter((id): id is string => typeof id === 'string') };
+  } catch {
+    return null;
+  }
+}
+
+function getOrCreateMetadataBatch(folderIds: string[]): StoredMetadataBatch {
+  const normalized = [...folderIds].sort();
+  const stored = readStoredMetadataBatch();
+  if (stored && stored.folderIds.length === normalized.length && stored.folderIds.every((id, i) => id === normalized[i])) {
+    return stored;
+  }
+  const suffix = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const batch = { id: `drive-metadata-${suffix}`, folderIds: normalized };
+  sessionStorage.setItem(METADATA_BATCH_SESSION_KEY, JSON.stringify(batch));
+  return batch;
 }
 
 export function MetadataUpdatePage({ themeMode }: MetadataUpdatePageProps) {
@@ -37,8 +70,68 @@ export function MetadataUpdatePage({ themeMode }: MetadataUpdatePageProps) {
 
   const [updateResults, setUpdateResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
+  const [metadataJobs, setMetadataJobs] = useState<Map<string, string>>(new Map());
   const updateLocksRef = useRef<Set<string>>(new Set());
   const updateResultVersionRef = useRef(0);
+
+  const applyFinishedJobs = useCallback((jobs: Awaited<ReturnType<typeof queryJobs>>['jobs']) => {
+    const finished = jobs.filter((job) => job.status !== 'queued' && job.status !== 'running');
+    if (finished.length === 0) return;
+    setUpdateResults((prev) => {
+      const next = new Map(prev);
+      for (const job of finished) {
+        next.set(job.folder_id, {
+          success: job.status === 'success',
+          message: job.result_message ?? job.error ?? (job.status === 'success' ? 'Metadata updated.' : 'Metadata update failed.'),
+        });
+      }
+      return next;
+    });
+    setMetadataJobs((prev) => {
+      const next = new Map(prev);
+      for (const job of finished) next.delete(job.folder_id);
+      return next;
+    });
+    setUpdatingIds((prev) => {
+      const next = new Set(prev);
+      for (const job of finished) next.delete(job.folder_id);
+      return next;
+    });
+    for (const job of finished) updateLocksRef.current.delete(job.folder_id);
+  }, []);
+
+  useEffect(() => {
+    const stored = readStoredMetadataBatch();
+    if (!stored) return;
+    let cancelled = false;
+    void listJobs(500, 0, { kind: 'metadata_update' }).then(({ jobs }) => {
+      if (cancelled) return;
+      const batchJobs = jobs.filter((job) => job.client_batch_id === stored.id);
+      applyFinishedJobs(batchJobs);
+      const active = batchJobs.filter((job) => job.status === 'queued' || job.status === 'running');
+      if (active.length === 0 && batchJobs.length > 0) sessionStorage.removeItem(METADATA_BATCH_SESSION_KEY);
+      setMetadataJobs(new Map(active.map((job) => [job.folder_id, job.id])));
+      setUpdatingIds(new Set(active.map((job) => job.folder_id)));
+      for (const job of active) updateLocksRef.current.add(job.folder_id);
+    });
+    return () => { cancelled = true; };
+  }, [applyFinishedJobs]);
+
+  useEffect(() => {
+    if (metadataJobs.size === 0) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await queryJobs(Array.from(metadataJobs.values()));
+        if (!cancelled) applyFinishedJobs(response.jobs);
+      } catch {
+        // Keep polling; persisted jobs continue safely on the backend.
+      }
+    };
+    void poll();
+    const interval = setInterval(() => void poll(), 4000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [applyFinishedJobs, metadataJobs]);
 
   const pageBackground = 'var(--cs-page)';
   const panelBackground = 'var(--cs-surface-elevated)';
@@ -98,6 +191,36 @@ export function MetadataUpdatePage({ themeMode }: MetadataUpdatePageProps) {
         next.delete(folderId);
         return next;
       });
+    }
+  };
+
+  const handleUpdateAllMetadata = async (entries: MetadataUpdateEntry[]) => {
+    const available = entries.filter((entry) => entry.story_id && !updateLocksRef.current.has(entry.folder_id));
+    if (available.length === 0) return;
+    const batch = getOrCreateMetadataBatch(available.map((entry) => entry.folder_id));
+    for (const entry of available) updateLocksRef.current.add(entry.folder_id);
+    setUpdatingIds((prev) => new Set([...prev, ...available.map((entry) => entry.folder_id)]));
+    try {
+      const response = await createJobsBatch({
+        client_batch_id: batch.id,
+        jobs: available.map((entry) => ({
+          kind: 'metadata_update',
+          folder_id: entry.folder_id,
+          folder_name: entry.folder_name,
+          display_name: `${entry.story_title} - Metadata update`,
+          main_be_api_base_url: config?.main_be_api_base_url,
+          payload: { story_id: entry.story_id, differences: entry.differences },
+        })),
+      });
+      setMetadataJobs(new Map(response.jobs.map((job, index) => [available[index].folder_id, job.id])));
+    } catch (error) {
+      for (const entry of available) updateLocksRef.current.delete(entry.folder_id);
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        for (const entry of available) next.delete(entry.folder_id);
+        return next;
+      });
+      showToast(error instanceof Error ? error.message : 'Failed to enqueue metadata batch.', 'error', 4000, 'top-center');
     }
   };
 
@@ -193,6 +316,7 @@ export function MetadataUpdatePage({ themeMode }: MetadataUpdatePageProps) {
               updatingIds={updatingIds}
               onCheckAll={handleCheckAll}
               onUpdateMetadata={handleUpdateMetadata}
+              onUpdateAllMetadata={handleUpdateAllMetadata}
               themeMode={themeMode}
             />
           )}

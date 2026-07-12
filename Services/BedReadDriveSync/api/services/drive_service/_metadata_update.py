@@ -1111,7 +1111,7 @@ class MetadataUpdateMixin:
 
         # Step 1: List folders + server stories
         with _Phase("1-list_drive_folders"):
-            drive_folders_raw, _ = self.list_drive_folders(limit=10000, offset=0)
+            drive_folders_raw, _ = self.list_drive_folders(limit=10000, offset=0, refresh=True)
         target_folders = [f for f in drive_folders_raw if _is_cover_update_folder(f)]
         if not target_folders:
             return {"can_update": [], "all_match": [], "no_server_match": []}

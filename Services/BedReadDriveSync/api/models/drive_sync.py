@@ -218,6 +218,7 @@ class JobCreateRequest(BaseModel):
     display_name: str
     main_be_api_base_url: Optional[str] = None
     chapters_count: Optional[int] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobCreateResponse(BaseModel):

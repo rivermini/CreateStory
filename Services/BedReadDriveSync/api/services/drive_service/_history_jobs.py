@@ -743,7 +743,7 @@ class HistoryJobsMixin:
         return selected_job, created
 
     def create_job_batch(self, client_batch_id: str, requests: list) -> tuple[list["SyncJob"], bool]:
-        """Atomically enqueue up to 500 upload/update jobs with request idempotency."""
+        """Atomically enqueue up to 500 supported jobs with request idempotency."""
         from api.models.drive_sync import JobKind, JobStatus, SyncJob
 
         batch_id = client_batch_id.strip()
@@ -753,7 +753,7 @@ class HistoryJobsMixin:
             raise ValueError("client_batch_id must be 128 characters or fewer.")
         if not requests or len(requests) > 500:
             raise ValueError("A batch must contain between 1 and 500 jobs.")
-        allowed = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE}
+        allowed = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.METADATA_UPDATE}
         created_at = datetime.now(timezone.utc).isoformat()
         jobs: list["SyncJob"] = []
         for request in requests:
@@ -769,6 +769,7 @@ class HistoryJobsMixin:
                 created_at=created_at,
                 main_be_api_base_url=request.main_be_api_base_url,
                 chapters_count=request.chapters_count,
+                payload=request.payload,
             ))
         persisted, created = self._repo.insert_job_batch(jobs, batch_id)
         if created:

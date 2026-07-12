@@ -144,6 +144,30 @@ def test_batch_retry_returns_original_jobs_without_duplicates():
     assert len(first) == 200
 
 
+def test_metadata_batch_persists_payload_and_is_idempotent():
+    service = HistoryJobsMixin.__new__(HistoryJobsMixin)
+    service._repo = _BatchRepository()
+    service.notify_job_dispatcher = lambda: None
+    request = JobCreateRequest(
+        kind="metadata_update",
+        folder_id="folder-1",
+        folder_name="DONE_Story",
+        display_name="Story - Metadata update",
+        payload={
+            "story_id": "story-1",
+            "differences": [{"field": "synopsis", "folder_value": "New", "server_value": "Old"}],
+        },
+    )
+
+    first, first_created = service.create_job_batch("metadata-batch-1", [request])
+    retry, retry_created = service.create_job_batch("metadata-batch-1", [request])
+
+    assert first_created is True
+    assert retry_created is False
+    assert retry[0].id == first[0].id
+    assert first[0].payload == request.payload
+
+
 def test_full_sync_discovers_folders_then_uses_the_persistent_batch_queue():
     service = HistoryJobsMixin.__new__(HistoryJobsMixin)
     service._config = SimpleNamespace(

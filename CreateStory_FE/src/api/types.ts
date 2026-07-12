@@ -931,12 +931,13 @@ export interface JobLogEntry {
 }
 
 export interface JobCreateRequest {
-  kind: 'upload_single' | 'update_single';
+  kind: 'upload_single' | 'update_single' | 'metadata_update';
   folder_id: string;
   folder_name: string;
   display_name: string;
   main_be_api_base_url?: string;
   chapters_count?: number;
+  payload?: Record<string, unknown>;
 }
 
 export interface JobCreateResponse {
