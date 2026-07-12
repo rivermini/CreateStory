@@ -42,12 +42,12 @@ services:
       retries: 5
       start_period: 10s
 
-  # Idempotently provisions one private role/database per application service.
-  # Application containers wait for this one-shot service before running their
-  # own Alembic migration chain.
+  # On-demand setup tool: `task database:provision` runs this with `--rm` before
+  # supported start/update workflows. Keeping it behind a profile prevents an
+  # exited setup container from being retained as part of the runtime stack.
   database_provisioner:
     image: postgres:18
-    container_name: create-story-database-provisioner
+    profiles: ["tools"]
     restart: "no"
     logging: *default-logging
     security_opt:
@@ -127,8 +127,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      database_provisioner:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api', timeout=5)\""]
       interval: 10s
@@ -208,8 +206,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      database_provisioner:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api', timeout=5)\""]
       interval: 10s
@@ -266,8 +262,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      database_provisioner:
-        condition: service_completed_successfully
       flaresolverr:
         condition: service_started
     healthcheck:
@@ -348,8 +342,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      database_provisioner:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/api', timeout=5)\""]
       interval: 10s
@@ -392,8 +384,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      database_provisioner:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/api', timeout=5)\""]
       interval: 10s
@@ -456,6 +446,38 @@ services:
       - sh
       - -c
       - sed 's/\r$//' /opt/create-story/migrate_databases.sh > /tmp/migrate_databases.sh && sh /tmp/migrate_databases.sh
+    networks:
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Disposable backup/restore utility. It is never part of the running stack;
+  # Task invokes it with `docker compose run --rm`.
+  database_backup:
+    image: postgres:18
+    profiles: ["tools"]
+    restart: "no"
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      BACKUP_MODE: ${BACKUP_MODE:-backup}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    secrets:
+      - postgres_password
+      - gateway_database_url
+      - crawler_database_url
+      - voices_database_url
+      - drive_sync_database_url
+      - auto_audio_database_url
+    volumes:
+      - ./scripts/backup_databases.sh:/opt/create-story/backup_databases.sh:ro
+      - C:/ProgramData/CreateStory/backups:/backups
+    command:
+      - sh
+      - -c
+      - sed 's/\r$//' /opt/create-story/backup_databases.sh > /tmp/backup_databases.sh && sh /tmp/backup_databases.sh
     networks:
       - database
     depends_on:

@@ -169,6 +169,32 @@ upgraded by the new code. While rollback is active, include that override in
 later Compose commands. It is not a post-cutover data merge: writes accepted by
 the new databases are not copied back to the legacy database.
 
+### Recurring database backups
+
+The post-migration databases have a separate backup workflow. Backups are stored
+under `C:\ProgramData\CreateStory\backups\service-databases` as timestamped,
+checksummed sets containing Gateway, Crawler, Voices, DriveSync, and AutoAudio.
+The backup utility is disposable and does not leave a container behind.
+
+```powershell
+task backup:database          # create and verify a backup now
+task backup:list              # list complete backup sets
+task backup:schedule-install  # daily at 03:00, retain 14 days
+task backup:restore-latest    # guarded full restore + service restart
+task backup:restore -- 20260712T012618Z  # restore a selected backup
+```
+
+To change the schedule, reinstall it with options, for example:
+`task backup:schedule-install -- -ScheduleTime 02:00 -RetentionDays 30`.
+
+Restore verifies checksums before changing anything and creates a fresh safety
+backup first. It then stops application writers, recreates all five databases,
+restores the latest complete set, and starts workers before the Gateway and
+frontend. If restore fails, application services remain stopped and the safety
+backup name is printed. Scheduled backups require Docker Desktop to be running
+and the installing Windows user to be signed in. Remove the schedule with
+`task backup:schedule-remove`.
+
 ## Layout
 
 - `docker-compose.yml` - local stack definition

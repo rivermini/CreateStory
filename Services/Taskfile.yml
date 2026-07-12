@@ -11,13 +11,13 @@ tasks:
 
   start:
     desc: "Build and start the backend compose stack in the foreground"
-    deps: ["secrets:ensure"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up --build {{.CLI_ARGS}}
 
   start:bg:
     desc: "Build and start the backend compose stack in the background"
-    deps: ["secrets:ensure"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build {{.CLI_ARGS}}
 
@@ -59,10 +59,41 @@ tasks:
       - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup_secrets.ps1 -Mode ensure -SecretDirectory ./.ci-secrets
 
   "database:provision":
-    desc: "Idempotently create/update the five service databases and restricted roles"
+    desc: "Run the disposable setup tool to create/update service databases and roles"
     deps: ["secrets:ensure"]
     cmds:
       - docker compose run --rm database_provisioner
+      - docker rm -f create-story-database-provisioner 2>nul || true
+
+  "backup:database":
+    desc: "Create and verify a backup set for all five service databases"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_backup.ps1 -Mode backup
+
+  "backup:list":
+    desc: "List complete service-database backup sets"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_backup.ps1 -Mode list
+
+  "backup:restore-latest":
+    desc: "Safely restore all five databases from the latest complete backup"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_backup.ps1 -Mode restore-latest
+
+  "backup:restore":
+    desc: "Restore a selected backup ID: task backup:restore -- YYYYMMDDTHHMMSSZ"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_backup.ps1 -Mode restore -BackupSet "{{.CLI_ARGS}}"
+
+  "backup:schedule-install":
+    desc: "Install daily backup schedule (default 03:00/14 days; accepts PowerShell options)"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_backup.ps1 -Mode schedule-install {{.CLI_ARGS}}
+
+  "backup:schedule-remove":
+    desc: "Remove the Windows daily database-backup schedule"
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/database_backup.ps1 -Mode schedule-remove
 
   "migration:plan":
     desc: "Read-only inventory of legacy rows and their target service database"
@@ -110,7 +141,7 @@ tasks:
 
   "update:all":
     desc: "Build frontend, rebuild, and reload all compose services"
-    deps: ["secrets:ensure"]
+    deps: ["database:provision"]
     cmds:
       - task: "build:frontend"
       - docker compose up -d --build
@@ -118,49 +149,49 @@ tasks:
 
   "update:all-noFE":
     desc: "Rebuild and reload all compose services, skipping frontend compilation"
-    deps: ["secrets:ensure"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build
       - docker image prune -f 2>nul || true
 
   "update:backend":
     desc: "Rebuild and reload all backend compose services (no frontend build)"
-    deps: ["secrets:ensure"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build postgres fastapi_gateway bedread_voices novel_crawler flaresolverr bedread_drive_sync auto_audio
       - docker image prune -f 2>nul || true
 
   "update:gateway":
     desc: "Update fastapi_gateway service (no-deps rebuild)"
-    deps: ["secrets:ensure", "database:provision"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build --no-deps fastapi_gateway
       - docker image prune -f 2>nul || true
 
   "update:voices":
     desc: "Update bedread_voices service (no-deps rebuild)"
-    deps: ["secrets:ensure", "database:provision"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build --no-deps bedread_voices
       - docker image prune -f 2>nul || true
 
   "update:crawler":
     desc: "Update novel_crawler service (no-deps rebuild)"
-    deps: ["secrets:ensure", "database:provision"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build --no-deps novel_crawler
       - docker image prune -f 2>nul || true
 
   "update:sync":
     desc: "Update bedread_drive_sync service (no-deps rebuild)"
-    deps: ["secrets:ensure", "database:provision"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build --no-deps bedread_drive_sync
       - docker image prune -f 2>nul || true
 
   "update:audio":
     desc: "Update auto_audio service (no-deps rebuild)"
-    deps: ["secrets:ensure", "database:provision"]
+    deps: ["database:provision"]
     cmds:
       - docker compose up -d --build --no-deps auto_audio
       - docker image prune -f 2>nul || true
