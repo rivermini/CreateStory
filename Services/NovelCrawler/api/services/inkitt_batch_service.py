@@ -36,6 +36,10 @@ INKITT_DISCOVER_RETRY_TIMES = int(os.getenv("INKITT_DISCOVER_RETRY_TIMES", "6"))
 INKITT_DISCOVER_RETRY_BASE_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_BASE_SECONDS", "15"))
 INKITT_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("INKITT_DISCOVER_RETRY_MAX_SECONDS", "120"))
 INKITT_DISCOVER_RETRY_HTTP_CODES = {429, 500, 502, 503, 504}
+INKITT_CRAWL_RETRY_HTTP_CODES = {408, 425, 429, 500, 502, 503, 504}
+INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS = max(
+    0.25, float(os.getenv("INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "0.5"))
+)
 INKITT_RENDERED_FALLBACK = os.getenv("INKITT_RENDERED_FALLBACK", "1").strip().lower() not in {"0", "false", "no"}
 INKITT_RENDERED_FALLBACK_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_WORDS", "120"))
 INKITT_RENDERED_FALLBACK_TINY_WORDS = int(os.getenv("INKITT_RENDERED_FALLBACK_TINY_WORDS", "12"))
@@ -158,8 +162,13 @@ class InkittBatchService:
         self._exported_story_index_file = self._batch_root / "exported_story_index.json"
         self._discovery_progress_file = self._batch_root / "discovery_progress.json"
         self._last_persist_at = 0.0
+        # Chromium is a singleton and must stay serialized. Static HTTP uses a
+        # separate requests.Session per discovery/story worker, with a shared
+        # egress limiter so a slow render cannot freeze unrelated workers.
         self._request_lock = threading.Lock()
+        self._rate_lock = threading.Lock()
         self._last_request_at = 0.0
+        self._rate_cooldown_until = 0.0
         self._history_lock = threading.Lock()
         cfg = load_site_config("inkitt")
         self._promo_patterns = build_promo_patterns(cfg.get("promo_patterns", []))
@@ -790,6 +799,7 @@ class InkittBatchService:
                     f"{genre_label}: HTTP {response.status_code} on page {page}; "
                     f"retry {attempt + 1}/{INKITT_DISCOVER_RETRY_TIMES} in {wait:.1f}s.",
                 )
+                self._set_rate_cooldown(wait)
                 time.sleep(wait)
             if response is None:
                 break
@@ -1064,16 +1074,18 @@ class InkittBatchService:
         if not INKITT_RENDERED_FALLBACK:
             return ""
         try:
-            from handlers.selenium_handler import _get_browser
-
-            browser = _get_browser()
             with self._request_lock:
                 self._wait_for_request_slot_locked(delay)
+                rendered = self._fetch_rendered_with_flaresolverr(url)
+                if rendered:
+                    self._last_request_at = time.monotonic()
+                    return rendered
+
+                from handlers.selenium_handler import _get_browser
+
+                browser = _get_browser()
                 _final_url, status, body, _headers, paragraphs = browser.fetch_with_retry(
-                    url,
-                    timeout=60,
-                    skip_scroll=False,
-                    max_retries=1,
+                    url, timeout=60, skip_scroll=False, max_retries=1
                 )
                 self._last_request_at = time.monotonic()
             if status and status >= 400:
@@ -1088,6 +1100,42 @@ class InkittBatchService:
             return InkittSpider(novel=url, limit=1)._extract_chapter_content(soup)
         except Exception as exc:
             logger.warning("[inkitt-batch] rendered fallback failed for %s: %s", url, exc)
+            return ""
+
+    def _fetch_rendered_with_flaresolverr(self, url: str) -> str:
+        try:
+            from api.services.flaresolverr_client import is_configured, solve
+
+            if not is_configured():
+                return ""
+            cookies, _user_agent = load_saved_inkitt_cookies()
+            # FlareSolverr mints its own Linux-fingerprint cf_clearance. Reusing
+            # a browser's cf_clearance there can invalidate the solve, while the
+            # Inkitt login session itself is portable to the same egress IP.
+            auth_cookies = [
+                {
+                    "name": str(cookie.get("name") or ""),
+                    "value": str(cookie.get("value") or ""),
+                    "domain": str(cookie.get("domain") or ".inkitt.com"),
+                    "path": str(cookie.get("path") or "/"),
+                }
+                for cookie in cookies
+                if cookie.get("name") == "user_credentials" and cookie.get("value")
+            ]
+            result = solve(url, max_timeout_ms=90_000, cookies=auth_cookies)
+            if result.get("status_code") and int(result["status_code"]) >= 400:
+                return ""
+            html = str(result.get("html") or "")
+            if not html:
+                return ""
+            soup = BeautifulSoup(html, "html.parser")
+            # Content extraction is stateless; avoid constructing a second
+            # spider here (which would reload the database cookies and can
+            # block a fallback while the crawler is already under load).
+            parser = InkittSpider.__new__(InkittSpider)
+            return parser._extract_chapter_content(soup)
+        except Exception as exc:
+            logger.warning("[inkitt-batch] FlareSolverr fallback failed for %s: %s", url, exc)
             return ""
 
     def _finish_crawl_run_locked(self, state: InkittBatchState, run_id: str, status: str = "completed") -> None:
@@ -1117,18 +1165,46 @@ class InkittBatchService:
 
     def _fetch_spider_html(self, spider: InkittSpider, url: str, delay: float, attempts: int = 5) -> str:
         last_error = ""
+        session = spider._session
+        anonymous_attempted = False
         for attempt in range(attempts):
-            response = self._throttled_get(spider._session, url, delay)
-            if response.status_code == 429:
+            try:
+                response = self._throttled_get(session, url, delay)
+            except requests.RequestException as exc:
+                last_error = f"[inkitt] {exc.__class__.__name__} while fetching {url}"
+                if attempt >= attempts - 1:
+                    break
+                time.sleep(min(30.0, 2.0 ** attempt) + random.uniform(0.1, 0.5))
+                continue
+
+            if response.status_code in INKITT_CRAWL_RETRY_HTTP_CODES:
                 retry_after = parse_retry_after(response.headers.get("Retry-After"))
-                wait = retry_after if retry_after is not None else min(90.0, 8.0 * (attempt + 1))
+                wait = retry_after if retry_after is not None else min(60.0, 2.0 ** (attempt + 1))
                 wait += random.uniform(0.5, 2.0)
-                last_error = f"[inkitt] HTTP 429 while fetching {url}"
+                last_error = f"[inkitt] HTTP {response.status_code} while fetching {url}"
+                if attempt >= attempts - 1:
+                    break
+                self._set_rate_cooldown(wait)
                 time.sleep(wait)
                 continue
-            if (spider._is_blocked_response(response) or spider._is_login_gated_response(response.text)) and not spider._cookies_loaded:
-                spider._saved_cookie_count = spider._load_saved_cookies()
-                response = self._throttled_get(spider._session, url, delay)
+
+            saved_count = int(getattr(spider, "_saved_cookie_count", 0) or 0)
+            needs_clean_session = (
+                response.status_code == 410
+                or spider._is_blocked_response(response)
+                or spider._is_login_gated_response(response.text)
+            )
+            if needs_clean_session and saved_count and not anonymous_attempted:
+                # Expired Inkitt auth/clearance cookies can make a public page
+                # look gated (or even gone) while the anonymous page is readable.
+                # Retry exactly once without cookies before blaming credentials.
+                anonymous_attempted = True
+                session = self._make_anonymous_session()
+                spider._session = session
+                spider._saved_cookie_count = 0
+                logger.info("[inkitt] Retrying %s without stale saved cookies.", url)
+                continue
+
             if response.status_code != 200:
                 raise RuntimeError(f"[inkitt] HTTP {response.status_code} while fetching {url}")
             if spider._is_blocked_response(response):
@@ -1157,18 +1233,50 @@ class InkittBatchService:
         return wait + random.uniform(0.5, 2.0)
 
     def _throttled_get(self, session: requests.Session, url: str, delay: float, **kwargs: Any) -> requests.Response:
-        with self._request_lock:
-            self._wait_for_request_slot_locked(delay)
-            kwargs.setdefault("timeout", 30)
-            response = session.get(url, **kwargs)
-            self._last_request_at = time.monotonic()
-            return response
+        # Keep the HTTP lane bounded across all workers. The per-session slot
+        # preserves the user-selected delay for each story; the shared slot
+        # prevents five sessions from overwhelming one Inkitt egress IP.
+        self._reserve_request_slot(session, delay)
+        kwargs.setdefault("timeout", 30)
+        return session.get(url, **kwargs)
 
     def _wait_for_request_slot_locked(self, delay: float) -> None:
-        min_delay = max(1.0, float(delay or 0))
-        elapsed = time.monotonic() - self._last_request_at
-        if elapsed < min_delay:
-            time.sleep(min_delay - elapsed)
+        self._reserve_request_slot(None, delay)
+
+    def _reserve_request_slot(self, session: requests.Session | None, delay: float) -> None:
+        """Reserve a future request start without holding a network lock."""
+        if not hasattr(self, "_rate_lock"):
+            self._rate_lock = threading.Lock()
+        requested_delay = max(0.0, float(delay or 0))
+        with self._rate_lock:
+            now = time.monotonic()
+            shared_interval = max(
+                INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS,
+                requested_delay if session is None else 0.0,
+            )
+            shared_next = float(getattr(self, "_last_request_at", 0.0) or 0.0) + shared_interval
+            session_next = float(getattr(session, "_inkitt_next_request_at", 0.0) or 0.0) if session is not None else 0.0
+            scheduled = max(
+                now,
+                shared_next,
+                session_next,
+                float(getattr(self, "_rate_cooldown_until", 0.0) or 0.0),
+            )
+            self._last_request_at = scheduled
+            if session is not None:
+                setattr(session, "_inkitt_next_request_at", scheduled + requested_delay)
+        wait = scheduled - now
+        if wait > 0:
+            time.sleep(wait)
+
+    def _set_rate_cooldown(self, seconds: float) -> None:
+        if not hasattr(self, "_rate_lock"):
+            self._rate_lock = threading.Lock()
+        with self._rate_lock:
+            self._rate_cooldown_until = max(
+                float(getattr(self, "_rate_cooldown_until", 0.0) or 0.0),
+                time.monotonic() + max(0.0, float(seconds or 0)),
+            )
 
     def _load_exported_story_ids(self) -> set[str]:
         with self._history_lock:
@@ -1432,6 +1540,14 @@ class InkittBatchService:
                 domain=str(cookie.get("domain") or ".inkitt.com"),
                 path=str(cookie.get("path") or "/"),
             )
+        return session
+
+    def _make_anonymous_session(self) -> requests.Session:
+        session = requests.Session()
+        session.headers.update(InkittSpider._HEADERS)
+        proxies = requests_proxies("inkitt")
+        if proxies:
+            session.proxies.update(proxies)
         return session
 
     def _prepare_output_dir(self, batch_id: str) -> Path:
@@ -1872,6 +1988,8 @@ class InkittBatchService:
 
 def classify_inkitt_crawl_error(message: str) -> dict[str, str]:
     lowered = message.lower()
+    if "http 410" in lowered:
+        return {"status": "skipped", "error": "Story was removed or unpublished on Inkitt (HTTP 410 Gone)."}
     if is_inkitt_subscription_gate(lowered):
         return {"status": "skipped", "error": "Skipped paid/subscription-gated story."}
     if is_inkitt_login_gate(lowered):

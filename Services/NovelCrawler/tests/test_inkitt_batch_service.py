@@ -4,6 +4,7 @@ import json
 import sys
 import threading
 import types
+from concurrent.futures import ThreadPoolExecutor
 
 from bs4 import BeautifulSoup
 
@@ -37,6 +38,7 @@ from api.services.inkitt_batch_service import (
     extract_story_quality,
     should_use_rendered_fallback,
 )
+from api.services.inkitt_cookie_service import _is_login_gated_response as cookie_check_is_login_gated
 from spiders.inkitt import InkittSpider
 
 
@@ -419,6 +421,7 @@ def test_rendered_fallback_uses_global_request_delay(monkeypatch) -> None:
     fake_module._get_browser = lambda: FakeBrowser()
     monkeypatch.setitem(sys.modules, "handlers.selenium_handler", fake_module)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK", True)
+    monkeypatch.setattr(service, "_fetch_rendered_with_flaresolverr", lambda _url: "")
     monotonic_values = iter([12.0, 15.0])
     slept: list[float] = []
     monkeypatch.setattr("api.services.inkitt_batch_service.time.monotonic", lambda: next(monotonic_values))
@@ -456,6 +459,7 @@ def test_rendered_fallback_extracts_from_returned_body_when_paragraph_list_is_em
     fake_module._get_browser = lambda: FakeBrowser()
     monkeypatch.setitem(sys.modules, "handlers.selenium_handler", fake_module)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK", True)
+    monkeypatch.setattr(service, "_fetch_rendered_with_flaresolverr", lambda _url: "")
 
     class FakeInkittSpider:
         def __init__(self, *_args, **_kwargs) -> None:
@@ -470,6 +474,40 @@ def test_rendered_fallback_extracts_from_returned_body_when_paragraph_list_is_em
 
     assert "real readable chapter text" in content
     assert "final URL" in content
+
+
+def test_rendered_fallback_prefers_flaresolverr_and_forwards_only_login_cookie(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._request_lock = threading.Lock()
+    service._last_request_at = 0.0
+    captured: dict = {}
+
+    fake_module = types.ModuleType("api.services.flaresolverr_client")
+    fake_module.is_configured = lambda: True
+
+    def fake_solve(url, max_timeout_ms, cookies):
+        captured.update({"url": url, "timeout": max_timeout_ms, "cookies": cookies})
+        return {
+            "status_code": 200,
+            "html": "<article id='story-text-container'><p data-content='true'>Rendered full chapter prose.</p></article>",
+        }
+
+    fake_module.solve = fake_solve
+    monkeypatch.setitem(sys.modules, "api.services.flaresolverr_client", fake_module)
+    monkeypatch.setattr(
+        "api.services.inkitt_batch_service.load_saved_inkitt_cookies",
+        lambda: ([
+            {"name": "user_credentials", "value": "login", "domain": ".inkitt.com", "path": "/"},
+            {"name": "cf_clearance", "value": "browser-bound", "domain": ".inkitt.com", "path": "/"},
+        ], "Browser UA"),
+    )
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK", True)
+
+    content = service._fetch_rendered_chapter_content("https://www.inkitt.com/stories/1/chapters/5", 0)
+
+    assert content == "Rendered full chapter prose."
+    assert captured["timeout"] == 90_000
+    assert [cookie["name"] for cookie in captured["cookies"]] == ["user_credentials"]
 
 
 def test_inkitt_extractor_prefers_article_with_real_prose() -> None:
@@ -743,6 +781,109 @@ def test_subscription_gate_is_skipped_not_retried() -> None:
     assert "paid/subscription" in result["error"]
 
 
+def test_http_410_is_skipped_as_removed_story() -> None:
+    result = classify_inkitt_crawl_error(
+        "[inkitt] HTTP 410 while fetching https://www.inkitt.com/stories/212657"
+    )
+
+    assert result["status"] == "skipped"
+    assert "removed or unpublished" in result["error"]
+
+
+def test_stale_saved_cookies_fall_back_to_clean_anonymous_session(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+
+    class FakeResponse:
+        status_code = 200
+        headers: dict = {}
+
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+    class FakeSession:
+        def __init__(self, response: FakeResponse) -> None:
+            self.response = response
+            self.calls = 0
+
+        def get(self, *_args, **_kwargs) -> FakeResponse:
+            self.calls += 1
+            return self.response
+
+    stale_session = FakeSession(FakeResponse("log in to continue reading"))
+    anonymous_session = FakeSession(FakeResponse("full public chapter text"))
+    monkeypatch.setattr(service, "_make_anonymous_session", lambda: anonymous_session)
+
+    class FakeSpider:
+        _session = stale_session
+        _saved_cookie_count = 2
+
+        @staticmethod
+        def _is_blocked_response(_response) -> bool:
+            return False
+
+        @staticmethod
+        def _is_login_gated_response(text: str) -> bool:
+            return "log in to continue" in text
+
+    spider = FakeSpider()
+    html = service._fetch_spider_html(spider, "https://www.inkitt.com/stories/1", 0)
+
+    assert html == "full public chapter text"
+    assert stale_session.calls == 1
+    assert anonymous_session.calls == 1
+    assert spider._session is anonymous_session
+    assert spider._saved_cookie_count == 0
+
+
+def test_static_story_sessions_can_download_concurrently() -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    barrier = threading.Barrier(2, timeout=2)
+    state_lock = threading.Lock()
+    active = 0
+    max_active = 0
+
+    class FakeSession:
+        def get(self, *_args, **_kwargs):
+            nonlocal active, max_active
+            with state_lock:
+                active += 1
+                max_active = max(max_active, active)
+            barrier.wait()
+            with state_lock:
+                active -= 1
+            return types.SimpleNamespace(status_code=200, text="ok", headers={})
+
+    sessions = [FakeSession(), FakeSession()]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda session: service._throttled_get(session, "https://example.test", 0), sessions))
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert max_active == 2
+
+
+def test_short_real_chapter_text_is_not_mistaken_for_login_gate() -> None:
+    spider = InkittSpider.__new__(InkittSpider)
+    readable_short_chapters = [
+        "Epilogue If more than three people read this, I might write one.",
+        "Prologue Earth 2.0 is ready to receive guests.",
+        "History With logic and hope, read the future in the other books.",
+        "Rewrite Thank you to everyone that has read this book; I apologize for the delay.",
+    ]
+
+    for text in readable_short_chapters:
+        html = f"<article id='story-text-container'><p>{text}</p></article>"
+        assert spider._is_login_gated_response(html) is False
+        assert cookie_check_is_login_gated(html) is False
+
+
+def test_explicit_inkitt_login_wall_is_detected() -> None:
+    spider = InkittSpider.__new__(InkittSpider)
+    html = "<article id='story-text-container'><p>Log in to continue reading this chapter.</p></article>"
+
+    assert spider._is_login_gated_response(html) is True
+    assert cookie_check_is_login_gated(html) is True
+
+
 def test_inkitt_story_landing_page_without_chapter_links_does_not_create_fake_chapter() -> None:
     spider = InkittSpider.__new__(InkittSpider)
     spider.selector_config = types.SimpleNamespace(chapter_list="a[href*='/stories/'][href*='/chapters/']")
@@ -784,6 +925,29 @@ def test_inkitt_direct_chapter_url_is_kept_when_no_chapter_list_is_visible() -> 
     assert len(links) == 1
     assert links[0]["chapter_number"] == 42
     assert links[0]["url"] == "https://www.inkitt.com/stories/317829/chapters/42"
+
+
+def test_single_chapter_story_landing_page_with_real_content_is_kept() -> None:
+    spider = InkittSpider.__new__(InkittSpider)
+    spider.selector_config = types.SimpleNamespace(chapter_list="a[href*='/stories/'][href*='/chapters/']")
+    html = """
+    <article id="story-text-container">
+      <h2>Earth's history</h2>
+      <p data-content="true">This is the real and only chapter.</p>
+    </article>
+    """
+
+    links = spider._collect_chapter_links(
+        BeautifulSoup(html, "html.parser"),
+        "262970",
+        "https://www.inkitt.com/stories/262970",
+    )
+
+    assert links == [{
+        "chapter_number": 1,
+        "title": "Earth's history",
+        "url": "https://www.inkitt.com/stories/262970",
+    }]
 
 
 def test_story_without_chapter_list_is_skipped_with_zero_chapters(monkeypatch, tmp_path) -> None:

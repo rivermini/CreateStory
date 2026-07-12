@@ -228,8 +228,7 @@ def _is_login_gated_response(html: str) -> bool:
     ]
     if any(indicator in text for indicator in login_indicators):
         return True
-
-    return len(text.split()) < 80 and "log" in text and "read" in text
+    return False
 
 
 def _has_chapter_content(html: str) -> bool:

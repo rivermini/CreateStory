@@ -367,8 +367,7 @@ class InkittSpider(BaseSpider):
         ]
         if any(indicator in text for indicator in login_indicators):
             return True
-
-        return len(text.split()) < 80 and "log" in text and "read" in text
+        return False
 
     def _collect_chapter_links(self, soup: BeautifulSoup, story_id: str, page_url: str) -> list[dict[str, Any]]:
         links_by_number: dict[int, dict[str, Any]] = {}
@@ -400,6 +399,19 @@ class InkittSpider(BaseSpider):
                 "title": self._extract_chapter_title(soup) or f"Chapter {current_chapter}",
                 "url": page_url,
             }
+
+        # Inkitt does not render a chapter-list link for some one-chapter
+        # stories, even though the landing page is the real chapter. Require a
+        # data-content paragraph so a summary-only landing page is not exported
+        # as chapter text.
+        if not links_by_number and current_chapter is None:
+            article = soup.select_one("article#story-text-container") or soup.select_one("article.default-style")
+            if article is not None and article.select_one("p[data-content]") is not None:
+                links_by_number[1] = {
+                    "chapter_number": 1,
+                    "title": self._extract_chapter_title(soup) or "Chapter 1",
+                    "url": page_url,
+                }
 
         return [links_by_number[n] for n in sorted(links_by_number)]
 

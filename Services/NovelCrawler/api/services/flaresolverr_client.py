@@ -26,7 +26,11 @@ def is_configured() -> bool:
     return bool(flaresolverr_url())
 
 
-def solve(url: str, max_timeout_ms: int = 75000) -> dict[str, Any]:
+def solve(
+    url: str,
+    max_timeout_ms: int = 75000,
+    cookies: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Ask FlareSolverr to fetch ``url``, solving any Cloudflare challenge.
 
     Returns ``{"html", "cookies": {name: value}, "raw_cookies": [...], "user_agent"}``.
@@ -36,7 +40,9 @@ def solve(url: str, max_timeout_ms: int = 75000) -> dict[str, Any]:
     if not endpoint:
         raise RuntimeError("FLARESOLVERR_URL is not configured.")
 
-    payload = {"cmd": "request.get", "url": url, "maxTimeout": int(max_timeout_ms)}
+    payload: dict[str, Any] = {"cmd": "request.get", "url": url, "maxTimeout": int(max_timeout_ms)}
+    if cookies:
+        payload["cookies"] = cookies
     resp = requests.post(endpoint, json=payload, timeout=(max_timeout_ms / 1000) + 20)
     resp.raise_for_status()
     data = resp.json()

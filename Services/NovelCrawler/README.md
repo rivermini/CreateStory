@@ -87,11 +87,12 @@ The server starts on **http://localhost:8002**. API docs are at **http://localho
 | `SCRIBBLEHUB_RETRY_COOLDOWN` | `45` | Seconds before each retry round for rate-limited chapters |
 | `SCRIBBLEHUB_RETRY_ROUNDS` | `40` | Max retry rounds to recover rate-limited chapters (completeness) |
 | `INKITT_BATCH_MAX_DISCOVER_WORKERS` | `2` in Docker | Upper bound for concurrent Inkitt genre discovery workers |
-| `INKITT_BATCH_MAX_CRAWL_WORKERS` | `2` in Docker | Upper bound for concurrent Inkitt story crawl workers |
+| `INKITT_BATCH_MAX_CRAWL_WORKERS` | `5` in Docker | Upper bound for concurrent Inkitt story crawl workers |
 | `INKITT_DISCOVER_RETRY_TIMES` | `6` | Retry attempts for transient Inkitt discovery HTTP errors |
 | `INKITT_DISCOVER_RETRY_BASE_SECONDS` | `15` | Base cooldown for Inkitt discovery retries |
 | `INKITT_DISCOVER_RETRY_MAX_SECONDS` | `120` | Maximum cooldown for Inkitt discovery retries |
-| `INKITT_RENDERED_FALLBACK` | `1` | Enables browser fallback when static Inkitt chapter HTML is incomplete |
+| `INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS` | `0.5` | Shared minimum spacing between Inkitt requests from this egress IP; increases automatically after HTTP 429 |
+| `INKITT_RENDERED_FALLBACK` | `1` | Enables FlareSolverr/Selenium fallback when static Inkitt chapter HTML is incomplete |
 | `INKITT_RENDERED_FALLBACK_SUSPICIOUS_WORDS` | `800` | Only use browser fallback for suspicious static content at or below this word count |
 
 ---
@@ -225,11 +226,11 @@ egress route unless your infrastructure explicitly routes them elsewhere.
 
 Recommended production posture:
 
-- Keep Inkitt crawl workers at `1` or `2`.
-- Use a `5` to `10` second request delay for long runs.
+- Keep Inkitt crawl workers at `5` with the shared `0.5` second limiter; lower the worker count for a constrained proxy.
+- Use the UI's `1` second per-story delay for normal runs; increase it for a heavily rate-limited egress IP.
 - Crawl in small runs, for example `50` to `200` stories, then download or resume later.
 - Treat HTTP `429` and `403` as slow-down signals: pause, raise the delay, and resume after a cooldown.
-- Keep `INKITT_RENDERED_FALLBACK=1` only when needed; browser fallback is under the same global request
+- Keep `INKITT_RENDERED_FALLBACK=1`; static story workers are paced independently while the rendered fallback
   delay gate as static fetches and is skipped for long static chapters by default, but it is still heavier
   than plain HTML fetches.
 
