@@ -6,6 +6,7 @@ import threading
 import time
 import types
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 
 import pytest
 from bs4 import BeautifulSoup
@@ -43,6 +44,16 @@ from api.services.inkitt_batch_service import (
 )
 from api.services.inkitt_cookie_service import _is_login_gated_response as cookie_check_is_login_gated
 from spiders.inkitt import InkittSpider
+
+
+def install_fake_clock(monkeypatch) -> None:
+    clock = [100.0]
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.monotonic", lambda: clock[0])
+
+    def advance(seconds: float) -> None:
+        clock[0] += seconds
+
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", advance)
 
 
 def test_extract_completed_story_refs_skips_ongoing() -> None:
@@ -173,8 +184,9 @@ def test_discover_genre_reports_stop_reason_and_keeps_partial_results(monkeypatc
     session = FakeSession()
     monkeypatch.setattr(service, "_make_session", lambda: session)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_DISCOVER_RETRY_TIMES", 2)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", 0.0)
     monkeypatch.setattr("api.services.inkitt_batch_service.random.uniform", lambda _start, _end: 0)
-    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
+    install_fake_clock(monkeypatch)
 
     result = service._discover_genre(None, "action", "Action", 1000, 2)
 
@@ -225,8 +237,9 @@ def test_discover_genre_retries_transient_500(monkeypatch) -> None:
     session = FakeSession()
     monkeypatch.setattr(service, "_make_session", lambda: session)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_DISCOVER_RETRY_TIMES", 2)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", 0.0)
     monkeypatch.setattr("api.services.inkitt_batch_service.random.uniform", lambda _start, _end: 0)
-    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
+    install_fake_clock(monkeypatch)
 
     result = service._discover_genre(None, "action", "Action", 1000, 2)
 
@@ -318,7 +331,8 @@ def test_discover_genre_writes_live_progress_logs(tmp_path, monkeypatch) -> None
             return FakeResponse(int(kwargs["params"]["page"]))
 
     monkeypatch.setattr(service, "_make_session", lambda: FakeSession())
-    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", 0.0)
+    install_fake_clock(monkeypatch)
 
     result = service._discover_genre("aaaaaaaa", "action", "Action", 1000, 1)
 
@@ -372,7 +386,8 @@ def test_discover_genre_labels_page_cap_500(monkeypatch) -> None:
     session = FakeSession()
     monkeypatch.setattr(service, "_make_session", lambda: session)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_DISCOVER_RETRY_TIMES", 0)
-    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", 0.0)
+    install_fake_clock(monkeypatch)
 
     result = service._discover_genre(None, "drama", "Drama", 1000, 1)
 
@@ -425,10 +440,15 @@ def test_rendered_fallback_uses_global_request_delay(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "handlers.selenium_handler", fake_module)
     monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RENDERED_FALLBACK", True)
     monkeypatch.setattr(service, "_fetch_rendered_with_flaresolverr", lambda _url: "")
-    monotonic_values = iter([12.0, 15.0])
+    clock = [12.0]
     slept: list[float] = []
-    monkeypatch.setattr("api.services.inkitt_batch_service.time.monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", slept.append)
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.monotonic", lambda: clock[0])
+
+    def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+        clock[0] += seconds
+
+    monkeypatch.setattr("api.services.inkitt_batch_service.time.sleep", fake_sleep)
 
     content = service._fetch_rendered_chapter_content("https://www.inkitt.com/stories/1/chapters/1", 5.0)
 
@@ -838,7 +858,7 @@ def test_stale_saved_cookies_fall_back_to_clean_anonymous_session(monkeypatch) -
     assert spider._saved_cookie_count == 0
 
 
-def test_static_story_sessions_share_one_serial_request_lane(monkeypatch) -> None:
+def test_static_story_sessions_overlap_with_bounded_in_flight_capacity(monkeypatch) -> None:
     service = InkittBatchService.__new__(InkittBatchService)
     service._request_lock = threading.Lock()
     service._rate_lock = threading.Lock()
@@ -864,7 +884,34 @@ def test_static_story_sessions_share_one_serial_request_lane(monkeypatch) -> Non
         responses = list(pool.map(lambda session: service._throttled_get(session, "https://example.test", 0), sessions))
 
     assert [response.status_code for response in responses] == [200, 200]
-    assert max_active == 1
+    assert max_active == 2
+
+
+def test_request_starts_are_globally_spaced_while_responses_overlap(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._request_lock = threading.Lock()
+    service._rate_lock = threading.Lock()
+    service._last_request_at = 0.0
+    service._adaptive_request_interval = 0.02
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", 0.02)
+    starts: list[float] = []
+    starts_lock = threading.Lock()
+
+    class FakeSession:
+        def get(self, *_args, **_kwargs):
+            with starts_lock:
+                starts.append(time.monotonic())
+            time.sleep(0.06)
+            return types.SimpleNamespace(status_code=200, text="ok", headers={})
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        list(pool.map(lambda _index: service._throttled_get(FakeSession(), "https://example.test", 0), range(3)))
+
+    starts.sort()
+    assert len(starts) == 3
+    assert starts[1] - starts[0] >= 0.015
+    assert starts[2] - starts[1] >= 0.015
+    assert service._peak_active_requests == 2
 
 
 def test_rate_limit_uses_global_cooldown_and_slower_adaptive_pacing(monkeypatch) -> None:
@@ -885,6 +932,25 @@ def test_rate_limit_uses_global_cooldown_and_slower_adaptive_pacing(monkeypatch)
     assert snapshot["total"] == 1
     assert snapshot["request_interval_seconds"] == 1.5
     assert snapshot["cooldown_remaining_seconds"] == 60.0
+    assert snapshot["max_in_flight_requests"] == 1
+
+
+def test_successful_recovery_restores_bounded_request_capacity(monkeypatch) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._rate_lock = threading.Lock()
+    service._rate_limit_events = 1
+    service._successes_since_rate_limit = 0
+    service._adaptive_request_interval = 1.5
+    service._set_adaptive_max_in_flight(1)
+    monkeypatch.setattr("api.services.inkitt_batch_service.INKITT_RATE_LIMIT_RECOVERY_SUCCESSES", 2)
+
+    service._register_rate_success()
+    assert service._rate_limit_snapshot()["max_in_flight_requests"] == 1
+
+    service._register_rate_success()
+    snapshot = service._rate_limit_snapshot()
+    assert snapshot["max_in_flight_requests"] == 2
+    assert snapshot["request_interval_seconds"] == 1.0
 
 
 def test_repeated_rate_limits_pause_instead_of_failing_rows(monkeypatch) -> None:
@@ -1156,6 +1222,7 @@ def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> 
             title="Done",
             url="https://www.inkitt.com/stories/1",
             story_id="1",
+            crawl_run_id="run123",
             status="completed",
             total_chapters=10,
             crawled_chapters=10,
@@ -1167,6 +1234,7 @@ def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> 
             title="Partial",
             url="https://www.inkitt.com/stories/2",
             story_id="2",
+            crawl_run_id="run123",
             status="queued",
             total_chapters=20,
             crawled_chapters=5,
@@ -1178,6 +1246,7 @@ def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> 
             title="Waiting",
             url="https://www.inkitt.com/stories/3",
             story_id="3",
+            crawl_run_id="run123",
             status="queued",
             total_chapters=30,
             crawled_chapters=0,
@@ -1197,6 +1266,8 @@ def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> 
             "completed_count": 1,
             "failed_count": 0,
             "skipped_count": 0,
+            "processed_count": 1,
+            "crawled_chapters": 15,
             "status": "completed",
         }],
     )
@@ -1211,6 +1282,82 @@ def test_summary_estimates_remaining_crawl_time_across_whole_batch(tmp_path) -> 
     assert estimate["elapsed_seconds"] == 600
     assert estimate["chapters_per_hour"] == 90.0
     assert estimate["estimated_remaining_seconds"] == 1800
+    assert estimate["source"] == "all_time_chapters"
+
+
+def test_summary_uses_current_run_for_elapsed_speed_and_full_batch_for_eta(tmp_path) -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    service._batch_root = tmp_path
+    current_started_at = datetime.now() - timedelta(hours=1)
+    old_started_at = current_started_at - timedelta(days=12)
+    rows = [
+        InkittBatchRow(
+            index=1,
+            genre="Action",
+            genre_slug="action",
+            title="Old run story",
+            url="https://www.inkitt.com/stories/1",
+            story_id="1",
+            crawl_run_id="oldrun",
+            status="completed",
+            total_chapters=100,
+            crawled_chapters=100,
+        ),
+        InkittBatchRow(
+            index=2,
+            genre="Action",
+            genre_slug="action",
+            title="Current run story",
+            url="https://www.inkitt.com/stories/2",
+            story_id="2",
+            crawl_run_id="newrun",
+            status="completed",
+            total_chapters=30,
+            crawled_chapters=30,
+        ),
+        InkittBatchRow(
+            index=3,
+            genre="Action",
+            genre_slug="action",
+            title="Remaining story",
+            url="https://www.inkitt.com/stories/3",
+            story_id="3",
+            crawl_run_id="newrun",
+            status="queued",
+            total_chapters=90,
+            crawled_chapters=0,
+        ),
+    ]
+    state = InkittBatchState(
+        batch_id="aaaaaaaa",
+        created_by_user_id=None,
+        rows=rows,
+        phase="crawling",
+        output_dir=str(tmp_path / "aaaaaaaa"),
+        crawl_runs=[
+            {
+                "run_id": "oldrun",
+                "started_at": old_started_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "finished_at": (old_started_at + timedelta(days=10)).strftime("%Y-%m-%d %H:%M:%S"),
+                "status": "completed",
+            },
+            {
+                "run_id": "newrun",
+                "started_at": current_started_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "finished_at": None,
+                "initial_crawled_chapters": 20,
+                "status": "crawling",
+            },
+        ],
+    )
+
+    estimate = service._summary_locked(state)["crawl_estimate"]
+
+    assert 3599 <= estimate["elapsed_seconds"] <= 3601
+    assert estimate["chapters_per_hour"] == pytest.approx(10.0, abs=0.01)
+    assert estimate["remaining_stories"] == 1
+    assert estimate["remaining_chapters"] == 90
+    assert estimate["estimated_remaining_seconds"] == pytest.approx(9 * 3600, abs=10)
     assert estimate["source"] == "all_time_chapters"
 
 
@@ -1274,6 +1421,42 @@ def test_active_crawl_run_summary_reports_live_story_and_chapter_progress() -> N
     assert run["completed_count"] == 1
     assert run["crawled_chapters"] == 17
     assert run["total_chapters"] == 30
+
+
+def test_active_resumed_run_summary_excludes_previously_crawled_chapters() -> None:
+    service = InkittBatchService.__new__(InkittBatchService)
+    state = InkittBatchState(
+        batch_id="aaaaaaaa",
+        created_by_user_id=None,
+        phase="crawling",
+        rows=[
+            InkittBatchRow(
+                index=1,
+                genre="Action",
+                genre_slug="action",
+                title="Resumed",
+                url="https://www.inkitt.com/stories/1",
+                story_id="1",
+                status="crawling",
+                crawl_run_id="run123",
+                total_chapters=100,
+                crawled_chapters=45,
+            ),
+        ],
+        crawl_runs=[{
+            "run_id": "run123",
+            "started_at": "2026-07-13 10:00:00",
+            "finished_at": None,
+            "target_stories": 1,
+            "initial_crawled_chapters": 40,
+            "status": "crawling",
+        }],
+    )
+
+    run = service._crawl_run_summaries_locked(state)[0]
+
+    assert run["crawled_chapters"] == 5
+    assert run["total_chapters"] == 60
 
 
 def test_summary_adjusts_remaining_chapters_by_observed_yield(monkeypatch, tmp_path) -> None:

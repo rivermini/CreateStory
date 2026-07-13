@@ -697,7 +697,9 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 <Stat className="col-span-2" label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${(summary?.total_chapters ?? 0).toLocaleString()}`} />
                 {summary?.rate_limit && (
                   <>
-                    <Stat label="Request lane" value={`${summary.rate_limit.request_interval_seconds.toFixed(1)}s serialized`} />
+                    <Stat label="Request starts" value={`${summary.rate_limit.request_interval_seconds.toFixed(1)}s cadence`} />
+                    <Stat label="In flight" value={`${summary.rate_limit.in_flight_requests ?? 0}/${summary.rate_limit.max_in_flight_requests ?? 1}`} />
+                    <Stat label="Avg response" value={`${(summary.rate_limit.average_request_latency_seconds ?? 0).toFixed(2)}s`} />
                     <Stat label="429 cooldown" value={summary.rate_limit.cooldown_remaining_seconds > 0 ? formatDuration(summary.rate_limit.cooldown_remaining_seconds) : 'Ready'} />
                   </>
                 )}

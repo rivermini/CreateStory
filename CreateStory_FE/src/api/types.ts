@@ -299,6 +299,13 @@ export interface InkittBatchRateLimit {
   request_interval_seconds: number;
   cooldown_remaining_seconds: number;
   last_rate_limit_at: string;
+  in_flight_requests?: number;
+  max_in_flight_requests?: number;
+  configured_max_in_flight_requests?: number;
+  peak_in_flight_requests?: number;
+  request_total?: number;
+  completed_request_total?: number;
+  average_request_latency_seconds?: number;
 }
 
 export interface InkittBatchCrawlEstimate {

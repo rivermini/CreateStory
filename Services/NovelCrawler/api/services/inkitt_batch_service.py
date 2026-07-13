@@ -41,6 +41,7 @@ INKITT_CRAWL_RETRY_HTTP_CODES = {408, 425, 429, 500, 502, 503, 504}
 INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS = max(
     1.0, float(os.getenv("INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "1.0"))
 )
+INKITT_MAX_IN_FLIGHT_REQUESTS = max(1, min(4, int(os.getenv("INKITT_MAX_IN_FLIGHT_REQUESTS", "2"))))
 INKITT_RATE_LIMIT_BASE_COOLDOWN_SECONDS = max(
     1.0, float(os.getenv("INKITT_RATE_LIMIT_BASE_COOLDOWN_SECONDS", "60"))
 )
@@ -188,11 +189,17 @@ class InkittBatchService:
         self._exported_story_index_file = self._batch_root / "exported_story_index.json"
         self._discovery_progress_file = self._batch_root / "discovery_progress.json"
         self._last_persist_at = 0.0
-        # All Inkitt traffic shares one request lane. Four story workers can
-        # parse/write independently, but network requests never overlap on the
-        # same egress IP. This is the production-proven ~1,000 chapters/hour
-        # posture and prevents a short speed burst becoming a multi-day ban.
+        # Request starts share one globally paced lane, while a separate bounded
+        # gate allows slow responses to overlap without creating a request burst.
         self._request_lock = threading.Lock()
+        self._request_capacity = threading.Condition(threading.Lock())
+        self._active_requests = 0
+        self._peak_active_requests = 0
+        self._adaptive_max_in_flight = INKITT_MAX_IN_FLIGHT_REQUESTS
+        self._request_total = 0
+        self._completed_request_total = 0
+        self._request_latency_total_seconds = 0.0
+        self._render_lock = threading.Lock()
         self._rate_lock = threading.Lock()
         self._last_request_at = 0.0
         self._rate_cooldown_until = 0.0
@@ -270,6 +277,7 @@ class InkittBatchService:
             state.finished_at = None
             state.crawl_concurrency = clamp(crawl_concurrency, 1, INKITT_BATCH_MAX_CRAWL_WORKERS)
             state.request_delay_seconds = max(1.0, min(float(request_delay_seconds), 15.0))
+            initial_crawled_chapters = sum(int(row.crawled_chapters or 0) for row in available_rows)
             state.crawl_runs.append({
                 "run_id": run_id,
                 "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -280,6 +288,7 @@ class InkittBatchService:
                 "skipped_count": 0,
                 "processed_count": 0,
                 "crawled_chapters": 0,
+                "initial_crawled_chapters": initial_crawled_chapters,
                 "total_chapters": 0,
                 "status": "crawling",
             })
@@ -1264,20 +1273,29 @@ class InkittBatchService:
         if not INKITT_RENDERED_FALLBACK:
             return ""
         try:
-            with self._request_lock:
-                self._wait_for_request_slot_locked(delay, batch_id=batch_id)
-                rendered = self._fetch_rendered_with_flaresolverr(url)
-                if rendered:
-                    self._last_request_at = time.monotonic()
-                    return rendered
+            if not hasattr(self, "_render_lock"):
+                self._render_lock = threading.Lock()
+            with self._render_lock:
+                self._acquire_request_capacity(batch_id)
+                started_at = 0.0
+                try:
+                    with self._request_lock:
+                        self._wait_for_request_slot_locked(delay, batch_id=batch_id)
+                        started_at = time.monotonic()
+                        self._last_request_at = started_at
+                    rendered = self._fetch_rendered_with_flaresolverr(url)
+                    if rendered:
+                        return rendered
 
-                from handlers.selenium_handler import _get_browser
+                    from handlers.selenium_handler import _get_browser
 
-                browser = _get_browser()
-                _final_url, status, body, _headers, paragraphs = browser.fetch_with_retry(
-                    url, timeout=60, skip_scroll=False, max_retries=1
-                )
-                self._last_request_at = time.monotonic()
+                    browser = _get_browser()
+                    _final_url, status, body, _headers, paragraphs = browser.fetch_with_retry(
+                        url, timeout=60, skip_scroll=False, max_retries=1
+                    )
+                finally:
+                    latency = max(0.0, time.monotonic() - started_at) if started_at else 0.0
+                    self._release_request_capacity(latency)
             if status and status >= 400:
                 return ""
             if paragraphs:
@@ -1377,7 +1395,10 @@ class InkittBatchService:
                 last_error = f"[inkitt] {exc.__class__.__name__} while fetching {url}"
                 if transient_attempt >= attempts:
                     break
-                self._set_rate_cooldown(min(30.0, 2.0 ** transient_attempt) + random.uniform(0.1, 0.5))
+                self._wait_for_retry(
+                    min(30.0, 2.0 ** transient_attempt) + random.uniform(0.1, 0.5),
+                    batch_id,
+                )
                 continue
 
             if response.status_code == 429:
@@ -1407,7 +1428,7 @@ class InkittBatchService:
                 last_error = f"[inkitt] HTTP {response.status_code} while fetching {url}"
                 if transient_attempt >= attempts:
                     break
-                self._set_rate_cooldown(wait)
+                self._wait_for_retry(wait, batch_id)
                 continue
 
             saved_count = int(getattr(spider, "_saved_cookie_count", 0) or 0)
@@ -1462,49 +1483,100 @@ class InkittBatchService:
         batch_id: str | None = None,
         **kwargs: Any,
     ) -> requests.Response:
-        # Story workers remain concurrent, but requests from this server IP are
-        # serialized and spaced after the preceding response completes.
+        # Reserve bounded in-flight capacity, then globally pace request starts.
+        # The network call intentionally happens outside the start scheduler so
+        # slow Inkitt responses can overlap without exceeding the start rate.
         if not hasattr(self, "_request_lock"):
             self._request_lock = threading.Lock()
-        with self._request_lock:
-            self._wait_for_request_slot_locked(delay, batch_id=batch_id)
+        self._acquire_request_capacity(batch_id)
+        started_at = 0.0
+        try:
+            with self._request_lock:
+                self._wait_for_request_slot_locked(delay, batch_id=batch_id)
+                started_at = time.monotonic()
+                self._last_request_at = started_at
             kwargs.setdefault("timeout", 30)
-            try:
-                response = session.get(url, **kwargs)
-            finally:
-                self._last_request_at = time.monotonic()
+            response = session.get(url, **kwargs)
             if response.status_code == 429:
                 self._register_rate_limit(response)
             elif response.status_code < 500:
                 self._register_rate_success()
             return response
+        finally:
+            latency = max(0.0, time.monotonic() - started_at) if started_at else 0.0
+            self._release_request_capacity(latency)
+
+    def _ensure_request_capacity(self) -> threading.Condition:
+        if not hasattr(self, "_request_capacity"):
+            if not hasattr(self, "_request_lock"):
+                self._request_lock = threading.Lock()
+            with self._request_lock:
+                if not hasattr(self, "_request_capacity"):
+                    self._request_capacity = threading.Condition(threading.Lock())
+                    self._active_requests = 0
+                    self._peak_active_requests = 0
+                    self._adaptive_max_in_flight = INKITT_MAX_IN_FLIGHT_REQUESTS
+                    self._request_total = 0
+                    self._completed_request_total = 0
+                    self._request_latency_total_seconds = 0.0
+        return self._request_capacity
+
+    def _acquire_request_capacity(self, batch_id: str | None) -> None:
+        capacity = self._ensure_request_capacity()
+        while True:
+            with capacity:
+                if int(getattr(self, "_active_requests", 0)) < int(
+                    getattr(self, "_adaptive_max_in_flight", INKITT_MAX_IN_FLIGHT_REQUESTS)
+                ):
+                    self._active_requests = int(getattr(self, "_active_requests", 0)) + 1
+                    self._peak_active_requests = max(
+                        int(getattr(self, "_peak_active_requests", 0)),
+                        self._active_requests,
+                    )
+                    self._request_total = int(getattr(self, "_request_total", 0)) + 1
+                    return
+                capacity.wait(timeout=0.5)
+            if batch_id and self._is_cancel_requested(batch_id):
+                raise InkittCrawlPaused("Crawl paused; the current story remains queued.")
+
+    def _release_request_capacity(self, latency_seconds: float) -> None:
+        capacity = self._ensure_request_capacity()
+        with capacity:
+            self._active_requests = max(0, int(getattr(self, "_active_requests", 0)) - 1)
+            self._completed_request_total = int(getattr(self, "_completed_request_total", 0)) + 1
+            self._request_latency_total_seconds = float(
+                getattr(self, "_request_latency_total_seconds", 0.0)
+            ) + max(0.0, latency_seconds)
+            capacity.notify_all()
+
+    def _set_adaptive_max_in_flight(self, value: int) -> None:
+        capacity = self._ensure_request_capacity()
+        with capacity:
+            self._adaptive_max_in_flight = max(1, min(INKITT_MAX_IN_FLIGHT_REQUESTS, int(value)))
+            capacity.notify_all()
 
     def _wait_for_request_slot_locked(self, delay: float, batch_id: str | None = None) -> None:
         if not hasattr(self, "_rate_lock"):
             self._rate_lock = threading.Lock()
-        with self._rate_lock:
-            now = time.monotonic()
-            interval = max(
-                INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS,
-                float(delay or 0),
-                float(getattr(self, "_adaptive_request_interval", INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS)),
-            )
-            ready_at = max(
-                float(getattr(self, "_last_request_at", 0.0) or 0.0) + interval,
-                float(getattr(self, "_rate_cooldown_until", 0.0) or 0.0),
-            )
-        wait = max(0.0, ready_at - now)
-        if wait <= 0:
-            return
-        if batch_id is None:
-            time.sleep(wait)
-            return
-        while wait > 0:
-            if self._is_cancel_requested(batch_id):
+        while True:
+            with self._rate_lock:
+                now = time.monotonic()
+                interval = max(
+                    INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS,
+                    float(delay or 0),
+                    float(getattr(self, "_adaptive_request_interval", INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS)),
+                )
+                ready_at = max(
+                    float(getattr(self, "_last_request_at", 0.0) or 0.0) + interval,
+                    float(getattr(self, "_rate_cooldown_until", 0.0) or 0.0),
+                )
+            wait = max(0.0, ready_at - now)
+            if wait <= 0:
+                return
+            if batch_id and self._is_cancel_requested(batch_id):
                 raise InkittCrawlPaused("Crawl paused; the current story remains queued.")
-            step = min(0.5, wait)
+            step = wait if batch_id is None else min(0.5, wait)
             time.sleep(step)
-            wait -= step
 
     def _register_rate_limit(self, response: requests.Response) -> None:
         if not hasattr(self, "_rate_lock"):
@@ -1531,6 +1603,7 @@ class InkittBatchService:
                 time.monotonic() + max(1.0, float(cooldown)),
             )
             self._last_rate_limit_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._set_adaptive_max_in_flight(1)
 
     def _register_rate_success(self) -> None:
         if not hasattr(self, "_rate_lock"):
@@ -1551,12 +1624,13 @@ class InkittBatchService:
                 INKITT_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS,
                 current_interval - 0.5,
             )
+        self._set_adaptive_max_in_flight(INKITT_MAX_IN_FLIGHT_REQUESTS)
 
     def _rate_limit_snapshot(self) -> dict[str, float | int | str]:
         if not hasattr(self, "_rate_lock"):
             self._rate_lock = threading.Lock()
         with self._rate_lock:
-            return {
+            snapshot: dict[str, float | int | str] = {
                 "events": int(getattr(self, "_rate_limit_events", 0) or 0),
                 "total": int(getattr(self, "_rate_limit_total", 0) or 0),
                 "request_interval_seconds": float(
@@ -1568,6 +1642,34 @@ class InkittBatchService:
                 ),
                 "last_rate_limit_at": str(getattr(self, "_last_rate_limit_at", "") or ""),
             }
+        capacity = self._ensure_request_capacity()
+        with capacity:
+            request_total = int(getattr(self, "_request_total", 0))
+            completed_request_total = int(getattr(self, "_completed_request_total", 0))
+            snapshot.update({
+                "in_flight_requests": int(getattr(self, "_active_requests", 0)),
+                "max_in_flight_requests": int(
+                    getattr(self, "_adaptive_max_in_flight", INKITT_MAX_IN_FLIGHT_REQUESTS)
+                ),
+                "configured_max_in_flight_requests": INKITT_MAX_IN_FLIGHT_REQUESTS,
+                "peak_in_flight_requests": int(getattr(self, "_peak_active_requests", 0)),
+                "request_total": request_total,
+                "completed_request_total": completed_request_total,
+                "average_request_latency_seconds": round(
+                    float(getattr(self, "_request_latency_total_seconds", 0.0)) / completed_request_total,
+                    3,
+                ) if completed_request_total else 0.0,
+            })
+        return snapshot
+
+    def _wait_for_retry(self, seconds: float, batch_id: str | None = None) -> None:
+        remaining = max(0.0, float(seconds or 0.0))
+        while remaining > 0:
+            if batch_id and self._is_cancel_requested(batch_id):
+                raise InkittCrawlPaused("Crawl paused; the current story remains queued.")
+            step = min(0.5, remaining)
+            time.sleep(step)
+            remaining -= step
 
     def _request_rate_limit_pause(self, batch_id: str | None, message: str) -> None:
         if not batch_id:
@@ -1901,6 +2003,7 @@ class InkittBatchService:
             if at > 0:
                 clean.append({
                     "at": at,
+                    "run_id": str(sample.get("run_id") or ""),
                     "crawled_chapters": max(0, crawled_chapters),
                     "processed_count": max(0, processed_count),
                     "total_chapters": max(0, total_chapters),
@@ -1917,8 +2020,10 @@ class InkittBatchService:
         if crawled_chapters <= 0 and processed_count <= 0:
             return
         now = time.time()
+        current_run = self._latest_crawl_run(state)
         sample = {
             "at": now,
+            "run_id": str(current_run.get("run_id") or "") if current_run else "",
             "crawled_chapters": int(crawled_chapters),
             "processed_count": int(processed_count),
             "total_chapters": int(total_chapters),
@@ -1926,6 +2031,7 @@ class InkittBatchService:
         last = state.progress_samples[-1] if state.progress_samples else None
         if (
             isinstance(last, dict)
+            and str(last.get("run_id") or "") == sample["run_id"]
             and int(last.get("crawled_chapters") or 0) == sample["crawled_chapters"]
             and int(last.get("processed_count") or 0) == sample["processed_count"]
             and int(last.get("total_chapters") or 0) == sample["total_chapters"]
@@ -1935,24 +2041,47 @@ class InkittBatchService:
         if len(state.progress_samples) > INKITT_PROGRESS_SAMPLE_LIMIT:
             state.progress_samples = state.progress_samples[-INKITT_PROGRESS_SAMPLE_LIMIT:]
 
-    def _crawl_elapsed_seconds(self, state: InkittBatchState, now_dt: datetime) -> float:
-        elapsed = 0.0
-        for run in state.crawl_runs:
-            if not isinstance(run, dict):
-                continue
-            started = parse_local_datetime(run.get("started_at"))
-            if started is None:
-                continue
-            finished = parse_local_datetime(run.get("finished_at"))
-            if finished is None and run.get("status") == "crawling" and state.phase == "crawling":
-                finished = now_dt
-            if finished is None:
-                continue
-            elapsed += max(0.0, (finished - started).total_seconds())
-        return elapsed
+    def _latest_crawl_run(self, state: InkittBatchState) -> dict[str, Any] | None:
+        for run in reversed(state.crawl_runs):
+            if isinstance(run, dict) and run.get("started_at"):
+                return run
+        return None
 
-    def _recent_rates(self, state: InkittBatchState, now_ts: float) -> dict[str, float | None]:
+    def _crawl_elapsed_seconds(self, state: InkittBatchState, now_dt: datetime) -> float:
+        """Return elapsed wall time for the latest crawl run, not all batch runs."""
+        run = self._latest_crawl_run(state)
+        if run is None:
+            return 0.0
+        started = parse_local_datetime(run.get("started_at"))
+        if started is None:
+            return 0.0
+        finished = parse_local_datetime(run.get("finished_at"))
+        if finished is None and run.get("status") == "crawling" and state.phase == "crawling":
+            finished = now_dt
+        if finished is None:
+            return 0.0
+        return max(0.0, (finished - started).total_seconds())
+
+    def _crawl_run_progress(self, state: InkittBatchState) -> tuple[str, int, int]:
+        """Return latest run ID plus chapters and stories completed during that run."""
+        run = self._latest_crawl_run(state)
+        if run is None:
+            return "", 0, 0
+        run_id = str(run.get("run_id") or "")
+        initial_chapters = int(run.get("initial_crawled_chapters") or 0)
+        if run.get("status") != "crawling" or state.phase != "crawling":
+            run_chapters = max(0, int(run.get("crawled_chapters") or 0) - initial_chapters)
+            run_stories = max(0, int(run.get("processed_count") or 0))
+            return run_id, run_chapters, run_stories
+        run_rows = [row for row in state.rows if row.crawl_run_id == run_id]
+        current_chapters = sum(int(row.crawled_chapters or 0) for row in run_rows)
+        run_chapters = max(0, current_chapters - initial_chapters)
+        run_stories = sum(1 for row in run_rows if row.status in {"completed", "skipped", "failed"})
+        return run_id, run_chapters, run_stories
+
+    def _recent_rates(self, state: InkittBatchState, now_ts: float, run_id: str) -> dict[str, float | None]:
         samples = self._normalize_progress_samples(state.progress_samples)
+        samples = [sample for sample in samples if sample.get("run_id") == run_id]
         if len(samples) < 2:
             return {"chapters_per_second": None, "stories_per_second": None, "window_seconds": None}
         latest = samples[-1]
@@ -2040,18 +2169,19 @@ class InkittBatchService:
         )
         estimated_total_chapters = crawled_chapters + estimated_remaining_chapters
         elapsed_seconds = self._crawl_elapsed_seconds(state, now_dt)
+        run_id, run_crawled_chapters, run_processed_count = self._crawl_run_progress(state)
         all_time_chapters_per_second = (
-            crawled_chapters / elapsed_seconds
-            if elapsed_seconds >= 30 and crawled_chapters > 0
+            run_crawled_chapters / elapsed_seconds
+            if elapsed_seconds >= 30 and run_crawled_chapters > 0
             else None
         )
         all_time_stories_per_second = (
-            processed_count / elapsed_seconds
-            if elapsed_seconds >= 30 and processed_count > 0
+            run_processed_count / elapsed_seconds
+            if elapsed_seconds >= 30 and run_processed_count > 0
             else None
         )
         self._append_progress_sample_locked(state, crawled_chapters, processed_count, total_chapters)
-        recent_rates = self._recent_rates(state, now_ts)
+        recent_rates = self._recent_rates(state, now_ts, run_id)
         recent_chapters_per_second = recent_rates["chapters_per_second"]
         recent_stories_per_second = recent_rates["stories_per_second"]
         estimate_chapters_per_second = recent_chapters_per_second or all_time_chapters_per_second
@@ -2159,6 +2289,7 @@ class InkittBatchService:
         summaries: list[dict[str, Any]] = []
         for stored_run in state.crawl_runs[-20:]:
             run = dict(stored_run)
+            initial_chapters = int(run.get("initial_crawled_chapters") or 0)
             run["processed_count"] = int(
                 run.get("processed_count")
                 or int(run.get("completed_count") or 0)
@@ -2173,8 +2304,21 @@ class InkittBatchService:
                 run["processed_count"] = (
                     run["completed_count"] + run["failed_count"] + run["skipped_count"]
                 )
-                run["crawled_chapters"] = sum(int(row.crawled_chapters or 0) for row in run_rows)
-                run["total_chapters"] = sum(int(row.total_chapters or 0) for row in run_rows)
+                current_chapters = sum(int(row.crawled_chapters or 0) for row in run_rows)
+                current_total = sum(int(row.total_chapters or 0) for row in run_rows)
+                run["crawled_chapters"] = max(0, current_chapters - initial_chapters)
+                run["total_chapters"] = max(0, current_total - initial_chapters)
+            elif "initial_crawled_chapters" in run:
+                # Finalized totals contain the rows' lifetime counters. Present
+                # resumed runs as only the work that happened during that run.
+                run["crawled_chapters"] = max(
+                    0,
+                    int(run.get("crawled_chapters") or 0) - initial_chapters,
+                )
+                run["total_chapters"] = max(
+                    0,
+                    int(run.get("total_chapters") or 0) - initial_chapters,
+                )
             summaries.append(run)
         return list(reversed(summaries))
 
