@@ -22,6 +22,7 @@ from bs4 import BeautifulSoup, Tag
 
 from configs.base_config import load_site_config
 from api.services.archive_cache import get_or_build_cached_zip
+from api.services.batch_runtime import clamp as shared_clamp
 from spiders.inkitt import InkittSpider
 from utils.cleaner import build_promo_patterns, clean_chapter_content
 from utils.proxy import requests_proxies
@@ -2756,7 +2757,7 @@ def urllib_join(href: str) -> str:
 
 
 def clamp(value: int, low: int, high: int) -> int:
-    return max(low, min(high, int(value)))
+    return shared_clamp(value, low, high)
 
 
 def load_saved_inkitt_cookies() -> tuple[list[dict[str, Any]], str | None]:

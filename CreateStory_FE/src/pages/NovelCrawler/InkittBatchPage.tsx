@@ -168,6 +168,12 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [error, setError] = useState('');
   const syncedBatchIdRef = useRef('');
   const catalogFileInputRef = useRef<HTMLInputElement | null>(null);
+  const statusRequestRef = useRef(false);
+  const rowsRequestRef = useRef(false);
+  const historyRequestRef = useRef(false);
+  const loadedRowCountRef = useRef(ROW_PAGE_SIZE);
+  const rowsRequestKeyRef = useRef('');
+  rowsRequestKeyRef.current = `${batchId}|${rowFilter}`;
 
   const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
   const estimateTotalChapters = summary?.crawl_estimate?.estimated_total_chapters || summary?.total_chapters || 0;
@@ -198,36 +204,65 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   }, [summary]);
 
   const fetchHistory = useCallback(() => {
+    if (historyRequestRef.current) return;
+    historyRequestRef.current = true;
     setHistoryLoading(true);
     listInkittBatches()
       .then(setHistory)
       .catch(() => {})
-      .finally(() => setHistoryLoading(false));
+      .finally(() => { historyRequestRef.current = false; setHistoryLoading(false); });
   }, []);
 
   const fetchStatus = useCallback(() => {
-    if (!batchId) return;
+    if (!batchId || statusRequestRef.current) return;
+    statusRequestRef.current = true;
     getInkittBatchStatus(batchId)
       .then(setSummary)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh Inkitt batch status.'));
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh Inkitt batch status.'))
+      .finally(() => { statusRequestRef.current = false; });
   }, [batchId]);
 
-  const fetchRows = useCallback((offset = 0) => {
-    if (!batchId) return;
+  const fetchRows = useCallback(async (offset = 0, requestedLimit = ROW_PAGE_SIZE) => {
+    if (!batchId || rowsRequestRef.current) return;
+    rowsRequestRef.current = true;
     setRowsLoading(true);
-    getInkittBatchRows(batchId, { offset, limit: ROW_PAGE_SIZE, status: rowFilter })
-      .then((response) => {
-        setRows((current) => offset > 0 ? [...current, ...response.items] : response.items);
-        setRowTotal(response.total);
-        setSummary(response.batch);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Inkitt batch rows.'))
-      .finally(() => setRowsLoading(false));
+    const requestKey = `${batchId}|${rowFilter}`;
+    try {
+      const items: InkittBatchRow[] = [];
+      let cursor = offset;
+      let remaining = Math.max(1, requestedLimit);
+      let lastResponse = null as Awaited<ReturnType<typeof getInkittBatchRows>> | null;
+      while (remaining > 0) {
+        const pageSize = Math.min(ROW_PAGE_SIZE, remaining);
+        const response = await getInkittBatchRows(batchId, { offset: cursor, limit: pageSize, status: rowFilter });
+        lastResponse = response;
+        items.push(...response.items);
+        cursor += response.items.length;
+        remaining -= response.items.length;
+        if (response.items.length < pageSize || cursor >= response.total) break;
+      }
+      if (rowsRequestKeyRef.current !== requestKey || !lastResponse) return;
+      setRows((current) => offset > 0 ? [...current, ...items] : items);
+      loadedRowCountRef.current = offset > 0
+        ? Math.max(ROW_PAGE_SIZE, offset + items.length)
+        : Math.max(ROW_PAGE_SIZE, items.length);
+      setRowTotal(lastResponse.total);
+      setSummary(lastResponse.batch);
+    } catch (err) {
+      if (rowsRequestKeyRef.current === requestKey) setError(err instanceof Error ? err.message : 'Failed to load Inkitt batch rows.');
+    } finally {
+      rowsRequestRef.current = false;
+      setRowsLoading(false);
+    }
   }, [batchId, rowFilter]);
 
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  useEffect(() => {
+    if (summary?.phase) fetchHistory();
+  }, [fetchHistory, summary?.phase]);
 
   useEffect(() => {
     if (!batchId) return;
@@ -237,12 +272,14 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
 
   useEffect(() => {
     if (!batchId || !active) return;
-    const id = window.setInterval(() => {
-      fetchStatus();
-      fetchRows(0);
-      fetchHistory();
-    }, 2500);
-    return () => window.clearInterval(id);
+    const statusId = window.setInterval(() => { fetchStatus(); }, 2500);
+    const rowsId = window.setInterval(() => { fetchRows(0, loadedRowCountRef.current); }, 10000);
+    const historyId = window.setInterval(() => { fetchHistory(); }, 30000);
+    return () => {
+      window.clearInterval(statusId);
+      window.clearInterval(rowsId);
+      window.clearInterval(historyId);
+    };
   }, [active, batchId, fetchHistory, fetchRows, fetchStatus]);
 
   const handleToggleGenre = (slug: string) => {

@@ -245,6 +245,28 @@ Recommended production posture:
 - Keep `INKITT_RENDERED_FALLBACK=1`; rendered requests use the same request lane and are skipped for long
   static chapters by default, but remain heavier than plain HTML fetches.
 
+### Jobnib completed-story batches
+
+`/jobnib-batch` scans the story cards on Jobnib's live homepage once and filters the result locally
+using Jobnib's `.sertostat` value. Jobnib's published `/book?page=2` link is deleted, while its pretty
+pagination paths repeat the first page, so they are intentionally not followed. Legacy or unlisted
+story URLs can be restored from JSON, text, or CSV catalogs.
+
+- Slow mode (default) runs one story with two request slots and at least 1.5 seconds between starts.
+  Fast mode runs two stories with four request slots and at least 0.75 seconds between starts.
+- Chapter identity uses TOC sequence plus canonical URL, so repeated chapter numbers in separate
+  volumes are retained. Only fully unlocked chapters pass validation; partial/preview exports are off.
+- Every validated chapter is checkpointed with its checksum. Homepage metadata URLs are persisted
+  beneath `output/jobnib_batch` for restart-safe resume.
+- Jobnib cookies and their matching User-Agent are encrypted in `create_story_crawler.jobnib_cookies`.
+  Refresh and test them from the production VPN/IP in Settings. Three consecutive session challenges
+  open the circuit breaker; after a successful test, **Retry session rows** resumes those stories.
+- Batch ZIPs are prepared after a short delay, cached, and served with HTTP range support for IDM.
+  Exports use `Completed/DONE_<title>_jn` and are recognized by DriveSync as Jobnib.
+
+Deployment needs no new container or database. `task update:all` rebuilds NovelCrawler and the
+frontend, and NovelCrawler runs Alembic revision `0006_add_jobnib_cookies` before starting.
+
 ---
 
 ## Adding a New Site

@@ -77,6 +77,14 @@ def test_worker_url_allows_inkitt_batch_download_with_run_id(monkeypatch) -> Non
     assert url == "http://novelcrawler.local/api/results/inkitt-batch/abc123ef/download?run_id=feedbeef"
 
 
+def test_worker_url_allows_jobnib_batch_download_with_run_id(monkeypatch) -> None:
+    monkeypatch.setenv("SERVICE_URLS_NovelCrawler", "http://novelcrawler.local")
+
+    url = _worker_url("/api/results/jobnib-batch/abc123ef/download?run_id=feedbeef")
+
+    assert url == "http://novelcrawler.local/api/results/jobnib-batch/abc123ef/download?run_id=feedbeef"
+
+
 def test_redeem_download_ticket_sets_start_marker_cookie(monkeypatch) -> None:
     """Successful downloads set cs_download_<token>=1 so the frontend can hold
     its loading state until the (possibly slow to prepare) file starts."""

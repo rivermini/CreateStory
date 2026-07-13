@@ -1,4 +1,4 @@
-import { apiFetch } from '../client';
+import { apiFetch, BASE_URL } from '../client';
 import type {
   CrawlRequest,
   CrawlStartResponse,
@@ -22,6 +22,18 @@ import type {
   InkittBatchRowsResponse,
   InkittBatchStartRequest,
   InkittBatchSummary,
+  JobnibCookieUpdateResponse,
+  JobnibCookieStatusResponse,
+  JobnibBatchCrawlRequest,
+  JobnibCatalogBackup,
+  JobnibCatalogImportResponse,
+  JobnibBatchLogsResponse,
+  JobnibBatchRowsResponse,
+  JobnibBatchStartRequest,
+  JobnibBatchSummary,
+  JobnibBrowserCapturePairResponse,
+  JobnibBrowserCaptureCloseResponse,
+  JobnibBrowserCaptureStatus,
   CrawlStatusWithLogs,
   ProgressUpdate,
   ActiveCrawl,
@@ -113,6 +125,26 @@ export async function updateWebnovelCookies(
 
 export async function checkWebnovelCookies(storyUrl?: string): Promise<WebNovelCookieStatusResponse> {
   return apiFetch<WebNovelCookieStatusResponse>('/api/crawl/webnovel-cookies/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ story_url: storyUrl }),
+    timeout: 60000,
+  });
+}
+
+export async function updateJobnibCookies(
+  cookies: string,
+  userAgent?: string,
+): Promise<JobnibCookieUpdateResponse> {
+  return apiFetch<JobnibCookieUpdateResponse>('/api/crawl/jobnib-cookies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies, user_agent: userAgent }),
+  });
+}
+
+export async function checkJobnibCookies(storyUrl?: string): Promise<JobnibCookieStatusResponse> {
+  return apiFetch<JobnibCookieStatusResponse>('/api/crawl/jobnib-cookies/status', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ story_url: storyUrl }),
@@ -254,6 +286,131 @@ export async function removeInkittBatch(batchId: string): Promise<{ deleted: boo
   return apiFetch<{ deleted: boolean; batch_id: string }>(
     `/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}`,
     { method: 'DELETE' },
+  );
+}
+
+export async function startJobnibBatch(request: JobnibBatchStartRequest): Promise<JobnibBatchSummary> {
+  return apiFetch<JobnibBatchSummary>('/api/crawl/jobnib-batch/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), timeout: 60000,
+  });
+}
+
+export async function crawlJobnibBatch(batchId: string, request: JobnibBatchCrawlRequest): Promise<JobnibBatchSummary> {
+  return apiFetch<JobnibBatchSummary>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/crawl`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), timeout: 60000,
+  });
+}
+
+export async function pauseJobnibBatch(batchId: string): Promise<JobnibBatchSummary> {
+  return apiFetch<JobnibBatchSummary>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/pause`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', timeout: 60000,
+  });
+}
+
+export async function retryJobnibFailedStories(batchId: string, rowIndex?: number): Promise<JobnibBatchSummary> {
+  return apiFetch<JobnibBatchSummary>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/retry-failed`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rowIndex ? { row_index: rowIndex } : {}), timeout: 60000,
+  });
+}
+
+export async function retryJobnibSessionStories(batchId: string): Promise<JobnibBatchSummary> {
+  return apiFetch<JobnibBatchSummary>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/retry-session`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', timeout: 60000,
+  });
+}
+
+export async function listJobnibBatches(): Promise<JobnibBatchSummary[]> {
+  return apiFetch<JobnibBatchSummary[]>('/api/crawl/jobnib-batch');
+}
+
+export async function getJobnibBatchStatus(batchId: string): Promise<JobnibBatchSummary> {
+  return apiFetch<JobnibBatchSummary>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}`);
+}
+
+export async function getJobnibBatchRows(
+  batchId: string,
+  options: { offset?: number; limit?: number; status?: string } = {},
+): Promise<JobnibBatchRowsResponse> {
+  const params = new URLSearchParams({
+    offset: String(options.offset ?? 0), limit: String(options.limit ?? 100), status: options.status ?? 'all',
+  });
+  return apiFetch<JobnibBatchRowsResponse>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/rows?${params.toString()}`);
+}
+
+export async function getJobnibBatchLogs(batchId: string): Promise<JobnibBatchLogsResponse> {
+  return apiFetch<JobnibBatchLogsResponse>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/logs`);
+}
+
+export async function exportJobnibBatchCatalog(batchId: string): Promise<JobnibCatalogBackup> {
+  return apiFetch<JobnibCatalogBackup>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/catalog/export`, { timeout: 300000 });
+}
+
+export async function importJobnibCatalog(payload: unknown): Promise<JobnibCatalogImportResponse> {
+  return apiFetch<JobnibCatalogImportResponse>('/api/crawl/jobnib-batch/catalog/import', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeout: 300000,
+  });
+}
+
+export async function removeJobnibBatch(batchId: string): Promise<{ deleted: boolean; batch_id: string }> {
+  return apiFetch<{ deleted: boolean; batch_id: string }>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}`, { method: 'DELETE' });
+}
+
+export async function pairJobnibBrowserCapture(
+  batchId: string,
+  options: { ttl_seconds?: number; row_index?: number } = {},
+): Promise<JobnibBrowserCapturePairResponse> {
+  return apiFetch<JobnibBrowserCapturePairResponse>(
+    `/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/browser-capture/pair`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...options, ttl_seconds: options.ttl_seconds ?? 900 }),
+    },
+  );
+}
+
+async function jobnibBrowserCaptureFetch<T>(path: string, pairingToken: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...init?.headers,
+      Authorization: `Bearer ${pairingToken}`,
+    },
+  });
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const body = await response.json() as { detail?: unknown; message?: unknown };
+      if (typeof body.detail === 'string') message = body.detail;
+      else if (typeof body.message === 'string') message = body.message;
+    } catch { /* keep the HTTP status */ }
+    throw new Error(message);
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function getJobnibBrowserCaptureStatus(
+  batchId: string,
+  pairingId: string,
+  pairingToken: string,
+): Promise<JobnibBrowserCaptureStatus> {
+  return jobnibBrowserCaptureFetch<JobnibBrowserCaptureStatus>(
+    `/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/browser-capture/${encodeURIComponent(pairingId)}/status`,
+    pairingToken,
+  );
+}
+
+export async function closeJobnibBrowserCapture(
+  batchId: string,
+  pairingId: string,
+  pairingToken: string,
+  reason = 'Closed by operator',
+): Promise<JobnibBrowserCaptureCloseResponse> {
+  return jobnibBrowserCaptureFetch<JobnibBrowserCaptureCloseResponse>(
+    `/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/browser-capture/${encodeURIComponent(pairingId)}/close`,
+    pairingToken,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) },
   );
 }
 

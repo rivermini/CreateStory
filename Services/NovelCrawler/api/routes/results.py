@@ -290,6 +290,38 @@ def download_inkitt_batch(
     )
 
 
+@router.get("/jobnib-batch/{batch_id}/download", response_model=None)
+def download_jobnib_batch(
+    batch_id: str,
+    request: Request,
+    run_id: str | None = Query(default=None),
+) -> FileResponse | StreamingResponse | Response:
+    """Serve a cached, resumable ZIP for completed Jobnib exports."""
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+    service = get_jobnib_batch_service()
+    try:
+        service.require_owner(
+            batch_id=batch_id,
+            user_id=getattr(request.state, "create_story_user_id", None),
+            role=getattr(request.state, "create_story_role", None),
+        )
+        archive_path = service.prepare_archive(batch_id, run_id=run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    suffix = f"_{run_id}" if run_id else ""
+    return _range_file_response(
+        archive_path,
+        f"jobnib_batch_{batch_id}{suffix}.zip",
+        request,
+    )
+
+
 def _attachment_disposition(filename: str) -> str:
     ascii_name = filename.encode("ascii", "ignore").decode("ascii").replace('"', "") or "download.zip"
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"

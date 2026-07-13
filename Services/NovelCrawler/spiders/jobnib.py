@@ -17,9 +17,7 @@ import json
 import logging
 import os
 import re
-import secrets
 import shutil
-import string
 import subprocess
 import tempfile
 import threading
@@ -103,6 +101,7 @@ class JobnibSpider(BaseSpider):
         self._seen_lock = threading.Lock()
         self._browser_lock = threading.Lock()
         self._abort_event = threading.Event()
+        self._saved_cookies, self._saved_user_agent = self._load_saved_session()
 
     async def start(self):
         start_url = self._normalize_url(self.start_urls[0])
@@ -221,15 +220,22 @@ class JobnibSpider(BaseSpider):
         return ""
 
     def _allow_partial_chapters(self) -> bool:
-        value = os.environ.get("JOBNIB_ALLOW_PARTIAL", "true").strip().lower()
+        value = os.environ.get("JOBNIB_ALLOW_PARTIAL", "false").strip().lower()
         return value in {"1", "true", "yes", "on"}
 
     def _partial_min_words(self) -> int:
-        raw = os.environ.get("JOBNIB_PARTIAL_MIN_WORDS", "1")
+        raw = os.environ.get("JOBNIB_PARTIAL_MIN_WORDS", "100")
         try:
             return max(1, int(raw.strip()))
         except (AttributeError, ValueError):
             return 1
+
+    def _minimum_chapter_words(self) -> int:
+        raw = os.environ.get("JOBNIB_MIN_CHAPTER_WORDS", "100")
+        try:
+            return max(1, int(raw.strip()))
+        except (AttributeError, ValueError):
+            return 100
 
     def build_selector_config(self, config: dict) -> SelectorConfig:
         selectors = config.get("selectors", {})
@@ -251,8 +257,9 @@ class JobnibSpider(BaseSpider):
         except Exception as exc:
             self.logger.debug("[jobnib] Requests fetch failed for %s: %s; retrying with browser.", url, exc)
 
-        browser = self._get_browser()
-        html = browser.fetch_page(url, timeout=60)
+        with self._browser_lock:
+            browser = self._get_browser()
+            html = browser.fetch_page(url, timeout=60)
         if self._is_cloudflare_challenge(html):
             raise CloseSpider(
                 "[jobnib] Cloudflare challenge did not clear. "
@@ -264,14 +271,22 @@ class JobnibSpider(BaseSpider):
         import requests
 
         headers = {
-            "User-Agent": _JOBNIB_USER_AGENT,
+            "User-Agent": os.getenv("JOBNIB_USER_AGENT") or self._saved_user_agent or _JOBNIB_USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": _JOBNIB_BASE + "/",
         }
-        resp = requests.get(
+        session = requests.Session()
+        session.headers.update(headers)
+        for cookie in self._saved_cookies:
+            session.cookies.set(
+                str(cookie.get("name") or ""),
+                str(cookie.get("value") or ""),
+                domain=str(cookie.get("domain") or ".jobnib.com"),
+                path=str(cookie.get("path") or "/"),
+            )
+        resp = session.get(
             url,
-            headers=headers,
             timeout=timeout,
             proxies=requests_proxies("jobnib"),
         )
@@ -315,7 +330,7 @@ class JobnibSpider(BaseSpider):
                 chapter_number,
                 word_count,
             )
-        elif status != "complete" or word_count < 500:
+        elif status != "complete" or word_count < self._minimum_chapter_words():
             reason = (
                 f"[jobnib/{chapter_number}] Could not unlock full chapter content "
                 f"(status={status}, words={word_count}). "
@@ -351,7 +366,7 @@ class JobnibSpider(BaseSpider):
                 unlocked = self._fetch_chapter_segments_with_requests(chapter_url, attempt_shell)
                 content, status = self._extract_visible_chapter_content(BeautifulSoup(unlocked, "html.parser"))
                 word_count = len(clean_chapter_content(content, self._promo_patterns).split())
-                if status == "complete" and word_count >= 500:
+                if status == "complete" and word_count >= self._minimum_chapter_words():
                     return unlocked
                 if status == "partial" and self._allow_partial_chapters() and word_count >= self._partial_min_words():
                     self.logger.info(
@@ -403,10 +418,17 @@ class JobnibSpider(BaseSpider):
 
         session = requests.Session()
         headers = {
-            "User-Agent": os.getenv("JOBNIB_USER_AGENT", _JOBNIB_USER_AGENT),
+            "User-Agent": os.getenv("JOBNIB_USER_AGENT") or self._saved_user_agent or _JOBNIB_USER_AGENT,
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": chapter_url,
         }
+        for cookie in self._saved_cookies:
+            session.cookies.set(
+                str(cookie.get("name") or ""),
+                str(cookie.get("value") or ""),
+                domain=str(cookie.get("domain") or ".jobnib.com"),
+                path=str(cookie.get("path") or "/"),
+            )
         ajax_headers = {
             **headers,
             "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -452,7 +474,6 @@ class JobnibSpider(BaseSpider):
                     "post_id": post_id,
                     "segment": "2",
                     "nonce": next_nonce,
-                    "cf_token": self._synthetic_turnstile_token(),
                 },
                 headers={
                     **ajax_headers,
@@ -558,10 +579,6 @@ class JobnibSpider(BaseSpider):
             preview["style"] = "display:none;"
         return str(soup)
 
-    def _synthetic_turnstile_token(self) -> str:
-        alphabet = string.ascii_letters + string.digits + "_-"
-        return "0." + "".join(secrets.choice(alphabet) for _ in range(1700))
-
     def _extract_visible_chapter_content(self, soup: BeautifulSoup) -> tuple[str, str]:
         entry = soup.select_one(".entry-content")
         if entry is None:
@@ -658,8 +675,9 @@ class JobnibSpider(BaseSpider):
         return True
 
     def _collect_chapter_links(self, soup: BeautifulSoup, story_url: str) -> list[dict[str, Any]]:
-        links_by_number: dict[int, dict[str, Any]] = {}
-        story_slug = self._story_slug_from_url(story_url)
+        """Return stable TOC-order refs without collapsing multi-volume chapter numbers."""
+        refs: list[dict[str, Any]] = []
+        seen_urls: set[str] = set()
 
         for anchor in soup.select(self.selector_config.chapter_list):
             href = anchor.get("href")
@@ -673,29 +691,42 @@ class JobnibSpider(BaseSpider):
                 continue
 
             slug = match.group(1)
-            number = self._chapter_number_from_slug(slug)
-            if number is None:
+            displayed_number = self._chapter_number_from_slug(slug)
+            if displayed_number is None and "chapter" not in (anchor.get_text(" ", strip=True) or "").lower():
                 continue
-
-            link_story_slug = self._strip_chapter_suffix(slug)
-            if story_slug and link_story_slug != story_slug:
+            if absolute in seen_urls or absolute == self._normalize_url(story_url):
                 continue
+            seen_urls.add(absolute)
 
             title = self._clean_text(anchor.get("title") or anchor.get_text(" ", strip=True))
             title = re.sub(r"^Ch\.\s*\d+\s+", "", title, flags=re.IGNORECASE)
+            sequence_index = len(refs) + 1
             if not title or re.fullmatch(r"Ch\.\s*\d+", title, flags=re.IGNORECASE):
-                title = f"Chapter {number}"
-
-            existing = links_by_number.get(number)
-            if existing and existing.get("title") and existing["title"] != f"Chapter {number}":
-                continue
-            links_by_number[number] = {
-                "chapter_number": number,
+                title = f"Chapter {displayed_number or sequence_index}"
+            volume_label = self._chapter_volume_label(anchor)
+            refs.append({
+                "chapter_number": sequence_index,
+                "sequence_index": sequence_index,
+                "displayed_chapter_number": displayed_number,
+                "volume_label": volume_label,
                 "title": title,
                 "url": absolute,
-            }
+            })
 
-        return [links_by_number[num] for num in sorted(links_by_number)]
+        return refs
+
+    def _chapter_volume_label(self, anchor: Tag) -> str:
+        current: Tag | None = anchor
+        for _ in range(5):
+            current = current.parent if isinstance(current.parent, Tag) else None
+            if current is None:
+                break
+            heading = current.find_previous(["h2", "h3", "h4"])
+            if heading:
+                text = self._clean_text(heading.get_text(" ", strip=True))
+                if re.search(r"\b(?:vol(?:ume)?|book)\b", text, re.IGNORECASE):
+                    return text
+        return ""
 
     def _select_chapters(self, links: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if self._range_start is not None and self._range_end is not None:
@@ -709,7 +740,7 @@ class JobnibSpider(BaseSpider):
         title = self._extract_story_title(soup)
         cover = self._extract_image_url(soup)
         description = self._meta_content(soup, "meta[name='description']") or ""
-        status_el = soup.select_one(".status")
+        status_el = soup.select_one(".sertostat, .status")
         status = self._clean_text(status_el.get_text(" ", strip=True)) if status_el else ""
         metadata = {
             "source_url": source_url,
@@ -807,6 +838,14 @@ class JobnibSpider(BaseSpider):
             self._browser = _JobnibBrowser(logger=self.logger)
         return self._browser
 
+    def _load_saved_session(self) -> tuple[list[dict[str, Any]], str | None]:
+        try:
+            from api.services.jobnib_cookie_service import load_jobnib_cookies
+
+            return load_jobnib_cookies()
+        except Exception:
+            return [], None
+
     def _is_chapter_url(self, url: str) -> bool:
         return self._chapter_number_from_url(url) is not None
 
@@ -872,7 +911,7 @@ class JobnibSpider(BaseSpider):
 
 
 class _JobnibBrowser:
-    def __init__(self, logger: logging.Logger):
+    def __init__(self, logger: logging.Logger, user_agent: str | None = None):
         self.logger = logger
         self._driver: Any = None
         self._xvfb_process: subprocess.Popen[Any] | None = None
@@ -880,6 +919,7 @@ class _JobnibBrowser:
         self._cookie_file = Path(__file__).parent.parent / "handlers" / "selenium_cookies_jobnib_com.json"
         self._persist_cookies = True
         self._chromedriver_path: str | None = None
+        self._saved_user_agent = (user_agent or self._load_saved_user_agent() or "").strip()
         atexit.register(self.close)
 
     def fetch_page(self, url: str, timeout: int = 60) -> str:
@@ -933,6 +973,7 @@ class _JobnibBrowser:
             except Exception:
                 self.close()
 
+        self._remove_stale_profile_locks()
         headless = self._should_run_headless()
         if self._env_flag("JOBNIB_HEADLESS") is None and headless and self._start_virtual_display():
             headless = False
@@ -957,7 +998,7 @@ class _JobnibBrowser:
         if headless:
             options.add_argument("--headless=new")
         options.add_argument("--window-size=1400,1000")
-        options.add_argument(f"--user-agent={os.getenv('JOBNIB_USER_AGENT', _JOBNIB_USER_AGENT)}")
+        options.add_argument(f"--user-agent={self._resolved_user_agent()}")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
@@ -1023,7 +1064,20 @@ class _JobnibBrowser:
 
             chromedriver_path = self._resolve_chromedriver()
             service = Service(executable_path=chromedriver_path) if chromedriver_path else Service()
-            self._driver = webdriver.Chrome(service=service, options=options)
+            try:
+                self._driver = webdriver.Chrome(service=service, options=options)
+            except Exception as exc:
+                # A persistent profile can retain a truncated Preferences file
+                # after Chromium is killed during a challenge. Keep the
+                # persistent cookies, but retry the browser with a clean profile
+                # instead of surfacing ChromeDriver's opaque JSON parse error.
+                self.logger.warning(
+                    "[jobnib] Selenium could not start with profile %s (%s); retrying with a fresh profile.",
+                    self._profile_dir,
+                    self._short_error(exc),
+                )
+                self._rotate_profile_dir(options, prefix="jobnib_crawler_selenium_profile")
+                self._driver = webdriver.Chrome(service=service, options=options)
             self._driver.execute_cdp_cmd(
                 "Page.addScriptToEvaluateOnNewDocument",
                 {
@@ -1038,6 +1092,40 @@ class _JobnibBrowser:
         if self._persist_cookies:
             self._inject_cookies()
         return self._driver
+
+    def _resolved_user_agent(self) -> str:
+        """Use the exact UA paired with saved Cloudflare cookies when available."""
+        return os.getenv("JOBNIB_USER_AGENT") or self._saved_user_agent or _JOBNIB_USER_AGENT
+
+    def _load_saved_user_agent(self) -> str | None:
+        try:
+            from api.services.jobnib_cookie_service import load_jobnib_cookies
+
+            _cookies, user_agent = load_jobnib_cookies()
+            return user_agent
+        except Exception:
+            return None
+
+    def _remove_stale_profile_locks(self) -> None:
+        """Remove Chromium ownership markers left by a crashed/recreated container.
+
+        This runs only when this browser object has no live driver and browser
+        access is serialized by the caller. A clean Chrome shutdown removes the
+        markers itself; their presence here means startup cannot safely reuse the
+        persistent profile without clearing them first.
+        """
+        self._profile_dir.mkdir(parents=True, exist_ok=True)
+        removed: list[str] = []
+        for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+            marker = self._profile_dir / name
+            try:
+                if marker.is_symlink() or marker.exists():
+                    marker.unlink()
+                    removed.append(name)
+            except OSError as exc:
+                self.logger.warning("[jobnib] Could not remove stale Chromium marker %s: %s", marker, exc)
+        if removed:
+            self.logger.info("[jobnib] Removed stale Chromium profile marker(s): %s.", ", ".join(removed))
 
     def _start_undetected_driver(self, uc: Any, options: Any, headless: bool) -> Any:
         chrome_major = self._chrome_major_version()
@@ -1406,11 +1494,17 @@ class _JobnibBrowser:
     def _inject_cookies(self) -> None:
         if not self._persist_cookies:
             return
-        if not self._cookie_file.exists():
-            return
         try:
             self._driver.get(_JOBNIB_BASE)
-            cookies = json.loads(self._cookie_file.read_text(encoding="utf-8"))
+            cookies = []
+            try:
+                from api.services.jobnib_cookie_service import load_jobnib_cookies
+
+                cookies, _user_agent = load_jobnib_cookies()
+            except Exception:
+                cookies = []
+            if not cookies and self._cookie_file.exists():
+                cookies = json.loads(self._cookie_file.read_text(encoding="utf-8"))
             for cookie in cookies:
                 try:
                     self._driver.add_cookie({
@@ -1421,7 +1515,8 @@ class _JobnibBrowser:
                     })
                 except Exception:
                     pass
-            self.logger.info("[jobnib] Loaded %d cookie(s) from %s", len(cookies), self._cookie_file.name)
+            if cookies:
+                self.logger.info("[jobnib] Loaded %d saved browser cookie(s).", len(cookies))
         except Exception as exc:
             self.logger.debug("[jobnib] Could not inject saved cookies: %s", exc)
 
@@ -1432,7 +1527,16 @@ class _JobnibBrowser:
             cookies = self._driver.get_cookies()
             if not cookies:
                 return
+            try:
+                from api.services.jobnib_cookie_service import persist_jobnib_cookies
+
+                user_agent = self._driver.execute_script("return navigator.userAgent || '';")
+                persist_jobnib_cookies(cookies, str(user_agent or ""))
+            except Exception as exc:
+                self.logger.debug("[jobnib] Could not persist browser cookies to the database: %s", exc)
             cookie_path = self._cookie_file
+            cookie_path.parent.mkdir(parents=True, exist_ok=True)
+            cookie_path.touch(exist_ok=True)
             with open(cookie_path, "r+") as f:
                 try:
                     if os.name == "nt" and msvcrt is not None:

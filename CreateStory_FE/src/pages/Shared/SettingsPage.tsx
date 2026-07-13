@@ -9,6 +9,8 @@ import {
   checkGoodnovelCookies,
   updateWebnovelCookies,
   checkWebnovelCookies,
+  updateJobnibCookies,
+  checkJobnibCookies,
   getSettings,
   updateSettings,
   getDriveSyncConfig,
@@ -24,7 +26,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 import { showToast } from '../../components/Shared/Toast';
 
-type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'goodnovel' | 'webnovel' | 'crawler' | 'audio' | 'danger';
+type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'goodnovel' | 'webnovel' | 'jobnib' | 'crawler' | 'audio' | 'danger';
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
@@ -48,6 +50,7 @@ const CATEGORY_ITEMS: CategoryItem[] = [
   { id: 'scribblehub', label: 'ScribbleHub Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
   { id: 'goodnovel', label: 'GoodNovel Cookies', description: 'Login cookies to unlock chapters', icon: 'shield' },
   { id: 'webnovel', label: 'WebNovel Cookies', description: 'Cloudflare and login cookies', icon: 'shield' },
+  { id: 'jobnib', label: 'Jobnib Session', description: 'Cloudflare cookies and User-Agent', icon: 'shield' },
   { id: 'crawler', label: 'Crawler', description: 'Default crawl behavior', icon: 'settings' },
   { id: 'audio', label: 'Audio Pipeline', description: 'Auto Audio and TTS', icon: 'music' },
   { id: 'danger', label: 'Advanced', description: 'Cleanup actions', icon: 'delete' },
@@ -155,6 +158,13 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [checkingWebnovelCookies, setCheckingWebnovelCookies] = useState(false);
   const [webnovelCookieError, setWebnovelCookieError] = useState('');
   const [webnovelCookieMessage, setWebnovelCookieMessage] = useState('');
+  const [jobnibCookies, setJobnibCookies] = useState('');
+  const [jobnibUserAgent, setJobnibUserAgent] = useState('');
+  const [jobnibTestUrl, setJobnibTestUrl] = useState('');
+  const [savingJobnibCookies, setSavingJobnibCookies] = useState(false);
+  const [checkingJobnibCookies, setCheckingJobnibCookies] = useState(false);
+  const [jobnibCookieError, setJobnibCookieError] = useState('');
+  const [jobnibCookieMessage, setJobnibCookieMessage] = useState('');
 
   useEffect(() => {
     getSettings()
@@ -800,6 +810,55 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     }
   };
 
+  const handleSaveJobnibCookies = async () => {
+    if (!jobnibCookies.trim()) {
+      setJobnibCookieError('Paste a raw Jobnib Cookie header or Selenium JSON first.');
+      return;
+    }
+    setSavingJobnibCookies(true); setJobnibCookieError(''); setJobnibCookieMessage('');
+    try {
+      const result = await updateJobnibCookies(jobnibCookies.trim(), jobnibUserAgent.trim() || undefined);
+      const message = `Saved ${result.cookie_count} Jobnib cookie${result.cookie_count === 1 ? '' : 's'}.`;
+      setJobnibCookieMessage(result.has_cf_clearance ? message : `${message} No cf_clearance was present; test the session before crawling.`);
+      showToast('Jobnib session saved.', 'success', 2200, 'top-center');
+    } catch (err) { setJobnibCookieError(err instanceof Error ? err.message : 'Failed to save Jobnib cookies.'); }
+    finally { setSavingJobnibCookies(false); }
+  };
+
+  const handleCheckJobnibCookies = async () => {
+    setCheckingJobnibCookies(true); setJobnibCookieError(''); setJobnibCookieMessage('');
+    try {
+      const result = await checkJobnibCookies(jobnibTestUrl.trim() || undefined);
+      if (result.valid) { setJobnibCookieMessage(result.message); showToast('Jobnib session is working.', 'success', 2200, 'top-center'); }
+      else if (result.valid === null) setJobnibCookieMessage(result.message);
+      else setJobnibCookieError(result.message);
+    } catch (err) { setJobnibCookieError(err instanceof Error ? err.message : 'Failed to test Jobnib cookies.'); }
+    finally { setCheckingJobnibCookies(false); }
+  };
+
+  const handleJobnibJsonFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed) && typeof parsed === 'object' && parsed?.reader_verified === false) {
+        const unlocked = Number(parsed?.reader_state?.unlocked_segments || 0);
+        setJobnibCookieError(`This collector file is not verified (${unlocked}/2 chapter segments unlocked). Open both parts in the collector Chrome window and collect again.`);
+        return;
+      }
+      const userAgent = !Array.isArray(parsed) && typeof parsed === 'object' && parsed
+        ? String(parsed.user_agent || parsed.userAgent || parsed['User-Agent'] || '') : '';
+      const cookies = !Array.isArray(parsed) && typeof parsed === 'object' && parsed && (parsed.cookies || parsed.data)
+        ? parsed.cookies || parsed.data : parsed;
+      setJobnibCookies(JSON.stringify(cookies));
+      if (userAgent) setJobnibUserAgent(userAgent);
+      setJobnibCookieError('');
+      showToast('Jobnib session JSON loaded.', 'success', 2200, 'top-center');
+    } catch (err) { setJobnibCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`); }
+    finally { event.target.value = ''; }
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -1057,6 +1116,34 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
             <p className="text-xs" style={{ color: tertiaryText }}>In Chrome at `https://www.webnovel.com`: DevTools - Application - Cookies - copy `cf_clearance` or the full Cookie header. Save the same browser's User-Agent. Locked chapters still require that your account can read them.</p>
             {webnovelCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{webnovelCookieMessage}</div>}
             {webnovelCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{webnovelCookieError}</div>}
+          </section>
+        );
+      case 'jobnib':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="Jobnib Session" description="Save the browser cookies and matching User-Agent used by Jobnib Batch and single-story crawling." pageText={pageText} secondaryText={secondaryText} />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label htmlFor="settings-jobnib-cookies" className={labelClassName}>Raw Cookie header or Selenium JSON</label>
+                <textarea id="settings-jobnib-cookies" value={jobnibCookies} onChange={(event) => { setJobnibCookies(event.target.value); setJobnibCookieError(''); setJobnibCookieMessage(''); }} rows={5} className={`${fieldClassName} min-h-[130px] resize-y font-mono text-xs`} placeholder={'cf_clearance=...; PHPSESSID=...\n\nor [{"name":"cf_clearance","value":"...","domain":".jobnib.com"}]'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-jobnib-ua" className={labelClassName}>Matching browser User-Agent</label>
+                <textarea id="settings-jobnib-ua" value={jobnibUserAgent} onChange={(event) => { setJobnibUserAgent(event.target.value); setJobnibCookieError(''); setJobnibCookieMessage(''); }} rows={2} className={`${fieldClassName} resize-y font-mono text-xs`} placeholder="Mozilla/5.0 ... Chrome/... Safari/537.36" style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-jobnib-test-url" className={labelClassName}>Jobnib story or chapter URL to test (optional)</label>
+                <input id="settings-jobnib-test-url" value={jobnibTestUrl} onChange={(event) => { setJobnibTestUrl(event.target.value); setJobnibCookieError(''); setJobnibCookieMessage(''); }} className={`${fieldClassName} font-mono text-xs`} placeholder="https://jobnib.com/book/story-name" style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={handleSaveJobnibCookies} disabled={savingJobnibCookies || !jobnibCookies.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingJobnibCookies || !jobnibCookies.trim() ? subtleSurface : primaryButton, color: savingJobnibCookies || !jobnibCookies.trim() ? tertiaryText : '#fff' }}>{savingJobnibCookies ? 'Saving...' : 'Save Session'}</button>
+              <button type="button" onClick={handleCheckJobnibCookies} disabled={checkingJobnibCookies} className="rounded-lg border px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>{checkingJobnibCookies ? 'Testing...' : 'Test Session'}</button>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}><span>Upload Selenium JSON</span><input type="file" accept="application/json" onChange={handleJobnibJsonFileUpload} className="hidden" /></label>
+            </div>
+            <p className="text-xs" style={{ color: tertiaryText }}>Jobnib has no login. On the production server PC, run the Jobnib cookie collector, open a chapter, complete any browser verification, and confirm both chapter parts unlock. Upload its JSON here; cookies are encrypted in the crawler database.</p>
+            {jobnibCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{jobnibCookieMessage}</div>}
+            {jobnibCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{jobnibCookieError}</div>}
           </section>
         );
       case 'crawler':

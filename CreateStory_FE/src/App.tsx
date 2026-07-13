@@ -24,6 +24,8 @@ const HomePage = lazy(() => import('./pages/NovelCrawler/HomePage').then(m => ({
 const GoodNovelBatchPage = lazy(() => import('./pages/NovelCrawler/GoodNovelBatchPage').then(m => ({ default: m.GoodNovelBatchPage })));
 const InkittBatchPage = lazy(() => import('./pages/NovelCrawler/InkittBatchPage').then(m => ({ default: m.InkittBatchPage })));
 const InkittBatchFullLogsPage = lazy(() => import('./pages/NovelCrawler/InkittBatchFullLogsPage').then(m => ({ default: m.InkittBatchFullLogsPage })));
+const JobnibBatchPage = lazy(() => import('./pages/NovelCrawler/JobnibBatchPage').then(m => ({ default: m.JobnibBatchPage })));
+const JobnibBatchFullLogsPage = lazy(() => import('./pages/NovelCrawler/JobnibBatchFullLogsPage').then(m => ({ default: m.JobnibBatchFullLogsPage })));
 const CrawlPage = lazy(() => import('./pages/NovelCrawler/CrawlPage').then(m => ({ default: m.CrawlPage })));
 const ResultPage = lazy(() => import('./pages/NovelCrawler/ResultPage').then(m => ({ default: m.ResultPage })));
 const CrawlHistory = lazy(() => import('./pages/NovelCrawler/CrawlHistoryPage').then(m => ({ default: m.default })));
@@ -265,6 +267,8 @@ function Shell({
               <Route path="/goodnovel-batch" element={<GoodNovelBatchPage themeMode={themeMode} />} />
               <Route path="/inkitt-batch" element={<InkittBatchPage themeMode={themeMode} />} />
               <Route path="/inkitt-batch/:batchId/full-logs" element={<InkittBatchFullLogsPage themeMode={themeMode} />} />
+              <Route path="/jobnib-batch" element={<JobnibBatchPage themeMode={themeMode} />} />
+              <Route path="/jobnib-batch/:batchId/full-logs" element={<JobnibBatchFullLogsPage themeMode={themeMode} />} />
               <Route path="/crawl" element={<CrawlPage themeMode={themeMode}  />} />
               <Route path="/results" element={<ResultPage themeMode={themeMode} />} />
               <Route path="/results/all" element={<CrawlHistory themeMode={themeMode} />} />

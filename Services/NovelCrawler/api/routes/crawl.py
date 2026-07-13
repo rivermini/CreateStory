@@ -5,9 +5,9 @@ import os
 import re
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sse_starlette.sse import EventSourceResponse
 
 from api.models.crawl_request import (
@@ -166,6 +166,34 @@ class WebNovelCookieStatusResponse(BaseModel):
     tested_url: str | None = None
 
 
+class JobnibCookieUpdateRequest(BaseModel):
+    cookies: str = Field(..., min_length=1, description="Jobnib cookies as Selenium JSON or a raw Cookie header.")
+    user_agent: str | None = Field(default=None, description="The browser User-Agent matching the cookies.")
+
+
+class JobnibCookieUpdateResponse(BaseModel):
+    updated: bool
+    cookie_count: int
+    has_cf_clearance: bool
+
+
+class JobnibCookieStatusRequest(BaseModel):
+    story_url: str | None = Field(default=None, description="Optional Jobnib story/chapter URL to test against.")
+
+    @field_validator("story_url")
+    @classmethod
+    def _validate_story_url(cls, value: str | None) -> str | None:
+        return validate_external_url(value, ("jobnib.com",), field_name="story_url")
+
+
+class JobnibCookieStatusResponse(BaseModel):
+    valid: bool | None
+    reason: str
+    message: str
+    cookie_count: int
+    tested_url: str | None = None
+
+
 class GoodNovelBatchScanRequest(BaseModel):
     titles_text: str = Field(..., min_length=1, description="Story titles separated by the configured delimiter.")
     delimiter: str = Field(default=";", max_length=16, description="Delimiter between titles. Use ';' or 'newline'.")
@@ -195,6 +223,72 @@ class InkittBatchCrawlRequest(BaseModel):
     crawl_concurrency: int = Field(default=4, ge=1, le=4)
     request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
     max_stories: int | None = Field(default=None, ge=1, le=10000)
+
+
+class JobnibBatchStartRequest(BaseModel):
+    batch_name: str | None = Field(default=None, max_length=160)
+    # Retained in the public contract for compatibility. Jobnib discovery now
+    # scans only the live homepage because its archive pages were deleted.
+    max_archive_pages: int = Field(default=1, ge=1, le=1000)
+    mode: Literal["slow", "fast"] = Field(default="slow")
+    crawl_after_discovery: bool = Field(default=False)
+
+
+class JobnibBatchCrawlRequest(BaseModel):
+    mode: Literal["slow", "fast"] = Field(default="slow")
+    max_stories: int = Field(default=20, ge=1, le=10000)
+
+
+class JobnibBrowserCapturePairRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ttl_seconds: int = Field(default=900, ge=60, le=1800)
+    row_index: int | None = Field(default=None, ge=1, le=10000)
+
+
+class JobnibCapturedSegment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segment_id: str = Field(..., min_length=1, max_length=128)
+    html: str = Field(..., min_length=1, max_length=1_200_000)
+    text: str | None = Field(default=None, max_length=1_000_000)
+    visible: bool
+
+
+class JobnibCapturedLock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segment_id: str | None = Field(default=None, max_length=128)
+    selector: str = Field(..., min_length=1, max_length=256)
+    text: str | None = Field(default=None, max_length=2000)
+    visible: bool
+
+
+class JobnibBrowserCaptureSubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    assignment_id: str = Field(..., min_length=32, max_length=64, pattern=r"^[0-9a-f]+$")
+    page_url: str = Field(..., min_length=1, max_length=2048)
+    page_title: str | None = Field(default=None, max_length=500)
+    segments: list[JobnibCapturedSegment] = Field(..., min_length=1, max_length=8)
+    locks: list[JobnibCapturedLock] = Field(..., max_length=32)
+    lock_scan_complete: bool
+    document_html: str | None = Field(default=None, max_length=1_200_000)
+
+
+class JobnibBrowserCaptureReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    assignment_id: str | None = Field(default=None, min_length=32, max_length=64, pattern=r"^[0-9a-f]+$")
+    kind: Literal["challenge", "unlock_required", "navigation_error", "capture_error", "info"]
+    message: str = Field(..., min_length=1, max_length=1000)
+    release_assignment: bool = False
+
+
+class JobnibBrowserCaptureCloseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 @router.post("/start", response_model=CrawlStartResponse)
@@ -363,6 +457,33 @@ async def check_webnovel_cookies(request: WebNovelCookieStatusRequest, http_requ
     return WebNovelCookieStatusResponse(**result)
 
 
+@router.post("/jobnib-cookies", response_model=JobnibCookieUpdateResponse)
+async def update_jobnib_cookies(request: JobnibCookieUpdateRequest, http_request: Request) -> JobnibCookieUpdateResponse:
+    """Store the Jobnib browser session used by normal and batch crawling."""
+    require_operator_identity(http_request)
+    from api.services.jobnib_cookie_service import update_jobnib_cookies as save_cookies
+
+    try:
+        result = save_cookies(request.cookies, request.user_agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JobnibCookieUpdateResponse(**result)
+
+
+@router.post("/jobnib-cookies/status", response_model=JobnibCookieStatusResponse)
+async def check_jobnib_cookies(request: JobnibCookieStatusRequest, http_request: Request) -> JobnibCookieStatusResponse:
+    """Test whether the saved Jobnib session clears the current site challenge."""
+    require_operator_identity(http_request)
+    from api.services.jobnib_cookie_service import check_jobnib_cookies as run_check
+
+    result = run_check(request.story_url)
+    if result.get("valid") is True:
+        from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+        get_jobnib_batch_service().mark_session_verified()
+    return JobnibCookieStatusResponse(**result)
+
+
 def _require_goodnovel_batch_owner(batch_id: str, request: Request):
     from api.services.goodnovel_batch_service import get_goodnovel_batch_service
 
@@ -382,6 +503,21 @@ def _require_inkitt_batch_owner(batch_id: str, request: Request):
     from api.services.inkitt_batch_service import get_inkitt_batch_service
 
     service = get_inkitt_batch_service()
+    try:
+        service.require_owner(
+            batch_id=batch_id,
+            user_id=getattr(request.state, "create_story_user_id", None),
+            role=getattr(request.state, "create_story_role", None),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return service
+
+
+def _require_jobnib_batch_owner(batch_id: str, request: Request):
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+    service = get_jobnib_batch_service()
     try:
         service.require_owner(
             batch_id=batch_id,
@@ -586,6 +722,308 @@ async def delete_inkitt_batch(batch_id: str, http_request: Request) -> dict:
         service.delete_batch(batch_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"deleted": True, "batch_id": batch_id}
+
+
+@router.post("/jobnib-batch/start")
+async def start_jobnib_batch(request: JobnibBatchStartRequest, http_request: Request) -> dict:
+    """Discover completed Jobnib stories from the live archive."""
+    require_operator_identity(http_request)
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+    service = get_jobnib_batch_service()
+    try:
+        state = service.start(
+            created_by_user_id=current_owner(http_request),
+            batch_name=request.batch_name or "",
+            max_archive_pages=request.max_archive_pages,
+            mode=request.mode,
+            crawl_after_discovery=request.crawl_after_discovery,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/jobnib-batch/{batch_id}/browser-capture/pair")
+async def pair_jobnib_browser_capture(
+    batch_id: str,
+    request: JobnibBrowserCapturePairRequest,
+    http_request: Request,
+    response: Response,
+) -> dict:
+    """Create a short-lived, batch-bound companion credential."""
+    require_operator_identity(http_request)
+    _require_jobnib_batch_owner(batch_id, http_request)
+    from api.services.jobnib_browser_capture_service import (
+        BrowserCaptureError,
+        get_jobnib_browser_capture_service,
+    )
+
+    try:
+        result = get_jobnib_browser_capture_service().create_pairing(
+            batch_id=batch_id,
+            owner_user_id=current_owner(http_request),
+            ttl_seconds=request.ttl_seconds,
+            row_index=request.row_index,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BrowserCaptureError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+def _capture_token(value: str) -> str:
+    token = (value or "").strip()
+    if not token or len(token) > 256:
+        raise HTTPException(status_code=401, detail="Missing browser-capture pairing credentials.")
+    return token
+
+
+def _capture_http_error(exc: Exception) -> HTTPException:
+    from api.services.jobnib_browser_capture_service import BrowserCaptureError
+
+    if isinstance(exc, BrowserCaptureError):
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
+    if isinstance(exc, KeyError):
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/jobnib-batch/{batch_id}/browser-capture/{pairing_id}/status")
+async def get_jobnib_browser_capture_status(
+    batch_id: str,
+    pairing_id: str,
+    response: Response,
+    pairing_token: str = Header(..., alias="X-Jobnib-Capture-Token"),
+) -> dict:
+    from api.services.jobnib_browser_capture_service import get_jobnib_browser_capture_service
+
+    try:
+        result = get_jobnib_browser_capture_service().status(
+            batch_id=batch_id,
+            pairing_id=pairing_id,
+            token=_capture_token(pairing_token),
+        )
+    except (KeyError, ValueError) as exc:
+        raise _capture_http_error(exc) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.get("/jobnib-batch/{batch_id}/browser-capture/{pairing_id}/next")
+async def get_next_jobnib_browser_capture_assignment(
+    batch_id: str,
+    pairing_id: str,
+    response: Response,
+    pairing_token: str = Header(..., alias="X-Jobnib-Capture-Token"),
+) -> dict:
+    from api.services.jobnib_browser_capture_service import get_jobnib_browser_capture_service
+
+    try:
+        result = get_jobnib_browser_capture_service().next_assignment(
+            batch_id=batch_id,
+            pairing_id=pairing_id,
+            token=_capture_token(pairing_token),
+        )
+    except (KeyError, ValueError) as exc:
+        raise _capture_http_error(exc) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.post("/jobnib-batch/{batch_id}/browser-capture/{pairing_id}/submit")
+async def submit_jobnib_browser_capture(
+    batch_id: str,
+    pairing_id: str,
+    request: JobnibBrowserCaptureSubmitRequest,
+    response: Response,
+    pairing_token: str = Header(..., alias="X-Jobnib-Capture-Token"),
+) -> dict:
+    from api.services.jobnib_browser_capture_service import get_jobnib_browser_capture_service
+
+    try:
+        result = get_jobnib_browser_capture_service().submit(
+            batch_id=batch_id,
+            pairing_id=pairing_id,
+            token=_capture_token(pairing_token),
+            payload=request.model_dump(),
+        )
+    except (KeyError, ValueError) as exc:
+        raise _capture_http_error(exc) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.post("/jobnib-batch/{batch_id}/browser-capture/{pairing_id}/report")
+async def report_jobnib_browser_capture(
+    batch_id: str,
+    pairing_id: str,
+    request: JobnibBrowserCaptureReportRequest,
+    response: Response,
+    pairing_token: str = Header(..., alias="X-Jobnib-Capture-Token"),
+) -> dict:
+    from api.services.jobnib_browser_capture_service import get_jobnib_browser_capture_service
+
+    try:
+        result = get_jobnib_browser_capture_service().report(
+            batch_id=batch_id,
+            pairing_id=pairing_id,
+            token=_capture_token(pairing_token),
+            payload=request.model_dump(),
+        )
+    except (KeyError, ValueError) as exc:
+        raise _capture_http_error(exc) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.post("/jobnib-batch/{batch_id}/browser-capture/{pairing_id}/close")
+async def close_jobnib_browser_capture(
+    batch_id: str,
+    pairing_id: str,
+    request: JobnibBrowserCaptureCloseRequest,
+    response: Response,
+    pairing_token: str = Header(..., alias="X-Jobnib-Capture-Token"),
+) -> dict:
+    from api.services.jobnib_browser_capture_service import get_jobnib_browser_capture_service
+
+    try:
+        result = get_jobnib_browser_capture_service().close(
+            batch_id=batch_id,
+            pairing_id=pairing_id,
+            token=_capture_token(pairing_token),
+            reason=request.reason or "",
+        )
+    except (KeyError, ValueError) as exc:
+        raise _capture_http_error(exc) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.post("/jobnib-batch/{batch_id}/crawl")
+async def crawl_jobnib_batch(batch_id: str, request: JobnibBatchCrawlRequest, http_request: Request) -> dict:
+    """Start or resume a bounded Jobnib crawl run."""
+    require_operator_identity(http_request)
+    service = _require_jobnib_batch_owner(batch_id, http_request)
+    try:
+        state = service.start_crawl(batch_id, mode=request.mode, max_stories=request.max_stories)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/jobnib-batch/{batch_id}/pause")
+async def pause_jobnib_batch(batch_id: str, http_request: Request) -> dict:
+    """Gracefully pause Jobnib after in-flight requests checkpoint."""
+    require_operator_identity(http_request)
+    service = _require_jobnib_batch_owner(batch_id, http_request)
+    try:
+        return service.get_status(service.pause_crawl(batch_id).batch_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/jobnib-batch/{batch_id}/retry-failed")
+async def retry_failed_jobnib_batch_rows(batch_id: str, payload: dict, http_request: Request) -> dict:
+    require_operator_identity(http_request)
+    service = _require_jobnib_batch_owner(batch_id, http_request)
+    try:
+        raw_index = payload.get("row_index") if isinstance(payload, dict) else None
+        state = service.retry_failed(batch_id, row_index=int(raw_index) if raw_index is not None else None)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/jobnib-batch/{batch_id}/retry-session")
+async def retry_jobnib_session_rows(batch_id: str, http_request: Request) -> dict:
+    require_operator_identity(http_request)
+    service = _require_jobnib_batch_owner(batch_id, http_request)
+    from api.services.jobnib_cookie_service import check_jobnib_cookies as run_check
+
+    check = run_check(None)
+    if check.get("valid") is not True:
+        raise HTTPException(status_code=409, detail=check.get("message") or "Refresh the Jobnib session first.")
+    try:
+        state = service.retry_session(batch_id)
+        service.mark_session_verified()
+        return service.get_status(state.batch_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/jobnib-batch")
+async def list_jobnib_batches(request: Request) -> list[dict]:
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+    return get_jobnib_batch_service().list_batches(
+        user_id=getattr(request.state, "create_story_user_id", None),
+        role=getattr(request.state, "create_story_role", None),
+    )
+
+
+@router.get("/jobnib-batch/catalog/export")
+async def export_jobnib_catalog(http_request: Request) -> dict:
+    require_operator_identity(http_request)
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+    return get_jobnib_batch_service().export_discovered_catalog()
+
+
+@router.get("/jobnib-batch/{batch_id}/catalog/export")
+async def export_jobnib_batch_catalog(batch_id: str, request: Request) -> dict:
+    return _require_jobnib_batch_owner(batch_id, request).export_batch_catalog(batch_id)
+
+
+@router.post("/jobnib-batch/catalog/import")
+async def import_jobnib_catalog(payload: dict, http_request: Request) -> dict:
+    require_operator_identity(http_request)
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+    try:
+        return get_jobnib_batch_service().import_catalog(payload, created_by_user_id=current_owner(http_request))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/jobnib-batch/{batch_id}")
+async def get_jobnib_batch_status(batch_id: str, request: Request) -> dict:
+    return _require_jobnib_batch_owner(batch_id, request).get_status(batch_id)
+
+
+@router.get("/jobnib-batch/{batch_id}/rows")
+async def list_jobnib_batch_rows(
+    batch_id: str,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    status: str = Query(default="all"),
+) -> dict:
+    return _require_jobnib_batch_owner(batch_id, request).list_rows(
+        batch_id, offset=offset, limit=limit, status_filter=status
+    )
+
+
+@router.get("/jobnib-batch/{batch_id}/logs")
+async def get_jobnib_batch_logs(batch_id: str, request: Request) -> dict:
+    return _require_jobnib_batch_owner(batch_id, request).get_full_logs(batch_id)
+
+
+@router.delete("/jobnib-batch/{batch_id}")
+async def delete_jobnib_batch(batch_id: str, http_request: Request) -> dict:
+    require_operator_identity(http_request)
+    service = _require_jobnib_batch_owner(batch_id, http_request)
+    try:
+        service.delete_batch(batch_id)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"deleted": True, "batch_id": batch_id}

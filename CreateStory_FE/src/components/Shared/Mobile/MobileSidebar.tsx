@@ -21,6 +21,7 @@ const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/': 'add',
     '/goodnovel-batch': 'batch',
     '/inkitt-batch': 'batch',
+    '/jobnib-batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread/jobs': 'audioJobs',
     '/drive-sync': 'sync',

@@ -137,6 +137,7 @@ if os.environ.get("ENVIRONMENT", "development").lower() not in ("production", "p
     app.include_router(dev.router)
 app.include_router(sites.router)
 app.include_router(crawl.router)
+app.include_router(crawl.browser_capture_router)
 app.include_router(results.router)
 app.include_router(bedread.router)
 app.include_router(drive_sync.router)

@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG CHROMIUM_MIN_VERSION=150.0.7871.100
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     chromium-driver \
@@ -45,6 +46,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     xauth \
     xvfb && \
+    installed_chromium="$(dpkg-query -W -f='${Version}' chromium)" && \
+    dpkg --compare-versions "$installed_chromium" ge "$CHROMIUM_MIN_VERSION" && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -52,6 +55,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# ChromeDriver can be version-matched yet unusable (Debian's
+# 150.0.7871.46 release crashed with SIGTRAP in Docker). Exercise a real
+# WebDriver session at build time so a broken browser cannot reach production.
+RUN python scripts/chromium_smoke.py
 
 RUN adduser --disabled-password --gecos "" appuser && \
     chown -R appuser:appuser /app

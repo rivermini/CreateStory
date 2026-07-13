@@ -131,6 +131,20 @@ export interface InkittCookieStatusResponse {
   tested_url?: string | null;
 }
 
+export interface JobnibCookieUpdateResponse {
+  updated: boolean;
+  cookie_count: number;
+  has_cf_clearance: boolean;
+}
+
+export interface JobnibCookieStatusResponse {
+  valid: boolean | null;
+  reason: string;
+  message: string;
+  cookie_count: number;
+  tested_url?: string | null;
+}
+
 export interface ScribbleHubCookieUpdateResponse {
   updated: boolean;
   cookie_count: number;
@@ -412,6 +426,174 @@ export interface InkittBatchCrawlRequest {
   crawl_concurrency: number;
   request_delay_seconds: number;
   max_stories?: number | null;
+}
+
+export type JobnibCrawlMode = 'slow' | 'fast';
+export type JobnibBatchPhase = 'discovering' | 'ready' | 'crawling' | 'waiting_for_session' | 'completed' | 'failed';
+export type JobnibBatchRowStatus = InkittBatchRowStatus | 'needs_session';
+
+export interface JobnibDiscoverySummary {
+  archive_pages_checked: number;
+  archive_found: number;
+  completed_eligible: number;
+  excluded: number;
+  duplicates: number;
+  metadata_failed: number;
+  challenged: number;
+  next_url: string;
+}
+
+export interface JobnibSessionSummary {
+  required: boolean;
+  consecutive_challenges: number;
+  last_error: string;
+  verified_at: string;
+}
+
+export interface JobnibBatchSummary {
+  batch_id: string;
+  batch_name: string;
+  phase: JobnibBatchPhase;
+  mode: JobnibCrawlMode;
+  total_stories: number;
+  discovered_count: number;
+  completed_count: number;
+  skipped_count: number;
+  failed_count: number;
+  needs_session_count: number;
+  processed_count: number;
+  total_chapters: number;
+  crawled_chapters: number;
+  crawl_estimate?: InkittBatchCrawlEstimate;
+  rate_limit?: InkittBatchRateLimit;
+  discovery: JobnibDiscoverySummary;
+  session: JobnibSessionSummary;
+  download_ready: boolean;
+  error_message: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  max_archive_pages: number;
+  max_stories_per_run: number;
+  crawl_runs: Array<InkittBatchCrawlRun & { needs_session_count?: number }>;
+  cancel_requested: boolean;
+  log_lines: string[];
+}
+
+export interface JobnibBatchRow {
+  index: number;
+  title: string;
+  url: string;
+  story_id: string;
+  status: JobnibBatchRowStatus;
+  author: string;
+  completion_status: string;
+  total_chapters: number | null;
+  crawled_chapters: number;
+  output_file: string;
+  metadata_file: string;
+  crawl_run_id: string;
+  retry_priority: number;
+  completed_at: string;
+  error: string;
+}
+
+export interface JobnibBatchRowsResponse {
+  batch: JobnibBatchSummary;
+  items: JobnibBatchRow[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface JobnibBatchLogsResponse {
+  batch: JobnibBatchSummary;
+  log_lines: string[];
+  total: number;
+}
+
+export interface JobnibCatalogBackup {
+  kind: 'jobnib_discovered_catalog' | 'jobnib_batch_discovered_catalog';
+  version: number;
+  exported_at: string;
+  batch_id?: string;
+  story_count: number;
+  stories: Array<Record<string, unknown>>;
+}
+
+export interface JobnibCatalogImportResponse {
+  imported_count: number;
+  batch: JobnibBatchSummary;
+}
+
+export interface JobnibBatchStartRequest {
+  batch_name?: string | null;
+  max_archive_pages: number;
+  mode: JobnibCrawlMode;
+  crawl_after_discovery?: boolean;
+}
+
+export interface JobnibBatchCrawlRequest {
+  mode: JobnibCrawlMode;
+  max_stories: number;
+}
+
+export type JobnibBrowserCaptureStatusValue = 'active' | 'closed' | 'expired';
+
+export interface JobnibBrowserCaptureAssignment {
+  assignment_id: string;
+  row_index: number;
+  story_id: string;
+  story_title: string;
+  sequence_index: number;
+  displayed_chapter_number: number | null;
+  volume_label: string;
+  chapter_title: string;
+  url: string;
+  expected_segment_ids: string[];
+  completed_chapters: number;
+  total_chapters: number;
+}
+
+export interface JobnibBrowserCaptureBatchProgress {
+  phase: JobnibBatchPhase;
+  total_stories: number;
+  completed_count: number;
+  needs_session_count: number;
+  total_chapters: number;
+  crawled_chapters: number;
+}
+
+export interface JobnibBrowserCaptureStatus {
+  batch_id: string;
+  pairing_id: string;
+  status: JobnibBrowserCaptureStatusValue;
+  created_at: string;
+  last_activity_at: string;
+  expires_at: string;
+  submitted_chapters: number;
+  reported_events: number;
+  active_assignment: JobnibBrowserCaptureAssignment | null;
+  batch: JobnibBrowserCaptureBatchProgress;
+}
+
+export interface JobnibBrowserCapturePairResponse {
+  batch_id: string;
+  pairing_id: string;
+  pairing_token: string;
+  row_index: number | null;
+  status: 'active';
+  created_at: string;
+  expires_at: string;
+  idle_ttl_seconds: number;
+}
+
+export interface JobnibBrowserCaptureCloseResponse {
+  batch_id: string;
+  pairing_id: string;
+  status: 'closed';
+  closed_at: string;
+  submitted_chapters: number;
 }
 
 export interface ProgressUpdate {
