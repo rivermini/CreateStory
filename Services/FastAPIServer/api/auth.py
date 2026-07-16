@@ -92,6 +92,13 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise credentials_error
     set_request_identity(str(user.id), user.role)
+    # Return the pooled connection now instead of at end-of-request: proxy
+    # routes (drive-sync, downloads) hold the request open for minutes, and a
+    # burst of them can otherwise pin every pooled connection on idle auth
+    # sessions. Expunge first so the detached user keeps its loaded attributes;
+    # routes that also depend on get_db lazily check out a fresh connection.
+    db.expunge(user)
+    db.rollback()
     return user
 
 

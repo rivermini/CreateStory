@@ -93,8 +93,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(0);
   const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
   const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
-  const [ttsConcurrency, setTtsConcurrency] = useState(1);
-  const ttsConcurrencyOptions = [1, 2];
   const [clearState, setClearState] = useState<'idle' | 'clearing'>('idle');
   const [clearConfirm, setClearConfirm] = useState('');
   const authUser = getStoredAuthUser();
@@ -179,7 +177,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 0);
         setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
         setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
-        setTtsConcurrency(Math.min(2, Math.max(1, s.tts_concurrency ?? 1)));
       })
       .catch(() => setError('Failed to load settings.'))
       .finally(() => setLoading(false));
@@ -339,7 +336,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
         crawl_auto_max_chapters: crawlAutoMaxChapters,
         auto_audio_rest_seconds: autoAudioRestSeconds,
         auto_audio_test_story_ids: autoAudioTestStoryIds,
-        tts_concurrency: ttsConcurrency,
       });
       setSettings(updated);
       onThemeChange(localTheme === 'dark' ? 'dark' : 'light');
@@ -1206,14 +1202,6 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
               <div className="max-w-lg">
                 <label htmlFor="settings-audio-test-story-ids" className={labelClassName}>Test Story IDs</label>
                 <textarea id="settings-audio-test-story-ids" value={autoAudioTestIdsText} onChange={(e) => { setAutoAudioTestIdsText(e.target.value); const ids = e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean); setAutoAudioTestStoryIds(ids); }} rows={3} className={`${fieldClassName} resize-none font-mono text-sm`} style={{ background: inputBackground, borderColor: inputBorder }} />
-              </div>
-            </section>
-            <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
-              <SectionTitle title="TTS Concurrency" description="Number of concurrent voice generation workers." pageText={pageText} secondaryText={secondaryText} />
-              <div className="inline-flex flex-wrap items-center gap-1 rounded-md p-0.5" style={{ background: subtleSurface }}>
-                {ttsConcurrencyOptions.map((v) => (
-                  <button key={v} onClick={() => setTtsConcurrency(v)} className="min-w-12 rounded-md px-4 py-2 text-sm font-medium" style={{ background: ttsConcurrency === v ? activeSurface : 'transparent', color: pageText }}>{v}</button>
-                ))}
               </div>
             </section>
           </div>

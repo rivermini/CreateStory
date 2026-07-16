@@ -75,7 +75,6 @@ export function MobileSettingsPage({
     const [autoAudioRestSeconds, setAutoAudioRestSeconds] = useState(0);
     const [autoAudioTestStoryIds, setAutoAudioTestStoryIds] = useState<string[]>([]);
     const [autoAudioTestIdsText, setAutoAudioTestIdsText] = useState('');
-    const [ttsConcurrency, setTtsConcurrency] = useState(1);
 
     // Inkitt cookies states
     const [inkittUserCredentials, setInkittUserCredentials] = useState('');
@@ -161,7 +160,6 @@ export function MobileSettingsPage({
                 setAutoAudioRestSeconds(s.auto_audio_rest_seconds ?? 0);
                 setAutoAudioTestStoryIds(s.auto_audio_test_story_ids ?? []);
                 setAutoAudioTestIdsText((s.auto_audio_test_story_ids ?? []).join(', '));
-                setTtsConcurrency(Math.min(2, Math.max(1, s.tts_concurrency ?? 1)));
             })
             .catch(() => setError('Failed to load settings.'))
             .finally(() => setLoading(false));
@@ -302,7 +300,6 @@ export function MobileSettingsPage({
                 crawl_auto_max_chapters: crawlAutoMaxChapters,
                 auto_audio_rest_seconds: autoAudioRestSeconds,
                 auto_audio_test_story_ids: autoAudioTestStoryIds,
-                tts_concurrency: ttsConcurrency,
             });
             onThemeChange(localTheme === 'dark' ? 'dark' : 'light');
             setSaveState('saved');
@@ -888,14 +885,6 @@ export function MobileSettingsPage({
                             <div>
                                 <label htmlFor="mob-test-ids" className={labelCls}>Test Story IDs</label>
                                 <textarea id="mob-test-ids" value={autoAudioTestIdsText} onChange={(e) => { setAutoAudioTestIdsText(e.target.value); setAutoAudioTestStoryIds(e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)); }} rows={3} className={`${inputCls} resize-none font-mono text-xs`} style={{ background: inputBg, borderColor: inputBorder }} />
-                            </div>
-                        </div>
-                        <div className={`${sectionCard}`} style={{ background: cardBg, borderColor: cardBorder }}>
-                            <p className={`${labelCls} mb-2`}>TTS Concurrency</p>
-                            <div className="flex gap-2">
-                                {[1, 2].map((v) => (
-                                    <button key={v} onClick={() => setTtsConcurrency(v)} className="flex-1 rounded-xl py-2.5 text-sm font-medium" style={{ background: ttsConcurrency === v ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)') : 'transparent', border: `1.5px solid ${ttsConcurrency === v ? cardBorder : 'transparent'}`, color: textPrimary }}>{v}</button>
-                                ))}
                             </div>
                         </div>
                     </div>

@@ -1,0 +1,120 @@
+{
+  "input": "D:\\Developer\\Nova\\CreateStory\\deliverables\\CV_Nguyen_Quang_Ha_Sunny_Patel_Style_Refined_2026.docx",
+  "fonts_by_char_count": {
+    "Times New Roman": 5354
+  },
+  "direct_run_formatting_runs": 112,
+  "direct_paragraph_formatting_paragraphs": 21,
+  "heading_like_paragraphs_not_heading_style": [
+    {
+      "para_index": 1,
+      "text": "NGUYEN QUANG HA",
+      "style": "Normal"
+    },
+    {
+      "para_index": 7,
+      "text": "Programming:\tC#, TypeScript, JavaScript, Python, SQL, HTML/CSS",
+      "style": "Normal"
+    },
+    {
+      "para_index": 9,
+      "text": "Frontend:\tReact, Vite, Tailwind CSS, responsive web interfaces",
+      "style": "Normal"
+    },
+    {
+      "para_index": 13,
+      "text": "Hanoi Open University\tHanoi, Vietnam",
+      "style": "Normal"
+    },
+    {
+      "para_index": 16,
+      "text": "Software Developer Intern - Nova Engine Software Solution\tMar. 2026 - Jul. 2026",
+      "style": "Normal"
+    },
+    {
+      "para_index": 24,
+      "text": "Web Development Internship Project - FPT\t2025",
+      "style": "Normal"
+    },
+    {
+      "para_index": 45,
+      "text": "Skeleton Survivors  |  C#, Unity, Solo project   Demo\t2021",
+      "style": "Normal"
+    },
+    {
+      "para_index": 48,
+      "text": "RiverMini Portfolio  |  React, TypeScript, Vite, Vercel   Live\t2026",
+      "style": "Normal"
+    },
+    {
+      "para_index": 52,
+      "text": "Languages:\tVietnamese (native), English (professional working proficiency)",
+      "style": "Normal"
+    },
+    {
+      "para_index": 54,
+      "text": "Availability:\tHanoi, Vietnam - open to Fresher / Junior Software Developer roles",
+      "style": "Normal"
+    }
+  ],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 1,
+        "text": "NGUYEN QUANG HA",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "text": " +84 868 710 827  |   quangha27103@gmail.com  |   LinkedIn  |   github.com/rivermini  |   rivermini.com",
+        "style": "Normal"
+      },
+      {
+        "para_index": 7,
+        "text": "Programming:\tC#, TypeScript, JavaScript, Python, SQL, HTML/CSS",
+        "style": "Normal"
+      },
+      {
+        "para_index": 8,
+        "text": "Backend:\tASP.NET Core, Entity Framework Core, FastAPI, REST APIs, authentication, RBAC",
+        "style": "Normal"
+      },
+      {
+        "para_index": 9,
+        "text": "Frontend:\tReact, Vite, Tailwind CSS, responsive web interfaces",
+        "style": "Normal"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 1,
+        "run_text": "NGUYEN QUANG HA",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": " ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": "  |  ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": " ",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "run_text": "  |  ",
+        "style": "Normal"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

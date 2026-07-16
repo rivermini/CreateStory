@@ -176,20 +176,17 @@ services:
       # with less waiting. Each queued job holds its chapter text in memory, so
       # keep it bounded.
       MAX_QUEUED_JOBS_GLOBAL: ${MAX_QUEUED_JOBS_GLOBAL:-300}
-      # --- Auto Mode / TTS throughput tuning (see .env.example) ---
-      # Parallel chapters synthesized at once. Left EMPTY here so it FOLLOWS the
-      # persisted UI concurrency setting; set KOKORO_CONCURRENCY in .env only to
-      # force/override the UI value from ops.
-      KOKORO_CONCURRENCY: ${KOKORO_CONCURRENCY:-}
-      # Upper bound the concurrency knob is allowed to reach (raise on big hosts).
-      KOKORO_MAX_CONCURRENCY: ${KOKORO_MAX_CONCURRENCY:-4}
-      # ONNX intra-op threads PER worker = VOICES_CPUS / KOKORO_CONCURRENCY, so the
-      # workers together fill the CPU budget without oversubscribing. Default 3
-      # pairs with the default VOICES_CPUS=6 (2 * 3 = 6); on the server set
-      # VOICES_CPUS=10 + KOKORO_INTRA_OP_THREADS=5 (2 * 5 = 10).
-      KOKORO_INTRA_OP_THREADS: ${KOKORO_INTRA_OP_THREADS:-3}
-      OMP_NUM_THREADS: ${KOKORO_INTRA_OP_THREADS:-3}
-      ORT_NUM_THREADS: ${KOKORO_INTRA_OP_THREADS:-3}
+      # --- TTS throughput tuning ---
+      # Single-worker TTS by design: one chapter synthesizes at a time and that
+      # worker gets the service's whole CPU budget. The UI "TTS Concurrency"
+      # setting is retired; these pins override any persisted value.
+      KOKORO_CONCURRENCY: "1"
+      KOKORO_MAX_CONCURRENCY: "1"
+      # ONNX intra-op threads for the single worker = the full VOICES_CPUS
+      # budget (integer; keep equal to VOICES_CPUS in .env).
+      KOKORO_INTRA_OP_THREADS: ${KOKORO_INTRA_OP_THREADS:-6}
+      OMP_NUM_THREADS: ${KOKORO_INTRA_OP_THREADS:-6}
+      ORT_NUM_THREADS: ${KOKORO_INTRA_OP_THREADS:-6}
     secrets:
       - voices_database_url
       - internal_service_token
