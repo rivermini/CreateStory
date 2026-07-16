@@ -93,6 +93,28 @@ def _normalize(s: str) -> str:
     return s.strip().lower()
 
 
+def _duplicate_story_title_groups(folders: list[dict]) -> dict[str, list[dict]]:
+    """Return Drive folders grouped by duplicated normalized display title."""
+    groups: dict[str, list[dict]] = {}
+    for folder in folders:
+        title = _normalize(folder.get("display_name", ""))
+        if title:
+            groups.setdefault(title, []).append(folder)
+    return {title: matches for title, matches in groups.items() if len(matches) > 1}
+
+
+def _duplicate_story_title_error(folder: dict, duplicate_groups: dict[str, list[dict]]) -> Optional[str]:
+    """Build a user-facing validation error for a duplicated Drive story title."""
+    matches = duplicate_groups.get(_normalize(folder.get("display_name", "")))
+    if not matches:
+        return None
+    folder_names = "; ".join(sorted(match.get("name", "") for match in matches))
+    return (
+        f"DUPLICATE STORY TITLE: '{folder.get('display_name', '').strip()}' is used by multiple "
+        f"Drive folders: {folder_names}"
+    )
+
+
 def _resolve_actual_server_chapter_maxes(
     service,
     server_stories: list[ServerStoryRef],
@@ -188,6 +210,7 @@ async def check_uploadable() -> CheckUploadableResponse:
     candidate_folders = [f for f in drive_folders_raw if f.get("prefix") in uploadable_prefixes]
     not_ready_folders = [f for f in drive_folders_raw if f.get("prefix") not in uploadable_prefixes]
     server_titles = {_normalize(s["title"]) for s in server_stories}
+    duplicate_title_groups = _duplicate_story_title_groups(candidate_folders)
 
     uploadable = []
     already_on_server = []
@@ -213,6 +236,12 @@ async def check_uploadable() -> CheckUploadableResponse:
         folder["validation_errors"] = []
         entry = DriveFolderEntry(**folder)
         title_lower = _normalize(folder.get("display_name", ""))
+
+        duplicate_error = _duplicate_story_title_error(folder, duplicate_title_groups)
+        if duplicate_error:
+            folder["validation_errors"].append(duplicate_error)
+            invalid.append(DriveFolderEntry(**folder))
+            continue
 
         if title_lower in server_titles:
             already_on_server.append(entry)
@@ -309,6 +338,12 @@ async def check_updatable() -> CheckUpdatableResponse:
         raise HTTPException(status_code=500, detail="Failed to list folders.")
 
     extended_folders = [f for f in drive_folders_raw if f.get("prefix") == "EXTENDED"]
+    duplicate_title_groups = _duplicate_story_title_groups(extended_folders)
+    duplicate_title_folder_ids = {
+        folder.get("id")
+        for folders in duplicate_title_groups.values()
+        for folder in folders
+    }
 
     server_by_title: dict[str, ServerStoryRef] = {}
     for s in server_stories:
@@ -321,10 +356,13 @@ async def check_updatable() -> CheckUpdatableResponse:
 
     matched_extended_folders = [
         f for f in extended_folders
+        if f.get("id") not in duplicate_title_folder_ids
         if _normalize(f.get("display_name", "")) in server_by_title
     ]
     no_server_match = []
     for folder in extended_folders:
+        if folder.get("id") in duplicate_title_folder_ids:
+            continue
         if _normalize(folder.get("display_name", "")) not in server_by_title:
             try:
                 no_server_match.append(DriveFolderEntry(**folder))
@@ -387,6 +425,23 @@ async def check_updatable() -> CheckUpdatableResponse:
     updatable_folder_ids: list[str] = []
     no_update_needed = []
     invalid = []
+    for folders in duplicate_title_groups.values():
+        for folder in folders:
+            payload = dict(folder)
+            payload["validation_errors"] = list(payload.get("validation_errors") or [])
+            duplicate_error = _duplicate_story_title_error(payload, duplicate_title_groups)
+            if duplicate_error:
+                payload["validation_errors"].append(duplicate_error)
+            try:
+                entry = DriveFolderEntry(**payload)
+            except Exception as exc:
+                logger.warning("Skipping malformed duplicate-title Drive folder: %s", exc)
+                continue
+            title_lower = _normalize(payload.get("display_name", ""))
+            server_story = server_by_title.get(title_lower) or ServerStoryRef(
+                id="", title=payload.get("display_name", ""), maxChapter=0
+            )
+            invalid.append(UpdatableStoryEntry(folder=entry, server_story=server_story))
     for folder in wrong_prefix_folders:
         title_lower = _normalize(folder.get("display_name", ""))
         server_story = server_by_title[title_lower]
@@ -552,6 +607,19 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
         reader_stories = []
     reader_titles_lower: set[str] = {_normalize(s.get("title", "")) for s in reader_stories if s.get("title")}
 
+    reader_extended_folders = [
+        folder
+        for folder in drive_folders_raw
+        if folder.get("prefix") == "EXTENDED"
+        and _normalize(folder.get("display_name", "")) in reader_titles_lower
+    ]
+    duplicate_title_groups = _duplicate_story_title_groups(reader_extended_folders)
+    duplicate_title_folder_ids = {
+        folder.get("id")
+        for folders in duplicate_title_groups.values()
+        for folder in folders
+    }
+
     server_by_title: dict[str, ServerStoryRef] = {}
     for s in server_stories:
         title = _normalize(s.get("title", ""))
@@ -581,8 +649,29 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
 
     matched_extended_folders = [
         f for f in drive_folders_raw
-        if f.get("prefix") == "EXTENDED" and _normalize(f.get("display_name", "")) in reader_titles_lower
+        if f.get("prefix") == "EXTENDED"
+        and f.get("id") not in duplicate_title_folder_ids
+        and _normalize(f.get("display_name", "")) in reader_titles_lower
     ]
+
+    duplicate_invalid: list[UpdatableStoryEntry] = []
+    for folders in duplicate_title_groups.values():
+        for folder in folders:
+            payload = dict(folder)
+            payload["validation_errors"] = list(payload.get("validation_errors") or [])
+            duplicate_error = _duplicate_story_title_error(payload, duplicate_title_groups)
+            if duplicate_error:
+                payload["validation_errors"].append(duplicate_error)
+            try:
+                entry = DriveFolderEntry(**payload)
+            except Exception as exc:
+                logger.warning("Skipping malformed duplicate-title Drive folder: %s", exc)
+                continue
+            title_lower = _normalize(payload.get("display_name", ""))
+            server_story = server_by_title.get(title_lower) or ServerStoryRef(
+                id="", title=payload.get("display_name", ""), maxChapter=0
+            )
+            duplicate_invalid.append(UpdatableStoryEntry(folder=entry, server_story=server_story))
 
     titles_to_resolve = {
         _normalize(f.get("display_name", ""))
@@ -609,7 +698,7 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
     if not matched_extended_folders:
         # Still separate missing folders from matching folders that have the wrong prefix.
         no_drive_folder: list[ServerOnlyStoryEntry] = []
-        invalid: list[UpdatableStoryEntry] = []
+        invalid: list[UpdatableStoryEntry] = list(duplicate_invalid)
         last_updated_by_title = await _get_last_update_times(
             service,
             [s.get("title", "") for s in reader_stories],
@@ -678,7 +767,7 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
 
     updatable: list[UpdatableStoryEntry] = []
     no_update_needed: list[UpdatableStoryEntry] = []
-    invalid: list[UpdatableStoryEntry] = []
+    invalid: list[UpdatableStoryEntry] = list(duplicate_invalid)
     no_server_match: list[DriveFolderEntry] = []
     empty_extended: list[DriveFolderEntry] = []
     no_drive_folder: list[ServerOnlyStoryEntry] = []
@@ -800,7 +889,12 @@ async def check_updatable_reader_finished() -> CheckUpdatableResponse:
 
     for s in reader_stories:
         title = _normalize(s.get("title", ""))
-        if title in reader_titles_lower and title not in matched_folder_titles_lower and title not in wrong_prefix_by_title:
+        if (
+            title in reader_titles_lower
+            and title not in matched_folder_titles_lower
+            and title not in duplicate_title_groups
+            and title not in wrong_prefix_by_title
+        ):
             server_ref = server_by_title.get(title)
             if server_ref:
                 last_updated = last_updated_by_name.get(server_ref.title)
