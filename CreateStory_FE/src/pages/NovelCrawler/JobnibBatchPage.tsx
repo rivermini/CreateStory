@@ -186,6 +186,22 @@ export function JobnibBatchPage({ themeMode }: Props) {
     } finally { setBusy(''); }
   };
 
+  const downloadBatch = async (targetBatchId: string) => {
+    if (!targetBatchId) return;
+    const target = `download:${targetBatchId}`;
+    setBusy(target); setError('');
+    try {
+      await downloadWithAuth(
+        getJobnibBatchDownloadUrl(targetBatchId),
+        `jobnib_batch_${targetBatchId}.zip`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download Jobnib ZIP.');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const refreshAfterBrowserCapture = useCallback(() => {
     void fetchStatus();
     void fetchRows();
@@ -234,6 +250,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
               <button type="button" className={primaryButton} disabled={!!busy || interactionLocked} onClick={() => void act('discover', () => startJobnibBatch({ batch_name: batchName, max_archive_pages: 1, mode, crawl_after_discovery: false }))}><Icon icon={busy === 'discover' ? appIcons.spinner : appIcons.search} className={`h-4 w-4 ${busy === 'discover' ? 'animate-spin' : ''}`} />Discover homepage</button>
               <button type="button" className={primaryButton} disabled={!!busy || interactionLocked || !batchId} onClick={() => void act('crawl', () => crawlJobnibBatch(batchId, { mode, max_stories: storiesPerRun }))}><Icon icon={busy === 'crawl' ? appIcons.spinner : appIcons.play} className={`h-4 w-4 ${busy === 'crawl' ? 'animate-spin' : ''}`} />Start/Resume crawl</button>
               {active && <button type="button" className={secondaryButton} disabled={!!busy || !!summary?.cancel_requested} onClick={() => void act('pause', () => pauseJobnibBatch(batchId))} style={{ borderColor: border, background: muted }}><Icon icon={appIcons.pause} className="h-4 w-4" />Graceful pause</button>}
+              <button type="button" className={secondaryButton} disabled={!summary?.download_ready || !!busy} onClick={() => void downloadBatch(batchId)} style={{ borderColor: border, background: muted }}><Icon icon={busy === `download:${batchId}` ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${busy === `download:${batchId}` ? 'animate-spin' : ''}`} />{busy === `download:${batchId}` ? 'Preparing ZIP' : 'Download exported ZIP'}</button>
               <button type="button" className={secondaryButton} disabled={!!busy || interactionLocked} onClick={() => fileRef.current?.click()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'import' ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${busy === 'import' ? 'animate-spin' : ''}`} />Import catalog/URLs</button>
               <input ref={fileRef} type="file" accept=".json,.txt,.csv,application/json,text/plain,text/csv" onChange={(event) => void importFile(event)} className="hidden" />
             </div>
@@ -278,7 +295,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
         <section className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
           <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Batch history</h2><p className="text-xs" style={{ color: faint }}>{history.length} retained batch(es)</p></div><button type="button" className={secondaryButton} onClick={() => void fetchHistory()} style={{ borderColor: border, background: muted }}><Icon icon={appIcons.refresh} className="h-4 w-4" />Refresh</button></div>
           <div className="mt-3 space-y-2">{history.map((item) => <div key={item.batch_id} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: item.batch_id === batchId ? 'var(--cs-primary)' : border, background: muted }}><button type="button" onClick={() => setBatchId(item.batch_id)} className="min-w-0 text-left"><div className="truncate text-sm font-semibold">{item.batch_name || `Jobnib ${item.batch_id}`}</div><div className="mt-1 text-xs" style={{ color: faint }}>{item.created_at} · {item.completed_count.toLocaleString()} exports · {item.total_stories.toLocaleString()} stories · <span className="capitalize">{item.phase.replaceAll('_', ' ')}</span></div></button><div className="flex flex-wrap gap-2">
-            {item.download_ready && <button type="button" className={secondaryButton} disabled={!!busy} onClick={() => { setBusy(`download:${item.batch_id}`); void downloadWithAuth(getJobnibBatchDownloadUrl(item.batch_id), `jobnib_batch_${item.batch_id}.zip`).catch((err) => setError(err instanceof Error ? err.message : 'Download failed.')).finally(() => setBusy('')); }} style={{ borderColor: border }}><Icon icon={busy === `download:${item.batch_id}` ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${busy === `download:${item.batch_id}` ? 'animate-spin' : ''}`} />ZIP</button>}
+            {item.download_ready && <button type="button" className={secondaryButton} disabled={!!busy} onClick={() => void downloadBatch(item.batch_id)} style={{ borderColor: border }}><Icon icon={busy === `download:${item.batch_id}` ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${busy === `download:${item.batch_id}` ? 'animate-spin' : ''}`} />ZIP</button>}
             <button type="button" className={secondaryButton} onClick={() => { setBusy('export'); void exportJobnibBatchCatalog(item.batch_id).then((data) => downloadJson(data, `jobnib_catalog_${item.batch_id}.json`)).catch((err) => setError(err instanceof Error ? err.message : 'Export failed.')).finally(() => setBusy('')); }} style={{ borderColor: border }}><Icon icon={appIcons.download} className="h-4 w-4" />Catalog</button>
             {!['discovering', 'crawling'].includes(item.phase) && <button type="button" className={secondaryButton} onClick={() => { if (!window.confirm(`Delete ${item.batch_name}?`)) return; setBusy('delete'); void removeJobnibBatch(item.batch_id).then(() => { if (batchId === item.batch_id) setBatchId(''); return fetchHistory(); }).catch((err) => setError(err instanceof Error ? err.message : 'Delete failed.')).finally(() => setBusy('')); }} style={{ borderColor: border }}><Icon icon={appIcons.delete} className="h-4 w-4" /></button>}
           </div></div>)}</div>

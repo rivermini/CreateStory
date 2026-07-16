@@ -1,6 +1,6 @@
 # CreateStory Monorepo
 
-CreateStory is a unified local operations system for crawling novels, generating high-quality Text-to-Speech (TTS) audio, syncing Google Drive story folders to a remote backend, and orchestrating auto-audio production workflows. It features a React frontend and a Docker Compose microservice backend.
+CreateStory is a unified local operations system for crawling novels, generating high-quality Text-to-Speech (TTS) audio, syncing Google Drive story folders to a remote backend, and orchestrating auto-audio production workflows. It features a React frontend and a Docker Compose microservice backend
 
 ---
 
