@@ -50,6 +50,10 @@ const NAV_ITEMS_AUTO_AUDIO: NavItem[] = [
     { to: '/auto-audio/history', label: 'Auto History', iconKey: '/auto-audio/history' },
 ];
 
+const NAV_ITEMS_TOOLS: NavItem[] = [
+    { to: '/tools/gemini-watermark-remover', label: 'Watermark Remover', iconKey: '/tools/gemini-watermark-remover' },
+];
+
 const NAV_ITEMS_SYSTEM: NavItem[] = [
     { to: '/supported-sites', label: 'Supported Sites', iconKey: '/supported-sites' },
 ];
@@ -63,6 +67,7 @@ export const NAV_SECTIONS: NavSection[] = [
     { label: 'Audio', items: NAV_ITEMS_AUDIO },
     { label: 'DriveSync', items: NAV_ITEMS_BEDREADS },
     { label: 'Auto Audio', items: NAV_ITEMS_AUTO_AUDIO },
+    { label: 'Tools', items: NAV_ITEMS_TOOLS },
     { label: 'System', items: NAV_ITEMS_SYSTEM },
     { label: 'Admin', items: NAV_ITEMS_ADMIN },
 ];

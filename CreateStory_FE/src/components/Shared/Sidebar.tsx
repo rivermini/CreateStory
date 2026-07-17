@@ -31,6 +31,7 @@ const NAV_ICONS = {
     '/drive-sync/title-update': 'edit',
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
+    '/tools/gemini-watermark-remover': 'image',
     '/supported-sites': 'supportedSites',
     '/dashboard': 'dashboardUsers',
 } as const;

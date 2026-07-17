@@ -34,6 +34,7 @@ const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/drive-sync/title-update': 'edit',
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
+    '/tools/gemini-watermark-remover': 'image',
     '/supported-sites': 'supportedSites',
     '/dashboard': 'dashboardUsers',
 };
