@@ -7,6 +7,12 @@ Your current team access model is Cloudflare-managed routes on the existing `cre
 - `https://createstory.online` -> local frontend container on `127.0.0.1:5173`
 - `https://be.createstory.online` -> local gateway on `127.0.0.1:8000`
 
+For the standalone Jobnib companion, create a more-specific Cloudflare Access
+application on the active API hostname with a **Bypass / Everyone** policy only
+for `/api/crawl/jobnib-batch/*/browser-capture/*`. These endpoints use their own
+short-lived, batch-bound pairing bearer; keep every other `/api` path behind the
+normal Access login.
+
 ## What runs locally
 
 - Frontend Nginx on `127.0.0.1:5173`

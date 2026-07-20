@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   closeJobnibBrowserCapture,
+  getJobnibCompanionDownloadUrl,
+  getJobnibCompanionManifest,
   getJobnibBrowserCaptureStatus,
   pairJobnibBrowserCapture,
+  startJobnibBatch,
 } from './crawl';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -22,6 +25,16 @@ describe('Jobnib browser capture API', () => {
       removeItem: (key: string) => values.delete(key),
       setItem: (key: string, value: string) => values.set(key, String(value)),
     } satisfies Storage);
+  });
+
+  it('sends the selected completed or ongoing discovery scope', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ batch_id: 'batch-1' }), { status: 200, headers: jsonHeaders }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await startJobnibBatch({ batch_name: 'All stories', max_archive_pages: 1, story_status: 'all' });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual({ batch_name: 'All stories', max_archive_pages: 1, story_status: 'all' });
   });
 
   it('creates a pairing with the normal app API', async () => {
@@ -43,6 +56,26 @@ describe('Jobnib browser capture API', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toBe('http://localhost:8000/api/crawl/jobnib-batch/batch%2F1/browser-capture/pair');
     expect(JSON.parse(String(init?.body))).toEqual({ ttl_seconds: 600, row_index: 8 });
+  });
+
+  it('loads the companion manifest and exposes its authenticated download path', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      available: true,
+      platform: 'windows-x64',
+      filename: 'CreateStory-Jobnib-Companion-win-x64.exe',
+      download_path: '/api/crawl/jobnib-companion/download/windows-x64',
+      version: '0.2.0',
+      size: 50000000,
+      sha256: 'abc123',
+      message: 'ready',
+    }), { status: 200, headers: jsonHeaders }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manifest = await getJobnibCompanionManifest();
+
+    expect(manifest.available).toBe(true);
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://localhost:8000/api/crawl/jobnib-companion/manifest');
+    expect(getJobnibCompanionDownloadUrl()).toBe('http://localhost:8000/api/crawl/jobnib-companion/download/windows-x64');
   });
 
   it('polls and closes with the temporary pairing bearer without app-auth refresh', async () => {

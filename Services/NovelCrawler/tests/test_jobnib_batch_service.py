@@ -168,6 +168,43 @@ def test_discovery_scans_homepage_once_and_filters_completed_locally(tmp_path, m
     assert {row.title for row in state.rows} == {"Completed Alpha"}
 
 
+def test_discovery_can_target_ongoing_or_both_statuses(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(JobnibSpider, "_load_saved_session", lambda self: ([], ""))
+    pages = {
+        "https://jobnib.com/": fixture("archive_page_1.html").replace('<a rel="next" href="/book/page/2">Next</a>', ""),
+        "https://jobnib.com/book/completed-alpha": fixture("completed_story.html").replace("Completed Fixture", "Completed Alpha"),
+        "https://jobnib.com/book/ongoing-beta": fixture("ongoing_story.html"),
+    }
+
+    for scope, expected_titles, completed, ongoing, excluded in (
+        ("ongoing", {"Ongoing Fixture"}, 0, 1, 1),
+        ("all", {"Completed Alpha", "Ongoing Fixture"}, 1, 1, 0),
+    ):
+        service = JobnibBatchService(output_root=tmp_path / scope)
+        batch_id = "feed1234" if scope == "ongoing" else "feed5678"
+        output = tmp_path / scope / "jobnib_batch" / batch_id
+        output.mkdir(parents=True)
+        state = JobnibBatchState(
+            batch_id=batch_id,
+            created_by_user_id="user-1",
+            output_dir=str(output),
+            max_archive_pages=1,
+            story_status_scope=scope,
+        )
+        service._batches[batch_id] = state
+        monkeypatch.setattr(service, "_fetch_html", lambda _batch, url, _interval: pages[url])
+
+        service._run_discovery(batch_id)
+
+        summary = service.get_status(batch_id)
+        assert {row.title for row in state.rows} == expected_titles
+        assert summary["story_status_scope"] == scope
+        assert summary["discovery"]["completed_eligible"] == completed
+        assert summary["discovery"]["ongoing_eligible"] == ongoing
+        assert summary["discovery"]["eligible"] == completed + ongoing
+        assert summary["discovery"]["excluded"] == excluded
+
+
 def test_three_consecutive_challenges_open_session_circuit_breaker(tmp_path, monkeypatch) -> None:
     service = JobnibBatchService(output_root=tmp_path)
     batch_id = "feed1234"
@@ -310,6 +347,28 @@ def test_browser_capture_pairing_checkpoints_full_segments_and_finishes_story(tm
     )
     assert duplicate["accepted"] is True
     assert duplicate["duplicate"] is True
+
+
+def test_ongoing_story_capture_uses_ongoing_output_label(tmp_path) -> None:
+    batch_service, _capture_service, _batch_id, row = _capture_fixture(tmp_path)
+    row.completion_status = "Ongoing"
+
+    result = batch_service._write_story_output(
+        row,
+        {"title": "Complete Story", "description": "Fixture"},
+        "Ongoing",
+        [{
+            "sequence_index": 1,
+            "chapter_number": 1,
+            "title": "Chapter One",
+            "url": "https://jobnib.com/book/complete-story-chapter-1",
+            "content": "<p>Current ongoing chapter content.</p>",
+        }],
+    )
+
+    assert result["completion_status"] == "Ongoing"
+    assert result["output_file"].startswith("Ongoing/")
+    assert result["output_file"].endswith("_Ongoing_jn.md")
 
 
 def test_browser_capture_rejects_missing_segment_and_visible_lock() -> None:

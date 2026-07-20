@@ -436,6 +436,8 @@ export interface JobnibDiscoverySummary {
   archive_pages_checked: number;
   archive_found: number;
   completed_eligible: number;
+  ongoing_eligible: number;
+  eligible: number;
   excluded: number;
   duplicates: number;
   metadata_failed: number;
@@ -455,6 +457,7 @@ export interface JobnibBatchSummary {
   batch_name: string;
   phase: JobnibBatchPhase;
   mode: JobnibCrawlMode;
+  story_status_scope: JobnibStoryStatusScope;
   total_stories: number;
   discovered_count: number;
   completed_count: number;
@@ -530,7 +533,10 @@ export interface JobnibBatchStartRequest {
   batch_name?: string | null;
   max_archive_pages: number;
   mode?: JobnibCrawlMode;
+  story_status?: JobnibStoryStatusScope;
 }
+
+export type JobnibStoryStatusScope = 'completed' | 'ongoing' | 'all';
 
 export interface JobnibBatchCrawlRequest {
   mode: JobnibCrawlMode;
@@ -538,6 +544,17 @@ export interface JobnibBatchCrawlRequest {
 }
 
 export type JobnibBrowserCaptureStatusValue = 'active' | 'closed' | 'expired';
+
+export interface JobnibCompanionManifest {
+  available: boolean;
+  platform: 'windows-x64';
+  filename: string;
+  download_path: string;
+  version: string;
+  size: number;
+  sha256: string;
+  message: string;
+}
 
 export interface JobnibBrowserCaptureAssignment {
   assignment_id: string;

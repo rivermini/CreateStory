@@ -31,6 +31,7 @@ import type {
   JobnibBatchRowsResponse,
   JobnibBatchStartRequest,
   JobnibBatchSummary,
+  JobnibCompanionManifest,
   JobnibBrowserCapturePairResponse,
   JobnibBrowserCaptureCloseResponse,
   JobnibBrowserCaptureStatus,
@@ -353,6 +354,14 @@ export async function importJobnibCatalog(payload: unknown): Promise<JobnibCatal
 
 export async function removeJobnibBatch(batchId: string): Promise<{ deleted: boolean; batch_id: string }> {
   return apiFetch<{ deleted: boolean; batch_id: string }>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}`, { method: 'DELETE' });
+}
+
+export async function getJobnibCompanionManifest(): Promise<JobnibCompanionManifest> {
+  return apiFetch<JobnibCompanionManifest>('/api/crawl/jobnib-companion/manifest');
+}
+
+export function getJobnibCompanionDownloadUrl(): string {
+  return `${BASE_URL}/api/crawl/jobnib-companion/download/windows-x64`;
 }
 
 export async function pairJobnibBrowserCapture(

@@ -9,9 +9,13 @@ import {
 } from '../../api';
 import { BASE_URL } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
+import { createJobnibPairingCode } from './jobnibPairingCode';
 
 interface Props {
   readonly batchId: string;
+  readonly selectedRowIndex: number | null;
+  readonly selectedStoryTitle?: string;
+  readonly selectedStoryStatus?: string;
   readonly disabled?: boolean;
   readonly disabledReason?: string;
   readonly onActivity?: () => void;
@@ -23,19 +27,7 @@ function formatExpiry(value: string) {
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString();
 }
 
-function pairingCommand(pairing: JobnibBrowserCapturePairResponse) {
-  const apiBase = BASE_URL || window.location.origin;
-  return [
-    '.\\Services\\NovelCrawler\\tools\\jobnib_browser_assistant\\run_jobnib_browser_assistant.bat',
-    `--batch "${pairing.batch_id}"`,
-    `--pairing "${pairing.pairing_id}"`,
-    `--token "${pairing.pairing_token}"`,
-    `--api-base "${apiBase}"`,
-    '--chrome-port 9224',
-  ].join(' ');
-}
-
-export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledReason = '', onActivity, onSessionActiveChange }: Props) {
+export function JobnibBrowserCapturePanel({ batchId, selectedRowIndex, selectedStoryTitle = '', selectedStoryStatus = '', disabled = false, disabledReason = '', onActivity, onSessionActiveChange }: Props) {
   const [pairing, setPairing] = useState<JobnibBrowserCapturePairResponse | null>(null);
   const [status, setStatus] = useState<JobnibBrowserCaptureStatus | null>(null);
   const [busy, setBusy] = useState('');
@@ -44,7 +36,10 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledR
   const [copied, setCopied] = useState(false);
   const polling = useRef(false);
   const lastProgressSnapshot = useRef('');
-  const command = useMemo(() => pairing ? pairingCommand(pairing) : '', [pairing]);
+  const code = useMemo(
+    () => pairing ? createJobnibPairingCode(pairing, BASE_URL || window.location.origin) : '',
+    [pairing],
+  );
   const active = pairing?.status === 'active' && (!status || status.status === 'active');
   const assignment = status?.active_assignment;
   const chapterProgress = assignment?.total_chapters
@@ -105,11 +100,14 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledR
     setError('');
     setNotice('');
     try {
-      const next = await pairJobnibBrowserCapture(batchId, { ttl_seconds: 900 });
+      const next = await pairJobnibBrowserCapture(batchId, {
+        ttl_seconds: 900,
+        row_index: selectedRowIndex ?? undefined,
+      });
       setPairing(next);
       setStatus(null);
       lastProgressSnapshot.current = '';
-      setNotice('Pairing created. Copy and run the command on this PC; the companion opens a normal visible Chrome window automatically.');
+      setNotice(`Pairing created for ${selectedStoryTitle || 'the selected story'}. Open the companion and paste the one-time code below.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create a browser-assisted session.');
     } finally {
@@ -119,11 +117,11 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledR
 
   const copyCommand = async () => {
     try {
-      await navigator.clipboard.writeText(command);
+      await navigator.clipboard.writeText(code);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError('Could not copy automatically. Select the command and copy it manually.');
+      setError('Could not copy automatically. Select the pairing code and copy it manually.');
     }
   };
 
@@ -167,15 +165,17 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledR
               <span className="rounded-full border px-2 py-0.5 text-xs font-semibold" style={{ borderColor: 'rgba(34,197,94,.4)', background: 'rgba(34,197,94,.08)', color: '#22c55e' }}>Only capture method</span>
             </div>
             <p className="mt-1 max-w-3xl text-sm" style={{ color: soft }}>
-              A companion uses your normal visible Chrome and advances at your pace. There is no Slow or Fast setting.
+              Select one story from the list, then the companion captures only that story through visible Chrome.
             </p>
           </div>
         </div>
         {!pairing ? (
-          <button type="button" className={primaryButton} disabled={disabled || !batchId || busy === 'pair'} onClick={() => void start()}>
-            <Icon icon={busy === 'pair' ? appIcons.spinner : appIcons.link} className={`h-4 w-4 ${busy === 'pair' ? 'animate-spin' : ''}`} />
-            Pair Chrome companion
-          </button>
+          <div>
+            <button type="button" className={primaryButton} disabled={disabled || !batchId || !selectedRowIndex || !!busy} onClick={() => void start()}>
+              <Icon icon={busy === 'pair' ? appIcons.spinner : appIcons.link} className={`h-4 w-4 ${busy === 'pair' ? 'animate-spin' : ''}`} />
+              Create pairing code
+            </button>
+          </div>
         ) : (
           <div className="flex flex-wrap gap-2">
             <button type="button" className={secondaryButton} disabled={busy === 'close'} onClick={() => void refresh()} style={{ borderColor: border, background: muted }}>
@@ -189,12 +189,13 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledR
       </div>
 
       {!pairing && disabledReason && <div className="mt-4 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: border, background: muted, color: soft }}><Icon icon={appIcons.info} className="mr-2 inline h-4 w-4" />{disabledReason}</div>}
+      {!pairing && selectedRowIndex && <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: border, background: muted }}><Icon icon={appIcons.checkCircle} className="h-4 w-4 text-emerald-500" /><span style={{ color: soft }}>Selected story:</span><strong>{selectedStoryTitle || `Story #${selectedRowIndex}`}</strong>{selectedStoryStatus && <span className="rounded-full border px-2 py-0.5 text-xs capitalize" style={{ borderColor: border }}>{selectedStoryStatus}</span>}</div>}
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {[
-          ['1. Companion opens', 'Run the one-time command below. It opens a normal visible Chrome profile automatically; keep its window and the companion terminal open.'],
-          ['2. You unlock', 'When Jobnib asks, manually click Start Reading or Continue and complete any browser verification shown.'],
-          ['3. Capture advances', 'After all expected segments are visible, the companion validates and submits the full chapter, then prepares the next one.'],
+          ['1. Download once', 'Download and open the standalone Windows capture tool. No repository or Node.js installation is required.'],
+          ['2. Select and pair', 'Choose one story in the list, create its short-lived pairing code, then paste it into the tool.'],
+          ['3. Unlock and capture', 'Use Jobnib normally in Chrome. Each full validated chapter is submitted before the companion advances.'],
         ].map(([title, body]) => (
           <div key={title} className="rounded-lg border p-3" style={{ borderColor: border, background: muted }}>
             <div className="text-sm font-semibold">{title}</div>
@@ -213,15 +214,15 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledR
           <div className="rounded-lg border p-3" style={{ borderColor: border, background: muted }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="text-xs font-semibold uppercase" style={{ color: faint }}>One-time companion command</div>
+                <div className="text-xs font-semibold uppercase" style={{ color: faint }}>One-time pairing code</div>
                 <div className="mt-1 text-xs" style={{ color: soft }}>Pairing {pairing.pairing_id} · expires {formatExpiry(pairing.expires_at)}</div>
               </div>
               <button type="button" className={secondaryButton} onClick={() => void copyCommand()} style={{ borderColor: border }}>
-                <Icon icon={copied ? appIcons.check : appIcons.link} className="h-4 w-4" />{copied ? 'Copied' : 'Copy command'}
+                <Icon icon={copied ? appIcons.check : appIcons.link} className="h-4 w-4" />{copied ? 'Copied' : 'Copy pairing code'}
               </button>
             </div>
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-md border p-3 text-xs" style={{ borderColor: border, background: 'var(--cs-page)' }}>{command}</pre>
-            <p className="mt-2 text-xs" style={{ color: '#f59e0b' }}>The command contains a temporary secret. Do not share it. It is kept only in this page memory and disappears on refresh.</p>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-md border p-3 text-xs" style={{ borderColor: border, background: 'var(--cs-page)' }}>{code}</pre>
+            <p className="mt-2 text-xs" style={{ color: '#f59e0b' }}>The pairing code contains a temporary secret. Do not share it. It expires automatically and disappears from this page on refresh.</p>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
@@ -243,7 +244,7 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledR
                   <p className="mt-3 text-xs" style={{ color: soft }}>Expected segments: {assignment.expected_segment_ids.length || 'checking'}.</p>
                 </div>
               ) : (
-                <p className="mt-3 text-sm" style={{ color: soft }}>Run the command. The companion will request the next eligible chapter and open it in Chrome.</p>
+                <p className="mt-3 text-sm" style={{ color: soft }}>Open the companion and paste the pairing code. It will request the next eligible chapter and open it in Chrome.</p>
               )}
             </div>
 

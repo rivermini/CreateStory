@@ -6,7 +6,7 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sse_starlette.sse import EventSourceResponse
 
@@ -231,6 +231,7 @@ class JobnibBatchStartRequest(BaseModel):
     # scans only the live homepage because its archive pages were deleted.
     max_archive_pages: int = Field(default=1, ge=1, le=1000)
     mode: Literal["slow", "fast"] = Field(default="slow")
+    story_status: Literal["completed", "ongoing", "all"] = Field(default="completed")
 
 
 class JobnibBatchCrawlRequest(BaseModel):
@@ -728,7 +729,7 @@ async def delete_inkitt_batch(batch_id: str, http_request: Request) -> dict:
 
 @router.post("/jobnib-batch/start")
 async def start_jobnib_batch(request: JobnibBatchStartRequest, http_request: Request) -> dict:
-    """Discover completed Jobnib stories from the live archive."""
+    """Discover completed, ongoing, or both kinds of Jobnib stories."""
     require_operator_identity(http_request)
     from api.services.jobnib_batch_service import get_jobnib_batch_service
 
@@ -739,10 +740,37 @@ async def start_jobnib_batch(request: JobnibBatchStartRequest, http_request: Req
             batch_name=request.batch_name or "",
             max_archive_pages=request.max_archive_pages,
             mode=request.mode,
+            story_status=request.story_status,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return service.get_status(state.batch_id)
+
+
+@router.get("/jobnib-companion/manifest")
+async def get_jobnib_companion_manifest(http_request: Request) -> dict:
+    """Describe the standalone Windows browser companion published by this server."""
+    require_operator_identity(http_request)
+    from api.services.jobnib_companion_service import companion_manifest
+
+    return companion_manifest()
+
+
+@router.get("/jobnib-companion/download/windows-x64", response_class=FileResponse)
+async def download_jobnib_companion(http_request: Request) -> FileResponse:
+    """Download the repository-free Windows browser companion."""
+    require_operator_identity(http_request)
+    from api.services.jobnib_companion_service import FILENAME, companion_path
+
+    executable = companion_path()
+    if not executable.is_file():
+        raise HTTPException(status_code=404, detail="The Windows Jobnib companion is not published on this server.")
+    return FileResponse(
+        executable,
+        filename=FILENAME,
+        media_type="application/vnd.microsoft.portable-executable",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.post("/jobnib-batch/{batch_id}/browser-capture/pair")

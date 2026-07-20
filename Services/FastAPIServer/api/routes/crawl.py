@@ -205,6 +205,22 @@ async def start_jobnib_batch(request: dict = Body(...)) -> JSONResponse:
     return await _forward_request("POST", "/api/crawl/jobnib-batch/start", json_body=request)
 
 
+@router.get("/jobnib-companion/manifest", dependencies=[Depends(require_operator)])
+async def get_jobnib_companion_manifest() -> JSONResponse:
+    """Return availability and integrity metadata for the standalone companion."""
+    return await _forward_request("GET", "/api/crawl/jobnib-companion/manifest")
+
+
+@router.get("/jobnib-companion/download/windows-x64", dependencies=[Depends(require_operator)])
+async def download_jobnib_companion() -> StreamingResponse:
+    """Stream the standalone Windows companion from NovelCrawler."""
+    return await streaming_proxy(
+        "GET",
+        f"{_nc_url()}/api/crawl/jobnib-companion/download/windows-x64",
+        timeout=300.0,
+    )
+
+
 @router.post("/jobnib-batch/{batch_id}/browser-capture/pair", dependencies=[Depends(require_operator)])
 async def pair_jobnib_browser_capture(
     batch_id: str,

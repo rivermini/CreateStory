@@ -14,12 +14,14 @@ import {
   type JobnibBatchRow,
   type JobnibBatchSummary,
   type JobnibCookieStatusResponse,
+  type JobnibStoryStatusScope,
 } from '../../api';
 import { downloadWithAuth } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 import { getInkittLogTone, inkittLogToneClass, splitInkittLogLine } from './inkittLogUtils';
 import { JobnibBrowserCapturePanel } from './JobnibBrowserCapturePanel';
+import { JobnibCompanionDownloadButton } from './JobnibCompanionDownloadButton';
 
 interface Props { readonly themeMode: ThemeMode }
 
@@ -58,13 +60,15 @@ function rowStatusLabel(status: JobnibBatchRow['status']) {
 
 export function JobnibBatchPage({ themeMode }: Props) {
   const isDark = themeMode === 'dark';
-  const [batchName, setBatchName] = useState('Jobnib completed stories');
+  const [batchName, setBatchName] = useState('Jobnib stories');
+  const [storyStatusScope, setStoryStatusScope] = useState<JobnibStoryStatusScope>('completed');
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('jobnib_batch_id') || '');
   const [summary, setSummary] = useState<JobnibBatchSummary | null>(null);
   const [history, setHistory] = useState<JobnibBatchSummary[]>([]);
   const [rows, setRows] = useState<JobnibBatchRow[]>([]);
   const [rowTotal, setRowTotal] = useState(0);
   const [filter, setFilter] = useState('all');
+  const [storySelection, setStorySelection] = useState<(Pick<JobnibBatchRow, 'index' | 'title' | 'status' | 'completion_status'> & { batchId: string }) | null>(null);
   const [session, setSession] = useState<JobnibCookieStatusResponse | null>(null);
   const [browserCaptureActive, setBrowserCaptureActive] = useState(false);
   const [busy, setBusy] = useState('');
@@ -78,6 +82,14 @@ export function JobnibBatchPage({ themeMode }: Props) {
 
   const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
   const interactionLocked = active || browserCaptureActive;
+  const selectedStory = storySelection?.batchId === batchId
+    ? (() => {
+        const updated = rows.find((row) => row.index === storySelection.index);
+        return updated
+          ? { index: updated.index, title: updated.title, status: updated.status, completion_status: updated.completion_status }
+          : storySelection;
+      })()
+    : null;
   const captureRemaining = summary
     ? Math.max(0, summary.total_stories - summary.completed_count - summary.skipped_count)
     : 0;
@@ -86,10 +98,14 @@ export function JobnibBatchPage({ themeMode }: Props) {
     : active
       ? 'Wait for discovery to finish or pause the active batch.'
       : summary.total_stories === 0
-        ? 'This batch has no completed stories to capture.'
+        ? 'This batch has no matching stories to capture.'
         : captureRemaining === 0
           ? 'All stories in this batch are already captured.'
-          : '';
+          : !selectedStory
+            ? 'Select a story from the Stories list below.'
+            : ['completed', 'skipped'].includes(selectedStory.status)
+              ? 'The selected story no longer needs capture. Choose another story.'
+              : '';
   const loadedRows = Math.max(ROW_LIMIT, rows.length);
   const estimate = summary?.crawl_estimate;
   const progress = summary?.total_chapters
@@ -228,9 +244,9 @@ export function JobnibBatchPage({ themeMode }: Props) {
   }, [fetchRows, fetchStatus]);
 
   const statCards = useMemo(() => summary ? [
-    ['Found', summary.discovery.archive_found], ['Ready', summary.discovery.completed_eligible],
+    ['Found', summary.discovery.archive_found], ['Ready', summary.discovery.eligible],
+    ['Completed', summary.discovery.completed_eligible], ['Ongoing', summary.discovery.ongoing_eligible],
     ['Excluded', summary.discovery.excluded], ['Captured', summary.completed_count],
-    ['Needs capture', summary.needs_session_count], ['Failed', summary.failed_count],
   ] : [], [summary]);
 
   const panel = 'var(--cs-surface-elevated)';
@@ -244,7 +260,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: 'var(--cs-page)', color: text }}>
-      <main className="mx-auto w-full max-w-7xl space-y-4 px-3 py-4 sm:px-5 lg:px-6">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-3 py-4 sm:px-5 lg:px-6">
         <section className="rounded-2xl border p-5 sm:p-6" style={{ background: panel, borderColor: border }}>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
@@ -253,7 +269,8 @@ export function JobnibBatchPage({ themeMode }: Props) {
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/10 px-2.5 py-1 text-xs font-semibold text-orange-600 dark:text-orange-400"><Icon icon={appIcons.userCheck} className="h-3 w-3" />Browser-assisted only</span>
               </div>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Jobnib batch</h1>
-              <p className="mt-2 text-sm leading-6" style={{ color: soft }}>Find completed stories, then capture their full chapters through your visible Chrome browser. The server crawler does not run from this page.</p>
+              <p className="mt-2 text-sm leading-6" style={{ color: soft }}>Discover completed stories, ongoing stories, or both. Then select one story and capture its available chapters through visible Chrome.</p>
+              <JobnibCompanionDownloadButton />
             </div>
             <div className="min-w-[260px] rounded-xl border p-3" style={{ background: muted, borderColor: border }}>
               <div className="flex items-center justify-between gap-3">
@@ -279,15 +296,16 @@ export function JobnibBatchPage({ themeMode }: Props) {
 
             <div className="space-y-6 p-4 sm:p-5">
               <div>
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-end">
                   <label><span className="text-xs font-semibold" style={{ color: faint }}>Batch name</span><input value={batchName} onChange={(e) => setBatchName(e.target.value)} className="mt-1.5 h-11 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-orange-500" style={{ background: muted, borderColor: border }} /></label>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <button type="button" className={primaryButton} disabled={!!busy || interactionLocked} onClick={() => void act('discover', () => startJobnibBatch({ batch_name: batchName, max_archive_pages: 1 }))}><Icon icon={busy === 'discover' ? appIcons.spinner : appIcons.search} className={`h-4 w-4 ${busy === 'discover' ? 'animate-spin' : ''}`} />{busy === 'discover' ? 'Discovering…' : 'Discover homepage'}</button>
+                  <label><span className="text-xs font-semibold" style={{ color: faint }}>Story status</span><select value={storyStatusScope} onChange={(event) => setStoryStatusScope(event.target.value as JobnibStoryStatusScope)} className="mt-1.5 h-11 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-orange-500" style={{ background: muted, borderColor: border }}><option value="completed">Completed only</option><option value="ongoing">Ongoing only</option><option value="all">Completed + ongoing</option></select></label>
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <button type="button" className={primaryButton} disabled={!!busy || interactionLocked} onClick={() => void act('discover', () => startJobnibBatch({ batch_name: batchName, max_archive_pages: 1, story_status: storyStatusScope }))}><Icon icon={busy === 'discover' ? appIcons.spinner : appIcons.search} className={`h-4 w-4 ${busy === 'discover' ? 'animate-spin' : ''}`} />{busy === 'discover' ? 'Discovering…' : 'Discover homepage'}</button>
                     <button type="button" className={secondaryButton} disabled={!!busy || interactionLocked} onClick={() => fileRef.current?.click()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'import' ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${busy === 'import' ? 'animate-spin' : ''}`} />Import</button>
-                  </div>
                 </div>
                 <input ref={fileRef} type="file" accept=".json,.txt,.csv,application/json,text/plain,text/csv" onChange={(event) => void importFile(event)} className="hidden" />
-                <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: faint }}><Icon icon={appIcons.shield} className="h-3 w-3" />Only completed stories are added. This step does not crawl chapters.</p>
+                <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: faint }}><Icon icon={appIcons.shield} className="h-3 w-3" />Discovery adds only the status you choose and never crawls chapter content.</p>
               </div>
 
               {active && <div className="border-t pt-5" style={{ borderColor: border }}><button type="button" className={secondaryButton} disabled={!!busy || !!summary?.cancel_requested} onClick={() => void act('pause', () => pauseJobnibBatch(batchId))} style={{ borderColor: border, background: muted }}><Icon icon={appIcons.pause} className="h-4 w-4" />Pause active batch</button><p className="mt-2 text-xs" style={{ color: faint }}>Browser-assisted capture becomes available after discovery finishes or the older server crawl is paused.</p></div>}
@@ -304,24 +322,13 @@ export function JobnibBatchPage({ themeMode }: Props) {
           </aside>
         </section>
 
-        <JobnibBrowserCapturePanel
-          key={batchId}
-          batchId={batchId}
-          disabled={!!browserCaptureDisabledReason || !!busy}
-          disabledReason={browserCaptureDisabledReason}
-          onActivity={refreshAfterBrowserCapture}
-          onSessionActiveChange={setBrowserCaptureActive}
-        />
-
-        {summary && <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        {summary && <section className="order-3 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
             <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Batch log</h2><p className="text-xs" style={{ color: faint }}>Latest {summary.log_lines.length} lines</p></div><Link to={`/jobnib-batch/${encodeURIComponent(summary.batch_id)}/full-logs`} className={secondaryButton} style={{ borderColor: border, background: muted }}>Full logs</Link></div>
             <div className="mt-3 max-h-64 overflow-auto rounded-lg border p-2 font-mono text-xs" style={{ borderColor: border, background: muted }}>{summary.log_lines.length ? summary.log_lines.slice().reverse().map((line, index) => { const parts = splitInkittLogLine(line); return <div key={`${index}-${line}`} className={`mb-1 rounded border-l-2 px-2 py-1 ${inkittLogToneClass(getInkittLogTone(line))}`}><span className="mr-2 opacity-60">{parts.time}</span>{parts.message}</div>; }) : <div className="p-5 text-center" style={{ color: faint }}>No log lines yet.</div>}</div>
           </div>
           <aside className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
-            <div className="flex items-center gap-2"><Icon icon={appIcons.userCheck} className="h-4 w-4 text-orange-500" /><h2 className="font-semibold">Human-paced capture</h2></div>
-            <p className="mt-2 text-sm leading-6" style={{ color: soft }}>There is no Slow or Fast preset. The companion advances only after you unlock the page and the full chapter passes validation.</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">{[
+            <div className="flex items-center gap-2"><Icon icon={appIcons.userCheck} className="h-4 w-4 text-orange-500" /><h2 className="font-semibold">Human-paced capture</h2></div>            <div className="mt-3 grid grid-cols-2 gap-2">{[
               ['Remaining stories', estimate?.remaining_stories?.toLocaleString() || '-'],
               ['Remaining chapters', estimate?.remaining_chapters?.toLocaleString() || '-'],
               ['Captured chapters', summary.crawled_chapters.toLocaleString()],
@@ -330,7 +337,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
           </aside>
         </section>}
 
-        <section className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
+        <section className="order-4 rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
           <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Batch history</h2><p className="text-xs" style={{ color: faint }}>{history.length} retained batch(es)</p></div><button type="button" className={secondaryButton} onClick={() => void fetchHistory()} style={{ borderColor: border, background: muted }}><Icon icon={appIcons.refresh} className="h-4 w-4" />Refresh</button></div>
           <div className="mt-3 space-y-2">{history.map((item) => <div key={item.batch_id} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: item.batch_id === batchId ? 'var(--cs-primary)' : border, background: muted }}><button type="button" onClick={() => setBatchId(item.batch_id)} className="min-w-0 text-left"><div className="truncate text-sm font-semibold">{item.batch_name || `Jobnib ${item.batch_id}`}</div><div className="mt-1 text-xs" style={{ color: faint }}>{item.created_at} · {item.completed_count.toLocaleString()} exports · {item.total_stories.toLocaleString()} stories · <span className="capitalize">{item.phase.replaceAll('_', ' ')}</span></div></button><div className="flex flex-wrap gap-2">
             {item.download_ready && <button type="button" className={secondaryButton} disabled={!!busy} onClick={() => void downloadBatch(item.batch_id)} style={{ borderColor: border }}><Icon icon={busy === `download:${item.batch_id}` ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${busy === `download:${item.batch_id}` ? 'animate-spin' : ''}`} />ZIP</button>}
@@ -339,11 +346,29 @@ export function JobnibBatchPage({ themeMode }: Props) {
           </div></div>)}</div>
         </section>
 
-        {summary && <section className="overflow-hidden rounded-xl border" style={{ background: panel, borderColor: border }}>
-          <div className="flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: border }}><div><h2 className="font-semibold">Stories</h2><p className="text-xs" style={{ color: faint }}>Showing {rows.length.toLocaleString()} of {rowTotal.toLocaleString()} rows</p></div><div className="flex flex-wrap gap-2">{FILTERS.map(([value, label]) => <button type="button" key={value} onClick={() => setFilter(value)} className="rounded-full border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: filter === value ? 'var(--cs-primary)' : border, background: filter === value ? 'rgba(249,115,22,.15)' : muted }}>{label}</button>)}</div></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead style={{ background: muted, color: faint }}><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Story</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Chapters</th><th className="px-4 py-3">Output / error</th></tr></thead><tbody>{rows.map((row) => <tr key={row.index} className="border-t align-top" style={{ borderColor: border }}><td className="px-4 py-3 tabular-nums">{row.index}</td><td className="px-4 py-3"><a href={row.url} target="_blank" rel="noreferrer" className="font-semibold underline">{row.title}</a><div className="mt-1 text-xs" style={{ color: faint }}>{row.author || row.story_id}</div></td><td className="px-4 py-3"><span className="rounded border px-2 py-1 text-xs" style={{ borderColor: border }}>{rowStatusLabel(row.status)}</span></td><td className="px-4 py-3 tabular-nums">{row.crawled_chapters.toLocaleString()}/{row.total_chapters?.toLocaleString() ?? '-'}</td><td className="max-w-xl px-4 py-3 text-xs" style={{ color: row.error ? '#f59e0b' : soft }}>{row.error || row.output_file || '-'}</td></tr>)}</tbody></table>{rows.length === 0 && <div className="p-8 text-center text-sm" style={{ color: soft }}>No rows match this filter.</div>}</div>
+        {summary && <section className="order-1 overflow-hidden rounded-xl border" style={{ background: panel, borderColor: border }}>
+          <div className="flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: border }}><div><h2 className="font-semibold">Choose a story to capture</h2><p className="text-xs" style={{ color: faint }}>{selectedStory ? `Selected #${selectedStory.index}: ${selectedStory.title}` : `Showing ${rows.length.toLocaleString()} of ${rowTotal.toLocaleString()} rows`}</p></div><div className="flex flex-wrap gap-2">{FILTERS.map(([value, label]) => <button type="button" key={value} onClick={() => setFilter(value)} className="rounded-full border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: filter === value ? 'var(--cs-primary)' : border, background: filter === value ? 'rgba(249,115,22,.15)' : muted }}>{label}</button>)}</div></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1120px] table-fixed text-left text-sm"><colgroup><col className="w-[120px]" /><col className="w-[48px]" /><col className="w-[320px]" /><col className="w-[165px]" /><col className="w-[90px]" /><col /></colgroup><thead style={{ background: muted, color: faint }}><tr><th className="whitespace-nowrap px-4 py-3">Select</th><th className="whitespace-nowrap px-4 py-3">#</th><th className="px-4 py-3">Story</th><th className="whitespace-nowrap px-4 py-3">Capture status</th><th className="whitespace-nowrap px-4 py-3">Chapters</th><th className="px-4 py-3">Output / error</th></tr></thead><tbody>{rows.map((row) => {
+            const available = !['completed', 'skipped'].includes(row.status);
+            const selected = selectedStory?.index === row.index;
+            return <tr key={row.index} className="border-t align-top transition" style={{ borderColor: selected ? 'var(--cs-primary)' : border, background: selected ? 'rgba(249,115,22,.08)' : undefined }}><td className="px-4 py-3"><label className={`inline-flex whitespace-nowrap items-center gap-2 font-semibold ${available && !interactionLocked ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}><input type="radio" name="jobnib-capture-story" checked={selected} disabled={!available || interactionLocked} onChange={() => setStorySelection({ batchId, index: row.index, title: row.title, status: row.status, completion_status: row.completion_status })} /><span>{selected ? 'Selected' : 'Choose'}</span></label></td><td className="whitespace-nowrap px-4 py-3 tabular-nums">{row.index}</td><td className="px-4 py-3"><a href={row.url} target="_blank" rel="noreferrer" className="font-semibold underline">{row.title}</a><div className="mt-1 break-words text-xs" style={{ color: faint }}>{row.author || row.story_id} · <span className="capitalize">{row.completion_status || 'Unknown'}</span></div></td><td className="px-4 py-3"><span className="inline-flex whitespace-nowrap rounded border px-2 py-1 text-xs" style={{ borderColor: border }}>{rowStatusLabel(row.status)}</span></td><td className="whitespace-nowrap px-4 py-3 tabular-nums">{row.crawled_chapters.toLocaleString()}/{row.total_chapters?.toLocaleString() ?? '-'}</td><td className="break-words px-4 py-3 text-xs leading-5" style={{ color: row.error ? '#f59e0b' : soft }}>{row.error || row.output_file || '-'}</td></tr>;
+          })}</tbody></table>{rows.length === 0 && <div className="p-8 text-center text-sm" style={{ color: soft }}>No rows match this filter.</div>}</div>
           {rows.length < rowTotal && <div className="border-t p-3 text-center" style={{ borderColor: border }}><button type="button" onClick={() => void loadMoreRows()} disabled={busy === 'rows'} className={secondaryButton} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'rows' ? appIcons.spinner : appIcons.add} className={`h-4 w-4 ${busy === 'rows' ? 'animate-spin' : ''}`} />Load more rows</button></div>}
         </section>}
+
+        <div className="order-2">
+          <JobnibBrowserCapturePanel
+            key={batchId}
+            batchId={batchId}
+            selectedRowIndex={selectedStory?.index ?? null}
+            selectedStoryTitle={selectedStory?.title}
+            selectedStoryStatus={selectedStory?.completion_status}
+            disabled={!!browserCaptureDisabledReason || !!busy}
+            disabledReason={browserCaptureDisabledReason}
+            onActivity={refreshAfterBrowserCapture}
+            onSessionActiveChange={setBrowserCaptureActive}
+          />
+        </div>
       </main>
     </div>
   );

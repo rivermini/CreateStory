@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from fastapi.routing import APIRoute
 
 from api.routes.crawl import _pairing_bearer, browser_capture_router, router as crawl_router
+from api.routes.downloads import _worker_url
 from api.routes.results import router as results_router
 
 
@@ -18,6 +19,8 @@ def test_all_jobnib_gateway_routes_are_registered() -> None:
         ("POST", "/api/crawl/jobnib-cookies"),
         ("POST", "/api/crawl/jobnib-cookies/status"),
         ("POST", "/api/crawl/jobnib-batch/start"),
+        ("GET", "/api/crawl/jobnib-companion/manifest"),
+        ("GET", "/api/crawl/jobnib-companion/download/windows-x64"),
         ("GET", "/api/crawl/jobnib-batch"),
         ("GET", "/api/crawl/jobnib-batch/catalog/export"),
         ("GET", "/api/crawl/jobnib-batch/{batch_id}/catalog/export"),
@@ -40,6 +43,17 @@ def test_all_jobnib_gateway_routes_are_registered() -> None:
     }
 
     assert expected <= routes
+
+
+def test_companion_download_ticket_targets_novelcrawler(monkeypatch) -> None:
+    monkeypatch.setenv("SERVICE_URLS_NovelCrawler", "http://crawler:8002")
+    assert _worker_url("/api/crawl/jobnib-companion/download/windows-x64") == (
+        "http://crawler:8002/api/crawl/jobnib-companion/download/windows-x64"
+    )
+    assert _worker_url("/api/results/download-all") == "http://crawler:8002/api/results/download-all"
+    assert _worker_url("/api/results/jobnib-batch/deadbeef/download") == (
+        "http://crawler:8002/api/results/jobnib-batch/deadbeef/download"
+    )
 
 
 def test_companion_bearer_requires_a_high_entropy_urlsafe_token() -> None:

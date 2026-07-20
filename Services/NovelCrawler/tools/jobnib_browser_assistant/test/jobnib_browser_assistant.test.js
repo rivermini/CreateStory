@@ -3,16 +3,22 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  BackendClient,
   ChromeSession,
   MANUAL_ACTION_SCAN_EXPRESSION,
   assertJobnibUrl,
   buildManualActionCenterExpression,
+  decodePairingCode,
   isSameAssignmentPage,
   normalizeAssignment,
   normalizeApiBase,
   parseArgs,
   validateCapture,
 } = require("../jobnib_browser_assistant");
+
+function pairingCode(payload) {
+  return `csjn1.${Buffer.from(JSON.stringify({ v: 1, ...payload })).toString('base64url')}`;
+}
 
 test("parseArgs accepts the documented companion command", () => {
   const result = parseArgs([
@@ -32,6 +38,75 @@ test("parseArgs accepts the documented companion command", () => {
 test("remote API bases require HTTPS", () => {
   assert.throws(() => normalizeApiBase("http://example.test"), /must use HTTPS/);
   assert.equal(normalizeApiBase("https://createstory.online/"), "https://createstory.online");
+});
+
+test("pairing codes configure localhost and public server sessions", () => {
+  const localCode = pairingCode({
+    api_base: "http://127.0.0.1:8000",
+    batch_id: "deadbeef",
+    pairing_id: "a".repeat(32),
+    pairing_token: "b".repeat(43),
+    expires_at: new Date(Date.now() + 60000).toISOString(),
+  });
+  const decoded = decodePairingCode(localCode);
+  assert.equal(decoded.apiBase, "http://127.0.0.1:8000");
+  assert.equal(decoded.batchId, "deadbeef");
+  assert.equal(parseArgs(["--pairing-code", localCode]).pairingId, "a".repeat(32));
+
+  const publicCode = pairingCode({
+    api_base: "https://stories.example.com",
+    batch_id: "feed1234",
+    pairing_id: "c".repeat(32),
+    pairing_token: "d".repeat(43),
+    expires_at: new Date(Date.now() + 60000).toISOString(),
+  });
+  assert.equal(parseArgs(["--pairing-code", publicCode]).apiBase, "https://stories.example.com");
+});
+
+test("expired or non-HTTPS remote pairing codes are rejected", () => {
+  const expired = pairingCode({
+    api_base: "https://stories.example.com",
+    batch_id: "feed1234",
+    pairing_id: "c".repeat(32),
+    pairing_token: "d".repeat(43),
+    expires_at: new Date(Date.now() - 1000).toISOString(),
+  });
+  assert.throws(() => decodePairingCode(expired), /expired/);
+
+  const insecure = pairingCode({
+    api_base: "http://stories.example.com",
+    batch_id: "feed1234",
+    pairing_id: "c".repeat(32),
+    pairing_token: "d".repeat(43),
+    expires_at: new Date(Date.now() + 60000).toISOString(),
+  });
+  assert.throws(() => parseArgs(["--pairing-code", insecure]), /must use HTTPS/);
+});
+
+test("pairing codes require complete fields and a valid expiry", () => {
+  assert.throws(() => decodePairingCode(pairingCode({ expires_at: "not-a-date" })), /incomplete/);
+  assert.throws(() => decodePairingCode(pairingCode({
+    api_base: "https://stories.example.com",
+    batch_id: "feed1234",
+    pairing_id: "c".repeat(32),
+    pairing_token: "d".repeat(43),
+    expires_at: "not-a-date",
+  })), /invalid expiry/);
+});
+
+test("the companion explains a public access-proxy block", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response(
+    "<html><title>Cloudflare Access</title></html>",
+    { status: 200, headers: { "Content-Type": "text/html" } },
+  ));
+  const client = new BackendClient({
+    apiBase: "https://stories.example.com",
+    batchId: "feed1234",
+    pairingId: "c".repeat(32),
+    token: "d".repeat(43),
+  });
+
+  await assert.rejects(() => client.request("next"), /access proxy blocked.*bypass only/s);
 });
 
 test("assignments are restricted to Jobnib HTTPS pages", () => {

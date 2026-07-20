@@ -3,10 +3,16 @@
 "use strict";
 
 const http = require("node:http");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+const readline = require("node:readline/promises");
 const { setTimeout: sleep } = require("node:timers/promises");
 const WebSocket = require("ws");
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
+const PAIRING_CODE_PREFIX = "csjn1.";
 const JOBNIB_HOSTS = new Set(["jobnib.com", "www.jobnib.com"]);
 const DEFAULT_API_BASE = "http://127.0.0.1:8000";
 const DEFAULT_CHROME_PORT = 9224;
@@ -18,6 +24,9 @@ function usage() {
 CreateStory - Jobnib browser assistant ${VERSION}
 
 Usage:
+  CreateStory-Jobnib-Companion.exe [--pairing-code <code>]
+
+Developer usage:
   node jobnib_browser_assistant.js \\
     --batch <batch-id> \\
     --pairing <pairing-id> \\
@@ -32,7 +41,38 @@ and submits the populated chapter segments automatically.
 `;
 }
 
-function parseArgs(argv) {
+function decodePairingCode(value) {
+  const code = String(value || "").trim();
+  if (!code.startsWith(PAIRING_CODE_PREFIX)) {
+    throw new Error("The pairing code is not a CreateStory Jobnib code.");
+  }
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(code.slice(PAIRING_CODE_PREFIX.length), "base64url").toString("utf8"));
+  } catch {
+    throw new Error("The pairing code is malformed.");
+  }
+  if (!payload || payload.v !== 1) throw new Error("The pairing code version is not supported.");
+  const required = ["api_base", "batch_id", "pairing_id", "pairing_token", "expires_at"];
+  if (required.some((key) => typeof payload[key] !== "string" || !payload[key].trim())) {
+    throw new Error("The pairing code is incomplete. Create a new pairing in CreateStory.");
+  }
+  const expiresAt = Date.parse(payload.expires_at);
+  if (!Number.isFinite(expiresAt)) {
+    throw new Error("The pairing code has an invalid expiry time.");
+  }
+  if (expiresAt <= Date.now()) {
+    throw new Error("The pairing code has expired. Create a new pairing in CreateStory.");
+  }
+  return {
+    apiBase: payload.api_base,
+    batchId: payload.batch_id,
+    pairingId: payload.pairing_id,
+    token: payload.pairing_token,
+  };
+}
+
+function parseArgs(argv, { allowMissing = false } = {}) {
   const aliases = new Map([
     ["--batch", "batchId"],
     ["--batch-id", "batchId"],
@@ -43,6 +83,7 @@ function parseArgs(argv) {
     ["--chrome-port", "chromePort"],
     ["--poll-ms", "pollMs"],
     ["--min-segment-chars", "minSegmentChars"],
+    ["--pairing-code", "pairingCode"],
   ]);
   const values = {
     apiBase: process.env.CREATE_STORY_API_BASE || DEFAULT_API_BASE,
@@ -50,6 +91,7 @@ function parseArgs(argv) {
     pollMs: process.env.JOBNIB_ASSIST_POLL_MS || DEFAULT_POLL_MS,
     minSegmentChars: process.env.JOBNIB_ASSIST_MIN_SEGMENT_CHARS || DEFAULT_MIN_SEGMENT_CHARS,
   };
+  const explicit = new Set();
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -62,19 +104,49 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value.`);
     values[key] = value;
+    explicit.add(key);
     index += 1;
+  }
+
+  if (values.pairingCode) {
+    const paired = decodePairingCode(values.pairingCode);
+    for (const [key, value] of Object.entries(paired)) {
+      if (!explicit.has(key)) values[key] = value;
+    }
   }
 
   values.chromePort = parsePositiveInteger(values.chromePort, "--chrome-port");
   values.pollMs = parsePositiveInteger(values.pollMs, "--poll-ms");
   values.minSegmentChars = parsePositiveInteger(values.minSegmentChars, "--min-segment-chars");
   values.apiBase = normalizeApiBase(values.apiBase);
-  if (!values.help) {
+  if (!values.help && !allowMissing) {
     for (const [key, option] of [["batchId", "--batch"], ["pairingId", "--pairing"], ["token", "--token"]]) {
       if (!values[key]) throw new Error(`${option} is required.`);
     }
   }
   return values;
+}
+
+async function resolveOptions(argv) {
+  let options = parseArgs(argv, { allowMissing: true });
+  if (options.help) return options;
+  const missing = ["batchId", "pairingId", "token"].filter((key) => !options[key]);
+  if (missing.length) {
+    if (!process.stdin.isTTY) {
+      throw new Error("A pairing code is required. Create one in the Jobnib Batch page.");
+    }
+    const terminal = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      console.log("Create a browser-assisted pairing in CreateStory, then paste its one-time code here.");
+      const code = await terminal.question("Pairing code: ");
+      options = parseArgs([...argv, "--pairing-code", code.trim()]);
+    } finally {
+      terminal.close();
+    }
+  } else {
+    options = parseArgs(argv);
+  }
+  return options;
 }
 
 function parsePositiveInteger(value, option) {
@@ -162,7 +234,17 @@ class BackendClient {
     let data = null;
     if (text) {
       try { data = JSON.parse(text); }
-      catch { throw new Error(`${method} ${action} returned non-JSON HTTP ${response.status}.`); }
+      catch {
+        const accessProxyResponse = response.redirected
+          || /cloudflare(?:\s+zero\s+trust|\s+access)?|cf-access|cdn-cgi\/access/i.test(`${response.url}\n${text.slice(0, 2000)}`);
+        if (accessProxyResponse) {
+          throw new Error(
+            "The public server access proxy blocked the companion. The server administrator must bypass only the "
+            + "/api/crawl/jobnib-batch/*/browser-capture/* path; the pairing token still protects every request.",
+          );
+        }
+        throw new Error(`${method} ${action} returned non-JSON HTTP ${response.status}.`);
+      }
     }
     if (!response.ok) {
       const detail = data?.detail || data?.message || `HTTP ${response.status}`;
@@ -230,10 +312,10 @@ class BackendClient {
   }
 }
 
-function getJson(port, pathname) {
+function getJson(port, pathname, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const request = http.get(
-      { hostname: "127.0.0.1", port, path: pathname, timeout: 10000 },
+      { hostname: "127.0.0.1", port, path: pathname, timeout: timeoutMs },
       (response) => {
         let body = "";
         response.setEncoding("utf8");
@@ -251,6 +333,57 @@ function getJson(port, pathname) {
     request.on("error", reject);
     request.on("timeout", () => request.destroy(new Error("Chrome debugging connection timed out.")));
   });
+}
+
+async function chromeIsReady(port) {
+  try {
+    const version = await getJson(port, "/json/version", 1200);
+    return Boolean(version?.webSocketDebuggerUrl || version?.Browser);
+  } catch {
+    return false;
+  }
+}
+
+function findChromeExecutable() {
+  if (process.platform !== "win32") return null;
+  const candidates = [
+    process.env.PROGRAMFILES && path.join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
+    process.env["PROGRAMFILES(X86)"] && path.join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+async function ensureChrome(port) {
+  if (await chromeIsReady(port)) {
+    console.log(`[OK] Reusing the CreateStory Chrome window on port ${port}.`);
+    return;
+  }
+  const executable = findChromeExecutable();
+  if (!executable) {
+    throw new Error("Google Chrome was not found. Install Chrome, then start the companion again.");
+  }
+  const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+  const profile = path.join(localAppData, "CreateStory", "JobnibBrowserAssistant");
+  fs.mkdirSync(profile, { recursive: true });
+  console.log("[START] Opening a dedicated visible Chrome window...");
+  const child = spawn(executable, [
+    `--remote-debugging-port=${port}`,
+    "--remote-allow-origins=*",
+    `--user-data-dir=${profile}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "https://jobnib.com/",
+  ], { detached: true, stdio: "ignore" });
+  child.unref();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(1000);
+    if (await chromeIsReady(port)) {
+      console.log("[OK] Chrome is ready.");
+      return;
+    }
+  }
+  throw new Error(`Chrome did not open its local debugging port ${port} within 20 seconds.`);
 }
 
 class ChromeSession {
@@ -650,6 +783,7 @@ async function run(options) {
 
   try {
     console.log(`CreateStory Jobnib browser assistant ${VERSION}`);
+    await ensureChrome(options.chromePort);
     console.log(`[INFO] Connecting to Chrome debugging port ${options.chromePort}...`);
     await chrome.connect();
     console.log("[OK] Connected to the isolated Chrome window.");
@@ -721,19 +855,27 @@ async function run(options) {
   }
 }
 
+async function pauseBeforeExit() {
+  if (!process.stdin.isTTY || process.platform !== "win32") return;
+  const terminal = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try { await terminal.question("Press Enter to close..."); }
+  finally { terminal.close(); }
+}
+
 if (require.main === module) {
-  try {
-    const options = parseArgs(process.argv.slice(2));
-    if (options.help) {
+  (async () => {
+    try {
+      const options = await resolveOptions(process.argv.slice(2));
+      if (options.help) console.log(usage());
+      else await run(options);
+    } catch (error) {
+      console.error(`[ERROR] ${error.message}`);
       console.log(usage());
-    } else {
-      run(options);
+      process.exitCode = 1;
+    } finally {
+      await pauseBeforeExit();
     }
-  } catch (error) {
-    console.error(`[ERROR] ${error.message}`);
-    console.log(usage());
-    process.exitCode = 1;
-  }
+  })();
 }
 
 module.exports = {
@@ -743,10 +885,15 @@ module.exports = {
   MANUAL_ACTION_SCAN_EXPRESSION,
   assertJobnibUrl,
   buildManualActionCenterExpression,
+  chromeIsReady,
+  decodePairingCode,
+  ensureChrome,
+  findChromeExecutable,
   isSameAssignmentPage,
   normalizeAssignment,
   normalizeSegmentId,
   normalizeApiBase,
   parseArgs,
+  resolveOptions,
   validateCapture,
 };

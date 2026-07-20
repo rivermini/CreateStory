@@ -21,27 +21,65 @@ It does **not** click, focus, or type, call Jobnib JavaScript reader functions, 
 or replay verification tokens, change browser fingerprint properties, export
 cookies, or attempt to solve a challenge.
 
-## First-time setup
+## User setup (localhost or public server)
 
-1. Install Node.js 20 or newer.
-2. In CreateStory, open Jobnib Batch, choose a batch, and create a browser
-   capture pairing.
-3. Copy the generated command. It has this shape:
+1. In CreateStory, open Jobnib Batch and click **Download companion**. No
+   repository checkout or Node.js installation is required.
+2. Open `CreateStory-Jobnib-Companion-win-x64.exe`.
+3. Choose a discovered batch in CreateStory and click **Create pairing code**.
+4. Copy the `csjn1...` code and paste it into the companion window.
 
-   ```bat
-   .\Services\NovelCrawler\tools\jobnib_browser_assistant\run_jobnib_browser_assistant.bat --batch BATCH_ID --pairing PAIRING_ID --token PAIRING_TOKEN --api-base http://127.0.0.1:8000 --chrome-port 9224
-   ```
+The same executable accepts loopback HTTP for local development and requires
+HTTPS for a public CreateStory server. Pairing credentials are batch-bound,
+short-lived, held only in memory, and never written to disk.
 
-   Run that command from the CreateStory repository root.
+The companion opens or reuses a visible Chrome window with a dedicated profile
+under `%LOCALAPPDATA%\CreateStory\JobnibBrowserAssistant`.
 
-The BAT file installs the single local `ws` dependency on its first run. It
-reuses Chrome if the requested debugging port is already open; otherwise it
-opens a normal visible Chrome window with a dedicated profile under
-`%LOCALAPPDATA%\CreateStory\JobnibBrowserAssistant`. The pairing token remains
-in process memory and is never written to disk. Close the terminal or press
-`Ctrl+C` to close the pairing; Chrome remains open.
+## Build and publish
 
-Use HTTPS for a production API URL. Plain HTTP is accepted only for localhost.
+On Windows x64 with Node.js 26 or newer:
+
+```powershell
+cd Services
+task build:jobnib-companion
+```
+
+The build bundles the assistant and WebSocket client with esbuild, then uses
+Node's single-executable builder. It creates the executable and integrity
+manifest under `tools/jobnib_browser_assistant/dist/`. Build it before building
+the NovelCrawler Docker image, or mount it elsewhere and set
+`JOBNIB_COMPANION_PATH`. Set `CREATE_STORY_SIGN_CERT_SHA1` during the build to
+code-sign and timestamp the executable with `signtool.exe`.
+
+The authenticated gateway exposes the build through the normal download-ticket
+flow, so NovelCrawler does not need to be publicly reachable.
+
+### Public server prerequisite
+
+If the API hostname embedded in the frontend is protected by Cloudflare Access
+or another whole-site login proxy, create a more-specific Access application
+and add a **Bypass / Everyone** policy for this path only:
+
+```text
+/api/crawl/jobnib-batch/*/browser-capture/*
+```
+
+Do not bypass the whole `/api` tree. Pair creation, companion download, and all
+normal application APIs remain behind the user's regular login. The bypassed
+companion endpoints independently require a high-entropy, batch-bound bearer
+from the one-time pairing code and reject missing, invalid, expired, or closed
+pairings. Without this narrow proxy exception, the companion detects the HTML
+access-login response and explains the required server-side fix.
+
+## Developer fallback
+
+The source assistant remains runnable for development:
+
+```powershell
+npm install
+node jobnib_browser_assistant.js --pairing-code "csjn1..."
+```
 
 ## During capture
 

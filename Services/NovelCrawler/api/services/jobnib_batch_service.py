@@ -1,4 +1,4 @@
-"""Persistent completed-story batch crawler for Jobnib."""
+"""Persistent browser-assisted batch capture for Jobnib stories."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 BatchPhase = Literal["discovering", "ready", "crawling", "waiting_for_session", "completed", "failed"]
 RowStatus = Literal["discovered", "queued", "crawling", "completed", "skipped", "failed", "needs_session"]
 CrawlMode = Literal["slow", "fast"]
+DiscoveryScope = Literal["completed", "ongoing", "all"]
 
 JOBNIB_HOMEPAGE_URL = "https://jobnib.com/"
 # Jobnib's published archive pagination is deleted. Pretty pagination URLs also
@@ -105,9 +106,10 @@ class JobnibBatchState:
     batch_id: str
     created_by_user_id: str | None
     rows: list[JobnibBatchRow] = field(default_factory=list)
-    batch_name: str = "Jobnib completed stories"
+    batch_name: str = "Jobnib stories"
     phase: BatchPhase = "discovering"
     mode: CrawlMode = "slow"
+    story_status_scope: DiscoveryScope = "completed"
     max_archive_pages: int = JOBNIB_MAX_ARCHIVE_PAGES
     max_stories_per_run: int = 20
     output_dir: str = ""
@@ -124,6 +126,7 @@ class JobnibBatchState:
     discovery_pages_checked: int = 0
     archive_found_count: int = 0
     completed_eligible_count: int = 0
+    ongoing_eligible_count: int = 0
     excluded_count: int = 0
     duplicate_count: int = 0
     metadata_failed_count: int = 0
@@ -178,21 +181,25 @@ class JobnibBatchService:
         batch_name: str,
         max_archive_pages: int,
         mode: CrawlMode = "slow",
+        story_status: DiscoveryScope = "completed",
     ) -> JobnibBatchState:
         mode = normalize_mode(mode)
+        story_status = normalize_discovery_scope(story_status)
         batch_id = uuid.uuid4().hex[:8]
         output_dir = self._prepare_output_dir(batch_id)
         state = JobnibBatchState(
             batch_id=batch_id,
             created_by_user_id=created_by_user_id,
-            batch_name=(batch_name or "Jobnib completed stories").strip(),
+            batch_name=(batch_name or "Jobnib stories").strip(),
             mode=mode,
+            story_status_scope=story_status,
             max_archive_pages=clamp(max_archive_pages, 1, JOBNIB_MAX_ARCHIVE_PAGES),
             output_dir=str(output_dir),
             started_at=now_string(),
             log_file=str(output_dir / "jobnib_batch.log"),
         )
-        state.add_log("Started Jobnib homepage discovery. Completed stories only.")
+        scope_label = "completed and ongoing" if story_status == "all" else story_status
+        state.add_log(f"Started Jobnib homepage discovery. Target: {scope_label} stories.")
         with self._lock:
             self._batches[batch_id] = state
             self._persist_locked()
@@ -545,7 +552,7 @@ class JobnibBatchService:
             if candidate.is_relative_to(output_dir) and candidate.is_file() and not candidate.is_symlink():
                 files.append((candidate, relative.replace("\\", "/")))
         if not files:
-            raise FileNotFoundError("No completed Jobnib batch files were created.")
+            raise FileNotFoundError("No captured Jobnib batch files were created.")
         return state, files
 
     def prepare_archive(self, batch_id: str, run_id: str | None = None) -> Path:
@@ -622,7 +629,7 @@ class JobnibBatchService:
                     state = self._get_state_locked(batch_id)
                     state.add_log(
                         f"Homepage scan: found {state.archive_found_count}, "
-                        f"completed {state.completed_eligible_count}."
+                        f"eligible {state.completed_eligible_count + state.ongoing_eligible_count}."
                     )
                     self._persist_locked()
                 if not next_page:
@@ -669,7 +676,10 @@ class JobnibBatchService:
             metadata = spider._extract_story_metadata(soup, ref["url"])
             status = extract_jobnib_status(soup)
             title = metadata.get("title") or ref.get("title") or ref["story_id"].replace("-", " ").title()
-            if status.lower() != "completed":
+            status_kind = normalize_story_status(status)
+            with self._lock:
+                scope = self._get_state_locked(batch_id).story_status_scope
+            if status_kind == "unknown" or (scope != "all" and status_kind != scope):
                 with self._lock:
                     state = self._get_state_locked(batch_id)
                     state.excluded_count += 1
@@ -691,7 +701,10 @@ class JobnibBatchService:
                 row.index = len(state.rows) + 1
                 state.rows.append(row)
                 self._save_chapter_manifest(row, chapters, metadata=metadata, status=status)
-                state.completed_eligible_count += 1
+                if status_kind == "completed":
+                    state.completed_eligible_count += 1
+                else:
+                    state.ongoing_eligible_count += 1
                 state.consecutive_session_challenges = 0
                 self._persist_locked()
         except JobnibSessionRequired:
@@ -719,9 +732,10 @@ class JobnibBatchService:
             state.discovery_next_url = ""
             state.add_log(
                 f"Discovery finished: {state.completed_eligible_count} completed, "
-                f"{state.excluded_count} non-completed, {state.metadata_failed_count} metadata failure(s)."
+                f"{state.ongoing_eligible_count} ongoing, {state.excluded_count} excluded, "
+                f"{state.metadata_failed_count} metadata failure(s)."
             )
-            state.add_log("Ready for manual crawl. Crawling starts only when requested by the operator.")
+            state.add_log("Ready for browser-assisted capture. Select a story before creating a pairing.")
             self._persist_locked()
 
     def _run_crawl(self, batch_id: str, run_id: str) -> None:
@@ -870,12 +884,13 @@ class JobnibBatchService:
     ) -> dict[str, Any]:
         title = str(metadata.get("title") or row.title)
         output_dir = Path(self._get_state(row).output_dir).resolve()
-        folder = Path("Completed") / f"DONE_{sanitize_filename(title)}_jn"
+        source_status = "Ongoing" if normalize_story_status(status) == "ongoing" else "Completed"
+        folder = Path(source_status) / f"DONE_{sanitize_filename(title)}_jn"
         story_dir = (output_dir / folder).resolve()
         if not story_dir.is_relative_to(output_dir):
             raise RuntimeError("Unsafe Jobnib output path.")
         story_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"Jobnib_{sanitize_filename(title)}_Completed_jn.md"
+        filename = f"Jobnib_{sanitize_filename(title)}_{source_status}_jn.md"
         markdown_path = story_dir / filename
         markdown_path.write_text(format_jobnib_markdown(title, row.url, chapters), encoding="utf-8")
         info = {
@@ -1125,8 +1140,8 @@ class JobnibBatchService:
         html = self._fetch_html(batch_id, row.url, JOBNIB_DISCOVERY_INTERVAL)
         soup = BeautifulSoup(html, "html.parser")
         status = extract_jobnib_status(soup)
-        if status.lower() != "completed":
-            raise ValueError("Browser-assisted capture is limited to completed Jobnib stories.")
+        if normalize_story_status(status) == "unknown":
+            raise ValueError("The Jobnib story status is neither completed nor ongoing.")
         spider = JobnibSpider(novel=row.url, limit=1)
         metadata = spider._extract_story_metadata(soup, row.url)
         chapters = spider._collect_chapter_links(soup, row.url)
@@ -1228,6 +1243,7 @@ class JobnibBatchService:
             "batch_name": state.batch_name,
             "phase": state.phase,
             "mode": state.mode,
+            "story_status_scope": state.story_status_scope,
             "total_stories": total,
             "discovered_count": total,
             "completed_count": completed,
@@ -1260,6 +1276,8 @@ class JobnibBatchService:
                 "archive_pages_checked": state.discovery_pages_checked,
                 "archive_found": state.archive_found_count,
                 "completed_eligible": state.completed_eligible_count,
+                "ongoing_eligible": state.ongoing_eligible_count,
+                "eligible": state.completed_eligible_count + state.ongoing_eligible_count,
                 "excluded": state.excluded_count,
                 "duplicates": state.duplicate_count,
                 "metadata_failed": state.metadata_failed_count,
@@ -1390,6 +1408,22 @@ def construct_dataclass(cls, raw: dict[str, Any]):
 
 def normalize_mode(mode: str) -> CrawlMode:
     return "fast" if str(mode).lower() == "fast" else "slow"
+
+
+def normalize_discovery_scope(value: str) -> DiscoveryScope:
+    normalized = str(value or "completed").strip().lower()
+    if normalized not in {"completed", "ongoing", "all"}:
+        raise ValueError("Jobnib discovery status must be completed, ongoing, or all.")
+    return cast(DiscoveryScope, normalized)
+
+
+def normalize_story_status(value: str) -> Literal["completed", "ongoing", "unknown"]:
+    normalized = clean_text(str(value or "")).lower()
+    if normalized in {"completed", "complete", "finished"}:
+        return "completed"
+    if normalized in {"ongoing", "updating", "serializing", "in progress", "in-progress"}:
+        return "ongoing"
+    return "unknown"
 
 
 def now_string() -> str:

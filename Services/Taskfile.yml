@@ -139,6 +139,14 @@ tasks:
       - powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '../CreateStory_FE') { Push-Location '../CreateStory_FE'; if (Get-Command npm -ErrorAction SilentlyContinue) { npm install; npm run build; Pop-Location; if (Test-Path './frontend-dist') { Remove-Item -Recurse -Force './frontend-dist' }; Copy-Item -Path '../CreateStory_FE/dist' -Destination './frontend-dist' -Recurse -Force } else { Pop-Location; Write-Host '[WARN] npm not found. Skipping frontend compilation.' } } else { Write-Host '[INFO] CreateStory_FE directory not found. Using existing frontend-dist.' }"
       - docker compose up -d frontend 2>nul || true
 
+  "build:jobnib-companion":
+    desc: "Build the repository-free Windows x64 Jobnib companion (requires Node.js 26+)"
+    dir: "NovelCrawler/tools/jobnib_browser_assistant"
+    cmds:
+      - npm install --no-audit --no-fund
+      - npm run test
+      - npm run build:standalone
+
   "update:all":
     desc: "Build frontend, rebuild, and reload all compose services"
     deps: ["database:provision"]

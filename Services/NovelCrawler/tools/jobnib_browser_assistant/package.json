@@ -1,17 +1,21 @@
 {
   "name": "create-story-jobnib-browser-assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Manual-assist browser companion for operator-unlocked Jobnib chapters.",
   "main": "jobnib_browser_assistant.js",
   "scripts": {
     "start": "node jobnib_browser_assistant.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build:standalone": "node build-standalone.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }
