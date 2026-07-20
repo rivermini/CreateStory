@@ -47,7 +47,7 @@ def is_novelworm_chapter_url(url: str) -> bool:
 
 def is_jobnib_chapter_url(url: str) -> bool:
     parsed_path = urllib.parse.urlparse(url).path.lower().rstrip("/")
-    return bool(re.search(r"/book/[^/]+-chapter-\d+$", parsed_path))
+    return bool(re.search(r"/book/[^/]+-chapter-\d+(?:-\d+)?$", parsed_path))
 
 
 def is_scribblehub_chapter_url(url: str) -> bool:

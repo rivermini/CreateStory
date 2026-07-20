@@ -60,6 +60,7 @@ JOBNIB_MIN_CHAPTER_WORDS = max(1, int(os.getenv("JOBNIB_MIN_CHAPTER_WORDS", "100
 JOBNIB_ARCHIVE_DELAY = max(0.0, float(os.getenv("JOBNIB_ARCHIVE_PREPARE_DELAY_SECONDS", "120")))
 JOBNIB_ARCHIVE_COMPRESSION = clamp(int(os.getenv("JOBNIB_ARCHIVE_COMPRESSION_LEVEL", "1")), 0, 9)
 JOBNIB_MEMORY_LOG_LINES = max(180, int(os.getenv("JOBNIB_BATCH_MEMORY_LOG_LINES", "10000")))
+JOBNIB_CHAPTER_SLUG_RE = re.compile(r"-chapter-\d+(?:-\d+)?$", re.IGNORECASE)
 
 MODE_PRESETS: dict[CrawlMode, dict[str, float | int]] = {
     "slow": {
@@ -447,7 +448,7 @@ class JobnibBatchService:
     def list_rows(self, batch_id: str, offset: int, limit: int, status_filter: str = "all") -> dict[str, Any]:
         with self._lock:
             state = self._get_state_locked(batch_id)
-            rows = filter_rows(state.rows, status_filter)
+            rows = filter_rows(deduplicate_story_rows(state.rows), status_filter)
             offset = max(0, offset)
             limit = clamp(limit, 1, 500)
             return {
@@ -700,7 +701,14 @@ class JobnibBatchService:
                     return
                 row.index = len(state.rows) + 1
                 state.rows.append(row)
-                self._save_chapter_manifest(row, chapters, metadata=metadata, status=status)
+                try:
+                    self._save_chapter_manifest(row, chapters, metadata=metadata, status=status)
+                except Exception:
+                    # Manifest validation is part of inserting a discovered
+                    # story. Roll the row back so the error handler below does
+                    # not leave both a ready row and a failed duplicate.
+                    state.rows.pop()
+                    raise
                 if status_kind == "completed":
                     state.completed_eligible_count += 1
                 else:
@@ -1226,14 +1234,15 @@ class JobnibBatchService:
         })
 
     def _summary_locked(self, state: JobnibBatchState) -> dict[str, Any]:
-        total = len(state.rows)
-        completed = sum(row.status == "completed" for row in state.rows)
-        skipped = sum(row.status == "skipped" for row in state.rows)
-        failed = sum(row.status == "failed" for row in state.rows)
-        needs_session = sum(row.status == "needs_session" for row in state.rows)
+        rows = deduplicate_story_rows(state.rows)
+        total = len(rows)
+        completed = sum(row.status == "completed" for row in rows)
+        skipped = sum(row.status == "skipped" for row in rows)
+        failed = sum(row.status == "failed" for row in rows)
+        needs_session = sum(row.status == "needs_session" for row in rows)
         processed = completed + skipped + failed
-        total_chapters = sum(int(row.total_chapters or 0) for row in state.rows)
-        crawled_chapters = sum(int(row.crawled_chapters or 0) for row in state.rows)
+        total_chapters = sum(int(row.total_chapters or 0) for row in rows)
+        crawled_chapters = sum(int(row.crawled_chapters or 0) for row in rows)
         started = parse_local_datetime(state.started_at)
         elapsed = max(0.0, (datetime.now() - started).total_seconds()) if started else 0.0
         preset = MODE_PRESETS[state.mode]
@@ -1406,6 +1415,26 @@ def construct_dataclass(cls, raw: dict[str, Any]):
     return cls(**{key: value for key, value in raw.items() if key in allowed})
 
 
+def deduplicate_story_rows(rows: list[JobnibBatchRow]) -> list[JobnibBatchRow]:
+    """Hide stale duplicate rows created by pre-fix manifest failures."""
+    preferred: dict[str, JobnibBatchRow] = {}
+    status_rank = {
+        "completed": 6,
+        "crawling": 5,
+        "queued": 4,
+        "discovered": 3,
+        "needs_session": 2,
+        "skipped": 1,
+        "failed": 0,
+    }
+    for row in rows:
+        key = row.url or f"index:{row.index}"
+        existing = preferred.get(key)
+        if existing is None or status_rank.get(row.status, 0) > status_rank.get(existing.status, 0):
+            preferred[key] = row
+    return sorted(preferred.values(), key=lambda row: row.index)
+
+
 def normalize_mode(mode: str) -> CrawlMode:
     return "fast" if str(mode).lower() == "fast" else "slow"
 
@@ -1451,7 +1480,7 @@ def extract_homepage_story_refs(soup: BeautifulSoup) -> list[dict[str, str]]:
             continue
         path = urllib.parse.urlparse(url).path
         slug = path.rstrip("/").split("/")[-1]
-        if slug == "list-mode" or re.search(r"-chapter-\d+$", slug, re.IGNORECASE):
+        if slug == "list-mode" or JOBNIB_CHAPTER_SLUG_RE.search(slug):
             continue
         title = clean_text(anchor.get_text(" ", strip=True))
         if title.lower() in {"read", "text mode"}:
@@ -1476,7 +1505,7 @@ def normalize_story_url(value: str) -> str:
     if not re.fullmatch(r"/book/[^/?#]+/?", parsed.path, re.IGNORECASE):
         raise ValueError("Jobnib imports must be story URLs under /book/.")
     slug = parsed.path.rstrip("/").split("/")[-1]
-    if re.search(r"-chapter-\d+$", slug, re.IGNORECASE):
+    if JOBNIB_CHAPTER_SLUG_RE.search(slug):
         raise ValueError("Import the Jobnib story page, not an individual chapter.")
     return urllib.parse.urlunparse(("https", "jobnib.com", parsed.path.rstrip("/"), "", "", ""))
 
@@ -1488,7 +1517,7 @@ def normalize_capture_chapter_url(value: str) -> str:
     host = (parsed.hostname or "").lower()
     path = parsed.path.rstrip("/")
     if host not in {"jobnib.com", "www.jobnib.com"} or not re.fullmatch(
-        r"/book/[^/?#]+-chapter-\d+",
+        r"/book/[^/?#]+-chapter-\d+(?:-\d+)?",
         path,
         re.IGNORECASE,
     ):

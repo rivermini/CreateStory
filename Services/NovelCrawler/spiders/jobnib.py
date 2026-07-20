@@ -45,7 +45,10 @@ from utils.proxy import get_proxy_url, requests_proxies
 logger = logging.getLogger(__name__)
 
 _BOOK_PATH_RE = re.compile(r"^/book/([^/?#]+)/?$", re.IGNORECASE)
-_CHAPTER_SUFFIX_RE = re.compile(r"-chapter-(\d+)$", re.IGNORECASE)
+# WordPress adds a numeric collision suffix when a chapter slug has already
+# been used (for example ``-chapter-246-2``). The first number is still the
+# displayed chapter number; the final number only makes the URL unique.
+_CHAPTER_SUFFIX_RE = re.compile(r"-chapter-(\d+)(?:-\d+)?$", re.IGNORECASE)
 _SPACE_RE = re.compile(r"\s+")
 _JOBNIB_BASE = "https://jobnib.com"
 _JOBNIB_USER_AGENT = (

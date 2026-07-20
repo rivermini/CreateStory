@@ -31,6 +31,7 @@ from api.services.jobnib_batch_service import (
     extract_homepage_story_refs,
     extract_import_refs,
     extract_jobnib_status,
+    normalize_capture_chapter_url,
 )
 from api.services.jobnib_browser_capture_service import (
     BrowserCaptureError,
@@ -119,6 +120,26 @@ def test_completed_status_uses_sertostat_and_preserves_duplicate_chapter_numbers
     assert all("other-slug" in item["url"] for item in links)
 
 
+def test_wordpress_collision_suffix_is_a_valid_chapter_url(monkeypatch) -> None:
+    soup = BeautifulSoup(
+        """
+        <div class="chapter-list">
+          <a href="/book/mated-to-four-alphas-chapter-246-2">Chapter 246</a>
+        </div>
+        """,
+        "html.parser",
+    )
+    spider = make_spider(monkeypatch)
+
+    links = spider._collect_chapter_links(soup, "https://jobnib.com/book/mated-to-four-alphas")
+
+    assert len(links) == 1
+    assert links[0]["displayed_chapter_number"] == 246
+    assert normalize_capture_chapter_url(links[0]["url"]) == (
+        "https://jobnib.com/book/mated-to-four-alphas-chapter-246-2"
+    )
+
+
 def test_import_accepts_text_json_rows_and_rejects_non_jobnib_domains() -> None:
     refs = extract_import_refs({
         "stories": [{"title": "Legacy", "url": "https://jobnib.com/book/legacy-story"}],
@@ -203,6 +224,62 @@ def test_discovery_can_target_ongoing_or_both_statuses(tmp_path, monkeypatch) ->
         assert summary["discovery"]["ongoing_eligible"] == ongoing
         assert summary["discovery"]["eligible"] == completed + ongoing
         assert summary["discovery"]["excluded"] == excluded
+
+
+def test_manifest_failure_does_not_leave_a_ready_duplicate(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(JobnibSpider, "_load_saved_session", lambda self: ([], ""))
+    service = JobnibBatchService(output_root=tmp_path)
+    batch_id = "badc0de1"
+    output = tmp_path / "jobnib_batch" / batch_id
+    output.mkdir(parents=True)
+    state = JobnibBatchState(
+        batch_id=batch_id,
+        created_by_user_id="user-1",
+        output_dir=str(output),
+    )
+    service._batches[batch_id] = state
+    monkeypatch.setattr(service, "_fetch_html", lambda *_args: fixture("completed_story.html"))
+    monkeypatch.setattr(
+        service,
+        "_save_chapter_manifest",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("invalid chapter URL")),
+    )
+
+    service._inspect_and_add_ref(batch_id, {
+        "url": "https://jobnib.com/book/completed-fixture",
+        "story_id": "completed-fixture",
+        "title": "Completed Fixture",
+    })
+
+    assert len(state.rows) == 1
+    assert state.rows[0].status == "failed"
+    assert state.rows[0].error == "Metadata inspection failed: invalid chapter URL"
+
+
+def test_stale_failed_duplicate_is_hidden_from_rows_and_summary(tmp_path) -> None:
+    service = JobnibBatchService(output_root=tmp_path)
+    batch_id = "fade1234"
+    output = tmp_path / "jobnib_batch" / batch_id
+    output.mkdir(parents=True)
+    story_url = "https://jobnib.com/book/mated-to-four-alphas"
+    service._batches[batch_id] = JobnibBatchState(
+        batch_id=batch_id,
+        created_by_user_id="user-1",
+        output_dir=str(output),
+        rows=[
+            JobnibBatchRow(1, "Mated to Four Alphas", story_url, "mated-to-four-alphas", total_chapters=350),
+            JobnibBatchRow(2, "Mated to Four Alphas", story_url, "mated-to-four-alphas", status="failed"),
+        ],
+    )
+
+    summary = service.get_status(batch_id)
+    page = service.list_rows(batch_id, 0, 100)
+
+    assert summary["total_stories"] == 1
+    assert summary["failed_count"] == 0
+    assert summary["total_chapters"] == 350
+    assert page["total"] == 1
+    assert [item["index"] for item in page["items"]] == [1]
 
 
 def test_three_consecutive_challenges_open_session_circuit_breaker(tmp_path, monkeypatch) -> None:

@@ -77,7 +77,7 @@ def slug_from_url(url: str) -> Optional[str]:
         m = re.search(pattern, url, re.IGNORECASE)
         if m:
             slug = m.group(1)
-            slug = re.sub(r"-chapter-\d+$", "", slug, flags=re.IGNORECASE)
+            slug = re.sub(r"-chapter-\d+(?:-\d+)?$", "", slug, flags=re.IGNORECASE)
             return slug
 
     segments = url.rstrip("/").split("/")

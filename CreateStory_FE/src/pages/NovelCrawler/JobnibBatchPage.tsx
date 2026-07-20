@@ -330,7 +330,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
           <aside className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
             <div className="flex items-center gap-2"><Icon icon={appIcons.userCheck} className="h-4 w-4 text-orange-500" /><h2 className="font-semibold">Human-paced capture</h2></div>            <div className="mt-3 grid grid-cols-2 gap-2">{[
               ['Remaining stories', estimate?.remaining_stories?.toLocaleString() || '-'],
-              ['Remaining chapters', estimate?.remaining_chapters?.toLocaleString() || '-'],
+              ['Remaining chapters', estimate?.known_remaining_chapters?.toLocaleString() || '-'],
               ['Captured chapters', summary.crawled_chapters.toLocaleString()],
               ['Total chapters', summary.total_chapters.toLocaleString()],
             ].map(([label, value]) => <div key={label} className="rounded-lg border p-2.5" style={{ background: muted, borderColor: border }}><div className="text-xs" style={{ color: faint }}>{label}</div><div className="mt-1 font-semibold tabular-nums">{value}</div></div>)}</div>
