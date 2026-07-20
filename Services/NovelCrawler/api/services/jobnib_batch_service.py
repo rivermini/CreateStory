@@ -164,6 +164,7 @@ class JobnibBatchService:
         self._browser_lock = threading.RLock()
         self._shared_browser: _JobnibBrowser | None = None
         self._last_request_at = 0.0
+        self._session_verified_at = ""
         self._batches: dict[str, JobnibBatchState] = {}
         self._project_root = Path(__file__).resolve().parents[2]
         self._batch_root = ((output_root or (self._project_root / "output")) / "jobnib_batch").resolve()
@@ -184,6 +185,7 @@ class JobnibBatchService:
         mode: CrawlMode = "slow",
         story_status: DiscoveryScope = "completed",
     ) -> JobnibBatchState:
+        self.require_verified_session()
         mode = normalize_mode(mode)
         story_status = normalize_discovery_scope(story_status)
         batch_id = uuid.uuid4().hex[:8]
@@ -269,6 +271,7 @@ class JobnibBatchService:
 
     def mark_session_verified(self) -> None:
         with self._lock:
+            self._session_verified_at = now_string()
             for state in self._batches.values():
                 state.session_verified_at = now_string()
                 state.session_required = False
@@ -281,6 +284,19 @@ class JobnibBatchService:
             if self._shared_browser is not None:
                 self._shared_browser.close()
                 self._shared_browser = None
+
+    def mark_session_unverified(self) -> None:
+        with self._lock:
+            self._session_verified_at = ""
+            for state in self._batches.values():
+                state.session_verified_at = ""
+            self._persist_locked()
+
+    def require_verified_session(self) -> None:
+        with self._lock:
+            if self._session_verified_at:
+                return
+        raise ValueError("Test the Jobnib session successfully before discovering or adding stories.")
 
     def get_status(self, batch_id: str) -> dict[str, Any]:
         with self._lock:
@@ -496,6 +512,7 @@ class JobnibBatchService:
         }
 
     def import_catalog(self, payload: Any, created_by_user_id: str | None) -> dict[str, Any]:
+        self.require_verified_session()
         refs = extract_import_refs(payload)
         if not refs:
             raise ValueError("No valid Jobnib story URLs were found in the import.")
@@ -521,6 +538,7 @@ class JobnibBatchService:
 
     def add_story(self, batch_id: str, story_url: str) -> dict[str, Any]:
         """Inspect one explicit story URL and append it to an existing batch."""
+        self.require_verified_session()
         url = normalize_story_url(story_url)
         story_id = urllib.parse.urlparse(url).path.rstrip("/").split("/")[-1]
         ref = {"url": url, "story_id": story_id, "title": ""}
@@ -1051,6 +1069,7 @@ class JobnibBatchService:
 
     def _add_challenged_row(self, batch_id: str, ref: dict[str, str], message: str) -> None:
         with self._lock:
+            self._session_verified_at = ""
             state = self._get_state_locked(batch_id)
             if any(row.url == ref["url"] for row in state.rows):
                 return
@@ -1072,6 +1091,7 @@ class JobnibBatchService:
 
     def _mark_batch_session_required(self, batch_id: str, error: str, log_message: str) -> None:
         with self._lock:
+            self._session_verified_at = ""
             state = self._get_state_locked(batch_id)
             state.phase = "waiting_for_session"
             state.session_required = True

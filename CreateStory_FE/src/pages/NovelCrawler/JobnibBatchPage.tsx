@@ -83,6 +83,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
   const rowsRequestKeyRef = useRef(rowsRequestKey);
 
   const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
+  const sessionVerified = session?.valid === true;
   const interactionLocked = active || browserCaptureActive;
   const selectedStory = storySelection?.batchId === batchId
     ? (() => {
@@ -308,7 +309,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
             </div>
             <div className="min-w-[260px] rounded-xl border p-3" style={{ background: muted, borderColor: border }}>
               <div className="flex items-center justify-between gap-3">
-                <div><div className="text-xs font-semibold" style={{ color: faint }}>Jobnib session</div><div className="mt-0.5 text-sm font-medium">{session?.valid ? 'Ready' : summary?.session.required ? 'Needs attention' : 'Not checked'}</div></div>
+                <div><div className="text-xs font-semibold" style={{ color: faint }}>Jobnib session</div><div className="mt-0.5 text-sm font-medium">{sessionVerified ? 'Ready' : session?.valid === false ? 'Invalid' : summary?.session.required ? 'Needs attention' : 'Not checked'}</div></div>
                 <button type="button" onClick={() => void checkSession()} disabled={busy === 'session'} className={secondaryButton} style={{ borderColor: border, background: panel }}><Icon icon={busy === 'session' ? appIcons.spinner : appIcons.shield} className={`h-4 w-4 ${busy === 'session' ? 'animate-spin' : ''}`} />Test</button>
               </div>
               <p className="mt-2 text-xs" style={{ color: faint }}><Icon icon={appIcons.settings} className="mr-1 h-3 w-3" />Manage cookies in workspace Settings → Jobnib Session.</p>
@@ -335,18 +336,18 @@ export function JobnibBatchPage({ themeMode }: Props) {
                   <label><span className="text-xs font-semibold" style={{ color: faint }}>Story status</span><select value={storyStatusScope} onChange={(event) => setStoryStatusScope(event.target.value as JobnibStoryStatusScope)} className="mt-1.5 h-11 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-orange-500" style={{ background: muted, borderColor: border }}><option value="completed">Completed only</option><option value="ongoing">Ongoing only</option><option value="all">Completed + ongoing</option></select></label>
                 </div>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <button type="button" className={primaryButton} disabled={!!busy || interactionLocked} onClick={() => void act('discover', () => startJobnibBatch({ batch_name: batchName, max_archive_pages: 1, story_status: storyStatusScope }))}><Icon icon={busy === 'discover' ? appIcons.spinner : appIcons.search} className={`h-4 w-4 ${busy === 'discover' ? 'animate-spin' : ''}`} />{busy === 'discover' ? 'Discovering…' : 'Discover homepage'}</button>
-                    <button type="button" className={secondaryButton} disabled={!!busy || interactionLocked} onClick={() => fileRef.current?.click()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'import' ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${busy === 'import' ? 'animate-spin' : ''}`} />Import</button>
+                    <button type="button" className={primaryButton} disabled={!sessionVerified || !!busy || interactionLocked} onClick={() => void act('discover', () => startJobnibBatch({ batch_name: batchName, max_archive_pages: 1, story_status: storyStatusScope }))}><Icon icon={busy === 'discover' ? appIcons.spinner : appIcons.search} className={`h-4 w-4 ${busy === 'discover' ? 'animate-spin' : ''}`} />{busy === 'discover' ? 'Discovering…' : 'Discover homepage'}</button>
+                    <button type="button" className={secondaryButton} disabled={!sessionVerified || !!busy || interactionLocked} onClick={() => fileRef.current?.click()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'import' ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${busy === 'import' ? 'animate-spin' : ''}`} />Import</button>
                 </div>
                 <input ref={fileRef} type="file" accept=".json,.txt,.csv,application/json,text/plain,text/csv" onChange={(event) => void importFile(event)} className="hidden" />
-                <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: faint }}><Icon icon={appIcons.shield} className="h-3 w-3" />Discovery adds only the status you choose and never crawls chapter content.</p>
+                <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: sessionVerified ? faint : '#f59e0b' }}><Icon icon={appIcons.shield} className="h-3 w-3" />{sessionVerified ? 'Session tested. Discovery adds metadata only and never crawls chapter content.' : 'Test the Jobnib session successfully before discovery is enabled.'}</p>
               </div>
 
               <div className="border-t pt-5" style={{ borderColor: border }}>
                 <label htmlFor="jobnib-story-url"><span className="text-xs font-semibold" style={{ color: faint }}>Add a story by link</span><span className="mt-1 block text-xs" style={{ color: soft }}>Use this when a story appears in Jobnib search but not on its homepage.</span></label>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <input id="jobnib-story-url" type="url" value={storyUrl} onChange={(event) => setStoryUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void addStoryByUrl(); } }} placeholder="https://jobnib.com/book/story-name" disabled={!!busy || interactionLocked} className="h-11 min-w-0 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:border-orange-500" style={{ background: muted, borderColor: border }} />
-                  <button type="button" className={secondaryButton} disabled={!storyUrl.trim() || !!busy || interactionLocked} onClick={() => void addStoryByUrl()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'add-story' ? appIcons.spinner : appIcons.add} className={`h-4 w-4 ${busy === 'add-story' ? 'animate-spin' : ''}`} />{summary ? 'Add to batch' : 'Create from link'}</button>
+                  <input id="jobnib-story-url" type="url" value={storyUrl} onChange={(event) => setStoryUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && sessionVerified) { event.preventDefault(); void addStoryByUrl(); } }} placeholder="https://jobnib.com/book/story-name" disabled={!sessionVerified || !!busy || interactionLocked} className="h-11 min-w-0 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:border-orange-500" style={{ background: muted, borderColor: border }} />
+                  <button type="button" className={secondaryButton} disabled={!sessionVerified || !storyUrl.trim() || !!busy || interactionLocked} onClick={() => void addStoryByUrl()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'add-story' ? appIcons.spinner : appIcons.add} className={`h-4 w-4 ${busy === 'add-story' ? 'animate-spin' : ''}`} />{summary ? 'Add to batch' : 'Create from link'}</button>
                 </div>
                 <p className="mt-2 text-xs" style={{ color: faint }}>The link is inspected only. Select the added row below, then create the normal companion pairing to capture it.</p>
               </div>

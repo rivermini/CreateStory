@@ -473,6 +473,9 @@ async def update_jobnib_cookies(request: JobnibCookieUpdateRequest, http_request
         result = save_cookies(request.cookies, request.user_agent)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
+
+    get_jobnib_batch_service().mark_session_unverified()
     return JobnibCookieUpdateResponse(**result)
 
 
@@ -483,10 +486,13 @@ async def check_jobnib_cookies(request: JobnibCookieStatusRequest, http_request:
     from api.services.jobnib_cookie_service import check_jobnib_cookies as run_check
 
     result = run_check(request.story_url)
-    if result.get("valid") is True:
-        from api.services.jobnib_batch_service import get_jobnib_batch_service
+    from api.services.jobnib_batch_service import get_jobnib_batch_service
 
-        get_jobnib_batch_service().mark_session_verified()
+    service = get_jobnib_batch_service()
+    if result.get("valid") is True:
+        service.mark_session_verified()
+    else:
+        service.mark_session_unverified()
     return JobnibCookieStatusResponse(**result)
 
 

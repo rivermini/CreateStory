@@ -239,6 +239,7 @@ def test_manual_story_url_adds_ongoing_story_regardless_of_discovery_scope(tmp_p
         story_status_scope="completed",
         output_dir=str(output),
     )
+    service.mark_session_verified()
     ongoing_with_chapters = fixture("completed_story.html").replace(
         '<div class="sertostat">Completed</div>',
         '<div class="sertostat">Ongoing</div>',
@@ -267,12 +268,27 @@ def test_manual_story_url_rejects_duplicate(tmp_path) -> None:
         rows=[JobnibBatchRow(1, "From Best Friend To Fiancé", story_url, "from-best-friend-to-fiance")],
     )
 
+    service.mark_session_verified()
     try:
         service.add_story(batch_id, story_url)
     except ValueError as exc:
         assert str(exc) == "This Jobnib story is already in the batch."
     else:
         raise AssertionError("Duplicate story URL should be rejected")
+
+
+def test_story_inspection_requires_a_successful_session_test(tmp_path) -> None:
+    service = JobnibBatchService(output_root=tmp_path)
+
+    try:
+        service.import_catalog(
+            {"urls": ["https://jobnib.com/book/from-best-friend-to-fiance"]},
+            created_by_user_id="user-1",
+        )
+    except ValueError as exc:
+        assert str(exc) == "Test the Jobnib session successfully before discovering or adding stories."
+    else:
+        raise AssertionError("Untested Jobnib session should block discovery")
 
 
 def test_manifest_failure_does_not_leave_a_ready_duplicate(tmp_path, monkeypatch) -> None:
