@@ -169,7 +169,7 @@ class JobnibBatchService:
         self._archive_timers: dict[str, threading.Timer] = {}
         resume_ids = self._load_index()
         for batch_id in resume_ids:
-            threading.Thread(target=self._run_discovery, args=(batch_id, False), daemon=True).start()
+            threading.Thread(target=self._run_discovery, args=(batch_id,), daemon=True).start()
 
     def start(
         self,
@@ -178,7 +178,6 @@ class JobnibBatchService:
         batch_name: str,
         max_archive_pages: int,
         mode: CrawlMode = "slow",
-        crawl_after_discovery: bool = False,
     ) -> JobnibBatchState:
         mode = normalize_mode(mode)
         batch_id = uuid.uuid4().hex[:8]
@@ -197,7 +196,7 @@ class JobnibBatchService:
         with self._lock:
             self._batches[batch_id] = state
             self._persist_locked()
-        threading.Thread(target=self._run_discovery, args=(batch_id, crawl_after_discovery), daemon=True).start()
+        threading.Thread(target=self._run_discovery, args=(batch_id,), daemon=True).start()
         return state
 
     def start_crawl(self, batch_id: str, *, mode: CrawlMode, max_stories: int | None = None) -> JobnibBatchState:
@@ -559,7 +558,7 @@ class JobnibBatchService:
             compression_level=JOBNIB_ARCHIVE_COMPRESSION,
         )
 
-    def _run_discovery(self, batch_id: str, crawl_after_discovery: bool) -> None:
+    def _run_discovery(self, batch_id: str) -> None:
         try:
             while True:
                 with self._lock:
@@ -628,7 +627,7 @@ class JobnibBatchService:
                     self._persist_locked()
                 if not next_page:
                     break
-            self._finish_discovery(batch_id, crawl_after_discovery)
+            self._finish_discovery(batch_id)
         except JobnibSessionRequired as exc:
             self._mark_batch_session_required(batch_id, str(exc), "Discovery needs a refreshed Jobnib session.")
         except Exception as exc:
@@ -651,7 +650,7 @@ class JobnibBatchService:
                         break
                     state.archive_found_count += 1
                 self._inspect_and_add_ref(batch_id, ref)
-            self._finish_discovery(batch_id, False)
+            self._finish_discovery(batch_id)
         except JobnibSessionRequired as exc:
             self._mark_batch_session_required(batch_id, str(exc), "Imported catalog inspection needs a refreshed session.")
         except Exception as exc:
@@ -711,7 +710,7 @@ class JobnibBatchService:
                 )
                 state.rows.append(row)
 
-    def _finish_discovery(self, batch_id: str, crawl_after_discovery: bool) -> None:
+    def _finish_discovery(self, batch_id: str) -> None:
         with self._lock:
             state = self._get_state_locked(batch_id)
             crawlable = any(row.status in {"discovered", "queued"} for row in state.rows)
@@ -722,9 +721,8 @@ class JobnibBatchService:
                 f"Discovery finished: {state.completed_eligible_count} completed, "
                 f"{state.excluded_count} non-completed, {state.metadata_failed_count} metadata failure(s)."
             )
+            state.add_log("Ready for manual crawl. Crawling starts only when requested by the operator.")
             self._persist_locked()
-        if crawl_after_discovery and state.rows:
-            self.start_crawl(batch_id, mode=state.mode, max_stories=state.max_stories_per_run)
 
     def _run_crawl(self, batch_id: str, run_id: str) -> None:
         with self._lock:

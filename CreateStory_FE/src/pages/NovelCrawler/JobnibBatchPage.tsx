@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { Link } from 'react-router-dom';
 import {
   checkJobnibCookies,
-  crawlJobnibBatch,
   exportJobnibBatchCatalog,
   getJobnibBatchDownloadUrl,
   getJobnibBatchRows,
@@ -11,12 +10,9 @@ import {
   listJobnibBatches,
   pauseJobnibBatch,
   removeJobnibBatch,
-  retryJobnibFailedStories,
-  retryJobnibSessionStories,
   startJobnibBatch,
   type JobnibBatchRow,
   type JobnibBatchSummary,
-  type JobnibCrawlMode,
   type JobnibCookieStatusResponse,
 } from '../../api';
 import { downloadWithAuth } from '../../api/client';
@@ -29,8 +25,8 @@ interface Props { readonly themeMode: ThemeMode }
 
 const ROW_LIMIT = 500;
 const FILTERS = [
-  ['all', 'All'], ['completed', 'Exported'], ['needs_session', 'Needs session'],
-  ['failed', 'Failed'], ['crawling', 'Crawling'], ['queued', 'Queued'], ['skipped', 'Skipped'],
+  ['all', 'All'], ['completed', 'Captured'], ['needs_session', 'Needs capture'],
+  ['failed', 'Failed'], ['skipped', 'Skipped'],
 ] as const;
 
 function downloadJson(payload: unknown, filename: string) {
@@ -44,24 +40,25 @@ function downloadJson(payload: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function duration(seconds?: number | null) {
-  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '-';
-  const value = Math.max(0, Math.round(seconds));
-  const days = Math.floor(value / 86400);
-  const hours = Math.floor((value % 86400) / 3600);
-  const minutes = Math.floor((value % 3600) / 60);
-  return days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : minutes ? `${minutes}m` : `${value}s`;
+function phaseLabel(phase?: JobnibBatchSummary['phase']) {
+  if (!phase) return 'No batch selected';
+  if (phase === 'ready') return 'Ready for capture';
+  if (phase === 'waiting_for_session') return 'Ready for browser capture';
+  if (phase === 'crawling') return 'Legacy server crawl';
+  return phase.replaceAll('_', ' ');
 }
 
-function modeDescription(mode: JobnibCrawlMode) {
-  return mode === 'fast' ? '2 stories · 4 request slots · 0.75s minimum' : '1 story · 2 request slots · 1.5s minimum';
+function rowStatusLabel(status: JobnibBatchRow['status']) {
+  if (status === 'completed') return 'Captured';
+  if (status === 'needs_session') return 'Needs browser capture';
+  if (status === 'discovered' || status === 'queued') return 'Ready for capture';
+  if (status === 'crawling') return 'Legacy server crawl';
+  return status.replaceAll('_', ' ');
 }
 
 export function JobnibBatchPage({ themeMode }: Props) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('Jobnib completed stories');
-  const [mode, setMode] = useState<JobnibCrawlMode>('slow');
-  const [storiesPerRun, setStoriesPerRun] = useState(20);
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('jobnib_batch_id') || '');
   const [summary, setSummary] = useState<JobnibBatchSummary | null>(null);
   const [history, setHistory] = useState<JobnibBatchSummary[]>([]);
@@ -78,10 +75,21 @@ export function JobnibBatchPage({ themeMode }: Props) {
   const historyBusy = useRef(false);
   const rowsRequestKey = `${batchId}|${filter}`;
   const rowsRequestKeyRef = useRef(rowsRequestKey);
-  rowsRequestKeyRef.current = rowsRequestKey;
 
   const active = summary?.phase === 'discovering' || summary?.phase === 'crawling';
   const interactionLocked = active || browserCaptureActive;
+  const captureRemaining = summary
+    ? Math.max(0, summary.total_stories - summary.completed_count - summary.skipped_count)
+    : 0;
+  const browserCaptureDisabledReason = !summary
+    ? 'Prepare a batch first.'
+    : active
+      ? 'Wait for discovery to finish or pause the active batch.'
+      : summary.total_stories === 0
+        ? 'This batch has no completed stories to capture.'
+        : captureRemaining === 0
+          ? 'All stories in this batch are already captured.'
+          : '';
   const loadedRows = Math.max(ROW_LIMIT, rows.length);
   const estimate = summary?.crawl_estimate;
   const progress = summary?.total_chapters
@@ -139,13 +147,21 @@ export function JobnibBatchPage({ themeMode }: Props) {
     finally { historyBusy.current = false; }
   }, []);
 
-  useEffect(() => { void fetchHistory(); }, [fetchHistory]);
   useEffect(() => {
-    if (!batchId) { setSummary(null); setRows([]); return; }
+    const timer = window.setTimeout(() => { void fetchHistory(); }, 0);
+    return () => { window.clearTimeout(timer); };
+  }, [fetchHistory]);
+  useEffect(() => { rowsRequestKeyRef.current = rowsRequestKey; }, [rowsRequestKey]);
+  useEffect(() => {
+    if (!batchId) return;
     sessionStorage.setItem('jobnib_batch_id', batchId);
-    void Promise.all([fetchStatus(), fetchRows()]);
+    const timer = window.setTimeout(() => { void Promise.all([fetchStatus(), fetchRows()]); }, 0);
+    return () => { window.clearTimeout(timer); };
   }, [batchId, fetchRows, fetchStatus]);
-  useEffect(() => { void fetchRows(); }, [filter, fetchRows]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchRows(); }, 0);
+    return () => { window.clearTimeout(timer); };
+  }, [filter, fetchRows]);
   useEffect(() => {
     if (!active) return;
     const statusTimer = window.setInterval(() => { void fetchStatus(); }, 2500);
@@ -153,7 +169,11 @@ export function JobnibBatchPage({ themeMode }: Props) {
     const historyTimer = window.setInterval(() => { void fetchHistory(); }, 30000);
     return () => { window.clearInterval(statusTimer); window.clearInterval(rowsTimer); window.clearInterval(historyTimer); };
   }, [active, fetchHistory, fetchRows, fetchStatus]);
-  useEffect(() => { if (!active) void fetchHistory(); }, [active, fetchHistory, summary?.phase]);
+  useEffect(() => {
+    if (active) return;
+    const timer = window.setTimeout(() => { void fetchHistory(); }, 0);
+    return () => { window.clearTimeout(timer); };
+  }, [active, fetchHistory, summary?.phase]);
 
   const act = useCallback(async (name: string, action: () => Promise<JobnibBatchSummary>) => {
     setBusy(name); setError('');
@@ -208,9 +228,9 @@ export function JobnibBatchPage({ themeMode }: Props) {
   }, [fetchRows, fetchStatus]);
 
   const statCards = useMemo(() => summary ? [
-    ['Homepage found', summary.discovery.archive_found], ['Completed', summary.discovery.completed_eligible],
-    ['Excluded', summary.discovery.excluded], ['Exported', summary.completed_count],
-    ['Needs session', summary.needs_session_count], ['Failed', summary.failed_count],
+    ['Found', summary.discovery.archive_found], ['Ready', summary.discovery.completed_eligible],
+    ['Excluded', summary.discovery.excluded], ['Captured', summary.completed_count],
+    ['Needs capture', summary.needs_session_count], ['Failed', summary.failed_count],
   ] : [], [summary]);
 
   const panel = 'var(--cs-surface-elevated)';
@@ -219,59 +239,79 @@ export function JobnibBatchPage({ themeMode }: Props) {
   const text = 'var(--cs-text)';
   const soft = 'var(--cs-text-soft)';
   const faint = 'var(--cs-text-faint)';
-  const primaryButton = 'inline-flex items-center justify-center gap-2 rounded-full bg-orange-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50';
-  const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50';
+  const primaryButton = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50';
+  const secondaryButton = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/5';
 
   return (
     <div className={`${isDark ? 'dark' : 'light'} min-h-screen`} style={{ background: 'var(--cs-page)', color: text }}>
       <main className="mx-auto w-full max-w-7xl space-y-4 px-3 py-4 sm:px-5 lg:px-6">
-        <section className="rounded-xl border p-4 sm:p-5" style={{ background: panel, borderColor: border }}>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div><div className="text-xs font-semibold uppercase" style={{ color: faint }}>Novel crawler</div><h1 className="mt-1 text-2xl font-semibold">Jobnib Batch</h1><p className="mt-1 text-sm" style={{ color: soft }}>Completed stories only · full chapters only · safe checkpoint resume</p></div>
-            <div className="flex flex-wrap gap-2">
-              <span className={secondaryButton} style={{ borderColor: border, background: muted }} title="Open the workspace gear, then choose Jobnib Session"><Icon icon={appIcons.settings} className="h-4 w-4" />Session settings: workspace gear</span>
-              <button type="button" onClick={() => void checkSession()} disabled={busy === 'session'} className={secondaryButton} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'session' ? appIcons.spinner : appIcons.shield} className={`h-4 w-4 ${busy === 'session' ? 'animate-spin' : ''}`} />Test session</button>
+        <section className="rounded-2xl border p-5 sm:p-6" style={{ background: panel, borderColor: border }}>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: faint }}>Novel crawler</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/10 px-2.5 py-1 text-xs font-semibold text-orange-600 dark:text-orange-400"><Icon icon={appIcons.userCheck} className="h-3 w-3" />Browser-assisted only</span>
+              </div>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Jobnib batch</h1>
+              <p className="mt-2 text-sm leading-6" style={{ color: soft }}>Find completed stories, then capture their full chapters through your visible Chrome browser. The server crawler does not run from this page.</p>
+            </div>
+            <div className="min-w-[260px] rounded-xl border p-3" style={{ background: muted, borderColor: border }}>
+              <div className="flex items-center justify-between gap-3">
+                <div><div className="text-xs font-semibold" style={{ color: faint }}>Jobnib session</div><div className="mt-0.5 text-sm font-medium">{session?.valid ? 'Ready' : summary?.session.required ? 'Needs attention' : 'Not checked'}</div></div>
+                <button type="button" onClick={() => void checkSession()} disabled={busy === 'session'} className={secondaryButton} style={{ borderColor: border, background: panel }}><Icon icon={busy === 'session' ? appIcons.spinner : appIcons.shield} className={`h-4 w-4 ${busy === 'session' ? 'animate-spin' : ''}`} />Test</button>
+              </div>
+              <p className="mt-2 text-xs" style={{ color: faint }}><Icon icon={appIcons.settings} className="mr-1 h-3 w-3" />Manage cookies in workspace Settings → Jobnib Session.</p>
             </div>
           </div>
-          {(session || summary?.session.required) && <div className="mt-4 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: session?.valid ? 'rgba(34,197,94,.4)' : 'rgba(245,158,11,.45)', background: session?.valid ? 'rgba(34,197,94,.08)' : 'rgba(245,158,11,.08)' }}>{session?.message || summary?.session.last_error || 'Jobnib needs a refreshed browser session.'}</div>}
+          {(session || summary?.session.required) && <div className="mt-4 flex gap-2 rounded-lg border px-3 py-2.5 text-sm" style={{ borderColor: session?.valid ? 'rgba(34,197,94,.4)' : 'rgba(245,158,11,.45)', background: session?.valid ? 'rgba(34,197,94,.08)' : 'rgba(245,158,11,.08)' }}><Icon icon={session?.valid ? appIcons.checkCircle : appIcons.info} className="mt-0.5 h-4 w-4 shrink-0" />{session?.message || summary?.session.last_error || 'Jobnib needs a refreshed browser session.'}</div>}
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="rounded-xl border p-4 sm:p-5" style={{ background: panel, borderColor: border }}>
-            <h2 className="text-base font-semibold">Batch setup</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="sm:col-span-2 lg:col-span-3"><span className="text-xs font-semibold uppercase" style={{ color: faint }}>Name</span><input value={batchName} onChange={(e) => setBatchName(e.target.value)} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm" style={{ background: muted, borderColor: border }} /></label>
-              <div><span className="text-xs font-semibold uppercase" style={{ color: faint }}>Discovery source</span><div className="mt-1 flex h-10 items-center rounded-lg border px-3 text-sm" style={{ background: muted, borderColor: border }}>Current Jobnib homepage</div></div>
-              <label><span className="text-xs font-semibold uppercase" style={{ color: faint }}>Stories per run</span><input type="number" min={1} max={10000} value={storiesPerRun} onChange={(e) => setStoriesPerRun(Number(e.target.value))} className="mt-1 h-10 w-full rounded-lg border px-3" style={{ background: muted, borderColor: border }} /></label>
-              <div><span className="text-xs font-semibold uppercase" style={{ color: faint }}>Crawl mode</span><div className="mt-1 flex rounded-lg border p-1" style={{ borderColor: border, background: muted }}>{(['slow', 'fast'] as const).map((item) => <button type="button" key={item} onClick={() => setMode(item)} className="flex-1 rounded-md px-3 py-1.5 text-sm font-semibold capitalize" style={{ background: mode === item ? 'rgba(249,115,22,.18)' : 'transparent', color: mode === item ? 'var(--cs-primary)' : soft }}>{item}</button>)}</div></div>
+        {error && <section className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: 'rgba(239,68,68,.35)', background: 'rgba(239,68,68,.08)', color: isDark ? '#fca5a5' : '#dc2626' }}><Icon icon={appIcons.error} className="mr-2 inline h-4 w-4" />{error}</section>}
+
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="overflow-hidden rounded-2xl border" style={{ background: panel, borderColor: border }}>
+            <div className="border-b" style={{ borderColor: border }}>
+              <div className="flex gap-3 p-4 sm:p-5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-600 text-sm font-bold text-white">1</span>
+                <div><h2 className="font-semibold">Prepare a batch</h2><p className="mt-1 text-sm" style={{ color: soft }}>Discover the current homepage or import a saved catalog.</p></div>
+              </div>
             </div>
-            <p className="mt-2 text-xs" style={{ color: faint }}>{modeDescription(mode)}{active && summary?.mode !== mode ? ' · applies to next run' : ''}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" className={primaryButton} disabled={!!busy || interactionLocked} onClick={() => void act('discover', () => startJobnibBatch({ batch_name: batchName, max_archive_pages: 1, mode, crawl_after_discovery: false }))}><Icon icon={busy === 'discover' ? appIcons.spinner : appIcons.search} className={`h-4 w-4 ${busy === 'discover' ? 'animate-spin' : ''}`} />Discover homepage</button>
-              <button type="button" className={primaryButton} disabled={!!busy || interactionLocked || !batchId} onClick={() => void act('crawl', () => crawlJobnibBatch(batchId, { mode, max_stories: storiesPerRun }))}><Icon icon={busy === 'crawl' ? appIcons.spinner : appIcons.play} className={`h-4 w-4 ${busy === 'crawl' ? 'animate-spin' : ''}`} />Start/Resume crawl</button>
-              {active && <button type="button" className={secondaryButton} disabled={!!busy || !!summary?.cancel_requested} onClick={() => void act('pause', () => pauseJobnibBatch(batchId))} style={{ borderColor: border, background: muted }}><Icon icon={appIcons.pause} className="h-4 w-4" />Graceful pause</button>}
-              <button type="button" className={secondaryButton} disabled={!summary?.download_ready || !!busy} onClick={() => void downloadBatch(batchId)} style={{ borderColor: border, background: muted }}><Icon icon={busy === `download:${batchId}` ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${busy === `download:${batchId}` ? 'animate-spin' : ''}`} />{busy === `download:${batchId}` ? 'Preparing ZIP' : 'Download exported ZIP'}</button>
-              <button type="button" className={secondaryButton} disabled={!!busy || interactionLocked} onClick={() => fileRef.current?.click()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'import' ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${busy === 'import' ? 'animate-spin' : ''}`} />Import catalog/URLs</button>
-              <input ref={fileRef} type="file" accept=".json,.txt,.csv,application/json,text/plain,text/csv" onChange={(event) => void importFile(event)} className="hidden" />
+
+            <div className="space-y-6 p-4 sm:p-5">
+              <div>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <label><span className="text-xs font-semibold" style={{ color: faint }}>Batch name</span><input value={batchName} onChange={(e) => setBatchName(e.target.value)} className="mt-1.5 h-11 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-orange-500" style={{ background: muted, borderColor: border }} /></label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button type="button" className={primaryButton} disabled={!!busy || interactionLocked} onClick={() => void act('discover', () => startJobnibBatch({ batch_name: batchName, max_archive_pages: 1 }))}><Icon icon={busy === 'discover' ? appIcons.spinner : appIcons.search} className={`h-4 w-4 ${busy === 'discover' ? 'animate-spin' : ''}`} />{busy === 'discover' ? 'Discovering…' : 'Discover homepage'}</button>
+                    <button type="button" className={secondaryButton} disabled={!!busy || interactionLocked} onClick={() => fileRef.current?.click()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'import' ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${busy === 'import' ? 'animate-spin' : ''}`} />Import</button>
+                  </div>
+                </div>
+                <input ref={fileRef} type="file" accept=".json,.txt,.csv,application/json,text/plain,text/csv" onChange={(event) => void importFile(event)} className="hidden" />
+                <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: faint }}><Icon icon={appIcons.shield} className="h-3 w-3" />Only completed stories are added. This step does not crawl chapters.</p>
+              </div>
+
+              {active && <div className="border-t pt-5" style={{ borderColor: border }}><button type="button" className={secondaryButton} disabled={!!busy || !!summary?.cancel_requested} onClick={() => void act('pause', () => pauseJobnibBatch(batchId))} style={{ borderColor: border, background: muted }}><Icon icon={appIcons.pause} className="h-4 w-4" />Pause active batch</button><p className="mt-2 text-xs" style={{ color: faint }}>Browser-assisted capture becomes available after discovery finishes or the older server crawl is paused.</p></div>}
+              {summary?.download_ready && <div className="border-t pt-5" style={{ borderColor: border }}><button type="button" className={secondaryButton} disabled={!!busy} onClick={() => void downloadBatch(batchId)} style={{ borderColor: border, background: muted }}><Icon icon={busy === `download:${batchId}` ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${busy === `download:${batchId}` ? 'animate-spin' : ''}`} />{busy === `download:${batchId}` ? 'Preparing ZIP…' : 'Download captured stories'}</button></div>}
             </div>
           </div>
 
-          <aside className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
-            <h2 className="font-semibold">Current batch</h2>
-            <div className="mt-3 grid grid-cols-2 gap-2">{statCards.map(([label, value]) => <div key={String(label)} className="rounded-lg border p-3" style={{ background: muted, borderColor: border }}><div className="text-xs" style={{ color: faint }}>{label}</div><div className="mt-1 text-lg font-semibold tabular-nums">{Number(value).toLocaleString()}</div></div>)}</div>
-            {summary && <><div className="mt-3 h-2 overflow-hidden rounded-full" style={{ background: muted }}><div className="h-full bg-orange-600" style={{ width: `${progress}%` }} /></div><div className="mt-2 flex justify-between text-xs" style={{ color: soft }}><span>{summary.crawled_chapters.toLocaleString()} / {summary.total_chapters.toLocaleString()} chapters</span><span>{progress}%</span></div></>}
+          <aside className="rounded-2xl border p-4 sm:p-5" style={{ background: panel, borderColor: border }}>
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs font-semibold" style={{ color: faint }}>Current batch</div><h2 className="mt-1 truncate font-semibold">{summary?.batch_name || 'Nothing selected'}</h2></div><span className="shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold capitalize" style={{ borderColor: summary?.phase === 'crawling' ? 'rgba(249,115,22,.45)' : border, background: summary?.phase === 'crawling' ? 'rgba(249,115,22,.1)' : muted, color: summary?.phase === 'crawling' ? 'var(--cs-primary)' : soft }}>{phaseLabel(summary?.phase)}</span></div>
+            {summary ? <>
+              <div className="mt-4 grid grid-cols-2 gap-2">{statCards.map(([label, value]) => <div key={String(label)} className="rounded-lg border p-3" style={{ background: muted, borderColor: border }}><div className="text-xs" style={{ color: faint }}>{label}</div><div className="mt-1 text-lg font-semibold tabular-nums">{Number(value).toLocaleString()}</div></div>)}</div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full" style={{ background: muted }}><div className="h-full rounded-full bg-orange-600 transition-all" style={{ width: `${progress}%` }} /></div><div className="mt-2 flex justify-between text-xs" style={{ color: soft }}><span>{summary.crawled_chapters.toLocaleString()} / {summary.total_chapters.toLocaleString()} chapters</span><span>{progress}%</span></div>
+            </> : <div className="mt-8 text-center"><Icon icon={appIcons.batch} className="h-8 w-8" style={{ color: faint }} /><p className="mt-3 text-sm" style={{ color: soft }}>Create a batch or select one from history.</p></div>}
           </aside>
         </section>
 
         <JobnibBrowserCapturePanel
           key={batchId}
           batchId={batchId}
-          disabled={active || !!busy || !summary || summary.total_stories === 0}
+          disabled={!!browserCaptureDisabledReason || !!busy}
+          disabledReason={browserCaptureDisabledReason}
           onActivity={refreshAfterBrowserCapture}
           onSessionActiveChange={setBrowserCaptureActive}
         />
-
-        {error && <section className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: 'rgba(239,68,68,.35)', background: 'rgba(239,68,68,.08)', color: isDark ? '#fca5a5' : '#dc2626' }}><Icon icon={appIcons.error} className="mr-2 inline h-4 w-4" />{error}</section>}
 
         {summary && <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
@@ -279,16 +319,14 @@ export function JobnibBatchPage({ themeMode }: Props) {
             <div className="mt-3 max-h-64 overflow-auto rounded-lg border p-2 font-mono text-xs" style={{ borderColor: border, background: muted }}>{summary.log_lines.length ? summary.log_lines.slice().reverse().map((line, index) => { const parts = splitInkittLogLine(line); return <div key={`${index}-${line}`} className={`mb-1 rounded border-l-2 px-2 py-1 ${inkittLogToneClass(getInkittLogTone(line))}`}><span className="mr-2 opacity-60">{parts.time}</span>{parts.message}</div>; }) : <div className="p-5 text-center" style={{ color: faint }}>No log lines yet.</div>}</div>
           </div>
           <aside className="rounded-xl border p-4" style={{ background: panel, borderColor: border }}>
-            <div className="flex items-center justify-between"><h2 className="font-semibold">Time estimate</h2><span className="rounded border px-2 py-1 text-xs capitalize" style={{ borderColor: border, color: soft }}>{summary.mode}</span></div>
+            <div className="flex items-center gap-2"><Icon icon={appIcons.userCheck} className="h-4 w-4 text-orange-500" /><h2 className="font-semibold">Human-paced capture</h2></div>
+            <p className="mt-2 text-sm leading-6" style={{ color: soft }}>There is no Slow or Fast preset. The companion advances only after you unlock the page and the full chapter passes validation.</p>
             <div className="mt-3 grid grid-cols-2 gap-2">{[
               ['Remaining stories', estimate?.remaining_stories?.toLocaleString() || '-'],
               ['Remaining chapters', estimate?.remaining_chapters?.toLocaleString() || '-'],
-              ['Speed', estimate?.chapters_per_hour ? `${Math.round(estimate.chapters_per_hour).toLocaleString()} ch/h` : '-'],
-              ['Elapsed', duration(estimate?.elapsed_seconds)],
-              ['ETA', duration(estimate?.estimated_remaining_seconds)],
-              ['Cooldown', duration(summary.rate_limit?.cooldown_remaining_seconds)],
+              ['Captured chapters', summary.crawled_chapters.toLocaleString()],
+              ['Total chapters', summary.total_chapters.toLocaleString()],
             ].map(([label, value]) => <div key={label} className="rounded-lg border p-2.5" style={{ background: muted, borderColor: border }}><div className="text-xs" style={{ color: faint }}>{label}</div><div className="mt-1 font-semibold tabular-nums">{value}</div></div>)}</div>
-            <div className="mt-2 rounded-lg border p-2.5" style={{ borderColor: border, background: muted }}><div className="text-xs" style={{ color: faint }}>Finish</div><div className="mt-1 font-semibold">{estimate?.estimated_finished_at || '-'}</div></div>
           </aside>
         </section>}
 
@@ -297,17 +335,13 @@ export function JobnibBatchPage({ themeMode }: Props) {
           <div className="mt-3 space-y-2">{history.map((item) => <div key={item.batch_id} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: item.batch_id === batchId ? 'var(--cs-primary)' : border, background: muted }}><button type="button" onClick={() => setBatchId(item.batch_id)} className="min-w-0 text-left"><div className="truncate text-sm font-semibold">{item.batch_name || `Jobnib ${item.batch_id}`}</div><div className="mt-1 text-xs" style={{ color: faint }}>{item.created_at} · {item.completed_count.toLocaleString()} exports · {item.total_stories.toLocaleString()} stories · <span className="capitalize">{item.phase.replaceAll('_', ' ')}</span></div></button><div className="flex flex-wrap gap-2">
             {item.download_ready && <button type="button" className={secondaryButton} disabled={!!busy} onClick={() => void downloadBatch(item.batch_id)} style={{ borderColor: border }}><Icon icon={busy === `download:${item.batch_id}` ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${busy === `download:${item.batch_id}` ? 'animate-spin' : ''}`} />ZIP</button>}
             <button type="button" className={secondaryButton} onClick={() => { setBusy('export'); void exportJobnibBatchCatalog(item.batch_id).then((data) => downloadJson(data, `jobnib_catalog_${item.batch_id}.json`)).catch((err) => setError(err instanceof Error ? err.message : 'Export failed.')).finally(() => setBusy('')); }} style={{ borderColor: border }}><Icon icon={appIcons.download} className="h-4 w-4" />Catalog</button>
-            {!['discovering', 'crawling'].includes(item.phase) && <button type="button" className={secondaryButton} onClick={() => { if (!window.confirm(`Delete ${item.batch_name}?`)) return; setBusy('delete'); void removeJobnibBatch(item.batch_id).then(() => { if (batchId === item.batch_id) setBatchId(''); return fetchHistory(); }).catch((err) => setError(err instanceof Error ? err.message : 'Delete failed.')).finally(() => setBusy('')); }} style={{ borderColor: border }}><Icon icon={appIcons.delete} className="h-4 w-4" /></button>}
+            {!['discovering', 'crawling'].includes(item.phase) && <button type="button" className={secondaryButton} aria-label={`Delete ${item.batch_name || 'Jobnib batch'}`} onClick={() => { if (!window.confirm(`Delete ${item.batch_name}?`)) return; setBusy('delete'); void removeJobnibBatch(item.batch_id).then(() => { if (batchId === item.batch_id) { setBatchId(''); setSummary(null); setRows([]); setRowTotal(0); sessionStorage.removeItem('jobnib_batch_id'); } return fetchHistory(); }).catch((err) => setError(err instanceof Error ? err.message : 'Delete failed.')).finally(() => setBusy('')); }} style={{ borderColor: border }}><Icon icon={appIcons.delete} className="h-4 w-4" /></button>}
           </div></div>)}</div>
         </section>
 
         {summary && <section className="overflow-hidden rounded-xl border" style={{ background: panel, borderColor: border }}>
           <div className="flex flex-col gap-3 border-b p-4 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: border }}><div><h2 className="font-semibold">Stories</h2><p className="text-xs" style={{ color: faint }}>Showing {rows.length.toLocaleString()} of {rowTotal.toLocaleString()} rows</p></div><div className="flex flex-wrap gap-2">{FILTERS.map(([value, label]) => <button type="button" key={value} onClick={() => setFilter(value)} className="rounded-full border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: filter === value ? 'var(--cs-primary)' : border, background: filter === value ? 'rgba(249,115,22,.15)' : muted }}>{label}</button>)}</div></div>
-          {(summary.failed_count > 0 || summary.needs_session_count > 0) && <div className="flex flex-wrap gap-2 border-b px-4 py-3" style={{ borderColor: border }}>
-            {summary.failed_count > 0 && <button type="button" className={secondaryButton} disabled={!!busy || browserCaptureActive} onClick={() => void act('retry-failed', () => retryJobnibFailedStories(batchId))} style={{ borderColor: border }}><Icon icon={appIcons.refresh} className="h-4 w-4" />Retry failed</button>}
-            {summary.needs_session_count > 0 && <button type="button" className={secondaryButton} disabled={!!busy || browserCaptureActive} onClick={() => void act('retry-session', () => retryJobnibSessionStories(batchId))} style={{ borderColor: border }}><Icon icon={appIcons.shield} className="h-4 w-4" />Retry session rows</button>}
-          </div>}
-          <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead style={{ background: muted, color: faint }}><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Story</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Chapters</th><th className="px-4 py-3">Output / error</th></tr></thead><tbody>{rows.map((row) => <tr key={row.index} className="border-t align-top" style={{ borderColor: border }}><td className="px-4 py-3 tabular-nums">{row.index}</td><td className="px-4 py-3"><a href={row.url} target="_blank" rel="noreferrer" className="font-semibold underline">{row.title}</a><div className="mt-1 text-xs" style={{ color: faint }}>{row.author || row.story_id}</div></td><td className="px-4 py-3"><span className="rounded border px-2 py-1 text-xs capitalize" style={{ borderColor: border }}>{row.status.replaceAll('_', ' ')}</span></td><td className="px-4 py-3 tabular-nums">{row.crawled_chapters.toLocaleString()}/{row.total_chapters?.toLocaleString() ?? '-'}</td><td className="max-w-xl px-4 py-3 text-xs" style={{ color: row.error ? '#f59e0b' : soft }}>{row.error || row.output_file || '-'}</td></tr>)}</tbody></table>{rows.length === 0 && <div className="p-8 text-center text-sm" style={{ color: soft }}>No rows match this filter.</div>}</div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead style={{ background: muted, color: faint }}><tr><th className="px-4 py-3">#</th><th className="px-4 py-3">Story</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Chapters</th><th className="px-4 py-3">Output / error</th></tr></thead><tbody>{rows.map((row) => <tr key={row.index} className="border-t align-top" style={{ borderColor: border }}><td className="px-4 py-3 tabular-nums">{row.index}</td><td className="px-4 py-3"><a href={row.url} target="_blank" rel="noreferrer" className="font-semibold underline">{row.title}</a><div className="mt-1 text-xs" style={{ color: faint }}>{row.author || row.story_id}</div></td><td className="px-4 py-3"><span className="rounded border px-2 py-1 text-xs" style={{ borderColor: border }}>{rowStatusLabel(row.status)}</span></td><td className="px-4 py-3 tabular-nums">{row.crawled_chapters.toLocaleString()}/{row.total_chapters?.toLocaleString() ?? '-'}</td><td className="max-w-xl px-4 py-3 text-xs" style={{ color: row.error ? '#f59e0b' : soft }}>{row.error || row.output_file || '-'}</td></tr>)}</tbody></table>{rows.length === 0 && <div className="p-8 text-center text-sm" style={{ color: soft }}>No rows match this filter.</div>}</div>
           {rows.length < rowTotal && <div className="border-t p-3 text-center" style={{ borderColor: border }}><button type="button" onClick={() => void loadMoreRows()} disabled={busy === 'rows'} className={secondaryButton} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'rows' ? appIcons.spinner : appIcons.add} className={`h-4 w-4 ${busy === 'rows' ? 'animate-spin' : ''}`} />Load more rows</button></div>}
         </section>}
       </main>

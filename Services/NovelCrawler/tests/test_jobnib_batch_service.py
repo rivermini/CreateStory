@@ -157,7 +157,7 @@ def test_discovery_scans_homepage_once_and_filters_completed_locally(tmp_path, m
         "https://jobnib.com/book/ongoing-beta": fixture("ongoing_story.html"),
     }
     monkeypatch.setattr(service, "_fetch_html", lambda _batch, url, _interval: pages[url])
-    service._run_discovery(batch_id, False)
+    service._run_discovery(batch_id)
 
     summary = service.get_status(batch_id)
     assert summary["phase"] == "ready"
@@ -182,7 +182,7 @@ def test_three_consecutive_challenges_open_session_circuit_breaker(tmp_path, mon
         raise JobnibSessionRequired("Cloudflare session challenge")
 
     monkeypatch.setattr(service, "_fetch_html", fake_fetch)
-    service._run_discovery(batch_id, False)
+    service._run_discovery(batch_id)
     summary = service.get_status(batch_id)
     assert summary["phase"] == "waiting_for_session"
     assert summary["session"]["required"] is True

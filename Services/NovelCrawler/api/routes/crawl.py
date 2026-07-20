@@ -231,7 +231,6 @@ class JobnibBatchStartRequest(BaseModel):
     # scans only the live homepage because its archive pages were deleted.
     max_archive_pages: int = Field(default=1, ge=1, le=1000)
     mode: Literal["slow", "fast"] = Field(default="slow")
-    crawl_after_discovery: bool = Field(default=False)
 
 
 class JobnibBatchCrawlRequest(BaseModel):
@@ -740,7 +739,6 @@ async def start_jobnib_batch(request: JobnibBatchStartRequest, http_request: Req
             batch_name=request.batch_name or "",
             max_archive_pages=request.max_archive_pages,
             mode=request.mode,
-            crawl_after_discovery=request.crawl_after_discovery,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

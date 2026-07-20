@@ -13,6 +13,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 interface Props {
   readonly batchId: string;
   readonly disabled?: boolean;
+  readonly disabledReason?: string;
   readonly onActivity?: () => void;
   readonly onSessionActiveChange?: (active: boolean) => void;
 }
@@ -34,7 +35,7 @@ function pairingCommand(pairing: JobnibBrowserCapturePairResponse) {
   ].join(' ');
 }
 
-export function JobnibBrowserCapturePanel({ batchId, disabled = false, onActivity, onSessionActiveChange }: Props) {
+export function JobnibBrowserCapturePanel({ batchId, disabled = false, disabledReason = '', onActivity, onSessionActiveChange }: Props) {
   const [pairing, setPairing] = useState<JobnibBrowserCapturePairResponse | null>(null);
   const [status, setStatus] = useState<JobnibBrowserCaptureStatus | null>(null);
   const [busy, setBusy] = useState('');
@@ -152,25 +153,28 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, onActivit
   const muted = 'var(--cs-surface-muted)';
   const soft = 'var(--cs-text-soft)';
   const faint = 'var(--cs-text-faint)';
-  const primaryButton = 'inline-flex items-center justify-center gap-2 rounded-full bg-orange-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50';
-  const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50';
+  const primaryButton = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50';
+  const secondaryButton = 'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50';
 
   return (
-    <section className="rounded-xl border p-4 sm:p-5" style={{ background: panel, borderColor: border }}>
+    <section className="rounded-2xl border p-4 sm:p-5" style={{ background: panel, borderColor: border }}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold">Browser-assisted full capture</h2>
-            <span className="rounded-full border px-2 py-0.5 text-xs font-semibold" style={{ borderColor: 'rgba(34,197,94,.4)', background: 'rgba(34,197,94,.08)', color: '#22c55e' }}>Quality-first</span>
+        <div className="flex gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-600 text-sm font-bold text-white">2</span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold">Browser-assisted full capture</h2>
+              <span className="rounded-full border px-2 py-0.5 text-xs font-semibold" style={{ borderColor: 'rgba(34,197,94,.4)', background: 'rgba(34,197,94,.08)', color: '#22c55e' }}>Only capture method</span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm" style={{ color: soft }}>
+              A companion uses your normal visible Chrome and advances at your pace. There is no Slow or Fast setting.
+            </p>
           </div>
-          <p className="mt-1 max-w-3xl text-sm" style={{ color: soft }}>
-            A companion uses your normal visible Chrome. It saves a chapter only after every expected Jobnib segment is unlocked and validated.
-          </p>
         </div>
         {!pairing ? (
           <button type="button" className={primaryButton} disabled={disabled || !batchId || busy === 'pair'} onClick={() => void start()}>
             <Icon icon={busy === 'pair' ? appIcons.spinner : appIcons.link} className={`h-4 w-4 ${busy === 'pair' ? 'animate-spin' : ''}`} />
-            Pair browser companion
+            Pair Chrome companion
           </button>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -183,6 +187,8 @@ export function JobnibBrowserCapturePanel({ batchId, disabled = false, onActivit
           </div>
         )}
       </div>
+
+      {!pairing && disabledReason && <div className="mt-4 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: border, background: muted, color: soft }}><Icon icon={appIcons.info} className="mr-2 inline h-4 w-4" />{disabledReason}</div>}
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {[

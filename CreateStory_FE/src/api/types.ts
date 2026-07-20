@@ -529,8 +529,7 @@ export interface JobnibCatalogImportResponse {
 export interface JobnibBatchStartRequest {
   batch_name?: string | null;
   max_archive_pages: number;
-  mode: JobnibCrawlMode;
-  crawl_after_discovery?: boolean;
+  mode?: JobnibCrawlMode;
 }
 
 export interface JobnibBatchCrawlRequest {
