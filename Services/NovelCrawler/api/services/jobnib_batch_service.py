@@ -162,6 +162,7 @@ class JobnibBatchService:
         self._lock = threading.RLock()
         self._request_start_lock = threading.Lock()
         self._browser_lock = threading.RLock()
+        self._snapshot_archive_lock = threading.Lock()
         self._shared_browser: _JobnibBrowser | None = None
         self._last_request_at = 0.0
         self._session_verified_at = ""
@@ -592,30 +593,125 @@ class JobnibBatchService:
                 return
         raise HTTPException(status_code=403, detail="Access denied for this Jobnib batch.")
 
-    def get_download_files(self, batch_id: str, run_id: str | None = None) -> tuple[JobnibBatchState, list[tuple[Path, str]]]:
+    def get_download_files(
+        self,
+        batch_id: str,
+        run_id: str | None = None,
+        *,
+        include_partial: bool = False,
+    ) -> tuple[JobnibBatchState, list[tuple[Path, str]]]:
         with self._lock:
             state = self._get_state_locked(batch_id)
             output_dir = Path(state.output_dir).resolve()
             allowed_rows = [row for row in state.rows if row.status == "completed" and (not run_id or row.crawl_run_id == run_id)]
             paths = {row.output_file for row in allowed_rows} | {row.metadata_file for row in allowed_rows}
+            partial_rows = [
+                JobnibBatchRow(**row.to_dict())
+                for row in state.rows
+                if include_partial
+                and row.status != "completed"
+                and int(row.crawled_chapters or 0) > 0
+                and (not run_id or row.crawl_run_id == run_id)
+            ]
         files: list[tuple[Path, str]] = []
         for relative in sorted(path for path in paths if path):
             candidate = (output_dir / relative).resolve()
             if candidate.is_relative_to(output_dir) and candidate.is_file() and not candidate.is_symlink():
                 files.append((candidate, relative.replace("\\", "/")))
+        if include_partial:
+            files.extend(self._prepare_partial_snapshot_files(output_dir, partial_rows))
         if not files:
-            raise FileNotFoundError("No captured Jobnib batch files were created.")
+            raise FileNotFoundError("No captured Jobnib chapters are available yet.")
         return state, files
 
-    def prepare_archive(self, batch_id: str, run_id: str | None = None) -> Path:
-        state, files = self.get_download_files(batch_id, run_id)
+    def prepare_archive(
+        self,
+        batch_id: str,
+        run_id: str | None = None,
+        *,
+        include_partial: bool = False,
+    ) -> Path:
+        if include_partial:
+            with self._snapshot_archive_lock:
+                return self._prepare_archive(batch_id, run_id, include_partial=True)
+        return self._prepare_archive(batch_id, run_id, include_partial=False)
+
+    def _prepare_archive(self, batch_id: str, run_id: str | None, *, include_partial: bool) -> Path:
+        state, files = self.get_download_files(batch_id, run_id, include_partial=include_partial)
         suffix = f"_{run_id}" if run_id else ""
+        progress_suffix = "_progress" if include_partial else ""
         return get_or_build_cached_zip(
             files,
             Path(state.output_dir) / ".archives",
-            f"jobnib_batch_{batch_id}{suffix}",
+            f"jobnib_batch_{batch_id}{suffix}{progress_suffix}",
             compression_level=JOBNIB_ARCHIVE_COMPRESSION,
         )
+
+    def _prepare_partial_snapshot_files(
+        self,
+        output_dir: Path,
+        rows: list[JobnibBatchRow],
+    ) -> list[tuple[Path, str]]:
+        files: list[tuple[Path, str]] = []
+        snapshot_root = output_dir / ".snapshots" / "progress"
+        for row in rows:
+            checkpoint_path = (
+                output_dir
+                / ".checkpoints"
+                / f"{row.index:06d}_{sanitize_filename(row.story_id)}.json"
+            )
+            try:
+                payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                continue
+            if payload.get("story_id") != row.story_id:
+                continue
+            chapters = [
+                item
+                for item in payload.get("chapters", [])
+                if isinstance(item, dict) and item.get("content") and item.get("url")
+            ]
+            chapters.sort(key=lambda item: int(item.get("sequence_index") or 0))
+            if not chapters:
+                continue
+
+            captured = len(chapters)
+            total = max(captured, int(row.total_chapters or captured))
+            safe_title = sanitize_filename(row.title or row.story_id)
+            folder_name = f"PARTIAL_{row.index:04d}_{safe_title}_{captured}-of-{total}_jn"
+            archive_folder = Path("In Progress") / folder_name
+            snapshot_dir = snapshot_root / f"{row.index:06d}_{sanitize_filename(row.story_id)}"
+            markdown_name = f"Jobnib_{safe_title}_Partial_{captured}-of-{total}_jn.md"
+            markdown_path = snapshot_dir / markdown_name
+            info_path = snapshot_dir / "info.json"
+            _atomic_write_text(
+                markdown_path,
+                format_jobnib_markdown(
+                    row.title,
+                    row.url,
+                    chapters,
+                    status=f"Partial capture ({captured}/{total})",
+                    total_chapters=total,
+                ),
+            )
+            atomic_write_json(info_path, {
+                "title": row.title,
+                "author": row.author,
+                "status": "Partial capture",
+                "source_status": row.completion_status,
+                "source_url": row.url,
+                "story_id": row.story_id,
+                "captured_chapters": captured,
+                "total_chapters": total,
+                "is_partial": True,
+                "snapshot_at": now_string(),
+                "source_suffix": "jn",
+            })
+            files.extend([
+                (markdown_path, str(archive_folder / markdown_name).replace("\\", "/")),
+                (info_path, str(archive_folder / "info.json").replace("\\", "/")),
+            ])
+        return files
 
     def _run_discovery(self, batch_id: str) -> None:
         try:
@@ -1358,7 +1454,7 @@ class JobnibBatchService:
                 "last_error": state.last_session_error,
                 "verified_at": state.session_verified_at,
             },
-            "download_ready": completed > 0,
+            "download_ready": crawled_chapters > 0,
             "error_message": state.error_message,
             "created_at": state.created_at,
             "started_at": state.started_at,
@@ -1650,8 +1746,16 @@ def contains_locked_markers(content: str) -> bool:
     ))
 
 
-def format_jobnib_markdown(title: str, source_url: str, chapters: list[dict[str, Any]]) -> str:
-    lines = [f"# {title}", "", f"Source: {source_url}", "Status: Completed", f"Chapters crawled: {len(chapters)}", ""]
+def format_jobnib_markdown(
+    title: str,
+    source_url: str,
+    chapters: list[dict[str, Any]],
+    *,
+    status: str = "Completed",
+    total_chapters: int | None = None,
+) -> str:
+    chapter_count = f"{len(chapters)} of {total_chapters}" if total_chapters else str(len(chapters))
+    lines = [f"# {title}", "", f"Source: {source_url}", f"Status: {status}", f"Chapters crawled: {chapter_count}", ""]
     for chapter in sorted(chapters, key=lambda item: int(item["sequence_index"])):
         display = chapter.get("displayed_chapter_number") or chapter["sequence_index"]
         volume = f" ({chapter['volume_label']})" if chapter.get("volume_label") else ""
@@ -1660,6 +1764,13 @@ def format_jobnib_markdown(title: str, source_url: str, chapters: list[dict[str,
             f"Source: {chapter['url']}", "", str(chapter["content"]).strip(), "",
         ])
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(path)
 
 
 def clean_text(value: str) -> str:

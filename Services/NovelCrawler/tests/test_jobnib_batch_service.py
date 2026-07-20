@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+import zipfile
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -491,6 +492,77 @@ def test_browser_capture_pairing_checkpoints_full_segments_and_finishes_story(tm
     assert duplicate["duplicate"] is True
 
 
+def test_progress_archive_includes_completed_stories_and_partial_checkpoint(tmp_path) -> None:
+    batch_service = JobnibBatchService(output_root=tmp_path)
+    batch_id = "fade1234"
+    output = tmp_path / "jobnib_batch" / batch_id
+    output.mkdir(parents=True, exist_ok=True)
+    completed_row = JobnibBatchRow(
+        1,
+        "Finished Story",
+        "https://jobnib.com/book/finished-story",
+        "finished-story",
+        status="completed",
+        completion_status="Completed",
+        total_chapters=1,
+        crawled_chapters=1,
+    )
+    partial_row = JobnibBatchRow(
+        2,
+        "Story Still Capturing",
+        "https://jobnib.com/book/story-still-capturing",
+        "story-still-capturing",
+        status="needs_session",
+        completion_status="Ongoing",
+        total_chapters=100,
+        crawled_chapters=46,
+    )
+    batch_service._batches[batch_id] = JobnibBatchState(
+        batch_id=batch_id,
+        created_by_user_id="user-1",
+        phase="waiting_for_session",
+        output_dir=str(output),
+        rows=[completed_row, partial_row],
+    )
+    completed_update = batch_service._write_story_output(
+        completed_row,
+        {"title": completed_row.title},
+        "Completed",
+        [{
+            "sequence_index": 1,
+            "title": "Finished chapter",
+            "url": "https://jobnib.com/book/finished-story-chapter-1",
+            "content": "Finished story content.",
+        }],
+    )
+    for key, value in completed_update.items():
+        setattr(completed_row, key, value)
+
+    partial_chapters = [{
+        "sequence_index": index,
+        "displayed_chapter_number": index,
+        "title": f"Chapter {index}",
+        "url": f"https://jobnib.com/book/story-still-capturing-chapter-{index}",
+        "content": f"Captured content for chapter {index}.",
+    } for index in range(1, 47)]
+    batch_service._save_checkpoint(partial_row, partial_chapters)
+
+    assert batch_service.get_status(batch_id)["download_ready"] is True
+    archive_path = batch_service.prepare_archive(batch_id, include_partial=True)
+
+    with zipfile.ZipFile(archive_path) as archive:
+        names = archive.namelist()
+        assert any(name.startswith("Completed/") and name.endswith(".md") for name in names)
+        partial_markdown = next(
+            name for name in names
+            if name.startswith("In Progress/PARTIAL_0002_") and name.endswith(".md")
+        )
+        content = archive.read(partial_markdown).decode("utf-8")
+        assert "Status: Partial capture (46/100)" in content
+        assert "Chapters crawled: 46 of 100" in content
+        assert "## Chapter 46" in content
+
+
 def test_ongoing_story_capture_uses_ongoing_output_label(tmp_path) -> None:
     batch_service, _capture_service, _batch_id, row = _capture_fixture(tmp_path)
     row.completion_status = "Ongoing"
@@ -538,6 +610,51 @@ def test_browser_capture_rejects_missing_segment_and_visible_lock() -> None:
         assert "still visible" in str(exc)
     else:
         raise AssertionError("Visible Jobnib lock should be rejected")
+
+
+def test_browser_capture_accepts_challenge_words_inside_real_story_prose() -> None:
+    segments = [_full_segment(1), _full_segment(2)]
+    story_words = " ".join(f"storyword{index}" for index in range(70))
+    segments[1]["html"] = (
+        "<div id='jn-content-42-2'>"
+        "<p>Just a moment, she said while waiting beside the old turnstile.</p>"
+        f"<p>{story_words}</p>"
+        "</div>"
+    )
+
+    content, _checksum, word_count = validate_captured_segments(
+        expected_segment_ids=["1", "2"],
+        segments=segments,
+        locks=[],
+        lock_scan_complete=True,
+    )
+
+    assert "Just a moment" in content
+    assert "turnstile" in content
+    assert word_count >= 100
+
+
+def test_browser_capture_rejects_reader_ui_embedded_as_short_prose_block() -> None:
+    segments = [_full_segment(1), _full_segment(2)]
+    segments[1]["html"] = (
+        "<div id='jn-content-42-2'>"
+        "<p>Read Part 1 to unlock</p>"
+        f"<p>{' '.join(f'storyword{index}' for index in range(70))}</p>"
+        "</div>"
+    )
+
+    try:
+        validate_captured_segments(
+            expected_segment_ids=["1", "2"],
+            segments=segments,
+            locks=[],
+            lock_scan_complete=True,
+        )
+    except BrowserCaptureError as exc:
+        assert exc.status_code == 409
+        assert "read part 1 to unlock" in str(exc)
+    else:
+        raise AssertionError("Embedded Jobnib reader UI should be rejected")
 
 
 def test_browser_capture_pairing_token_is_batch_bound_and_expires(tmp_path) -> None:

@@ -1,6 +1,6 @@
 {
   "name": "create-story-jobnib-browser-assistant",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Manual-assist browser companion for operator-unlocked Jobnib chapters.",
   "main": "jobnib_browser_assistant.js",

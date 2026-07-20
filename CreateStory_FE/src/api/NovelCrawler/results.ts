@@ -51,9 +51,16 @@ export function getInkittBatchDownloadUrl(batchId: string, runId?: string): stri
   return `${BASE_URL}/api/results/inkitt-batch/${encodeURIComponent(batchId)}/download${params}`;
 }
 
-export function getJobnibBatchDownloadUrl(batchId: string, runId?: string): string {
-  const params = runId ? `?run_id=${encodeURIComponent(runId)}` : '';
-  return `${BASE_URL}/api/results/jobnib-batch/${encodeURIComponent(batchId)}/download${params}`;
+export function getJobnibBatchDownloadUrl(
+  batchId: string,
+  runId?: string,
+  includePartial = true,
+): string {
+  const params = new URLSearchParams();
+  if (runId) params.set('run_id', runId);
+  if (includePartial) params.set('include_partial', 'true');
+  const query = params.size ? `?${params.toString()}` : '';
+  return `${BASE_URL}/api/results/jobnib-batch/${encodeURIComponent(batchId)}/download${query}`;
 }
 
 export async function listAllResults(): Promise<CrawlSessionSummary[]> {

@@ -295,8 +295,9 @@ def download_jobnib_batch(
     batch_id: str,
     request: Request,
     run_id: str | None = Query(default=None),
+    include_partial: bool = Query(default=False),
 ) -> FileResponse | StreamingResponse | Response:
-    """Serve a cached, resumable ZIP for completed Jobnib exports."""
+    """Serve a cached, resumable ZIP for completed exports and optional checkpoints."""
     from api.services.jobnib_batch_service import get_jobnib_batch_service
 
     service = get_jobnib_batch_service()
@@ -306,7 +307,11 @@ def download_jobnib_batch(
             user_id=getattr(request.state, "create_story_user_id", None),
             role=getattr(request.state, "create_story_role", None),
         )
-        archive_path = service.prepare_archive(batch_id, run_id=run_id)
+        archive_path = service.prepare_archive(
+            batch_id,
+            run_id=run_id,
+            include_partial=include_partial,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
@@ -315,9 +320,10 @@ def download_jobnib_batch(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     suffix = f"_{run_id}" if run_id else ""
+    progress_suffix = "_progress" if include_partial else ""
     return _range_file_response(
         archive_path,
-        f"jobnib_batch_{batch_id}{suffix}.zip",
+        f"jobnib_batch_{batch_id}{suffix}{progress_suffix}.zip",
         request,
     )
 

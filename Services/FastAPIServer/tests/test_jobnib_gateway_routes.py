@@ -55,6 +55,9 @@ def test_companion_download_ticket_targets_novelcrawler(monkeypatch) -> None:
     assert _worker_url("/api/results/jobnib-batch/deadbeef/download") == (
         "http://crawler:8002/api/results/jobnib-batch/deadbeef/download"
     )
+    assert _worker_url("/api/results/jobnib-batch/deadbeef/download?include_partial=true") == (
+        "http://crawler:8002/api/results/jobnib-batch/deadbeef/download?include_partial=true"
+    )
 
 
 def test_companion_bearer_requires_a_high_entropy_urlsafe_token() -> None:

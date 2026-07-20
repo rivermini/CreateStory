@@ -10,6 +10,7 @@ const {
   buildManualActionCenterExpression,
   decodePairingCode,
   isSameAssignmentPage,
+  isDeterministicCaptureRejection,
   normalizeAssignment,
   normalizeApiBase,
   parseArgs,
@@ -160,6 +161,13 @@ test("capture requires every segment, no visible locks, and the final part visib
 
   const partial = { ...complete, segments: [complete.segments[0]], finalSegmentVisible: false };
   assert.equal(validateCapture(partial, assignment, 100).ready, false);
+});
+
+test("deterministic server capture rejections stop instead of recycling the assignment", () => {
+  assert.equal(isDeterministicCaptureRejection({ status: 409 }, "capture"), true);
+  assert.equal(isDeterministicCaptureRejection({ status: 422 }, "capture"), true);
+  assert.equal(isDeterministicCaptureRejection({ status: 500 }, "capture"), false);
+  assert.equal(isDeterministicCaptureRejection({ status: 409 }, "navigation"), false);
 });
 
 test("manual action scan is narrowly scoped and supports any continue part", () => {

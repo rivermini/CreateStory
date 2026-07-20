@@ -76,9 +76,17 @@ async def download_inkitt_batch(batch_id: str, run_id: str | None = Query(defaul
 
 
 @router.get("/jobnib-batch/{batch_id}/download")
-async def download_jobnib_batch(batch_id: str, run_id: str | None = Query(default=None)) -> StreamingResponse:
-    """Zip the completed-story exports for a Jobnib batch or crawl run."""
-    params = {"run_id": run_id} if run_id else None
+async def download_jobnib_batch(
+    batch_id: str,
+    run_id: str | None = Query(default=None),
+    include_partial: bool = Query(default=False),
+) -> StreamingResponse:
+    """Zip completed Jobnib stories and, when requested, checkpointed chapters."""
+    params: dict[str, str] = {}
+    if run_id:
+        params["run_id"] = run_id
+    if include_partial:
+        params["include_partial"] = "true"
     return await _proxy_download(f"/api/results/jobnib-batch/{batch_id}/download", params=params)
 
 

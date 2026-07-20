@@ -25,7 +25,6 @@ from api.services.jobnib_batch_service import (
     JOBNIB_MIN_CHAPTER_WORDS,
     JobnibBatchService,
     clean_text,
-    contains_locked_markers,
     get_jobnib_batch_service,
     normalize_capture_chapter_url,
 )
@@ -35,17 +34,19 @@ _DEFAULT_TTL_SECONDS = max(60, min(1800, int(os.getenv("JOBNIB_BROWSER_CAPTURE_T
 _MIN_SEGMENT_WORDS = max(1, int(os.getenv("JOBNIB_BROWSER_CAPTURE_MIN_SEGMENT_WORDS", "10")))
 _MAX_STORED_REPORTS = 100
 _SEGMENT_ID_PATTERN = re.compile(r"(?:^|-)(\d+)$")
-_CHALLENGE_MARKERS = (
+_CHALLENGE_UI_MARKERS = (
     "bot detected",
     "checking your browser",
     "enable javascript and cookies",
-    "just a moment",
     "performing security verification",
-    "read part 1 to unlock",
-    "tap to start reading",
-    "turnstile",
     "verify you are human",
 )
+_READER_UI_MARKERS = (
+    "read part 1 to unlock",
+    "tap to start reading",
+    "continue to part 2",
+)
+_MAX_UI_BLOCK_CHARS = 320
 
 
 class BrowserCaptureError(ValueError):
@@ -404,8 +405,12 @@ def validate_captured_segments(
             raise BrowserCaptureError(
                 f"Jobnib segment {segment_id} has only {word_count} words; it is not populated."
             )
-        if contains_locked_markers(prose) or _contains_challenge_marker(prose):
-            raise BrowserCaptureError(f"Jobnib segment {segment_id} still contains reader-lock or challenge text.", 409)
+        ui_marker = _find_embedded_ui_marker(prose)
+        if ui_marker:
+            raise BrowserCaptureError(
+                f'Jobnib segment {segment_id} still contains reader UI text ({ui_marker!r}).',
+                409,
+            )
         segment_hash = hashlib.sha256(prose.encode("utf-8")).hexdigest()
         if segment_hash in hashes:
             raise BrowserCaptureError("Two captured Jobnib segments contain identical prose.")
@@ -421,8 +426,6 @@ def validate_captured_segments(
         raise BrowserCaptureError(
             f"The combined Jobnib chapter has only {word_count} words; minimum is {JOBNIB_MIN_CHAPTER_WORDS}."
         )
-    if contains_locked_markers(content) or _contains_challenge_marker(content):
-        raise BrowserCaptureError("The combined Jobnib chapter still contains lock or challenge text.", 409)
     checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return content, checksum, word_count
 
@@ -467,7 +470,26 @@ def _normalize_segment_id(value: str) -> str:
 
 def _contains_challenge_marker(value: str) -> bool:
     lowered = clean_text(value).lower()
-    return any(marker in lowered for marker in _CHALLENGE_MARKERS)
+    return any(marker in lowered for marker in _CHALLENGE_UI_MARKERS)
+
+
+def _find_embedded_ui_marker(value: str) -> str | None:
+    """Return short reader/challenge UI accidentally captured as prose.
+
+    Jobnib novels can legitimately contain phrases such as "just a moment" or
+    "turnstile".  Treating any occurrence in the whole chapter as a challenge
+    creates deterministic false positives after the browser has fully unlocked
+    the page.  Actual reader notices are short standalone DOM blocks, so only
+    those blocks are checked here; visible lock elements are validated above.
+    """
+    for block in re.split(r"\n{2,}", value):
+        normalized = clean_text(block).lower()
+        if not normalized or len(normalized) > _MAX_UI_BLOCK_CHARS:
+            continue
+        for marker in (*_READER_UI_MARKERS, *_CHALLENGE_UI_MARKERS):
+            if marker in normalized:
+                return marker
+    return None
 
 
 def _token_digest(value: str) -> str:

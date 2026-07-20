@@ -11,7 +11,7 @@ const readline = require("node:readline/promises");
 const { setTimeout: sleep } = require("node:timers/promises");
 const WebSocket = require("ws");
 
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 const PAIRING_CODE_PREFIX = "csjn1.";
 const JOBNIB_HOSTS = new Set(["jobnib.com", "www.jobnib.com"]);
 const DEFAULT_API_BASE = "http://127.0.0.1:8000";
@@ -333,6 +333,11 @@ function getJson(port, pathname, timeoutMs = 10000) {
     request.on("error", reject);
     request.on("timeout", () => request.destroy(new Error("Chrome debugging connection timed out.")));
   });
+}
+
+function isDeterministicCaptureRejection(error, assignmentStage) {
+  const status = Number(error?.status);
+  return assignmentStage === "capture" && (status === 409 || status === 422);
 }
 
 async function chromeIsReady(port) {
@@ -825,18 +830,31 @@ async function run(options) {
         }
         const response = await backend.submit(assignment, finalCapture);
         if (response?.accepted === false) {
-          throw new Error(response.message || response.detail || "Backend rejected the captured chapter.");
+          const rejection = new Error(response.message || response.detail || "Backend rejected the captured chapter.");
+          rejection.status = 409;
+          throw rejection;
         }
         console.log(`[SAVED] ${assignment.chapterTitle || assignment.assignmentId} (${captureSummary(finalCapture, assignment)}).`);
       } catch (error) {
         if (controller.signal.aborted) break;
         console.error(`[ERROR] Assignment ${assignment.assignmentId}: ${error.message}`);
+        const deterministicRejection = isDeterministicCaptureRejection(error, assignmentStage);
         await backend.report(
-          assignmentStage === "navigation" ? "navigation_error" : "capture_error",
+          assignmentStage === "navigation"
+            ? "navigation_error"
+            : deterministicRejection ? "capture_rejected" : "capture_error",
           assignment,
           error.message,
-          true,
+          !deterministicRejection,
         );
+        if (deterministicRejection) {
+          stopReason = "capture_rejected";
+          console.error(
+            "[STOPPED] The unlocked chapter was rejected by server validation. "
+            + "The assignment was kept in place and will not be retried in a loop.",
+          );
+          break;
+        }
         await sleep(Math.max(options.pollMs, 3000), undefined, { signal: controller.signal });
       }
     }
@@ -890,6 +908,7 @@ module.exports = {
   ensureChrome,
   findChromeExecutable,
   isSameAssignmentPage,
+  isDeterministicCaptureRejection,
   normalizeAssignment,
   normalizeSegmentId,
   normalizeApiBase,
