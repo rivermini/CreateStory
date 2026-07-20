@@ -226,6 +226,55 @@ def test_discovery_can_target_ongoing_or_both_statuses(tmp_path, monkeypatch) ->
         assert summary["discovery"]["excluded"] == excluded
 
 
+def test_manual_story_url_adds_ongoing_story_regardless_of_discovery_scope(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(JobnibSpider, "_load_saved_session", lambda self: ([], ""))
+    service = JobnibBatchService(output_root=tmp_path)
+    batch_id = "add12345"
+    output = tmp_path / "jobnib_batch" / batch_id
+    output.mkdir(parents=True)
+    service._batches[batch_id] = JobnibBatchState(
+        batch_id=batch_id,
+        created_by_user_id="user-1",
+        phase="ready",
+        story_status_scope="completed",
+        output_dir=str(output),
+    )
+    ongoing_with_chapters = fixture("completed_story.html").replace(
+        '<div class="sertostat">Completed</div>',
+        '<div class="sertostat">Ongoing</div>',
+    )
+    monkeypatch.setattr(service, "_fetch_html", lambda *_args: ongoing_with_chapters)
+
+    result = service.add_story(batch_id, "https://jobnib.com/book/from-best-friend-to-fiance")
+
+    assert result["added"] is True
+    assert result["row"]["completion_status"] == "Ongoing"
+    assert result["row"]["total_chapters"] == 2
+    assert result["batch"]["total_stories"] == 1
+
+
+def test_manual_story_url_rejects_duplicate(tmp_path) -> None:
+    service = JobnibBatchService(output_root=tmp_path)
+    batch_id = "add67890"
+    output = tmp_path / "jobnib_batch" / batch_id
+    output.mkdir(parents=True)
+    story_url = "https://jobnib.com/book/from-best-friend-to-fiance"
+    service._batches[batch_id] = JobnibBatchState(
+        batch_id=batch_id,
+        created_by_user_id="user-1",
+        phase="ready",
+        output_dir=str(output),
+        rows=[JobnibBatchRow(1, "From Best Friend To Fiancé", story_url, "from-best-friend-to-fiance")],
+    )
+
+    try:
+        service.add_story(batch_id, story_url)
+    except ValueError as exc:
+        assert str(exc) == "This Jobnib story is already in the batch."
+    else:
+        raise AssertionError("Duplicate story URL should be rejected")
+
+
 def test_manifest_failure_does_not_leave_a_ready_duplicate(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(JobnibSpider, "_load_saved_session", lambda self: ([], ""))
     service = JobnibBatchService(output_root=tmp_path)

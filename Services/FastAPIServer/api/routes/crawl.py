@@ -385,6 +385,17 @@ async def import_jobnib_catalog(request: dict = Body(...)) -> JSONResponse:
     )
 
 
+@router.post("/jobnib-batch/{batch_id}/stories", dependencies=[Depends(require_operator)])
+async def add_jobnib_batch_story(batch_id: str, request: dict = Body(...)) -> JSONResponse:
+    """Inspect and add one explicit Jobnib story URL to an existing batch."""
+    return await _forward_request(
+        "POST",
+        f"/api/crawl/jobnib-batch/{batch_id}/stories",
+        json_body=request,
+        timeout=120.0,
+    )
+
+
 @router.get("/jobnib-batch/{batch_id}")
 async def get_jobnib_batch_status(batch_id: str) -> JSONResponse:
     """Return current Jobnib batch status."""

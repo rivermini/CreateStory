@@ -25,6 +25,7 @@ def test_all_jobnib_gateway_routes_are_registered() -> None:
         ("GET", "/api/crawl/jobnib-batch/catalog/export"),
         ("GET", "/api/crawl/jobnib-batch/{batch_id}/catalog/export"),
         ("POST", "/api/crawl/jobnib-batch/catalog/import"),
+        ("POST", "/api/crawl/jobnib-batch/{batch_id}/stories"),
         ("GET", "/api/crawl/jobnib-batch/{batch_id}"),
         ("POST", "/api/crawl/jobnib-batch/{batch_id}/crawl"),
         ("POST", "/api/crawl/jobnib-batch/{batch_id}/pause"),

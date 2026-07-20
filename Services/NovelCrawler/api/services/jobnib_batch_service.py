@@ -506,6 +506,7 @@ class JobnibBatchService:
             created_by_user_id=created_by_user_id,
             batch_name="Imported Jobnib catalog",
             phase="discovering",
+            story_status_scope="all",
             output_dir=str(output_dir),
             started_at=now_string(),
             log_file=str(output_dir / "jobnib_batch.log"),
@@ -517,6 +518,38 @@ class JobnibBatchService:
             self._persist_locked()
         threading.Thread(target=self._run_import_inspection, args=(batch_id, refs), daemon=True).start()
         return {"imported_count": len(refs), "batch": self.get_status(batch_id)}
+
+    def add_story(self, batch_id: str, story_url: str) -> dict[str, Any]:
+        """Inspect one explicit story URL and append it to an existing batch."""
+        url = normalize_story_url(story_url)
+        story_id = urllib.parse.urlparse(url).path.rstrip("/").split("/")[-1]
+        ref = {"url": url, "story_id": story_id, "title": ""}
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            if state.phase in {"discovering", "crawling"}:
+                raise ValueError("Pause the active Jobnib batch before adding a story.")
+            if any(row.url == url for row in state.rows):
+                raise ValueError("This Jobnib story is already in the batch.")
+            state.archive_found_count += 1
+            state.add_log(f"Inspecting manually added story: {url}")
+
+        self._inspect_and_add_ref(batch_id, ref, respect_scope=False)
+
+        with self._lock:
+            state = self._get_state_locked(batch_id)
+            row = next((item for item in reversed(state.rows) if item.url == url), None)
+            if row is None:
+                raise ValueError("The Jobnib story could not be added to this batch.")
+            if row.status not in {"failed", "skipped"} and state.phase == "completed":
+                state.phase = "ready"
+                state.finished_at = None
+            state.add_log(
+                f"Added {row.title} to this batch ({row.total_chapters or 0} chapter links found)."
+                if row.status != "failed"
+                else f"Could not add {row.title}: {row.error}"
+            )
+            self._persist_locked()
+            return {"added": row.status != "failed", "row": row.to_dict(), "batch": self._summary_locked(state)}
 
     def delete_batch(self, batch_id: str) -> None:
         with self._lock:
@@ -669,7 +702,13 @@ class JobnibBatchService:
                 state.add_log(f"Import inspection failed: {exc}")
                 self._persist_locked()
 
-    def _inspect_and_add_ref(self, batch_id: str, ref: dict[str, str]) -> None:
+    def _inspect_and_add_ref(
+        self,
+        batch_id: str,
+        ref: dict[str, str],
+        *,
+        respect_scope: bool = True,
+    ) -> None:
         try:
             html = self._fetch_html(batch_id, ref["url"], JOBNIB_DISCOVERY_INTERVAL)
             soup = BeautifulSoup(html, "html.parser")
@@ -680,7 +719,7 @@ class JobnibBatchService:
             status_kind = normalize_story_status(status)
             with self._lock:
                 scope = self._get_state_locked(batch_id).story_status_scope
-            if status_kind == "unknown" or (scope != "all" and status_kind != scope):
+            if status_kind == "unknown" or (respect_scope and scope != "all" and status_kind != scope):
                 with self._lock:
                     state = self._get_state_locked(batch_id)
                     state.excluded_count += 1

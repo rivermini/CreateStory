@@ -529,6 +529,12 @@ export interface JobnibCatalogImportResponse {
   batch: JobnibBatchSummary;
 }
 
+export interface JobnibBatchAddStoryResponse {
+  added: boolean;
+  row: JobnibBatchRow;
+  batch: JobnibBatchSummary;
+}
+
 export interface JobnibBatchStartRequest {
   batch_name?: string | null;
   max_archive_pages: number;

@@ -239,6 +239,12 @@ class JobnibBatchCrawlRequest(BaseModel):
     max_stories: int = Field(default=20, ge=1, le=10000)
 
 
+class JobnibBatchAddStoryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    story_url: str = Field(..., min_length=1, max_length=2048)
+
+
 class JobnibBrowserCapturePairRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1017,6 +1023,21 @@ async def import_jobnib_catalog(payload: dict, http_request: Request) -> dict:
 
     try:
         return get_jobnib_batch_service().import_catalog(payload, created_by_user_id=current_owner(http_request))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/jobnib-batch/{batch_id}/stories")
+async def add_jobnib_batch_story(
+    batch_id: str,
+    request: JobnibBatchAddStoryRequest,
+    http_request: Request,
+) -> dict:
+    """Add an unlisted Jobnib story URL to an existing manual-capture batch."""
+    require_operator_identity(http_request)
+    service = _require_jobnib_batch_owner(batch_id, http_request)
+    try:
+        return service.add_story(batch_id, request.story_url)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

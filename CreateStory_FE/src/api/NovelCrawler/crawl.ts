@@ -25,6 +25,7 @@ import type {
   JobnibCookieUpdateResponse,
   JobnibCookieStatusResponse,
   JobnibBatchCrawlRequest,
+  JobnibBatchAddStoryResponse,
   JobnibCatalogBackup,
   JobnibCatalogImportResponse,
   JobnibBatchLogsResponse,
@@ -349,6 +350,12 @@ export async function exportJobnibBatchCatalog(batchId: string): Promise<JobnibC
 export async function importJobnibCatalog(payload: unknown): Promise<JobnibCatalogImportResponse> {
   return apiFetch<JobnibCatalogImportResponse>('/api/crawl/jobnib-batch/catalog/import', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeout: 300000,
+  });
+}
+
+export async function addJobnibBatchStory(batchId: string, storyUrl: string): Promise<JobnibBatchAddStoryResponse> {
+  return apiFetch<JobnibBatchAddStoryResponse>(`/api/crawl/jobnib-batch/${encodeURIComponent(batchId)}/stories`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story_url: storyUrl }), timeout: 120000,
   });
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  addJobnibBatchStory,
   checkJobnibCookies,
   exportJobnibBatchCatalog,
   getJobnibBatchDownloadUrl,
@@ -62,6 +63,7 @@ export function JobnibBatchPage({ themeMode }: Props) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('Jobnib stories');
   const [storyStatusScope, setStoryStatusScope] = useState<JobnibStoryStatusScope>('completed');
+  const [storyUrl, setStoryUrl] = useState('');
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('jobnib_batch_id') || '');
   const [summary, setSummary] = useState<JobnibBatchSummary | null>(null);
   const [history, setHistory] = useState<JobnibBatchSummary[]>([]);
@@ -215,6 +217,38 @@ export function JobnibBatchPage({ themeMode }: Props) {
     finally { setBusy(''); }
   };
 
+  const addStoryByUrl = async () => {
+    const url = storyUrl.trim();
+    if (!url) return;
+    setBusy('add-story'); setError('');
+    try {
+      if (summary) {
+        const response = await addJobnibBatchStory(summary.batch_id, url);
+        setSummary(response.batch);
+        setStorySelection({
+          batchId: response.batch.batch_id,
+          index: response.row.index,
+          title: response.row.title,
+          status: response.row.status,
+          completion_status: response.row.completion_status,
+        });
+        setFilter('all');
+        setStoryUrl('');
+        await Promise.all([fetchRows(), fetchHistory()]);
+      } else {
+        const response = await importJobnibCatalog({ urls: [url] });
+        setBatchId(response.batch.batch_id);
+        setSummary(response.batch);
+        setStoryUrl('');
+        await fetchHistory();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add the Jobnib story.');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const checkSession = async () => {
     setBusy('session'); setError('');
     try { setSession(await checkJobnibCookies()); } catch (err) {
@@ -306,6 +340,15 @@ export function JobnibBatchPage({ themeMode }: Props) {
                 </div>
                 <input ref={fileRef} type="file" accept=".json,.txt,.csv,application/json,text/plain,text/csv" onChange={(event) => void importFile(event)} className="hidden" />
                 <p className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: faint }}><Icon icon={appIcons.shield} className="h-3 w-3" />Discovery adds only the status you choose and never crawls chapter content.</p>
+              </div>
+
+              <div className="border-t pt-5" style={{ borderColor: border }}>
+                <label htmlFor="jobnib-story-url"><span className="text-xs font-semibold" style={{ color: faint }}>Add a story by link</span><span className="mt-1 block text-xs" style={{ color: soft }}>Use this when a story appears in Jobnib search but not on its homepage.</span></label>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <input id="jobnib-story-url" type="url" value={storyUrl} onChange={(event) => setStoryUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void addStoryByUrl(); } }} placeholder="https://jobnib.com/book/story-name" disabled={!!busy || interactionLocked} className="h-11 min-w-0 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:border-orange-500" style={{ background: muted, borderColor: border }} />
+                  <button type="button" className={secondaryButton} disabled={!storyUrl.trim() || !!busy || interactionLocked} onClick={() => void addStoryByUrl()} style={{ borderColor: border, background: muted }}><Icon icon={busy === 'add-story' ? appIcons.spinner : appIcons.add} className={`h-4 w-4 ${busy === 'add-story' ? 'animate-spin' : ''}`} />{summary ? 'Add to batch' : 'Create from link'}</button>
+                </div>
+                <p className="mt-2 text-xs" style={{ color: faint }}>The link is inspected only. Select the added row below, then create the normal companion pairing to capture it.</p>
               </div>
 
               {active && <div className="border-t pt-5" style={{ borderColor: border }}><button type="button" className={secondaryButton} disabled={!!busy || !!summary?.cancel_requested} onClick={() => void act('pause', () => pauseJobnibBatch(batchId))} style={{ borderColor: border, background: muted }}><Icon icon={appIcons.pause} className="h-4 w-4" />Pause active batch</button><p className="mt-2 text-xs" style={{ color: faint }}>Browser-assisted capture becomes available after discovery finishes or the older server crawl is paused.</p></div>}
