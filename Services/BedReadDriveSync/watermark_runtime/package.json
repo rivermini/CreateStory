@@ -1,0 +1,8 @@
+{
+  "name": "createstory-watermark-runtime",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@pilio/gemini-watermark-remover": "1.0.30"
+  }
+}

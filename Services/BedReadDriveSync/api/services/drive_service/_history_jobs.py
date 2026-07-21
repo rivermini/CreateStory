@@ -1139,6 +1139,18 @@ class HistoryJobsMixin:
             try:
                 cover_bytes = self._download_cover_image_bytes(drive_service, cover_file["id"])
                 self.append_job_log(job_id, "info", f"Downloaded cover image ({len(cover_bytes)} bytes)")
+                watermark_result = self._process_watermarks_for_upload(
+                    cover_bytes,
+                    cover_file["name"],
+                    "cover",
+                )
+                self._log_watermark_processing_result(
+                    watermark_result,
+                    "cover",
+                    cover_file["name"],
+                    job_id,
+                )
+                cover_bytes = watermark_result.image_bytes
                 cover_url = self._upload_cover_image(story_id, cover_bytes, cover_file["name"])
                 if cover_url:
                     self.append_job_log(job_id, "info", f"Cover image uploaded: {cover_url}")
@@ -1150,7 +1162,7 @@ class HistoryJobsMixin:
             self.append_job_log(job_id, "info", "No cover.jpg found — skipping cover upload")
 
         if not existing_id:
-            banner_result = self.upload_banner_for_new_story(story_id, folder_id)
+            banner_result = self.upload_banner_for_new_story(story_id, folder_id, job_id=job_id)
             banner_filename = banner_result.get("filename")
             if banner_filename:
                 self.append_job_log(job_id, "info", f"Banner image found in Drive: {banner_filename}")
@@ -1162,7 +1174,7 @@ class HistoryJobsMixin:
                 self.append_job_log(job_id, "info", "No banner.{jpg,jpeg,png} found in story folder — skipping banner upload")
 
         if not existing_id:
-            intro_result = self.upload_intro_for_new_story(story_id, folder_id)
+            intro_result = self.upload_intro_for_new_story(story_id, folder_id, job_id=job_id)
             intro_filename = intro_result.get("filename")
             if intro_filename:
                 self.append_job_log(job_id, "info", f"Intro image found in Drive: {intro_filename}")

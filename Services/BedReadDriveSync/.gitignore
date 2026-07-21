@@ -1,6 +1,7 @@
 # Data files (created at runtime)
 data/
 *.json
+watermark_runtime/node_modules/
 
 # Credentials
 credentials/
@@ -21,3 +22,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime dependency manifests are source-controlled despite the JSON data rule.
+!watermark_runtime/package.json
+!watermark_runtime/package-lock.json

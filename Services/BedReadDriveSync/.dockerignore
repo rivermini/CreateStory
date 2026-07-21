@@ -6,3 +6,5 @@ __pycache__/
 venv/
 .env
 output/
+.pytest_cache/
+watermark_runtime/node_modules/

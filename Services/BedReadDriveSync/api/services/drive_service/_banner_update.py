@@ -181,7 +181,7 @@ class BannerUpdateMixin:
             return True, banner_url
         return False, "Banner upload returned no URL"
 
-    def upload_banner_for_new_story(self, story_id: str, folder_id: str) -> dict:
+    def upload_banner_for_new_story(self, story_id: str, folder_id: str, job_id: Optional[str] = None) -> dict:
         """
         Look for `banner.jpg` / `banner.jpeg` / `banner.png` in the Drive folder and POST it to
         main BE `/api/v1/story/{id}/upload-banner`. Used by the new-story upload flow.
@@ -220,6 +220,10 @@ class BannerUpdateMixin:
                 "error": f"Failed to download {filename} from Drive: {exc}",
                 "filename": filename,
             }
+
+        watermark_result = self._process_watermarks_for_upload(banner_bytes, filename, "banner")
+        self._log_watermark_processing_result(watermark_result, "banner", filename, job_id)
+        banner_bytes = watermark_result.image_bytes
 
         try:
             banner_url = self._upload_banner_image(

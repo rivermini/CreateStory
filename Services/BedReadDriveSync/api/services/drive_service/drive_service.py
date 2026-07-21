@@ -107,10 +107,12 @@ from api.services.drive_service._intro_update import IntroUpdateMixin
 from api.services.drive_service._metadata_update import MetadataUpdateMixin
 from api.services.drive_service._title_update import TitleUpdateMixin
 from api.services.drive_service._job_dispatcher import JobDispatcherMixin
+from api.services.drive_service._watermark_processing import WatermarkProcessingMixin
 
 
 class DriveSyncService(
     JobDispatcherMixin,
+    WatermarkProcessingMixin,
     ConfigStoreMixin,
     DriveAPIMixin,
     ParsersMixin,
