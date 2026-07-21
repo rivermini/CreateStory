@@ -654,6 +654,7 @@ class HistoryJobsMixin:
             JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
             JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
             JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+            JobKind.WATERMARK_PICTURE_FIX,
         }
         if kind not in _JOB_KINDS_VALID:
             raise ValueError(f"Invalid job kind: {kind}")
@@ -674,7 +675,7 @@ class HistoryJobsMixin:
         def _mutate(jobs: list["SyncJob"]) -> list["SyncJob"]:
             active_count = sum(1 for item in jobs if item.status in (JobStatus.QUEUED, JobStatus.RUNNING))
             if active_count >= _MAX_JOBS_ENTRIES:
-                raise ValueError("Drive sync queue can contain at most 500 active jobs.")
+                raise ValueError(f"Drive sync queue can contain at most {_MAX_JOBS_ENTRIES} active jobs.")
             jobs.insert(0, job)
             return jobs
 
@@ -700,6 +701,7 @@ class HistoryJobsMixin:
             JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
             JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
             JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+            JobKind.WATERMARK_PICTURE_FIX,
         }
         if kind not in _JOB_KINDS_VALID:
             raise ValueError(f"Invalid job kind: {kind}")
@@ -732,7 +734,7 @@ class HistoryJobsMixin:
                     return jobs
             active_count = sum(1 for item in jobs if item.status in (JobStatus.QUEUED, JobStatus.RUNNING))
             if active_count >= _MAX_JOBS_ENTRIES:
-                raise ValueError("Drive sync queue can contain at most 500 active jobs.")
+                raise ValueError(f"Drive sync queue can contain at most {_MAX_JOBS_ENTRIES} active jobs.")
             jobs.insert(0, job)
             return jobs
 
@@ -753,7 +755,12 @@ class HistoryJobsMixin:
             raise ValueError("client_batch_id must be 128 characters or fewer.")
         if not requests or len(requests) > 500:
             raise ValueError("A batch must contain between 1 and 500 jobs.")
-        allowed = {JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.METADATA_UPDATE}
+        allowed = {
+            JobKind.UPLOAD_SINGLE,
+            JobKind.UPDATE_SINGLE,
+            JobKind.METADATA_UPDATE,
+            JobKind.WATERMARK_PICTURE_FIX,
+        }
         created_at = datetime.now(timezone.utc).isoformat()
         jobs: list["SyncJob"] = []
         for request in requests:
@@ -821,6 +828,7 @@ class HistoryJobsMixin:
         error: Optional[str] = None,
         logs: Optional[list] = None,
         main_be_api_base_url: Optional[str] = None,
+        payload: Optional[dict] = None,
     ) -> bool:
         """Update fields on a job. Returns True if found and updated."""
         from api.models.drive_sync import JobStatus as _JS
@@ -841,6 +849,7 @@ class HistoryJobsMixin:
             if logs is not None
             else None,
             "main_be_api_base_url": main_be_api_base_url,
+            "payload": payload,
             "last_heartbeat_at": datetime.now(timezone.utc),
             "last_error": error,
         }
@@ -894,6 +903,7 @@ class HistoryJobsMixin:
             JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
             JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
             JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+            JobKind.WATERMARK_PICTURE_FIX,
         }
         if kind not in _JOB_KINDS_VALID:
             raise ValueError(f"Invalid job kind: {kind}")
@@ -1132,6 +1142,15 @@ class HistoryJobsMixin:
         if not story_id:
             self.append_job_log(job_id, "error", f"Story creation failed, skipping chapters for: {folder_name}")
             return (0, 0, False, story_error)
+
+        try:
+            current_job = self.get_job(job_id)
+            if current_job is not None:
+                current_payload = dict(current_job.payload or {})
+                current_payload.update({"story_id": story_id, "story_title": display_name})
+                self.update_job(job_id, payload=current_payload)
+        except Exception as exc:
+            self.append_job_log(job_id, "warning", f"Could not persist server story identity: {exc}")
 
         cover_file = self._find_cover_image_file(drive_service, folder_id)
         if cover_file:

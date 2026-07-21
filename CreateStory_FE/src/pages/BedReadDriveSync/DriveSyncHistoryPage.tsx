@@ -49,6 +49,7 @@ const JOB_KIND_LABEL_MAP: Record<SyncJob['kind'], string> = {
   banner_update: 'Banner Update',
   intro_update: 'Intro Update',
   title_update: 'Title Update',
+  watermark_picture_fix: 'Watermark Picture Fix',
 };
 
 function getJobKindLabel(kind: SyncJob['kind']): string {

@@ -22,6 +22,11 @@ import type {
   JobListFilters,
   JobListResponse,
   JobResponse,
+  JobCreateResponse,
+  WatermarkPictureStoriesResponse,
+  WatermarkPictureSelection,
+  WatermarkPictureBatchResponse,
+  WatermarkPictureStatusResponse,
 } from '../types';
 
 export async function validateMainBeToken(): Promise<TokenValidationResponse> {
@@ -224,5 +229,73 @@ export async function deleteJobs(jobIds: string[]): Promise<{ deleted: number }>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: jobIds }),
     }
+  );
+}
+
+export async function listWatermarkPictureStories(
+  page = 1,
+  limit = 24,
+  keyword = '',
+): Promise<WatermarkPictureStoriesResponse> {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (keyword.trim()) params.set('keyword', keyword.trim());
+  return apiFetch<WatermarkPictureStoriesResponse>(
+    `/api/drive-sync/watermark-picture-fix/stories?${params.toString()}`,
+    { cache: 'no-store', timeout: 120000 },
+  );
+}
+
+export async function checkWatermarkStoryPictures(
+  storyId: string,
+): Promise<import('../types').WatermarkPictureStory> {
+  return apiFetch<import('../types').WatermarkPictureStory>(
+    `/api/drive-sync/watermark-picture-fix/stories/${encodeURIComponent(storyId)}/pictures`,
+    { cache: 'no-store', timeout: 60000 },
+  );
+}
+
+export async function queueWatermarkPictureStory(
+  storyId: string,
+  title: string,
+  assetTypes: Array<'cover' | 'banner' | 'intro'>,
+): Promise<JobCreateResponse> {
+  return apiFetch<JobCreateResponse>(
+    `/api/drive-sync/watermark-picture-fix/stories/${encodeURIComponent(storyId)}/job`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, asset_types: assetTypes }),
+    },
+  );
+}
+
+export async function queueWatermarkPictureBatch(options: {
+  stories?: WatermarkPictureSelection[];
+  all_stories?: boolean;
+  keyword?: string;
+  client_batch_id?: string;
+}): Promise<WatermarkPictureBatchResponse> {
+  return apiFetch<WatermarkPictureBatchResponse>(
+    '/api/drive-sync/watermark-picture-fix/jobs/batch',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+      timeout: 120000,
+    },
+  );
+}
+
+export async function getWatermarkPictureStatus(
+  storyIds: string[],
+): Promise<WatermarkPictureStatusResponse> {
+  return apiFetch<WatermarkPictureStatusResponse>(
+    '/api/drive-sync/watermark-picture-fix/status',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ story_ids: storyIds }),
+      timeout: 15000,
+    },
   );
 }

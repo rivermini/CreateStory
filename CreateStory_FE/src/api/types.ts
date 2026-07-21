@@ -1117,7 +1117,8 @@ export type SyncJobKind =
   | 'cover_update'
   | 'banner_update'
   | 'intro_update'
-  | 'title_update';
+  | 'title_update'
+  | 'watermark_picture_fix';
 
 export type SyncJobStatus = 'queued' | 'running' | 'success' | 'error' | 'cancelled';
 
@@ -1142,6 +1143,8 @@ export interface SyncJob {
   attempt_count?: number;
   claimed_at?: string | null;
   heartbeat_at?: string | null;
+  payload: Record<string, unknown>;
+  batch_item_index?: number | null;
 }
 
 export interface JobLogEntry {
@@ -1204,6 +1207,92 @@ export interface JobResponse {
 
 export interface DriveSyncUploadProgress {
   total: number;
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+}
+
+// ---------------------------------------------------------------------------
+// Drive Sync — Existing server picture watermark repair
+// ---------------------------------------------------------------------------
+
+export type WatermarkPictureAssetStatus =
+  | 'pending'
+  | 'downloading'
+  | 'detecting'
+  | 'uploading'
+  | 'fixed'
+  | 'no_watermark'
+  | 'missing'
+  | 'error';
+
+export interface WatermarkPictureAssetResult {
+  status: WatermarkPictureAssetStatus;
+  original_url?: string | null;
+  output_url?: string | null;
+  filename?: string;
+  input_bytes?: number;
+  output_bytes?: number;
+  processing_ms?: number;
+  applied_passes?: number;
+  stop_reason?: string;
+  error?: string;
+}
+
+export interface WatermarkPictureFixPayload extends Record<string, unknown> {
+  story_id: string;
+  story_title?: string;
+  selected_assets?: Array<'cover' | 'banner' | 'intro'>;
+  current_asset?: 'cover' | 'banner' | 'intro' | null;
+  assets?: Partial<Record<'cover' | 'banner' | 'intro', WatermarkPictureAssetResult>>;
+  summary?: {
+    fixed: number;
+    already_clean: number;
+    missing: number;
+    failed: number;
+  };
+  fatal_error?: string;
+}
+
+export interface WatermarkPictureStory {
+  story_id: string;
+  title: string;
+  cover_url: string | null;
+  banner_url: string | null;
+  intro_url: string | null;
+  updated_at: string | null;
+  detail_error: string | null;
+  latest_job: SyncJob | null;
+}
+
+export interface WatermarkPictureStoriesResponse {
+  items: WatermarkPictureStory[];
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+}
+
+export interface WatermarkPictureSelection {
+  story_id: string;
+  title: string;
+  asset_types: Array<'cover' | 'banner' | 'intro'>;
+}
+
+export interface WatermarkPictureBatchResponse {
+  client_batch_id: string;
+  queued_count: number;
+  existing_count: number;
+  job_ids: string[];
+}
+
+export interface WatermarkPictureStatusResponse {
+  latest_jobs: Record<string, SyncJob>;
   queued: number;
   running: number;
   completed: number;

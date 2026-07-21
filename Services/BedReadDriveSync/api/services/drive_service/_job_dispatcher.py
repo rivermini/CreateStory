@@ -27,6 +27,7 @@ RETRYABLE_JOB_KINDS = frozenset({
     "banner_update",
     "intro_update",
     "title_update",
+    "watermark_picture_fix",
 })
 _RECOVERABLE_ERROR_MARKERS = (
     "timeout",
@@ -175,5 +176,9 @@ class JobDispatcherMixin:
                 job.id,
                 str(job.payload.get("story_id") or ""),
                 job.payload.get("chapter_number"),
+            ),
+            "watermark_picture_fix": lambda job: self.sync_watermark_picture_fix_as_job(
+                job.id,
+                str(job.payload.get("story_id") or ""),
             ),
         }

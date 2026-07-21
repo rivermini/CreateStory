@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { detectWatermarkInstances } from './multiDetector';
+import {
+  detectWatermarkInstances,
+  selectPairedMultiSizeDetections,
+  type WatermarkDetectionCandidate,
+} from './multiDetector';
 
 function makeDiamondTemplate(size: number): Float32Array {
   const result = new Float32Array(size * size);
@@ -48,6 +52,26 @@ function overlayWhiteWatermark(
   }
 }
 
+function overlayDarkWatermark(
+  pixels: Uint8ClampedArray,
+  width: number,
+  alphaMap: Float32Array,
+  size: number,
+  x: number,
+  y: number,
+  strength: number,
+): void {
+  for (let row = 0; row < size; row += 1) {
+    for (let column = 0; column < size; column += 1) {
+      const alpha = alphaMap[row * size + column] * strength;
+      const pixel = ((y + row) * width + x + column) * 4;
+      for (let channel = 0; channel < 3; channel += 1) {
+        pixels[pixel + channel] = Math.round(pixels[pixel + channel] * (1 - alpha));
+      }
+    }
+  }
+}
+
 describe('multi-instance watermark detection', () => {
   it('finds a strong and a faint nearby watermark in one scan', () => {
     const width = 96;
@@ -88,5 +112,84 @@ describe('multi-instance watermark detection', () => {
     );
 
     expect(detections).toEqual([]);
+  });
+
+  it('rejects strong title-like matches far from the confirmed watermark cluster', () => {
+    const width = 120;
+    const height = 90;
+    const size = 9;
+    const alphaMap = makeDiamondTemplate(size);
+    const pixels = makeImage(width, height);
+    overlayWhiteWatermark(pixels, width, alphaMap, size, 92, 68, 0.72);
+    overlayWhiteWatermark(pixels, width, alphaMap, size, 103, 77, 1);
+    overlayWhiteWatermark(pixels, width, alphaMap, size, 40, 35, 1);
+
+    const detections = detectWatermarkInstances(
+      pixels,
+      width,
+      height,
+      alphaMap,
+      size,
+      { seedRegions: [{ height: size, width: size, x: 92, y: 68 }] },
+    );
+
+    expect(detections).toHaveLength(2);
+    expect(detections.map(({ region }) => [region.x, region.y])).toEqual(expect.arrayContaining([
+      [92, 68],
+      [103, 77],
+    ]));
+    expect(detections.some(({ region }) => region.x === 40 && region.y === 35)).toBe(false);
+  });
+
+  it('pairs a shifted dark residual with the confirmed light watermark', () => {
+    const width = 120;
+    const height = 90;
+    const size = 9;
+    const alphaMap = makeDiamondTemplate(size);
+    const pixels = makeImage(width, height);
+    overlayWhiteWatermark(pixels, width, alphaMap, size, 92, 66, 0.7);
+    overlayDarkWatermark(pixels, width, alphaMap, size, 104, 77, 0.7);
+
+    const detections = detectWatermarkInstances(
+      pixels,
+      width,
+      height,
+      alphaMap,
+      size,
+      { seedRegions: [{ height: size, width: size, x: 92, y: 66 }] },
+    );
+
+    expect(detections).toHaveLength(2);
+    expect(detections.map(({ polarity }) => polarity).sort()).toEqual(['dark', 'light']);
+    expect(detections.find(({ polarity }) => polarity === 'dark')?.region).toMatchObject({
+      x: 104,
+      y: 77,
+    });
+  });
+
+  it('selects opposite-polarity layers even when their detected sizes differ', () => {
+    const candidate = (
+      polarity: WatermarkDetectionCandidate['polarity'],
+      score: number,
+      x: number,
+      y: number,
+      size: number,
+    ): WatermarkDetectionCandidate => ({
+      gradientScore: 0.2,
+      luminanceScore: 0.7,
+      polarity,
+      region: { height: size, width: size, x, y },
+      score,
+      source: 'local-scan',
+    });
+    const light = candidate('light', 0.84, 1743, 683, 64);
+    const dark = candidate('dark', 0.45, 1783, 727, 40);
+    const distantFalseMatch = candidate('dark', 0.7, 1400, 500, 64);
+
+    expect(selectPairedMultiSizeDetections([
+      distantFalseMatch,
+      dark,
+      light,
+    ])).toEqual([light, dark]);
   });
 });

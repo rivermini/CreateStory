@@ -79,7 +79,7 @@ _CATEGORY_MAP: dict[str, tuple[str, str | None]] = {
 # Job / history limits
 # -------------------------------------------------------------------------
 _MAX_HISTORY_ENTRIES = 200
-_MAX_JOBS_ENTRIES = 500
+_MAX_JOBS_ENTRIES = 2000
 
 _RANDOM_AUTHOR_IDS = [
     "0a00de42-0bde-4457-8f78-e91ecc64b066",

@@ -173,6 +173,7 @@ class JobKind(str):
     BANNER_UPDATE = "banner_update"
     INTRO_UPDATE = "intro_update"
     TITLE_UPDATE = "title_update"
+    WATERMARK_PICTURE_FIX = "watermark_picture_fix"
 
 
 class JobLogEntry(BaseModel):

@@ -3,6 +3,7 @@ import type { ManualWatermarkRegion } from './manualRemoval';
 export interface WatermarkDetectionCandidate {
   gradientScore: number;
   luminanceScore: number;
+  polarity: 'dark' | 'light';
   region: ManualWatermarkRegion;
   score: number;
   source: 'local-scan' | 'sdk-seed';
@@ -17,8 +18,10 @@ const COARSE_STEP = 2;
 const COARSE_CANDIDATE_LIMIT = 32;
 const DEFAULT_MAX_DETECTIONS = 4;
 const MIN_PRIMARY_SCORE = 0.48;
+const MIN_SEEDED_PRIMARY_SCORE = 0.38;
 const MIN_SECONDARY_SCORE = 0.38;
 const MIN_SEEDED_SCORE = 0.26;
+const MAX_CLUSTER_DISTANCE_FACTOR = 2.75;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
@@ -101,8 +104,9 @@ function scoreCandidate(
   x: number,
   y: number,
   source: WatermarkDetectionCandidate['source'],
+  polarity: WatermarkDetectionCandidate['polarity'],
 ): WatermarkDetectionCandidate {
-  const luminanceScore = normalizedCorrelationAt(
+  const rawLuminanceScore = normalizedCorrelationAt(
     luminance,
     imageWidth,
     alphaMap,
@@ -110,6 +114,7 @@ function scoreCandidate(
     x,
     y,
   );
+  const luminanceScore = polarity === 'dark' ? -rawLuminanceScore : rawLuminanceScore;
   const gradientScore = normalizedCorrelationAt(
     imageGradient,
     imageWidth,
@@ -121,6 +126,7 @@ function scoreCandidate(
   return {
     gradientScore,
     luminanceScore,
+    polarity,
     region: { height: size, width: size, x, y },
     score: 0.58 * luminanceScore + 0.42 * gradientScore,
     source,
@@ -142,6 +148,14 @@ function isSameInstance(
 ): boolean {
   const radius = Math.min(first.width, second.width) * 0.58;
   return centerDistanceSquared(first, second) < radius * radius;
+}
+
+function isWithinDetectionCluster(
+  anchor: ManualWatermarkRegion,
+  candidate: ManualWatermarkRegion,
+): boolean {
+  const radius = Math.min(anchor.width, candidate.width) * MAX_CLUSTER_DISTANCE_FACTOR;
+  return centerDistanceSquared(anchor, candidate) <= radius * radius;
 }
 
 function isRegionInsideImage(
@@ -185,25 +199,45 @@ export function detectWatermarkInstances(
   const alphaGradient = createGradient(alphaMap, size, size);
   const searchWidth = Math.max(160, Math.round(width * 0.26));
   const searchHeight = Math.max(112, Math.round(height * 0.34));
-  const left = Math.max(0, width - searchWidth);
-  const top = Math.max(0, height - searchHeight);
-  const right = width - size;
-  const bottom = height - size;
+  const validSeedRegions = (options.seedRegions ?? [])
+    .filter((region) => isRegionInsideImage(region, width, height, size));
+  const clusterRadius = Math.round(size * MAX_CLUSTER_DISTANCE_FACTOR);
+  const left = validSeedRegions.length > 0
+    ? Math.max(0, Math.min(...validSeedRegions.map((region) => region.x)) - clusterRadius)
+    : Math.max(0, width - searchWidth);
+  const top = validSeedRegions.length > 0
+    ? Math.max(0, Math.min(...validSeedRegions.map((region) => region.y)) - clusterRadius)
+    : Math.max(0, height - searchHeight);
+  const right = validSeedRegions.length > 0
+    ? Math.min(
+      width - size,
+      Math.max(...validSeedRegions.map((region) => region.x)) + clusterRadius,
+    )
+    : width - size;
+  const bottom = validSeedRegions.length > 0
+    ? Math.min(
+      height - size,
+      Math.max(...validSeedRegions.map((region) => region.y)) + clusterRadius,
+    )
+    : height - size;
   const coarse: WatermarkDetectionCandidate[] = [];
 
   for (let y = top; y <= bottom; y += COARSE_STEP) {
     for (let x = left; x <= right; x += COARSE_STEP) {
-      coarse.push(scoreCandidate(
-        luminance,
-        imageGradient,
-        width,
-        alphaMap,
-        alphaGradient,
-        size,
-        x,
-        y,
-        'local-scan',
-      ));
+      for (const polarity of ['light', 'dark'] as const) {
+        coarse.push(scoreCandidate(
+          luminance,
+          imageGradient,
+          width,
+          alphaMap,
+          alphaGradient,
+          size,
+          x,
+          y,
+          'local-scan',
+          polarity,
+        ));
+      }
     }
   }
   coarse.sort((first, second) => second.score - first.score);
@@ -223,14 +257,14 @@ export function detectWatermarkInstances(
           x,
           y,
           'local-scan',
+          candidate.polarity,
         ));
       }
     }
   }
 
-  const seeded = (options.seedRegions ?? [])
-    .filter((region) => isRegionInsideImage(region, width, height, size))
-    .map((region) => scoreCandidate(
+  const seeded = validSeedRegions.flatMap((region) => (
+    (['light', 'dark'] as const).map((polarity) => scoreCandidate(
       luminance,
       imageGradient,
       width,
@@ -240,15 +274,26 @@ export function detectWatermarkInstances(
       region.x,
       region.y,
       'sdk-seed',
-    ));
+      polarity,
+    ))
+  ));
   const ranked = [...seeded, ...refined]
     .sort((first, second) => second.score - first.score);
-  const strongest = ranked[0]?.score ?? 0;
-  if (strongest < MIN_PRIMARY_SCORE) return [];
+  const clusteredRanked = validSeedRegions.length > 0
+    ? ranked.filter((candidate) => validSeedRegions.some(
+      (seed) => isWithinDetectionCluster(seed, candidate.region),
+    ))
+    : ranked;
+  const strongest = clusteredRanked[0]?.score ?? 0;
+  const minimumPrimaryScore = validSeedRegions.length > 0
+    ? MIN_SEEDED_PRIMARY_SCORE
+    : MIN_PRIMARY_SCORE;
+  if (strongest < minimumPrimaryScore) return [];
 
   const accepted: WatermarkDetectionCandidate[] = [];
-  for (const candidate of ranked) {
+  for (const candidate of clusteredRanked) {
     if (accepted.some((existing) => isSameInstance(existing.region, candidate.region))) continue;
+    if (accepted.length > 0 && !isWithinDetectionCluster(accepted[0].region, candidate.region)) continue;
     const minimumScore = candidate.source === 'sdk-seed'
       ? MIN_SEEDED_SCORE
       : Math.max(MIN_SECONDARY_SCORE, strongest * 0.52);
@@ -264,4 +309,32 @@ export function detectWatermarkInstances(
     luminanceScore: clamp(candidate.luminanceScore, -1, 1),
     score: clamp(candidate.score, -1, 1),
   }));
+}
+
+export function selectPairedMultiSizeDetections(
+  candidates: readonly WatermarkDetectionCandidate[],
+): WatermarkDetectionCandidate[] {
+  const ranked = [...candidates].sort((first, second) => second.score - first.score);
+  let bestPair: { candidates: [WatermarkDetectionCandidate, WatermarkDetectionCandidate]; score: number } | null = null;
+  for (const light of ranked.filter(({ polarity, score }) => polarity === 'light' && score >= 0.42)) {
+    for (const dark of ranked.filter(({ polarity, score }) => polarity === 'dark' && score >= 0.38)) {
+      const separation = Math.sqrt(centerDistanceSquared(light.region, dark.region));
+      const minimumSeparation = Math.min(light.region.width, dark.region.width) * 0.35;
+      const maximumSeparation = Math.max(light.region.width, dark.region.width) * 1.5;
+      if (separation < minimumSeparation || separation > maximumSeparation) continue;
+      const score = light.score + dark.score;
+      if (!bestPair || score > bestPair.score) {
+        bestPair = { candidates: [light, dark], score };
+      }
+    }
+  }
+  if (bestPair) return bestPair.candidates;
+
+  const accepted: WatermarkDetectionCandidate[] = [];
+  for (const candidate of ranked) {
+    if (accepted.some((existing) => isSameInstance(existing.region, candidate.region))) continue;
+    accepted.push(candidate);
+    if (accepted.length >= DEFAULT_MAX_DETECTIONS) break;
+  }
+  return accepted;
 }

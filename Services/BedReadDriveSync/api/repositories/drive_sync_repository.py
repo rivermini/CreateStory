@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import case, delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -169,6 +169,7 @@ def _intro_history_entry_to_row_data(entry: dict) -> dict:
 
 class DriveSyncRepository:
     _QUEUE_ADMISSION_LOCK_ID = 2026071101
+    _MAX_ACTIVE_JOBS = 2000
 
     def __init__(self, session_factory=SessionLocal) -> None:
         self.session_factory = session_factory
@@ -341,6 +342,7 @@ class DriveSyncRepository:
             "main_be_api_base_url",
             "last_heartbeat_at",
             "last_error",
+            "payload",
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
         if not updates:
@@ -430,8 +432,10 @@ class DriveSyncRepository:
                     ).all()
                     if existing_rows:
                         return [SyncJob(**self._job_row_to_dict(row)) for row in existing_rows], False
-                    if self.count_active_jobs(db) + len(jobs) > 500:
-                        raise ValueError("Drive sync queue can contain at most 500 active jobs.")
+                    if self.count_active_jobs(db) + len(jobs) > self._MAX_ACTIVE_JOBS:
+                        raise ValueError(
+                            f"Drive sync queue can contain at most {self._MAX_ACTIVE_JOBS} active jobs."
+                        )
                     for index, job in enumerate(jobs):
                         job.client_batch_id = client_batch_id
                         job.batch_item_index = index
@@ -452,16 +456,28 @@ class DriveSyncRepository:
         return jobs, True
 
     def claim_next_job(self) -> "SyncJob | None":
-        """Atomically claim the oldest queued job using SKIP LOCKED."""
+        """Claim work atomically, keeping server watermark repair low priority and single-filed."""
         from api.models.drive_sync import SyncJob
 
         now = utcnow()
         with self.session_factory() as db:
             with db.begin():
+                self._lock_queue_admission(db)
+                watermark_kind = "watermark_picture_fix"
+                watermark_running = bool(db.scalar(
+                    select(func.count()).select_from(DriveSyncJobRecord).where(
+                        DriveSyncJobRecord.status == "running",
+                        DriveSyncJobRecord.kind == watermark_kind,
+                    )
+                ))
+                filters = [DriveSyncJobRecord.status == "queued"]
+                if watermark_running:
+                    filters.append(DriveSyncJobRecord.kind != watermark_kind)
                 row = db.scalar(
                     select(DriveSyncJobRecord)
-                    .where(DriveSyncJobRecord.status == "queued")
+                    .where(*filters)
                     .order_by(
+                        case((DriveSyncJobRecord.kind == watermark_kind, 1), else_=0).asc(),
                         DriveSyncJobRecord.created_at_text.asc(),
                         DriveSyncJobRecord.batch_item_index.asc().nulls_last(),
                         DriveSyncJobRecord.id.asc(),

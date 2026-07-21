@@ -89,6 +89,7 @@ _JOB_KINDS_VALID = {
     JobKind.UPLOAD_SINGLE, JobKind.UPDATE_SINGLE, JobKind.CHAPTER_CONTENT_UPDATE,
     JobKind.METADATA_UPDATE, JobKind.COVER_UPDATE, JobKind.BANNER_UPDATE,
     JobKind.INTRO_UPDATE, JobKind.TITLE_UPDATE,
+    JobKind.WATERMARK_PICTURE_FIX,
 }
 
 
@@ -108,11 +109,13 @@ from api.services.drive_service._metadata_update import MetadataUpdateMixin
 from api.services.drive_service._title_update import TitleUpdateMixin
 from api.services.drive_service._job_dispatcher import JobDispatcherMixin
 from api.services.drive_service._watermark_processing import WatermarkProcessingMixin
+from api.services.drive_service._server_watermark_fix import ServerWatermarkFixMixin
 
 
 class DriveSyncService(
     JobDispatcherMixin,
     WatermarkProcessingMixin,
+    ServerWatermarkFixMixin,
     ConfigStoreMixin,
     DriveAPIMixin,
     ParsersMixin,

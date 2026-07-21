@@ -21,6 +21,7 @@ from api.routes.drive_sync import (
     banner_update,
     intro_update,
     title_update,
+    watermark_picture_fix,
 )
 
 # Diagnostic GET endpoints that expose full Drive listings — operator/admin only.
@@ -51,3 +52,4 @@ router.include_router(banner_update.router)
 router.include_router(intro_update.router)
 router.include_router(metadata_update.router)
 router.include_router(title_update.router)
+router.include_router(watermark_picture_fix.router)

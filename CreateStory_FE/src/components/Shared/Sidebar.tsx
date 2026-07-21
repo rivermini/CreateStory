@@ -32,6 +32,7 @@ const NAV_ICONS = {
     '/auto-audio': 'autoAudio',
     '/auto-audio/history': 'syncHistory',
     '/tools/gemini-watermark-remover': 'image',
+    '/tools/fix-watermark-pictures': 'image',
     '/supported-sites': 'supportedSites',
     '/dashboard': 'dashboardUsers',
 } as const;

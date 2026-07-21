@@ -52,6 +52,7 @@ const NAV_ITEMS_AUTO_AUDIO: NavItem[] = [
 
 const NAV_ITEMS_TOOLS: NavItem[] = [
     { to: '/tools/gemini-watermark-remover', label: 'Watermark Remover', iconKey: '/tools/gemini-watermark-remover' },
+    { to: '/tools/fix-watermark-pictures', label: 'Fix Watermark Pictures', iconKey: '/tools/fix-watermark-pictures', adminOnly: true },
 ];
 
 const NAV_ITEMS_SYSTEM: NavItem[] = [

@@ -41,6 +41,7 @@ const CheckTitleUpdatePage = lazy(() => import('./pages/BedReadDriveSync/CheckTi
 const AutoAudioPage = lazy(() => import('./pages/AutoAudio/AutoAudioPage').then(m => ({ default: m.AutoAudioPage })));
 const AutoAudioHistoryPage = lazy(() => import('./pages/AutoAudio/AutoAudioHistoryPage').then(m => ({ default: m.AutoAudioHistoryPage })));
 const GeminiWatermarkRemoverPage = lazy(() => import('./pages/Tools/GeminiWatermarkRemoverPage').then(m => ({ default: m.GeminiWatermarkRemoverPage })));
+const FixWatermarkPicturesPage = lazy(() => import('./pages/Tools/FixWatermarkPicturesPage').then(m => ({ default: m.FixWatermarkPicturesPage })));
 const SupportedSitesPage = lazy(() => import('./pages/Shared/SupportedSitesPage').then(m => ({ default: m.SupportedSitesPage })));
 const SettingsPage = lazy(() => import('./pages/Shared/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const MobileSettingsPage = lazy(() => import('./pages/Shared/Mobile/MobileSettingsPage').then(m => ({ default: m.MobileSettingsPage })));
@@ -285,6 +286,7 @@ function Shell({
               <Route path="/auto-audio" element={<AutoAudioPage themeMode={themeMode}  />} />
               <Route path="/auto-audio/history" element={<AutoAudioHistoryPage themeMode={themeMode}  />} />
               <Route path="/tools/gemini-watermark-remover" element={<GeminiWatermarkRemoverPage themeMode={themeMode} />} />
+              <Route path="/tools/fix-watermark-pictures" element={authUser.role === 'admin' ? <FixWatermarkPicturesPage themeMode={themeMode} /> : <Navigate to="/" replace />} />
               <Route path="/settings" element={<Navigate to="/" replace />} />
               <Route path="/supported-sites" element={<SupportedSitesPage themeMode={themeMode} />} />
               <Route path="/dashboard/*" element={authUser.role === 'admin' ? <DashboardPage themeMode={themeMode} authUser={authUser} /> : <Navigate to="/" replace />} />

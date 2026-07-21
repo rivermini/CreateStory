@@ -4,8 +4,10 @@ import {
 } from './residualCleanup';
 import {
   detectWatermarkInstances,
+  selectPairedMultiSizeDetections,
   type WatermarkDetectionCandidate,
 } from './multiDetector';
+import { restorePairedWatermarkPatch } from './pairedPatchRestore';
 
 export interface ManualWatermarkTarget {
   alphaGain: number;
@@ -317,29 +319,65 @@ export async function processAutoDetectedWatermarksImage(
   context.drawImage(image, 0, 0);
   const imageData = context.getImageData(0, 0, width, height);
   const startedAt = performance.now();
-  const alphaMap = await getStandardAlphaMap(size);
-  const detections = detectWatermarkInstances(
-    imageData.data,
-    width,
-    height,
-    alphaMap,
-    size,
-    { seedRegions },
-  );
+  const sizes = seedRegions.length > 0
+    ? [...new Set([0.83, 1, 1.17, 1.33, 1.5].map((factor) => (
+      clamp(Math.round(size * factor / 4) * 4, 20, Math.min(128, width, height))
+    )))]
+    : [size];
+  type DetectionWithAlphaMap = WatermarkDetectionCandidate & { alphaMap: Float32Array };
+  const scanned: DetectionWithAlphaMap[] = [];
+  for (const candidateSize of sizes) {
+    const alphaMap = await getStandardAlphaMap(candidateSize);
+    const centeredSeeds = seedRegions.map((region) => ({
+      height: candidateSize,
+      width: candidateSize,
+      x: clamp(
+        Math.round(region.x + region.width / 2 - candidateSize / 2),
+        0,
+        width - candidateSize,
+      ),
+      y: clamp(
+        Math.round(region.y + region.height / 2 - candidateSize / 2),
+        0,
+        height - candidateSize,
+      ),
+    }));
+    scanned.push(...detectWatermarkInstances(
+      imageData.data,
+      width,
+      height,
+      alphaMap,
+      candidateSize,
+      { seedRegions: centeredSeeds },
+    ).map((detection) => ({ ...detection, alphaMap })));
+  }
+  const detections = selectPairedMultiSizeDetections(scanned) as DetectionWithAlphaMap[];
 
   if (detections.length === 0) {
     return { blob: null, detections, processingMs: performance.now() - startedAt, regions: [] };
   }
 
-  cleanupWatermarkPixels(
+  const isOppositePolarityPair = detections.length === 2
+    && detections[0].polarity !== detections[1].polarity;
+  const restoredPair = isOppositePolarityPair && restorePairedWatermarkPatch(
     imageData.data,
     width,
-    detections.map(({ region }) => ({
-      alphaGain: DEFAULT_MANUAL_WATERMARK_TARGET.alphaGain,
-      alphaMap,
-      region,
-    })),
+    height,
+    detections.map(({ alphaMap, region }) => ({ alphaMap, region })),
   );
+  if (!restoredPair) {
+    cleanupWatermarkPixels(
+      imageData.data,
+      width,
+      detections.map(({ alphaMap, polarity, region }) => ({
+        alphaGain: DEFAULT_MANUAL_WATERMARK_TARGET.alphaGain,
+        alphaMap: polarity === 'dark'
+          ? Float32Array.from(alphaMap, (value) => -Math.abs(value))
+          : alphaMap,
+        region,
+      })),
+    );
+  }
   context.putImageData(imageData, 0, 0);
   const blob = await createPngBlob(canvas);
 

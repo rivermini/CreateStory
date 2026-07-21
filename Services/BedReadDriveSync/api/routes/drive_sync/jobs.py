@@ -91,7 +91,7 @@ async def create_job_batch(body: JobBatchCreateRequest) -> JobBatchCreateRespons
     try:
         jobs, created = service.create_job_batch(body.client_batch_id, body.jobs)
     except ValueError as exc:
-        raise HTTPException(status_code=409 if "500 active" in str(exc) else 400, detail=str(exc)) from exc
+        raise HTTPException(status_code=409 if "active jobs" in str(exc) else 400, detail=str(exc)) from exc
     responses = [
         JobCreateResponse(
             id=job.id,
