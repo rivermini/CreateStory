@@ -2,18 +2,27 @@ import type { WatermarkMeta } from '@pilio/gemini-watermark-remover/image-data';
 import type { BrowserRuntimeProcessor } from '@pilio/gemini-watermark-remover/runtime-browser';
 import {
   DEFAULT_MANUAL_WATERMARK_TARGET,
+  processAutoDetectedWatermarksImage,
   processManualWatermarkImage,
   type ManualWatermarkRegion,
   type ManualWatermarkTarget,
 } from './manualRemoval';
+import type { WatermarkDetectionCandidate } from './multiDetector';
+import { preserveSourceImageEncoding } from './outputEncoding';
+import {
+  canUseWatermarkWorker,
+  processWatermarkBlobInWorker,
+} from './workerProcessor';
 
 export interface ProcessedWatermarkImage {
   appliedRegion: ManualWatermarkRegion | null;
+  appliedRegions: ManualWatermarkRegion[];
   blob: Blob | null;
+  detections: WatermarkDetectionCandidate[];
   height: number;
   manualTarget: ManualWatermarkTarget | null;
   meta: WatermarkMeta;
-  method: 'automatic' | 'cropped-banner' | 'none';
+  method: 'automatic' | 'cropped-banner' | 'multi-instance' | 'none';
   processingMs: number;
   width: number;
 }
@@ -78,9 +87,10 @@ export async function processWatermarkImage(file: File, sourceUrl: string): Prom
     throw new Error('The image has invalid dimensions.');
   }
 
-  const runtime = await getSharedRuntime();
   const startedAt = performance.now();
-  const result = await runtime.processWatermarkBlob(file);
+  const result = canUseWatermarkWorker()
+    ? await processWatermarkBlobInWorker(file)
+    : await (await getSharedRuntime()).processWatermarkBlob(file);
 
   if (!result.processedMeta) {
     throw new Error('The image processor returned no verification details.');
@@ -92,10 +102,47 @@ export async function processWatermarkImage(file: File, sourceUrl: string): Prom
 
   let blob = result.processedMeta.applied ? result.processedBlob : null;
   let appliedRegion = result.processedMeta.applied ? result.processedMeta.position : null;
+  let appliedRegions = appliedRegion ? [appliedRegion] : [];
+  let detections: WatermarkDetectionCandidate[] = [];
   let manualTarget: ManualWatermarkTarget | null = null;
   let method: ProcessedWatermarkImage['method'] = result.processedMeta.applied ? 'automatic' : 'none';
+  const preferredSize = result.processedMeta.position?.width
+    ?? result.processedMeta.size
+    ?? DEFAULT_MANUAL_WATERMARK_TARGET.size;
+  const canScanLocally = width / height >= 1.4
+    && preferredSize >= 28
+    && preferredSize <= 48;
+  const useCroppedBannerCleanup = shouldUseCroppedBannerCleanup(
+    result.processedMeta,
+    width,
+    height,
+  );
 
-  if (shouldUseCroppedBannerCleanup(result.processedMeta, width, height)) {
+  if (canScanLocally) {
+    try {
+      const seedRegions = result.processedMeta.applied && result.processedMeta.position
+        ? [result.processedMeta.position]
+        : [];
+      const local = await processAutoDetectedWatermarksImage(
+        sourceUrl,
+        preferredSize,
+        seedRegions,
+      );
+      const shouldUseLocalResult = Boolean(local.blob)
+        && (local.detections.length > 1 || !result.processedMeta.applied || useCroppedBannerCleanup);
+      if (shouldUseLocalResult) {
+        blob = local.blob;
+        appliedRegions = local.regions;
+        appliedRegion = local.regions[0] ?? null;
+        detections = local.detections;
+        method = local.regions.length > 1 ? 'multi-instance' : 'cropped-banner';
+      }
+    } catch {
+      // Preserve the SDK result and allow the calibrated fallback below to run.
+    }
+  }
+
+  if (useCroppedBannerCleanup && method === 'automatic') {
     const target: ManualWatermarkTarget = {
       ...DEFAULT_MANUAL_WATERMARK_TARGET,
       size: result.processedMeta.position?.width ?? DEFAULT_MANUAL_WATERMARK_TARGET.size,
@@ -105,6 +152,7 @@ export async function processWatermarkImage(file: File, sourceUrl: string): Prom
       const cleanup = await processManualWatermarkImage(sourceUrl, target);
       blob = cleanup.blob;
       appliedRegion = cleanup.region;
+      appliedRegions = [cleanup.region];
       manualTarget = cleanup.target;
       method = 'cropped-banner';
     } catch {
@@ -112,9 +160,13 @@ export async function processWatermarkImage(file: File, sourceUrl: string): Prom
     }
   }
 
+  if (blob) blob = await preserveSourceImageEncoding(blob, file);
+
   return {
     appliedRegion,
+    appliedRegions,
     blob,
+    detections,
     height,
     manualTarget,
     meta: result.processedMeta,
@@ -123,4 +175,3 @@ export async function processWatermarkImage(file: File, sourceUrl: string): Prom
     width,
   };
 }
-

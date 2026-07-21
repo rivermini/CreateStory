@@ -10,6 +10,7 @@ import {
   formatDuration,
   formatTechnicalLabel,
   isSupportedImage,
+  resolveSourceImageFormat,
   selectImageFiles,
 } from './watermarkRemover';
 
@@ -133,14 +134,28 @@ describe('watermark remover file helpers', () => {
 describe('watermark remover output filenames', () => {
   it.each([
     ['cover.png', 'cover-watermark-removed.png'],
-    ['cover.final.v2.JPEG', 'cover.final.v2-watermark-removed.png'],
+    ['cover.final.v2.JPEG', 'cover.final.v2-watermark-removed.jpeg'],
     ['extensionless', 'extensionless-watermark-removed.png'],
     ['.hidden', '.hidden-watermark-removed.png'],
     ['draft.', 'draft-watermark-removed.png'],
-    ['ảnh bìa.webp', 'ảnh bìa-watermark-removed.png'],
+    ['ảnh bìa.webp', 'ảnh bìa-watermark-removed.webp'],
     ['', 'gemini-image-watermark-removed.png'],
   ])('maps %j to %j', (input, expected) => {
     expect(buildOutputFilename(input)).toBe(expected);
+  });
+
+  it('uses MIME type when a filename has no usable extension', () => {
+    expect(buildOutputFilename('cover', 'image/jpeg')).toBe('cover-watermark-removed.jpg');
+    expect(buildOutputFilename('cover.bin', 'image/webp')).toBe('cover-watermark-removed.webp');
+  });
+
+  it.each([
+    ['cover.jpg', 'image/jpeg', { extension: 'jpg', mimeType: 'image/jpeg' }],
+    ['cover.jpeg', 'image/jpeg', { extension: 'jpeg', mimeType: 'image/jpeg' }],
+    ['cover.webp', '', { extension: 'webp', mimeType: 'image/webp' }],
+    ['cover.unknown', 'image/png', { extension: 'png', mimeType: 'image/png' }],
+  ])('resolves the source encoding for %s', (name, type, expected) => {
+    expect(resolveSourceImageFormat(makeFile(name, { type }))).toEqual(expected);
   });
 });
 

@@ -2,6 +2,10 @@ import {
   blendResidualEdgePixels,
   restoreResidualCorePixels,
 } from './residualCleanup';
+import {
+  detectWatermarkInstances,
+  type WatermarkDetectionCandidate,
+} from './multiDetector';
 
 export interface ManualWatermarkTarget {
   alphaGain: number;
@@ -22,6 +26,19 @@ export interface ManualWatermarkResult {
   processingMs: number;
   region: ManualWatermarkRegion;
   target: ManualWatermarkTarget;
+}
+
+export interface WatermarkPixelCleanupTarget {
+  alphaGain: number;
+  alphaMap: Float32Array;
+  region: ManualWatermarkRegion;
+}
+
+export interface AutoDetectedWatermarkResult {
+  blob: Blob | null;
+  detections: WatermarkDetectionCandidate[];
+  processingMs: number;
+  regions: ManualWatermarkRegion[];
 }
 
 export const DEFAULT_MANUAL_WATERMARK_TARGET: Readonly<ManualWatermarkTarget> = {
@@ -185,7 +202,7 @@ export function reverseBlendWatermarkPixels(
   }
 }
 
-async function getStandardAlphaMap(size: number): Promise<Float32Array> {
+export async function getStandardAlphaMap(size: number): Promise<Float32Array> {
   alphaMapEnginePromise ??= import('@pilio/gemini-watermark-remover/image-data')
     .then(({ createWatermarkEngine }) => createWatermarkEngine());
 
@@ -195,6 +212,35 @@ async function getStandardAlphaMap(size: number): Promise<Float32Array> {
   } catch (error) {
     alphaMapEnginePromise = null;
     throw error;
+  }
+}
+
+export function cleanupWatermarkPixels(
+  pixels: Uint8ClampedArray,
+  imageWidth: number,
+  targets: readonly WatermarkPixelCleanupTarget[],
+): void {
+  for (const target of targets) {
+    reverseBlendWatermarkPixels(
+      pixels,
+      imageWidth,
+      target.alphaMap,
+      target.region,
+      target.alphaGain,
+    );
+  }
+  for (const target of targets) {
+    blendResidualEdgePixels(pixels, imageWidth, target.alphaMap, target.region);
+  }
+  const exclusions = targets.map(({ alphaMap, region }) => ({ alphaMap, region }));
+  for (const target of targets) {
+    restoreResidualCorePixels(
+      pixels,
+      imageWidth,
+      target.alphaMap,
+      target.region,
+      exclusions,
+    );
   }
 }
 
@@ -236,15 +282,11 @@ export async function processManualWatermarkImage(
   const imageData = context.getImageData(0, 0, width, height);
   const startedAt = performance.now();
   const alphaMap = await getStandardAlphaMap(resolved.target.size);
-  reverseBlendWatermarkPixels(
-    imageData.data,
-    width,
+  cleanupWatermarkPixels(imageData.data, width, [{
+    alphaGain: resolved.target.alphaGain,
     alphaMap,
-    resolved.region,
-    resolved.target.alphaGain,
-  );
-  blendResidualEdgePixels(imageData.data, width, alphaMap, resolved.region);
-  restoreResidualCorePixels(imageData.data, width, alphaMap, resolved.region);
+    region: resolved.region,
+  }]);
   context.putImageData(imageData, 0, 0);
   const blob = await createPngBlob(canvas);
 
@@ -253,5 +295,58 @@ export async function processManualWatermarkImage(
     processingMs: performance.now() - startedAt,
     region: resolved.region,
     target: resolved.target,
+  };
+}
+
+export async function processAutoDetectedWatermarksImage(
+  sourceUrl: string,
+  preferredSize: number,
+  seedRegions: readonly ManualWatermarkRegion[] = [],
+): Promise<AutoDetectedWatermarkResult> {
+  const image = await loadImage(sourceUrl);
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  const size = clamp(Math.round(preferredSize), 20, Math.min(128, width, height));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+
+  if (!context) throw new Error('This browser does not support local image processing.');
+
+  context.drawImage(image, 0, 0);
+  const imageData = context.getImageData(0, 0, width, height);
+  const startedAt = performance.now();
+  const alphaMap = await getStandardAlphaMap(size);
+  const detections = detectWatermarkInstances(
+    imageData.data,
+    width,
+    height,
+    alphaMap,
+    size,
+    { seedRegions },
+  );
+
+  if (detections.length === 0) {
+    return { blob: null, detections, processingMs: performance.now() - startedAt, regions: [] };
+  }
+
+  cleanupWatermarkPixels(
+    imageData.data,
+    width,
+    detections.map(({ region }) => ({
+      alphaGain: DEFAULT_MANUAL_WATERMARK_TARGET.alphaGain,
+      alphaMap,
+      region,
+    })),
+  );
+  context.putImageData(imageData, 0, 0);
+  const blob = await createPngBlob(canvas);
+
+  return {
+    blob,
+    detections,
+    processingMs: performance.now() - startedAt,
+    regions: detections.map(({ region }) => region),
   };
 }

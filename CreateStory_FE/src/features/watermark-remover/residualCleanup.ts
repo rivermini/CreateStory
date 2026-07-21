@@ -11,6 +11,11 @@ export interface ResidualEdgeCleanupPreset {
   strength: number;
 }
 
+export interface ResidualCleanupExclusion {
+  alphaMap: Float32Array;
+  region: ManualWatermarkRegion;
+}
+
 export const COMPLETE_RESIDUAL_EDGE_PRESET: Readonly<ResidualEdgeCleanupPreset> = {
   maxAlpha: 0.99,
   minAlpha: 0.02,
@@ -723,6 +728,7 @@ export function restoreResidualCorePixels(
   imageWidth: number,
   alphaMap: Float32Array,
   region: ManualWatermarkRegion,
+  exclusions: readonly ResidualCleanupExclusion[] = [],
 ): void {
   const imageHeight = validateCoreCleanupGeometry(pixels, imageWidth, alphaMap, region);
   const bounds = createTileBounds(imageWidth, imageHeight, region);
@@ -744,6 +750,20 @@ export function restoreResidualCorePixels(
       if (alpha >= CORE_ALPHA_THRESHOLD) {
         coreSeed[tileIndex] = 1;
         corePixelCount += 1;
+      }
+    }
+  }
+
+  for (const exclusion of exclusions) {
+    if (exclusion.alphaMap.length !== exclusion.region.width * exclusion.region.height) continue;
+    for (let y = 0; y < exclusion.region.height; y += 1) {
+      const tileY = exclusion.region.y + y - bounds.top;
+      if (tileY < 0 || tileY >= tileHeight) continue;
+      for (let x = 0; x < exclusion.region.width; x += 1) {
+        if (Math.abs(exclusion.alphaMap[y * exclusion.region.width + x]) < CORE_EDGE_ALPHA_THRESHOLD) continue;
+        const tileX = exclusion.region.x + x - bounds.left;
+        if (tileX < 0 || tileX >= tileWidth) continue;
+        blockedSeed[tileY * tileWidth + tileX] = 1;
       }
     }
   }

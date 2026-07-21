@@ -20,6 +20,8 @@ import {
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { showToast } from '../../components/Shared/Toast';
 import { processWatermarkImage } from '../../features/watermark-remover/processor';
+import type { WatermarkDetectionCandidate } from '../../features/watermark-remover/multiDetector';
+import { preserveSourceImageEncoding } from '../../features/watermark-remover/outputEncoding';
 import {
   DEFAULT_MANUAL_WATERMARK_TARGET,
   MANUAL_WATERMARK_MAX_SIZE,
@@ -55,6 +57,8 @@ interface ImageDimensions {
 
 interface WatermarkJob {
   appliedRegion: ManualWatermarkRegion | null;
+  appliedRegions: ManualWatermarkRegion[];
+  detections: WatermarkDetectionCandidate[];
   dimensions: ImageDimensions | null;
   error: string | null;
   file: File;
@@ -65,7 +69,7 @@ interface WatermarkJob {
   outputName: string;
   outputUrl: string | null;
   processingMs: number | null;
-  resultMethod: 'automatic' | 'cropped-banner' | 'manual' | null;
+  resultMethod: 'automatic' | 'cropped-banner' | 'manual' | 'multi-instance' | null;
   sourceUrl: string;
   status: JobStatus;
 }
@@ -89,6 +93,8 @@ const STATUS_LABELS: Record<JobStatus, string> = {
 function createJob(file: File): WatermarkJob {
   return {
     appliedRegion: null,
+    appliedRegions: [],
+    detections: [],
     dimensions: null,
     error: null,
     file,
@@ -96,7 +102,7 @@ function createJob(file: File): WatermarkJob {
     meta: null,
     manualTarget: null,
     outputBlob: null,
-    outputName: buildOutputFilename(file.name),
+    outputName: buildOutputFilename(file.name, file.type),
     outputUrl: null,
     processingMs: null,
     resultMethod: null,
@@ -118,6 +124,12 @@ function triggerDownload(url: string, filename: string) {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
+}
+
+function formatImageType(mimeType: string): string {
+  if (mimeType === 'image/jpeg') return 'JPG';
+  if (mimeType === 'image/webp') return 'WebP';
+  return 'PNG';
 }
 
 function statusTone(status: JobStatus): 'danger' | 'default' | 'primary' | 'success' | 'warning' {
@@ -142,6 +154,7 @@ function getQueueCounts(jobs: readonly WatermarkJob[]): QueueCounts {
 function getJobSummary(job: WatermarkJob): string {
   if (job.status === 'failed') return job.error ?? 'Processing failed.';
   if (job.status === 'not-detected') return describeSkipReason(job.meta?.skipReason);
+  if (job.status === 'processed' && job.resultMethod === 'multi-instance') return `${job.appliedRegions.length} watermark instances were detected and cleaned together in one action. Review before downloading.`;
   if (job.status === 'processed' && job.resultMethod === 'cropped-banner') return 'The cropped-banner watermark, its dark residual, and its pale core were cleaned in one action. Review before downloading.';
   if (job.status === 'processed' && job.resultMethod === 'manual') return 'The watermark, its dark residual, and its pale core were cleaned at your target in one action. Review before downloading.';
   if (job.status === 'processed' && job.resultMethod === 'automatic' && job.meta?.detection.adaptiveConfidence !== null
@@ -150,7 +163,7 @@ function getJobSummary(job: WatermarkJob): string {
     return 'The automatic target is uncertain. Review the open manual target before downloading.';
   }
   if (job.status === 'processed') return 'A supported watermark pattern was processed. Review the comparison before downloading.';
-  if (job.status === 'processing') return 'Analyzing pixels locally in your browser…';
+  if (job.status === 'processing') return 'Analyzing pixels locally. Large images can take 30–60 seconds; keep this tab open.';
   return 'Ready to process.';
 }
 
@@ -177,6 +190,7 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
 
   useEffect(() => {
     mountedRef.current = true;
+    pauseRequestedRef.current = false;
     return () => {
       mountedRef.current = false;
       pauseRequestedRef.current = true;
@@ -214,16 +228,23 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
             : job
         )));
 
+        // Paint the preview and processing state before the SDK starts its
+        // CPU-heavy main-thread analysis.
+        await new Promise<void>((resolve) => {
+          globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(() => resolve()));
+        });
+        if (!mountedRef.current || pauseRequestedRef.current) break;
+
         try {
           const result = await processWatermarkImage(nextJob.file, nextJob.sourceUrl);
           if (!mountedRef.current) break;
 
-          if (!result.meta.applied && (result.meta.decisionTier === 'runtime-failure' || result.meta.skipReason === 'candidate-execution-failed')) {
+          if (!result.blob && !result.meta.applied && (result.meta.decisionTier === 'runtime-failure' || result.meta.skipReason === 'candidate-execution-failed')) {
             throw new Error(describeSkipReason(result.meta.skipReason));
           }
 
           const outputUrl = result.blob ? URL.createObjectURL(result.blob) : null;
-          const nextStatus: JobStatus = result.meta.applied ? 'processed' : 'not-detected';
+          const nextStatus: JobStatus = result.blob ? 'processed' : 'not-detected';
           if (nextStatus === 'processed') processedThisRun += 1;
           else notDetectedThisRun += 1;
 
@@ -233,6 +254,8 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
             return {
               ...job,
               appliedRegion: result.appliedRegion,
+              appliedRegions: result.appliedRegions,
+              detections: result.detections,
               dimensions: { height: result.height, width: result.width },
               error: null,
               meta: result.meta,
@@ -367,6 +390,8 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
       return {
         ...job,
         appliedRegion: null,
+        appliedRegions: [],
+        detections: [],
         error: null,
         meta: null,
         manualTarget: null,
@@ -400,21 +425,25 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
     )));
 
     try {
+      const startedAt = performance.now();
       const result = await processManualWatermarkImage(job.sourceUrl, target);
       if (!mountedRef.current) return;
 
-      const outputUrl = URL.createObjectURL(result.blob);
+      const outputBlob = await preserveSourceImageEncoding(result.blob, job.file);
+      const outputUrl = URL.createObjectURL(outputBlob);
       commitJobs((current) => current.map((candidate) => {
         if (candidate.id !== id) return candidate;
         if (candidate.outputUrl) URL.revokeObjectURL(candidate.outputUrl);
         return {
           ...candidate,
           appliedRegion: result.region,
+          appliedRegions: [result.region],
+          detections: [],
           error: null,
           manualTarget: result.target,
-          outputBlob: result.blob,
+          outputBlob,
           outputUrl,
-          processingMs: result.processingMs,
+          processingMs: performance.now() - startedAt,
           resultMethod: 'manual',
           status: 'processed',
         };
@@ -697,7 +726,7 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
               Targets known visible Gemini logo patterns. It does not remove SynthID, text overlays, or unrelated watermarks.
             </InfoCard>
             <InfoCard icon="eye" title="Review every result">
-              Detection is best-effort. Compare the original and processed image before choosing to download the PNG result.
+              Detection is best-effort. Compare the original and processed image before downloading the same-format result.
             </InfoCard>
           </section>
 
@@ -829,7 +858,8 @@ function SelectedImagePanel({
     ?? (job.resultMethod === 'automatic' ? detectedPosition : null);
   const isManualResult = job.resultMethod === 'manual';
   const isCroppedBannerResult = job.resultMethod === 'cropped-banner';
-  const isTargetedResult = isManualResult || isCroppedBannerResult;
+  const isMultiInstanceResult = job.resultMethod === 'multi-instance';
+  const isTargetedResult = isManualResult || isCroppedBannerResult || isMultiInstanceResult;
   const [isManualOpen, setIsManualOpen] = useState(() => (
     job.resultMethod === 'automatic'
     && confidence !== null
@@ -872,12 +902,15 @@ function SelectedImagePanel({
             <StatusBadge tone={statusTone(job.status)}>{STATUS_LABELS[job.status]}</StatusBadge>
             {isManualResult && <StatusBadge tone="warning">Manual target</StatusBadge>}
             {isCroppedBannerResult && <StatusBadge tone="success">One-click cleanup</StatusBadge>}
+            {isMultiInstanceResult && <StatusBadge tone="success">{job.appliedRegions.length} detected</StatusBadge>}
           </div>
           <p className="mt-1 text-xs leading-5 text-[var(--cs-text-muted)]">{getJobSummary(job)}</p>
         </div>
         <ActionButton icon="download" onClick={onDownloadOriginal}>Download original</ActionButton>
         {job.status === 'processed' && (
-          <ActionButton icon="download" tone="primary" onClick={onDownload}>Download PNG</ActionButton>
+          <ActionButton icon="download" tone="primary" onClick={onDownload}>
+            Download {formatImageType(job.outputBlob?.type ?? job.file.type)}
+          </ActionButton>
         )}
         {job.status === 'failed' && (
           <ActionButton icon="refresh" tone="primary" onClick={onRetry}>Retry</ActionButton>
@@ -942,11 +975,26 @@ function SelectedImagePanel({
                 <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-500 ring-2 ring-white" />
               </span>
             )}
+            {!isManualOpen && isMultiInstanceResult && job.dimensions && job.appliedRegions.map((region, index) => (
+              <span
+                key={`${region.x}-${region.y}`}
+                className="pointer-events-none absolute z-20 border border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+                style={{
+                  height: (region.height / previewHeight) * 100 + '%',
+                  left: (region.x / previewWidth) * 100 + '%',
+                  top: (region.y / previewHeight) * 100 + '%',
+                  width: (region.width / previewWidth) * 100 + '%',
+                }}
+                aria-hidden="true"
+              >
+                <span className="absolute -left-1 -top-5 rounded bg-emerald-600 px-1.5 py-0.5 text-[9px] font-black text-white">{index + 1}</span>
+              </span>
+            ))}
             {job.status === 'processing' && (
               <span className="absolute inset-0 z-30 flex items-center justify-center bg-black/45 backdrop-blur-[2px]" aria-busy="true">
                 <span className="flex items-center gap-2 rounded-full border border-white/20 bg-black/55 px-4 py-2 text-xs font-bold text-white">
                   <Icon icon={appIcons.spinner} className="h-3.5 w-3.5 animate-spin" />
-                  Processing locally…
+                  Processing locally — large images may take up to a minute
                 </span>
               </span>
             )}
@@ -1059,13 +1107,20 @@ function SelectedImagePanel({
         )}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Detail label="File size" value={formatBytes(job.file.size)} />
+          <Detail
+            label="File size"
+            value={job.outputBlob
+              ? `${formatBytes(job.file.size)} → ${formatBytes(job.outputBlob.size)} ${formatImageType(job.outputBlob.type)}`
+              : formatBytes(job.file.size)}
+          />
           <Detail label="Dimensions" value={job.dimensions ? job.dimensions.width + ' × ' + job.dimensions.height : 'Pending'} />
           <Detail label="Processing time" value={job.processingMs === null ? 'Pending' : formatDuration(job.processingMs)} />
           <Detail
             label="Decision"
-            value={isCroppedBannerResult
-              ? 'One-click cropped-banner cleanup'
+            value={isMultiInstanceResult
+              ? `${job.appliedRegions.length}-instance automatic cleanup`
+              : isCroppedBannerResult
+                ? 'One-click cropped-banner cleanup'
               : isManualResult
                 ? 'Manual target cleanup'
                 : formatTechnicalLabel(job.meta?.decisionTier)}
@@ -1078,7 +1133,9 @@ function SelectedImagePanel({
               label="Detection confidence"
               value={isManualResult
                 ? 'Not applicable (manual)'
-                : isCroppedBannerResult
+                : isMultiInstanceResult
+                  ? job.detections.map((detection) => Math.round(detection.score * 100) + '%').join(' · ')
+                  : isCroppedBannerResult
                   ? `${confidence === null || confidence === undefined ? 'Low-confidence SDK target' : `${Math.round(confidence * 100)}% SDK · corrected locally`}`
                 : confidence === null || confidence === undefined
                   ? 'Not available'
@@ -1086,7 +1143,9 @@ function SelectedImagePanel({
             />
             <Detail
               label="Applied region"
-              value={displayedRegion
+              value={isMultiInstanceResult
+                ? job.appliedRegions.map((region, index) => `${index + 1}: ${region.width} × ${region.height} at ${region.x}, ${region.y}`).join(' · ')
+                : displayedRegion
                 ? displayedRegion.width + ' × ' + displayedRegion.height + ' at ' + displayedRegion.x + ', ' + displayedRegion.y
                 : 'No region applied'}
             />

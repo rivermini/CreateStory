@@ -27,11 +27,16 @@
 param(
     [string]$Repo   = "hatrumtruong27/CreateStory",
     [string]$Tag    = "models-v1.0",
-    [string]$OutDir = (Join-Path $PSScriptRoot "..\BedReadVoices\api\models"),
+    [string]$OutDir,
     [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($OutDir)) {
+    $OutDir = Join-Path $PSScriptRoot "..\BedReadVoices\api\models"
+}
+
 $files = "kokoro-v1.0.onnx", "voices-v1.0.bin"
 $minimumBytes = @{
     "kokoro-v1.0.onnx" = 310MB

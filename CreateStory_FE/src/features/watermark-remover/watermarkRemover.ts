@@ -19,6 +19,32 @@ export interface FileSelectionResult {
 const SUPPORTED_TYPE_SET = new Set<string>(SUPPORTED_IMAGE_TYPES);
 const SUPPORTED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 
+export interface SourceImageFormat {
+  extension: 'jpeg' | 'jpg' | 'png' | 'webp';
+  mimeType: (typeof SUPPORTED_IMAGE_TYPES)[number];
+}
+
+export function resolveSourceImageFormat(
+  file: Pick<File, 'name' | 'type'>,
+): SourceImageFormat {
+  const requestedExtension = file.name.split('.').pop()?.toLocaleLowerCase();
+  const extension = SUPPORTED_EXTENSIONS.has(requestedExtension ?? '')
+    ? requestedExtension as SourceImageFormat['extension']
+    : null;
+  const mimeType = file.type.toLocaleLowerCase();
+
+  if (mimeType === 'image/jpeg') {
+    return { extension: extension === 'jpeg' ? 'jpeg' : 'jpg', mimeType };
+  }
+  if (mimeType === 'image/webp') return { extension: 'webp', mimeType };
+  if (mimeType === 'image/png') return { extension: 'png', mimeType };
+  if (extension === 'jpg' || extension === 'jpeg') {
+    return { extension, mimeType: 'image/jpeg' };
+  }
+  if (extension === 'webp') return { extension, mimeType: 'image/webp' };
+  return { extension: 'png', mimeType: 'image/png' };
+}
+
 export function fileIdentity(file: Pick<File, 'lastModified' | 'name' | 'size'>): string {
   return `${file.name.toLocaleLowerCase()}::${file.size}::${file.lastModified}`;
 }
@@ -86,10 +112,11 @@ export function selectImageFiles(
   return { accepted, rejected };
 }
 
-export function buildOutputFilename(filename: string): string {
+export function buildOutputFilename(filename: string, mimeType = ''): string {
   const lastDot = filename.lastIndexOf('.');
   const base = lastDot > 0 ? filename.slice(0, lastDot) : filename;
-  return `${base || 'gemini-image'}-watermark-removed.png`;
+  const format = resolveSourceImageFormat({ name: filename, type: mimeType });
+  return `${base || 'gemini-image'}-watermark-removed.${format.extension}`;
 }
 
 export function formatBytes(bytes: number): string {
@@ -128,4 +155,3 @@ export function describeSkipReason(reason: string | null | undefined): string {
 
   return descriptions[reason] ?? `No safe match was applied (${formatTechnicalLabel(reason)}).`;
 }
-
