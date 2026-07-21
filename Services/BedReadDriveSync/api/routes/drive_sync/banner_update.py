@@ -137,7 +137,12 @@ async def check_updated() -> CheckUpdatedResponse:
 
 
 @router.post("/upload/{folder_id}/{story_id}", response_model=UploadBannerResponse, tags=["Drive Sync"])
-async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "banner1.jpg") -> UploadBannerResponse:
+async def upload_banner(
+    folder_id: str,
+    story_id: str,
+    banner_filename: str = "banner1.jpg",
+    process_watermark: bool = False,
+) -> UploadBannerResponse:
     """
     Download the configured banner file from the given Drive folder and POST it to the main BE.
     Records the result in banner_update_histories.
@@ -173,7 +178,11 @@ async def upload_banner(folder_id: str, story_id: str, banner_filename: str = "b
             folder_name=folder_name,
             display_name=f"{story_title} - Banner update",
             main_be_api_base_url=config.main_be_api_base_url,
-            payload={"story_id": story_id, "filename": banner_filename},
+            payload={
+                "story_id": story_id,
+                "filename": banner_filename,
+                "process_watermark": process_watermark,
+            },
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

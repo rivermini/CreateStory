@@ -10,6 +10,7 @@ import { CoverUpdateTabs } from '../../components/BedReadDriveSync/CoverUpdate/C
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { LoadingAppIcon } from '../../components/BedReadDriveSync/DriveSync/SyncTabShared';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
+import { WatermarkProcessingToggle } from '../../components/BedReadDriveSync/WatermarkProcessingToggle';
 import { showToast } from '../../components/Shared/Toast';
 import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
 import type { ThemeMode } from '../../types/theme';
@@ -41,6 +42,7 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
   const [coverExtension, setCoverExtension] = useState<'jpg' | 'png'>('jpg');
   const [savedCoverExtension, setSavedCoverExtension] = useState<'jpg' | 'png'>('jpg');
   const [coverEdited, setCoverEdited] = useState(false);
+  const [processWatermark, setProcessWatermark] = useState(false);
 
   const handleCoverNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Allow an empty value: blank means "no number suffix", i.e. search for
@@ -126,7 +128,7 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
     setUploadingIds((prev) => new Set(prev).add(folderId));
 
     try {
-      const result = await uploadCoverUpdate(folderId, storyId, savedCoverFilename);
+      const result = await uploadCoverUpdate(folderId, storyId, savedCoverFilename, processWatermark);
       if (resultVersion === uploadResultVersionRef.current) {
         setUploadResults((prev) => new Map(prev).set(folderId, { success: result.success, message: result.message }));
       }
@@ -250,6 +252,11 @@ export function CoverUpdatePage({ themeMode }: CoverUpdatePageProps) {
                   {config.folder_id}
                 </span>
               </div>
+              <WatermarkProcessingToggle
+                enabled={processWatermark}
+                onChange={setProcessWatermark}
+                disabled={uploadingIds.size > 0}
+              />
             </div>
           )}
 

@@ -144,7 +144,14 @@ class BannerUpdateMixin:
                     return f
         return None
 
-    def _upload_story_banner_from_folder(self, story_id: str, folder_id: str, banner_filename: str = "banner1.jpg") -> tuple[bool, Optional[str]]:
+    def _upload_story_banner_from_folder(
+        self,
+        story_id: str,
+        folder_id: str,
+        banner_filename: str = "banner1.jpg",
+        job_id: Optional[str] = None,
+        process_watermark: bool = False,
+    ) -> tuple[bool, Optional[str]]:
         """
         Download the configured banner file from Drive and POST it to main BE /api/v1/story/{id}/upload-banner.
         Returns (success, banner_url_or_error_message).
@@ -167,6 +174,22 @@ class BannerUpdateMixin:
         except Exception as exc:
             return False, f"Failed to download {banner_filename} from Drive: {exc}"
 
+        if process_watermark:
+            watermark_result = self._process_watermarks_for_upload(
+                banner_bytes,
+                banner_file["name"],
+                "banner",
+            )
+            self._log_watermark_processing_result(
+                watermark_result,
+                "banner",
+                banner_file["name"],
+                job_id,
+            )
+            banner_bytes = watermark_result.image_bytes
+        elif job_id:
+            self.append_job_log(job_id, "info", "Banner watermark cleanup disabled; uploading original bytes.")
+
         try:
             banner_url = self._upload_banner_image(
                 story_id,
@@ -181,7 +204,13 @@ class BannerUpdateMixin:
             return True, banner_url
         return False, "Banner upload returned no URL"
 
-    def upload_banner_for_new_story(self, story_id: str, folder_id: str, job_id: Optional[str] = None) -> dict:
+    def upload_banner_for_new_story(
+        self,
+        story_id: str,
+        folder_id: str,
+        job_id: Optional[str] = None,
+        process_watermark: bool = True,
+    ) -> dict:
         """
         Look for `banner.jpg` / `banner.jpeg` / `banner.png` in the Drive folder and POST it to
         main BE `/api/v1/story/{id}/upload-banner`. Used by the new-story upload flow.
@@ -221,9 +250,10 @@ class BannerUpdateMixin:
                 "filename": filename,
             }
 
-        watermark_result = self._process_watermarks_for_upload(banner_bytes, filename, "banner")
-        self._log_watermark_processing_result(watermark_result, "banner", filename, job_id)
-        banner_bytes = watermark_result.image_bytes
+        if process_watermark:
+            watermark_result = self._process_watermarks_for_upload(banner_bytes, filename, "banner")
+            self._log_watermark_processing_result(watermark_result, "banner", filename, job_id)
+            banner_bytes = watermark_result.image_bytes
 
         try:
             banner_url = self._upload_banner_image(

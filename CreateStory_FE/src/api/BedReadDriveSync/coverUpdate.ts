@@ -19,10 +19,11 @@ export async function checkCoverUpdateUpdated(): Promise<CheckUpdatedResponse> {
 export async function uploadCoverUpdate(
   folderId: string,
   storyId: string,
-  coverFilename: string = 'cover1.jpg'
+  coverFilename: string = 'cover1.jpg',
+  processWatermark = false,
 ): Promise<CoverUpdateUploadResponse> {
   return apiFetch<CoverUpdateUploadResponse>(
-    `/api/drive-sync/cover-update/upload/${encodeURIComponent(folderId)}/${encodeURIComponent(storyId)}?cover_filename=${encodeURIComponent(coverFilename)}`,
+    `/api/drive-sync/cover-update/upload/${encodeURIComponent(folderId)}/${encodeURIComponent(storyId)}?cover_filename=${encodeURIComponent(coverFilename)}&process_watermark=${processWatermark}`,
     { method: 'POST', timeout: 120000 }
   );
 }

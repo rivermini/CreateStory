@@ -161,16 +161,19 @@ class JobDispatcherMixin:
                 job.id,
                 str(job.payload.get("story_id") or ""),
                 str(job.payload.get("filename") or "cover1.jpg"),
+                process_watermark=job.payload.get("process_watermark") is True,
             ),
             "banner_update": lambda job: self.sync_banner_update_as_job(
                 job.id,
                 str(job.payload.get("story_id") or ""),
                 str(job.payload.get("filename") or "banner1.jpg"),
+                process_watermark=job.payload.get("process_watermark") is True,
             ),
             "intro_update": lambda job: self.sync_intro_update_as_job(
                 job.id,
                 str(job.payload.get("story_id") or ""),
                 str(job.payload.get("filename") or "intro1.jpg"),
+                process_watermark=job.payload.get("process_watermark") is True,
             ),
             "title_update": lambda job: self.sync_title_folder_update_as_job(
                 job.id,

@@ -18,9 +18,14 @@ export async function checkIntroUpdateUpdated(): Promise<CheckUpdatedIntroRespon
   return apiFetch<CheckUpdatedIntroResponse>('/api/drive-sync/intro-update/check-updated', { timeout: 30000 });
 }
 
-export async function uploadIntroUpdate(folderId: string, storyId: string, introFilename: string = 'intro1.jpg'): Promise<IntroUpdateUploadResponse> {
+export async function uploadIntroUpdate(
+  folderId: string,
+  storyId: string,
+  introFilename: string = 'intro1.jpg',
+  processWatermark = false,
+): Promise<IntroUpdateUploadResponse> {
   return apiFetch<IntroUpdateUploadResponse>(
-    `/api/drive-sync/intro-update/upload/${encodeURIComponent(folderId)}/${encodeURIComponent(storyId)}?intro_filename=${encodeURIComponent(introFilename)}`,
+    `/api/drive-sync/intro-update/upload/${encodeURIComponent(folderId)}/${encodeURIComponent(storyId)}?intro_filename=${encodeURIComponent(introFilename)}&process_watermark=${processWatermark}`,
     { method: 'POST', timeout: 120000 }
   );
 }

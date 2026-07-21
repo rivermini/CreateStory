@@ -139,7 +139,14 @@ class CoverUpdateMixin:
                     return f
         return None
 
-    def _upload_story_cover_from_folder(self, story_id: str, folder_id: str, cover_filename: str = "cover1.jpg") -> tuple[bool, Optional[str]]:
+    def _upload_story_cover_from_folder(
+        self,
+        story_id: str,
+        folder_id: str,
+        cover_filename: str = "cover1.jpg",
+        job_id: Optional[str] = None,
+        process_watermark: bool = False,
+    ) -> tuple[bool, Optional[str]]:
         """
         Download the configured cover file from Drive and POST it to main BE /api/v1/story/{id}/upload-cover.
         Returns (success, cover_url_or_error_message).
@@ -161,6 +168,22 @@ class CoverUpdateMixin:
             cover_bytes = DriveAPIMixin._download_cover_image_bytes(self, drive_service, cover_file["id"])
         except Exception as exc:
             return False, f"Failed to download {cover_filename} from Drive: {exc}"
+
+        if process_watermark:
+            watermark_result = self._process_watermarks_for_upload(
+                cover_bytes,
+                cover_file["name"],
+                "cover",
+            )
+            self._log_watermark_processing_result(
+                watermark_result,
+                "cover",
+                cover_file["name"],
+                job_id,
+            )
+            cover_bytes = watermark_result.image_bytes
+        elif job_id:
+            self.append_job_log(job_id, "info", "Cover watermark cleanup disabled; uploading original bytes.")
 
         try:
             cover_url = self._upload_cover_image(

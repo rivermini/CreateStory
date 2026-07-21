@@ -134,7 +134,12 @@ async def check_updated() -> CheckUpdatedResponse:
 
 
 @router.post("/upload/{folder_id}/{story_id}", response_model=UploadCoverResponse, tags=["Drive Sync"])
-async def upload_cover(folder_id: str, story_id: str, cover_filename: str = "cover1.jpg") -> UploadCoverResponse:
+async def upload_cover(
+    folder_id: str,
+    story_id: str,
+    cover_filename: str = "cover1.jpg",
+    process_watermark: bool = False,
+) -> UploadCoverResponse:
     """
     Download the configured cover file from the given Drive folder and POST it to the main BE.
     Records the result in cover_update_histories.
@@ -170,7 +175,11 @@ async def upload_cover(folder_id: str, story_id: str, cover_filename: str = "cov
             folder_name=folder_name,
             display_name=f"{story_title} - Cover update",
             main_be_api_base_url=config.main_be_api_base_url,
-            payload={"story_id": story_id, "filename": cover_filename},
+            payload={
+                "story_id": story_id,
+                "filename": cover_filename,
+                "process_watermark": process_watermark,
+            },
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

@@ -27,6 +27,8 @@ export interface StorySyncTabsProps {
   readonly uploadingIds: Set<string>;
   readonly uploadProgress: DriveSyncUploadProgress | null;
   readonly uploadPollingError: string;
+  readonly processUploadWatermark: boolean;
+  readonly onProcessUploadWatermarkChange: (enabled: boolean) => void;
   readonly onCheckUploadable: () => void;
   readonly onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
   readonly onUploadAll: () => void;
@@ -57,6 +59,8 @@ export function StorySyncTabs({
   uploadingIds,
   uploadProgress,
   uploadPollingError,
+  processUploadWatermark,
+  onProcessUploadWatermarkChange,
   onCheckUploadable,
   onUploadSingle,
   onUploadAll,
@@ -201,6 +205,8 @@ export function StorySyncTabs({
               uploadingIds={uploadingIds}
               uploadProgress={uploadProgress}
               uploadPollingError={uploadPollingError}
+              processWatermark={processUploadWatermark}
+              onProcessWatermarkChange={onProcessUploadWatermarkChange}
               onCheck={onCheckUploadable}
               onUploadSingle={onUploadSingle}
               onRequestUploadAll={() => setShowUploadConfirm(true)}

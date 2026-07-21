@@ -37,6 +37,7 @@ const UPDATE_BATCH_SESSION_KEY = 'drivesync_active_update_batch';
 interface StoredUploadBatch {
   id: string;
   folderIds: string[];
+  processWatermark: boolean;
 }
 
 interface StoredUpdateBatch {
@@ -53,6 +54,7 @@ function readStoredUploadBatch(): StoredUploadBatch | null {
     return {
       id: value.id,
       folderIds: value.folderIds.filter((item): item is string => typeof item === 'string'),
+      processWatermark: typeof value.processWatermark === 'boolean' ? value.processWatermark : true,
     };
   } catch {
     return null;
@@ -77,18 +79,19 @@ function makeBatchId(kind: 'upload' | 'update' = 'upload'): string {
   return `drive-${kind}-${suffix}`;
 }
 
-function getOrCreateBatch(folderIds: string[]): StoredUploadBatch {
+function getOrCreateBatch(folderIds: string[], processWatermark: boolean): StoredUploadBatch {
   const normalizedIds = [...folderIds].sort();
   const stored = readStoredUploadBatch();
   if (
     stored
+    && stored.processWatermark === processWatermark
     && stored.folderIds.length === normalizedIds.length
     && stored.folderIds.every((id, index) => id === normalizedIds[index])
   ) {
     return stored;
   }
 
-  const batch = { id: makeBatchId(), folderIds: normalizedIds };
+  const batch = { id: makeBatchId(), folderIds: normalizedIds, processWatermark };
   storeUploadBatch(batch);
   return batch;
 }
@@ -200,6 +203,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
 
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<StorySyncTab>('uploadable');
+  const [processUploadWatermark, setProcessUploadWatermark] = useState(true);
   const [uploadableData, setUploadableData] = useState<CheckUploadableResponse | null>(null);
   const [uploadableLoading, setUploadableLoading] = useState(false);
   const [uploadableError, setUploadableError] = useState('');
@@ -444,6 +448,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           folder_name: folder.name,
           display_name: folder.display_name,
           main_be_api_base_url: config?.main_be_api_base_url,
+          payload: { process_watermark: processUploadWatermark },
         });
 
         setTrackedJobs((prev) =>
@@ -500,7 +505,10 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
     setUploadPollingError('');
     setUploadBatchTotal(folders.length);
 
-    const batch = getOrCreateBatch(folders.map((folder) => folder.id));
+    const batch = getOrCreateBatch(
+      folders.map((folder) => folder.id),
+      processUploadWatermark,
+    );
 
     try {
       const response = await createJobsBatch({
@@ -511,6 +519,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
           folder_name: folder.name,
           display_name: folder.display_name,
           main_be_api_base_url: config?.main_be_api_base_url,
+          payload: { process_watermark: processUploadWatermark },
         })),
       });
 
@@ -575,7 +584,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         'The batch request may have reached the server. Retrying Upload All will reuse the same batch ID and will not duplicate jobs.',
       );
     }
-  }, [uploadableData, config]);
+  }, [uploadableData, config, processUploadWatermark]);
 
   const handleCheckUpdatable = async () => {
     setUpdatableData(null);
@@ -753,7 +762,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         });
       }
     },
-    [config],
+    [config, processUploadWatermark],
   );
 
   const pendingUploadCount = Array.from(uploadingJobs.values()).filter(
@@ -854,6 +863,8 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
               uploadingIds={new Set(uploadingJobs.keys())}
               uploadProgress={uploadProgress}
               uploadPollingError={uploadPollingError}
+              processUploadWatermark={processUploadWatermark}
+              onProcessUploadWatermarkChange={setProcessUploadWatermark}
               onCheckUploadable={handleCheckUploadable}
               onUploadSingle={handleUploadSingle}
               onUploadAll={handleUploadAll}

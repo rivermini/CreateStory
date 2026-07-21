@@ -10,6 +10,7 @@ import { BannerUpdateTabs } from '../../components/BedReadDriveSync/BannerUpdate
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import { LoadingAppIcon } from '../../components/BedReadDriveSync/DriveSync/SyncTabShared';
 import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
+import { WatermarkProcessingToggle } from '../../components/BedReadDriveSync/WatermarkProcessingToggle';
 import { showToast } from '../../components/Shared/Toast';
 import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
 import type { ThemeMode } from '../../types/theme';
@@ -37,6 +38,7 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
   const [bannerExtension, setBannerExtension] = useState<'jpg' | 'png'>('jpg');
   const [savedBannerExtension, setSavedBannerExtension] = useState<'jpg' | 'png'>('jpg');
   const [bannerEdited, setBannerEdited] = useState(false);
+  const [processWatermark, setProcessWatermark] = useState(false);
 
   const handleBannerNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '');
@@ -127,7 +129,7 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
     setUploadingIds((prev) => new Set(prev).add(folderId));
 
     try {
-      const result = await uploadBannerUpdate(folderId, storyId, savedBannerFilename);
+      const result = await uploadBannerUpdate(folderId, storyId, savedBannerFilename, processWatermark);
       if (resultVersion === uploadResultVersionRef.current) {
         setUploadResults((prev) => new Map(prev).set(folderId, { success: result.success, message: result.message }));
       }
@@ -246,6 +248,11 @@ export function CheckBannerUpdatePage({ themeMode }: CheckBannerUpdatePageProps)
                   {config.folder_id}
                 </span>
               </div>
+              <WatermarkProcessingToggle
+                enabled={processWatermark}
+                onChange={setProcessWatermark}
+                disabled={uploadingIds.size > 0}
+              />
             </div>
           )}
 

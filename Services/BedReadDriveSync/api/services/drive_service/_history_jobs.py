@@ -1004,12 +1004,21 @@ class HistoryJobsMixin:
         folder_name = folder_info["name"]
         display_name = self._extract_story_name(folder_name)
         folder = {"id": job.folder_id, "name": folder_name}
+        process_watermark = job.payload.get("process_watermark", True) is True
+        self.append_job_log(
+            job_id,
+            "info",
+            "Watermark cleanup enabled for story images."
+            if process_watermark
+            else "Watermark cleanup disabled; original story images will be uploaded.",
+        )
 
         try:
             chapters_added, chapters_skipped, story_created, story_error = self._process_story_folder_with_job(
                 drive_service,
                 folder,
                 job_id,
+                process_watermark=process_watermark,
             )
         except Exception as exc:
             # The worker is a daemon thread. An exception escaping here would
@@ -1049,6 +1058,7 @@ class HistoryJobsMixin:
         drive_service: "Any",
         folder: dict,
         job_id: str,
+        process_watermark: bool = True,
     ) -> tuple[int, int, bool, str]:
         """Sync a story folder and track progress via job_id. Returns (chapters_added, chapters_skipped, story_created, error_message)."""
         from api.services.drive_service._parsers import _natural_sort_key as _ns
@@ -1158,18 +1168,19 @@ class HistoryJobsMixin:
             try:
                 cover_bytes = self._download_cover_image_bytes(drive_service, cover_file["id"])
                 self.append_job_log(job_id, "info", f"Downloaded cover image ({len(cover_bytes)} bytes)")
-                watermark_result = self._process_watermarks_for_upload(
-                    cover_bytes,
-                    cover_file["name"],
-                    "cover",
-                )
-                self._log_watermark_processing_result(
-                    watermark_result,
-                    "cover",
-                    cover_file["name"],
-                    job_id,
-                )
-                cover_bytes = watermark_result.image_bytes
+                if process_watermark:
+                    watermark_result = self._process_watermarks_for_upload(
+                        cover_bytes,
+                        cover_file["name"],
+                        "cover",
+                    )
+                    self._log_watermark_processing_result(
+                        watermark_result,
+                        "cover",
+                        cover_file["name"],
+                        job_id,
+                    )
+                    cover_bytes = watermark_result.image_bytes
                 cover_url = self._upload_cover_image(story_id, cover_bytes, cover_file["name"])
                 if cover_url:
                     self.append_job_log(job_id, "info", f"Cover image uploaded: {cover_url}")
@@ -1181,7 +1192,12 @@ class HistoryJobsMixin:
             self.append_job_log(job_id, "info", "No cover.jpg found — skipping cover upload")
 
         if not existing_id:
-            banner_result = self.upload_banner_for_new_story(story_id, folder_id, job_id=job_id)
+            banner_result = self.upload_banner_for_new_story(
+                story_id,
+                folder_id,
+                job_id=job_id,
+                process_watermark=process_watermark,
+            )
             banner_filename = banner_result.get("filename")
             if banner_filename:
                 self.append_job_log(job_id, "info", f"Banner image found in Drive: {banner_filename}")
@@ -1193,7 +1209,12 @@ class HistoryJobsMixin:
                 self.append_job_log(job_id, "info", "No banner.{jpg,jpeg,png} found in story folder — skipping banner upload")
 
         if not existing_id:
-            intro_result = self.upload_intro_for_new_story(story_id, folder_id, job_id=job_id)
+            intro_result = self.upload_intro_for_new_story(
+                story_id,
+                folder_id,
+                job_id=job_id,
+                process_watermark=process_watermark,
+            )
             intro_filename = intro_result.get("filename")
             if intro_filename:
                 self.append_job_log(job_id, "info", f"Intro image found in Drive: {intro_filename}")
@@ -1279,7 +1300,13 @@ class HistoryJobsMixin:
         finally:
             _UPDATE_JOB_SEMAPHORE.release()
 
-    def sync_cover_update_as_job(self, job_id: str, story_id: str, cover_filename: str = "cover1.jpg") -> None:
+    def sync_cover_update_as_job(
+        self,
+        job_id: str,
+        story_id: str,
+        cover_filename: str = "cover1.jpg",
+        process_watermark: bool = False,
+    ) -> None:
         """Run a cover-image update as a background job."""
         from api.models.drive_sync import JobStatus
 
@@ -1294,7 +1321,13 @@ class HistoryJobsMixin:
                     return
                 self.append_job_log(job_id, "info", f"Starting cover update: {cover_filename}")
                 folder_name, story_title = self._resolve_job_folder_names(job.folder_id, job.folder_name)
-                success, result = self._upload_story_cover_from_folder(story_id, job.folder_id, cover_filename)
+                success, result = self._upload_story_cover_from_folder(
+                    story_id,
+                    job.folder_id,
+                    cover_filename,
+                    job_id=job_id,
+                    process_watermark=process_watermark,
+                )
                 now = datetime.now(timezone.utc).isoformat()
                 if success:
                     self._record_cover_update(story_id=story_id, story_title=story_title, folder_id=job.folder_id, folder_name=folder_name, status="updated", cover_file_name=cover_filename, cover_url=result)
@@ -1311,7 +1344,13 @@ class HistoryJobsMixin:
 
         self._run_limited_update_job(job_id, _runner)
 
-    def sync_banner_update_as_job(self, job_id: str, story_id: str, banner_filename: str = "banner1.jpg") -> None:
+    def sync_banner_update_as_job(
+        self,
+        job_id: str,
+        story_id: str,
+        banner_filename: str = "banner1.jpg",
+        process_watermark: bool = False,
+    ) -> None:
         """Run a banner-image update as a background job."""
         from api.models.drive_sync import JobStatus
 
@@ -1326,7 +1365,13 @@ class HistoryJobsMixin:
                     return
                 self.append_job_log(job_id, "info", f"Starting banner update: {banner_filename}")
                 folder_name, story_title = self._resolve_job_folder_names(job.folder_id, job.folder_name)
-                success, result = self._upload_story_banner_from_folder(story_id, job.folder_id, banner_filename)
+                success, result = self._upload_story_banner_from_folder(
+                    story_id,
+                    job.folder_id,
+                    banner_filename,
+                    job_id=job_id,
+                    process_watermark=process_watermark,
+                )
                 now = datetime.now(timezone.utc).isoformat()
                 if success:
                     self._record_banner_update(story_id=story_id, story_title=story_title, folder_id=job.folder_id, folder_name=folder_name, status="updated", banner_file_name=banner_filename, banner_url=result)
@@ -1480,7 +1525,13 @@ class HistoryJobsMixin:
 
         self._run_limited_update_job(job_id, _runner)
 
-    def sync_intro_update_as_job(self, job_id: str, story_id: str, intro_filename: str = "intro1.jpg") -> None:
+    def sync_intro_update_as_job(
+        self,
+        job_id: str,
+        story_id: str,
+        intro_filename: str = "intro1.jpg",
+        process_watermark: bool = False,
+    ) -> None:
         """Run an intro-image update as a background job. Updates job status on completion."""
         from api.models.drive_sync import JobStatus
 
@@ -1510,7 +1561,13 @@ class HistoryJobsMixin:
             except Exception as exc:
                 raise RuntimeError(f"Failed to get Drive folder info: {exc}")
 
-            success, result = self._upload_story_intro_from_folder(story_id, job.folder_id, intro_filename)
+            success, result = self._upload_story_intro_from_folder(
+                story_id,
+                job.folder_id,
+                intro_filename,
+                job_id=job_id,
+                process_watermark=process_watermark,
+            )
             now = datetime.now(timezone.utc).isoformat()
 
             if success:

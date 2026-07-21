@@ -70,6 +70,7 @@ async def create_job(body: JobCreateRequest) -> JobCreateResponse:
         display_name=body.display_name,
         main_be_api_base_url=body.main_be_api_base_url,
         chapters_count=body.chapters_count,
+        payload=body.payload,
     )
 
     return JobCreateResponse(

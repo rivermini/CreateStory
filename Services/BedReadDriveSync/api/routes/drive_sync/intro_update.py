@@ -134,7 +134,12 @@ async def check_updated() -> CheckUpdatedIntroResponse:
 
 
 @router.post("/upload/{folder_id}/{story_id}", response_model=UploadIntroResponse, tags=["Drive Sync"])
-async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "intro1.jpg") -> UploadIntroResponse:
+async def upload_intro(
+    folder_id: str,
+    story_id: str,
+    intro_filename: str = "intro1.jpg",
+    process_watermark: bool = False,
+) -> UploadIntroResponse:
     """
     Download the configured intro file from the given Drive folder and POST it to the main BE.
     Records the result in intro_update_histories.
@@ -170,7 +175,11 @@ async def upload_intro(folder_id: str, story_id: str, intro_filename: str = "int
             folder_name=folder_name,
             display_name=f"{story_title} - Intro update",
             main_be_api_base_url=config.main_be_api_base_url,
-            payload={"story_id": story_id, "filename": intro_filename},
+            payload={
+                "story_id": story_id,
+                "filename": intro_filename,
+                "process_watermark": process_watermark,
+            },
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

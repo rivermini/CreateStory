@@ -144,7 +144,14 @@ class IntroUpdateMixin:
                     return f
         return None
 
-    def _upload_story_intro_from_folder(self, story_id: str, folder_id: str, intro_filename: str = "intro1.jpg") -> tuple[bool, Optional[str]]:
+    def _upload_story_intro_from_folder(
+        self,
+        story_id: str,
+        folder_id: str,
+        intro_filename: str = "intro1.jpg",
+        job_id: Optional[str] = None,
+        process_watermark: bool = False,
+    ) -> tuple[bool, Optional[str]]:
         """
         Download the configured intro file from Drive and POST it to main BE /api/v1/admin-recommended-stories/{id}/intro-image.
         Returns (success, intro_url_or_error_message).
@@ -167,6 +174,22 @@ class IntroUpdateMixin:
         except Exception as exc:
             return False, f"Failed to download {intro_filename} from Drive: {exc}"
 
+        if process_watermark:
+            watermark_result = self._process_watermarks_for_upload(
+                intro_bytes,
+                intro_file["name"],
+                "intro",
+            )
+            self._log_watermark_processing_result(
+                watermark_result,
+                "intro",
+                intro_file["name"],
+                job_id,
+            )
+            intro_bytes = watermark_result.image_bytes
+        elif job_id:
+            self.append_job_log(job_id, "info", "Intro watermark cleanup disabled; uploading original bytes.")
+
         try:
             intro_url = self._upload_intro_image(
                 story_id,
@@ -181,7 +204,13 @@ class IntroUpdateMixin:
             return True, intro_url
         return False, "Intro upload returned no URL"
 
-    def upload_intro_for_new_story(self, story_id: str, folder_id: str, job_id: Optional[str] = None) -> dict:
+    def upload_intro_for_new_story(
+        self,
+        story_id: str,
+        folder_id: str,
+        job_id: Optional[str] = None,
+        process_watermark: bool = True,
+    ) -> dict:
         """
         Look for `intro.jpg` / `intro.jpeg` / `intro.png` in the Drive folder and POST it to
         main BE `/api/v1/admin-recommended-stories/{id}/intro-image`. Used by the new-story upload flow.
@@ -221,9 +250,10 @@ class IntroUpdateMixin:
                 "filename": filename,
             }
 
-        watermark_result = self._process_watermarks_for_upload(intro_bytes, filename, "intro")
-        self._log_watermark_processing_result(watermark_result, "intro", filename, job_id)
-        intro_bytes = watermark_result.image_bytes
+        if process_watermark:
+            watermark_result = self._process_watermarks_for_upload(intro_bytes, filename, "intro")
+            self._log_watermark_processing_result(watermark_result, "intro", filename, job_id)
+            intro_bytes = watermark_result.image_bytes
 
         try:
             intro_url = self._upload_intro_image(
