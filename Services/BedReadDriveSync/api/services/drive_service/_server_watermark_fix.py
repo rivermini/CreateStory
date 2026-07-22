@@ -30,6 +30,19 @@ _NO_CACHE_HEADERS = {
 }
 
 
+def _authoritative_story_asset_url(
+    raw_story: dict[str, Any],
+    detail: dict[str, Any],
+    field_name: str,
+) -> Optional[str]:
+    """Prefer a successful web/admin detail response, including an explicit null."""
+    if detail and "detailError" not in detail:
+        value = detail.get(field_name)
+        return str(value) if value else None
+    value = raw_story.get(field_name)
+    return str(value) if value else None
+
+
 def _fresh_asset_url(image_url: str) -> str:
     """Bypass CDN edges and give every maintenance read a unique cache key."""
     parsed = urlparse(image_url)
@@ -194,8 +207,8 @@ class ServerWatermarkFixMixin:
             items.append({
                 "story_id": story_id,
                 "title": title,
-                "cover_url": detail.get("coverImageUrl") or raw.get("coverImageUrl"),
-                "banner_url": detail.get("bannerImageUrl") or raw.get("bannerImageUrl"),
+                "cover_url": _authoritative_story_asset_url(raw, detail, "coverImageUrl"),
+                "banner_url": _authoritative_story_asset_url(raw, detail, "bannerImageUrl"),
                 "intro_url": detail.get("introImageUrl") or self._known_intro_url(
                     story_id,
                     title,

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from api.models.drive_sync import JobLogEntry, JobStatus, SyncJob
-from api.services.drive_service._server_watermark_fix import _fresh_asset_url
+from api.services.drive_service._server_watermark_fix import (
+    _authoritative_story_asset_url,
+    _fresh_asset_url,
+)
 from api.services.drive_service._watermark_processing import WatermarkProcessingResult
 from api.services.drive_service.drive_service import DriveSyncService
 
@@ -65,6 +70,60 @@ def test_fresh_asset_url_bypasses_digitalocean_cdn_and_cache() -> None:
     )
     assert "version=2" in refreshed
     assert "_wm_refresh=" in refreshed
+
+
+def test_successful_story_detail_explicitly_overrides_stale_list_banner_with_missing() -> None:
+    raw = {"bannerImageUrl": "https://cdn.test/stale-banner.jpg"}
+    detail = {"id": "story-1", "bannerImageUrl": None}
+
+    assert _authoritative_story_asset_url(raw, detail, "bannerImageUrl") is None
+
+
+def test_story_list_asset_is_only_used_when_detail_request_failed() -> None:
+    raw = {"bannerImageUrl": "https://cdn.test/list-banner.jpg"}
+    detail = {"detailError": "temporary detail failure"}
+
+    assert (
+        _authoritative_story_asset_url(raw, detail, "bannerImageUrl")
+        == "https://cdn.test/list-banner.jpg"
+    )
+
+
+def test_story_picture_detail_uses_web_admin_representation() -> None:
+    service = DriveSyncService.__new__(DriveSyncService)
+    service._config = SimpleNamespace(main_be_api_base_url="https://api.test")
+    service._main_be_headers = lambda: {
+        "Authorization": "Bearer token",
+        "x-platform": "android",
+    }
+    captured_headers: dict[str, str] = {}
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"data": {"id": "story-1", "bannerImageUrl": None}}
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        @staticmethod
+        def get(_url, *, headers, params):
+            captured_headers.update(headers)
+            assert "_wm_refresh" in params
+            return Response()
+
+    service._main_be_client = lambda **_kwargs: Client()
+
+    detail = service._get_server_story_picture_detail("story-1")
+
+    assert detail["bannerImageUrl"] is None
+    assert "x-platform" not in captured_headers
 
 
 def test_server_repair_checks_all_assets_and_uploads_only_changed_images() -> None:

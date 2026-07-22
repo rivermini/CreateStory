@@ -8,7 +8,13 @@ vi.mock('../client', () => ({
   apiFetch: apiFetchMock,
 }));
 
-import { createJobsBatch, listActiveUploadJobs, queryJobs } from './driveSync';
+import {
+  DRIVE_SYNC_CONFIG_UPDATED_EVENT,
+  createJobsBatch,
+  initDriveSyncConfig,
+  listActiveUploadJobs,
+  queryJobs,
+} from './driveSync';
 
 describe('DriveSync batch job API', () => {
   beforeEach(() => {
@@ -85,5 +91,27 @@ describe('DriveSync batch job API', () => {
       '/api/drive-sync/jobs?limit=500&offset=0&status=queued&status=running&kind=upload_single',
       { timeout: 15000 },
     );
+  });
+
+  it('notifies mounted pages after Drive Sync configuration is saved', async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      folder_id: 'drive-folder',
+      enabled: true,
+      main_be_api_base_url: 'https://api-novel.santngo.com',
+      main_category_id: 'category-1',
+      main_be_user_id: 'user-1',
+    });
+    const listener = vi.fn();
+    window.addEventListener(DRIVE_SYNC_CONFIG_UPDATED_EVENT, listener);
+
+    await initDriveSyncConfig({
+      folder_id: 'drive-folder',
+      service_account_json_path: 'fixed-json/google-service-account.json',
+      main_be_api_base_url: 'https://api-novel.santngo.com',
+      main_be_user_id: 'user-1',
+    });
+
+    expect(listener).toHaveBeenCalledOnce();
+    window.removeEventListener(DRIVE_SYNC_CONFIG_UPDATED_EVENT, listener);
   });
 });

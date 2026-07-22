@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  DRIVE_SYNC_CONFIG_UPDATED_EVENT,
   FIXED_JSON_PREFIX,
   checkCredentialsExists,
   getDriveSyncConfig,
@@ -134,6 +135,14 @@ export function useDriveSyncConfig({
     });
   }, [reloadConfig]);
 
+  useEffect(() => {
+    const handleConfigUpdated = () => {
+      void reloadConfig();
+    };
+    window.addEventListener(DRIVE_SYNC_CONFIG_UPDATED_EVENT, handleConfigUpdated);
+    return () => window.removeEventListener(DRIVE_SYNC_CONFIG_UPDATED_EVENT, handleConfigUpdated);
+  }, [reloadConfig]);
+
   const handleConfigFormChange = useCallback((data: Partial<ConfigFormData>) => {
     setConfigForm(prev => ({ ...prev, ...data }));
   }, []);
@@ -169,13 +178,12 @@ export function useDriveSyncConfig({
         showToast('Drive Sync configuration saved successfully.', 'success', 2000, 'top-center');
       }
 
-      await reloadConfig();
     } catch (error) {
       setSavingConfigError(error instanceof Error ? error.message : 'Failed to save config.');
     } finally {
       setSavingConfig(false);
     }
-  }, [configForm, enableEditing, reloadConfig, showToastOnSave]);
+  }, [configForm, enableEditing, showToastOnSave]);
 
   const isConfigReady = useMemo(
     () => Boolean(config?.main_be_api_base_url && config?.main_be_user_id) && !configInvalid && !tokenInvalid,

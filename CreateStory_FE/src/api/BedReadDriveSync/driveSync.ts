@@ -29,6 +29,14 @@ import type {
   WatermarkPictureStatusResponse,
 } from '../types';
 
+export const DRIVE_SYNC_CONFIG_UPDATED_EVENT = 'create-story:drive-sync-config-updated';
+
+function notifyDriveSyncConfigUpdated(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(DRIVE_SYNC_CONFIG_UPDATED_EVENT));
+  }
+}
+
 export async function validateMainBeToken(): Promise<TokenValidationResponse> {
   return apiFetch<TokenValidationResponse>('/api/drive-sync/config/validate-token', { timeout: 30000 });
 }
@@ -43,11 +51,13 @@ export async function initDriveSyncConfig(req: InitDriveSyncRequest): Promise<Dr
     headers['X-Auth-Token'] = req.main_be_bearer_token;
   }
   const { main_be_bearer_token: _omit, ...body } = req;
-  return apiFetch<DriveSyncConfig>('/api/drive-sync/config', {
+  const config = await apiFetch<DriveSyncConfig>('/api/drive-sync/config', {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
+  notifyDriveSyncConfigUpdated();
+  return config;
 }
 
 export async function uploadDriveCredentials(file: File): Promise<UploadCredentialsResponse> {
@@ -67,11 +77,13 @@ export async function checkCredentialsExists(filename: string): Promise<boolean>
 }
 
 export async function updateDriveSyncConfig(req: DriveSyncUpdateRequest): Promise<DriveSyncConfig> {
-  return apiFetch<DriveSyncConfig>('/api/drive-sync/config', {
+  const config = await apiFetch<DriveSyncConfig>('/api/drive-sync/config', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
+  notifyDriveSyncConfigUpdated();
+  return config;
 }
 
 export async function listDriveFolders(options: { limit?: number; offset?: number; counts?: boolean } = {}): Promise<DriveFolderListResponse> {

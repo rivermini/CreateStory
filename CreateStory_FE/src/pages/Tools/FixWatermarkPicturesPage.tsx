@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   listWatermarkPictureStories,
   getWatermarkPictureStatus,
@@ -20,8 +20,10 @@ import {
   TextInput,
 } from '../../components/Shared/Primitives';
 import { Icon, appIcons } from '../../components/Shared/Icon';
+import { ServerModeBanner } from '../../components/Shared/ServerModeBanner';
 import { showToast } from '../../components/Shared/Toast';
 import { getThemeTokens } from '../../components/Shared/design';
+import { useDriveSyncConfig } from '../../hooks/useDriveSyncConfig';
 import type { ThemeMode } from '../../types/theme';
 
 interface FixWatermarkPicturesPageProps {
@@ -355,6 +357,16 @@ function StoryCard({
 
 export function FixWatermarkPicturesPage({ themeMode }: Readonly<FixWatermarkPicturesPageProps>) {
   const tokens = getThemeTokens(themeMode);
+  const isDark = themeMode === 'dark';
+  const {
+    config,
+    configLoading,
+    configInvalid,
+    tokenInvalid,
+  } = useDriveSyncConfig({
+    validateToken: false,
+    enableEditing: false,
+  });
   const [data, setData] = useState<Awaited<ReturnType<typeof listWatermarkPictureStories>> | null>(null);
   const [page, setPage] = useState(1);
   const [searchDraft, setSearchDraft] = useState('');
@@ -368,6 +380,24 @@ export function FixWatermarkPicturesPage({ themeMode }: Readonly<FixWatermarkPic
   const [refreshing, setRefreshing] = useState(false);
   const [previewRevision, setPreviewRevision] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
+  const serverTargetRef = useRef<string | null | undefined>(undefined);
+  const serverTarget = configLoading
+    ? undefined
+    : `${config?.main_be_api_base_url ?? ''}|${config?.main_be_user_id ?? ''}`;
+
+  useEffect(() => {
+    if (serverTarget === undefined) return;
+    if (serverTargetRef.current !== undefined && serverTargetRef.current !== serverTarget) {
+      setData(null);
+      setCatalogChecked(false);
+      setSelected(new Map());
+      setAssetSelections(new Map());
+      setPage(1);
+      setKeyword('');
+      setSearchDraft('');
+    }
+    serverTargetRef.current = serverTarget;
+  }, [serverTarget]);
 
   const activeCount = (data?.queued ?? 0) + (data?.running ?? 0);
   const hasData = Boolean(data);
@@ -607,20 +637,37 @@ export function FixWatermarkPicturesPage({ themeMode }: Readonly<FixWatermarkPic
           title="Fix Watermark Pictures"
           description="Check every story's cover, banner, and intro with the automatic detector, clean supported Gemini watermarks, then replace only the pictures that changed. Work is persistent and queued safely in the background."
           actions={(
-            <ActionButton
-              tone="primary"
-              icon={loading ? 'spinner' : 'eye'}
-              disabled={loading || refreshing}
-              onClick={() => void checkCatalog()}
-              className={loading ? '[&>svg]:animate-spin' : ''}
-            >
-              {loading ? 'Checking…' : catalogChecked ? 'Re-check pictures' : 'Check pictures'}
-            </ActionButton>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ServerModeBanner
+                serverUrl={config?.main_be_api_base_url ?? null}
+                isDark={isDark}
+                isConfigLoading={configLoading}
+                isConfigValid={
+                  tokenInvalid
+                    ? undefined
+                    : configInvalid
+                      ? false
+                      : configLoading
+                        ? undefined
+                        : Boolean(config?.main_be_api_base_url && config?.main_be_user_id)
+                }
+                tokenInvalid={tokenInvalid}
+              />
+              <ActionButton
+                tone="primary"
+                icon={loading ? 'spinner' : 'eye'}
+                disabled={loading || refreshing}
+                onClick={() => void checkCatalog()}
+                className={loading ? '[&>svg]:animate-spin' : ''}
+              >
+                {loading ? 'Checking…' : catalogChecked ? 'Re-check pictures' : 'Check pictures'}
+              </ActionButton>
+            </div>
           )}
         />
 
         {!catalogChecked && (
-          <Surface className="mb-5 flex flex-col items-start justify-between gap-4 border-orange-500/25 p-5 sm:flex-row sm:items-center">
+          <Surface className="mb-5 border-orange-500/25 p-5">
             <div className="flex items-start gap-3">
               <Icon icon={appIcons.eye} className="mt-1 h-5 w-5 shrink-0 text-[#ff5b00]" />
               <div>
@@ -630,9 +677,6 @@ export function FixWatermarkPicturesPage({ themeMode }: Readonly<FixWatermarkPic
                 </p>
               </div>
             </div>
-            <ActionButton tone="primary" icon={loading ? 'spinner' : 'eye'} disabled={loading} onClick={() => void checkCatalog()}>
-              {loading ? 'Checking…' : 'Check pictures'}
-            </ActionButton>
           </Surface>
         )}
 
