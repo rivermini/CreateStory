@@ -86,6 +86,56 @@ def test_new_story_images_are_cleaned_between_drive_download_and_upload(
     assert uploaded == [b"CLEANED-IMAGE"]
 
 
+@pytest.mark.parametrize(
+    ("method_name", "finder_name", "uploader_name", "filename"),
+    [
+        ("upload_banner_for_new_story", "_find_banner1_file", "_upload_banner_image", "banner.png"),
+        ("upload_intro_for_new_story", "_find_intro1_file", "_upload_intro_image", "intro.jpg"),
+    ],
+)
+def test_new_story_secondary_images_skip_cleanup_when_toggle_is_off(
+    monkeypatch,
+    method_name: str,
+    finder_name: str,
+    uploader_name: str,
+    filename: str,
+) -> None:
+    service = DriveSyncService.__new__(DriveSyncService)
+    service._build_drive_service = lambda: _DrivePlaceholder()
+    setattr(
+        service,
+        finder_name,
+        lambda _drive, _folder_id, candidate: {"id": "drive-image", "name": filename}
+        if candidate == filename
+        else None,
+    )
+    monkeypatch.setattr(
+        drive_api_module.DriveAPIMixin,
+        "_download_cover_image_bytes",
+        lambda *_args: b"ORIGINAL-IMAGE",
+    )
+    service._process_watermarks_for_upload = lambda *_args: pytest.fail(
+        "The watermark processor must not run when the upload toggle is off."
+    )
+    uploaded: list[bytes] = []
+
+    def upload(_story_id: str, image_bytes: bytes, _filename: str, _content_type: str):
+        uploaded.append(image_bytes)
+        return f"https://main.example.com/{filename}"
+
+    setattr(service, uploader_name, upload)
+
+    result = getattr(service, method_name)(
+        "story-id",
+        "folder-id",
+        job_id="job-id",
+        process_watermark=False,
+    )
+
+    assert result["uploaded"] is True
+    assert uploaded == [b"ORIGINAL-IMAGE"]
+
+
 def test_cover_is_cleaned_between_drive_download_and_upload() -> None:
     service = DriveSyncService.__new__(DriveSyncService)
     service._extract_story_name = lambda _name: "Existing Story"

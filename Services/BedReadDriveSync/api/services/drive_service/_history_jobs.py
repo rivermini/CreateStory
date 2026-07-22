@@ -1018,7 +1018,7 @@ class HistoryJobsMixin:
                 drive_service,
                 folder,
                 job_id,
-                process_watermark=process_watermark,
+                process_watermark,
             )
         except Exception as exc:
             # The worker is a daemon thread. An exception escaping here would

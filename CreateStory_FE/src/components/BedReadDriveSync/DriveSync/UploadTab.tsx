@@ -5,6 +5,7 @@ import {
   type DriveFolderEntry,
 } from '../../../api';
 import { Icon, appIcons } from '../../Shared/Icon';
+import { WatermarkProcessingToggle } from '../WatermarkProcessingToggle';
 import { StatusBadge, EmptyState, LoadingAppIcon } from './SyncTabShared';
 import type { ThemeMode } from '../../../types/theme';
 
@@ -19,6 +20,8 @@ interface UploadTabProps {
   readonly onCheck: () => void;
   readonly onUploadSingle: (folder: DriveFolderEntry) => Promise<string>;
   readonly onRequestUploadAll: () => void;
+  readonly processWatermark: boolean;
+  readonly onProcessWatermarkChange: (enabled: boolean) => void;
   readonly themeMode: ThemeMode;
 }
 
@@ -34,6 +37,8 @@ export function UploadTab({
   onUploadSingle,
   onRequestUploadAll,
   themeMode,
+  processWatermark,
+  onProcessWatermarkChange,
 }: UploadTabProps) {
   const isDark = themeMode === 'dark';
   const [search, setSearch] = useState('');
@@ -258,7 +263,13 @@ export function UploadTab({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <WatermarkProcessingToggle
+            enabled={processWatermark}
+            onChange={onProcessWatermarkChange}
+            disabled={isUploadingAny}
+          />
+
           <button
             onClick={onCheck}
             disabled={loading}

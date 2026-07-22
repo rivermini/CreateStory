@@ -480,7 +480,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         return folder.id;
       }
     },
-    [config],
+    [config, processUploadWatermark],
   );
 
   const handleUploadAll = useCallback(async () => {
@@ -762,7 +762,7 @@ export function DriveSyncPage({ themeMode }: DriveSyncPageProps) {
         });
       }
     },
-    [config, processUploadWatermark],
+    [config],
   );
 
   const pendingUploadCount = Array.from(uploadingJobs.values()).filter(
