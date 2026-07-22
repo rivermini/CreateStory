@@ -98,6 +98,7 @@ def test_server_repair_checks_all_assets_and_uploads_only_changed_images() -> No
     assert updates[-1]["payload"]["summary"] == {
         "fixed": 2,
         "already_clean": 1,
+        "needs_review": 0,
         "missing": 0,
         "failed": 0,
     }
@@ -172,6 +173,7 @@ def test_server_repair_processes_only_selected_picture_types() -> None:
     assert updates[-1]["payload"]["summary"] == {
         "fixed": 2,
         "already_clean": 0,
+        "needs_review": 0,
         "missing": 0,
         "failed": 0,
     }

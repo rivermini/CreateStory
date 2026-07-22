@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   detectPairedDarkResidual,
+  findDistantSparkleCandidate,
   removePairedDarkResidual,
   restorePairedWatermarkPatch,
 } from './paired-dark-residual.mjs';
@@ -30,6 +31,22 @@ function image(width, height) {
     }
   }
   return pixels;
+}
+
+function applyLayer(pixels, width, alphaMap, region, value) {
+  const output = new Uint8ClampedArray(pixels);
+  for (let y = 0; y < region.height; y += 1) {
+    for (let x = 0; x < region.width; x += 1) {
+      const alpha = alphaMap[y * region.width + x];
+      const pixel = ((region.y + y) * width + region.x + x) * 4;
+      for (let channel = 0; channel < 3; channel += 1) {
+        output[pixel + channel] = Math.round(
+          output[pixel + channel] * (1 - alpha) + value * alpha,
+        );
+      }
+    }
+  }
+  return output;
 }
 
 test('detects and reduces a shifted dark residual beside the light anchor', () => {
@@ -78,6 +95,47 @@ test('does not invent a dark pair on a clean neighborhood', () => {
     height,
     diamond(size),
     { x: 92, y: 66, width: size, height: size },
+  ), null);
+});
+
+test('finds a larger sparkle above-left of a validated corner anchor', () => {
+  const width = 220;
+  const height = 150;
+  const anchor = { x: 180, y: 115, width: 20, height: 20 };
+  const region = { x: 150, y: 83, width: 32, height: 32 };
+  const alphaMap = diamond(region.width);
+  const clean = new Uint8ClampedArray(width * height * 4);
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    clean[pixel * 4] = 45;
+    clean[pixel * 4 + 1] = 55;
+    clean[pixel * 4 + 2] = 65;
+    clean[pixel * 4 + 3] = 255;
+  }
+  const pixels = applyLayer(clean, width, alphaMap, region, 255);
+
+  const detected = findDistantSparkleCandidate(
+    pixels,
+    width,
+    height,
+    [{ alphaMap, size: region.width }],
+    anchor,
+  );
+
+  assert.deepEqual(
+    { x: detected?.region.x, y: detected?.region.y, size: detected?.region.width },
+    { x: region.x, y: region.y, size: region.width },
+  );
+  assert.equal(detected?.polarity, 'light');
+});
+
+test('does not invent a distant companion on clean artwork', () => {
+  const size = 32;
+  assert.equal(findDistantSparkleCandidate(
+    image(220, 150),
+    220,
+    150,
+    [{ alphaMap: diamond(size), size }],
+    { x: 180, y: 115, width: 20, height: 20 },
   ), null);
 });
 

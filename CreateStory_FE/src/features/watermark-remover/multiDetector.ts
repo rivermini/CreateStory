@@ -133,6 +133,35 @@ function scoreCandidate(
   };
 }
 
+export function scoreWatermarkCandidateAt(
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number,
+  alphaMap: Float32Array,
+  region: ManualWatermarkRegion,
+  polarity: WatermarkDetectionCandidate['polarity'],
+): WatermarkDetectionCandidate {
+  if (pixels.length !== width * height * 4
+    || alphaMap.length !== region.width * region.height
+    || region.width !== region.height
+    || !isRegionInsideImage(region, width, height, region.width)) {
+    throw new Error('The watermark scorer received invalid image geometry.');
+  }
+  const luminance = createLuminance(pixels);
+  return scoreCandidate(
+    luminance,
+    createGradient(luminance, width, height),
+    width,
+    alphaMap,
+    createGradient(alphaMap, region.width, region.height),
+    region.width,
+    region.x,
+    region.y,
+    'local-scan',
+    polarity,
+  );
+}
+
 function centerDistanceSquared(
   first: ManualWatermarkRegion,
   second: ManualWatermarkRegion,

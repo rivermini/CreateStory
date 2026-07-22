@@ -16,11 +16,18 @@ from typing import Any
 
 from PIL import Image
 
+from ._watermark_inpainting import (
+    detect_opaque_watermark,
+    is_safe_flat_sparkle_candidate,
+    reconstruct_opaque_watermark,
+    reconstruct_watermark_regions,
+)
+
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT_SECONDS = 120
-_DEFAULT_MAX_PASSES = 3
+_DEFAULT_MAX_PASSES = 1
 _LOSSY_MIN_QUALITY = 50
 _LOSSY_MAX_QUALITY = 98
 _LOSSY_SEARCH_STEPS = 7
@@ -35,6 +42,10 @@ class WatermarkProcessingResult:
     stop_reason: str
     error: str | None = None
     passes: tuple[dict[str, Any], ...] = ()
+    needs_review: bool = False
+    method: str = "none"
+    region: tuple[int, int, int, int] | None = None
+    confidence: float | None = None
 
 
 def _runtime_script_path() -> Path:
@@ -186,12 +197,202 @@ class WatermarkProcessingMixin:
                 image_format = (source.format or "").upper()
                 width, height = source.size
                 source_info = dict(source.info)
-                rgba_bytes = source.convert("RGBA").tobytes()
+                rgb_image = source.convert("RGB")
 
+            # Thin borders and frames are valid artwork. Automatic mode only
+            # handles independently validated logo/sparkle families.
+            working_image = rgb_image
+            opaque_detection = detect_opaque_watermark(working_image)
+            opaque = reconstruct_opaque_watermark(working_image, opaque_detection)
+            opaque_applied = False
+            opaque_method = "none"
+            if opaque.detected:
+                elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+                if not opaque.applied or opaque.image is None:
+                    return WatermarkProcessingResult(
+                        image_bytes=image_bytes,
+                        applied=False,
+                        applied_passes=0,
+                        processing_ms=elapsed_ms,
+                        stop_reason="opaque-reconstruction-unavailable",
+                        error=opaque.error or "Opaque watermark reconstruction was not available.",
+                        needs_review=True,
+                        method=f"opaque-{opaque.family or 'unknown'}",
+                        region=opaque.region,
+                        confidence=opaque.confidence,
+                    )
+                working_image = opaque.image
+                opaque_applied = True
+                opaque_method = f"opaque-{opaque.family}"
+
+            rgba_bytes = working_image.convert("RGBA").tobytes()
             processed_pixels, metadata = _run_node_processor(rgba_bytes, width, height)
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
             passes = tuple(metadata.get("passes") or ())
+            pass_metadata = passes[0] if passes else {}
+            position = pass_metadata.get("position") or {}
+            candidate_region = None
+            if position:
+                candidate_region = (
+                    int(position["x"]),
+                    int(position["y"]),
+                    int(position["x"] + position["width"]),
+                    int(position["y"] + position["height"]),
+                )
+
+            paired = metadata.get("pairedCandidate") or {}
+            paired_region_data = paired.get("region") or {}
+            secondary = metadata.get("secondaryCandidate") or {}
+            secondary_region_data = secondary.get("region") or {}
+            candidate_validation = pass_metadata.get("validation") or {}
+            candidate_evidence = candidate_validation.get("evidence") or {}
+            candidate_is_accepted = bool(candidate_validation.get("accepted"))
+            candidate_is_corroborated = (
+                candidate_region is not None
+                and float(candidate_evidence.get("score") or 0) >= 0.40
+                and float(candidate_evidence.get("gradientScore") or 0) >= 0.15
+                and float(candidate_evidence.get("luminanceScore") or 0) >= 0.55
+                and float(paired.get("score") or 0) >= 0.32
+                and float(paired.get("gradientScore") or 0) >= 0.20
+                and float(paired.get("luminanceScore") or 0) >= 0.40
+            )
+            paired_is_strong = (
+                (candidate_is_accepted or candidate_is_corroborated)
+                and candidate_region is not None
+                and float(paired.get("score") or 0) >= 0.32
+                and float(paired.get("luminanceScore") or 0) >= 0.35
+                and float(paired.get("gradientScore") or 0) >= 0.20
+            )
+            secondary_is_strong = (
+                candidate_is_accepted
+                and candidate_region is not None
+                and bool(secondary_region_data)
+                and float(secondary.get("score") or 0) >= 0.34
+                and float(secondary.get("luminanceScore") or 0) >= 0.45
+            )
+            flat_is_safe = (
+                processed_pixels is None
+                and metadata.get("stopReason") == "insufficient-original-pixel-evidence"
+                and candidate_region is not None
+                and float(candidate_evidence.get("score") or 0) >= 0.28
+                and float(candidate_evidence.get("gradientScore") or 0) >= 0.08
+                and is_safe_flat_sparkle_candidate(
+                    working_image,
+                    candidate_region,
+                    candidate_evidence,
+                )
+            )
+            if paired_is_strong or flat_is_safe or secondary_is_strong:
+                regions = [candidate_region]
+                shaped_regions: list[tuple[int, int, int, int]] = []
+                shaped_region_masks: dict[tuple[int, int, int, int], list[int]] = {}
+                primary_alpha_mask = metadata.get("primaryAlphaMask")
+                if isinstance(primary_alpha_mask, list):
+                    shaped_regions.append(candidate_region)
+                    shaped_region_masks[candidate_region] = primary_alpha_mask
+                method = (
+                    "sparkle-cluster"
+                    if secondary_is_strong
+                    else ("sparkle-pair" if paired_is_strong else "sparkle-flat")
+                )
+                confidence = max(
+                    float(paired.get("score") or 0),
+                    float(secondary.get("score") or 0),
+                    float(pass_metadata.get("confidence") or 0),
+                )
+                if paired_is_strong:
+                    paired_region = (
+                        int(paired_region_data["x"]),
+                        int(paired_region_data["y"]),
+                        int(paired_region_data["x"] + paired_region_data["width"]),
+                        int(paired_region_data["y"] + paired_region_data["height"]),
+                    )
+                    regions.append(paired_region)
+                    if isinstance(primary_alpha_mask, list):
+                        shaped_regions.append(paired_region)
+                        shaped_region_masks[paired_region] = primary_alpha_mask
+                if secondary_is_strong:
+                    secondary_width = int(secondary_region_data["width"])
+                    secondary_x = max(
+                        0,
+                        int(secondary_region_data["x"]) - max(2, round(secondary_width * 0.08)),
+                    )
+                    secondary_region = (
+                        secondary_x,
+                        int(secondary_region_data["y"]),
+                        secondary_x + secondary_width,
+                        int(secondary_region_data["y"] + secondary_region_data["height"]),
+                    )
+                    regions.append(secondary_region)
+                    shaped_regions.append(secondary_region)
+                    alpha_mask = secondary.get("alphaMask")
+                    if isinstance(alpha_mask, list):
+                        shaped_region_masks[secondary_region] = alpha_mask
+                reconstructed = reconstruct_watermark_regions(
+                    working_image,
+                    regions,
+                    family=method,
+                    margin=5 if paired_is_strong else 8,
+                    confidence=confidence,
+                    shaped_regions=shaped_regions,
+                    shaped_region_masks=shaped_region_masks,
+                )
+                elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+                if not reconstructed.applied or reconstructed.image is None:
+                    return WatermarkProcessingResult(
+                        image_bytes=image_bytes,
+                        applied=False,
+                        applied_passes=0,
+                        processing_ms=elapsed_ms,
+                        stop_reason=f"{method}-reconstruction-unavailable",
+                        error=reconstructed.error or "Sparkle reconstruction was not available.",
+                        passes=passes,
+                        needs_review=True,
+                        method=method,
+                        region=reconstructed.region,
+                        confidence=confidence,
+                    )
+                encoded = _encode_processed_pixels(
+                    reconstructed.image.convert("RGBA").tobytes(),
+                    width,
+                    height,
+                    image_format,
+                    source_info,
+                    len(image_bytes),
+                )
+                return WatermarkProcessingResult(
+                    image_bytes=encoded,
+                    applied=True,
+                    applied_passes=len(regions) + int(opaque_applied),
+                    processing_ms=elapsed_ms,
+                    stop_reason=(f"{opaque_method}+" if opaque_applied else "")
+                    + f"{method}-reconstructed",
+                    passes=passes,
+                    method=f"{opaque_method}+{method}" if opaque_applied else method,
+                    region=reconstructed.region,
+                    confidence=confidence,
+                )
             if processed_pixels is None:
+                if opaque_applied:
+                    encoded = _encode_processed_pixels(
+                        working_image.convert("RGBA").tobytes(),
+                        width,
+                        height,
+                        image_format,
+                        source_info,
+                        len(image_bytes),
+                    )
+                    return WatermarkProcessingResult(
+                        image_bytes=encoded,
+                        applied=True,
+                        applied_passes=1,
+                        processing_ms=elapsed_ms,
+                        stop_reason=f"{opaque_method}-reconstructed",
+                        passes=passes,
+                        method=opaque_method,
+                        region=opaque.region,
+                        confidence=opaque.confidence,
+                    )
                 return WatermarkProcessingResult(
                     image_bytes=image_bytes,
                     applied=False,
@@ -199,6 +400,8 @@ class WatermarkProcessingMixin:
                     processing_ms=elapsed_ms,
                     stop_reason=str(metadata.get("stopReason") or "no-match"),
                     passes=passes,
+                    needs_review=bool(metadata.get("needsReview")),
+                    method="sparkle" if metadata.get("candidate") else "none",
                 )
 
             expected_size = width * height * 4
@@ -217,10 +420,13 @@ class WatermarkProcessingMixin:
             return WatermarkProcessingResult(
                 image_bytes=encoded,
                 applied=True,
-                applied_passes=int(metadata.get("appliedPassCount") or 1),
+                applied_passes=int(metadata.get("appliedPassCount") or 1) + int(opaque_applied),
                 processing_ms=elapsed_ms,
-                stop_reason=str(metadata.get("stopReason") or "completed"),
+                stop_reason=(f"{opaque_method}+" if opaque_applied else "")
+                + str(metadata.get("stopReason") or "completed"),
                 passes=passes,
+                needs_review=bool(metadata.get("needsReview")),
+                method=f"{opaque_method}+sparkle" if opaque_applied else "sparkle",
             )
         except Exception as exc:
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)
@@ -257,11 +463,28 @@ class WatermarkProcessingMixin:
             )
             return
         if result.applied:
+            if result.method.startswith("opaque-") and "+" not in result.method:
+                family = result.method.removeprefix("opaque-")
+                self.append_job_log(
+                    job_id,
+                    "info",
+                    f"{asset_type.title()} watermark cleanup reconstructed the opaque {family} "
+                    f"in {result.processing_ms} ms (output format and dimensions preserved)",
+                )
+                return
             self.append_job_log(
                 job_id,
                 "info",
                 f"{asset_type.title()} watermark cleanup removed {result.applied_passes} detected layer(s) "
                 f"in {result.processing_ms} ms (output format and dimensions preserved)",
+            )
+            return
+        if result.needs_review:
+            self.append_job_log(
+                job_id,
+                "warning",
+                f"{asset_type.title()} image {filename} may contain an uncertain watermark; "
+                "the original bytes were preserved for review",
             )
             return
         self.append_job_log(

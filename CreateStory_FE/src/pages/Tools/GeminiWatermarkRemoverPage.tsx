@@ -174,7 +174,7 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
   const [isDragging, setIsDragging] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [comparisonPosition, setComparisonPosition] = useState(50);
+  const [comparisonPosition, setComparisonPosition] = useState(100);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
   const jobsRef = useRef<WatermarkJob[]>([]);
@@ -203,6 +203,7 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
     () => jobs.find((job) => job.id === selectedId) ?? jobs[0] ?? null,
     [jobs, selectedId],
   );
+
   const counts = useMemo(() => getQueueCounts(jobs), [jobs]);
   const finishedCount = counts.failed + counts.notDetected + counts.processed;
   const completedProgress = jobs.length === 0 ? 0 : Math.round((finishedCount / jobs.length) * 100);
@@ -384,6 +385,7 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
   const handleRetry = (id: string) => {
     pauseRequestedRef.current = false;
     setIsPaused(false);
+    setComparisonPosition(100);
     commitJobs((current) => current.map((job) => {
       if (job.id !== id) return job;
       if (job.outputUrl) URL.revokeObjectURL(job.outputUrl);
@@ -685,7 +687,7 @@ export function GeminiWatermarkRemoverPage({ themeMode }: GeminiWatermarkRemover
                         onDownload={() => handleDownloadJob(job)}
                         onRemove={() => handleRemove(job.id)}
                         onRetry={() => handleRetry(job.id)}
-                        onSelect={() => { setSelectedId(job.id); setComparisonPosition(50); }}
+                        onSelect={() => { setSelectedId(job.id); setComparisonPosition(job.outputUrl ? 100 : 50); }}
                       />
                     ))}
                   </div>
@@ -949,16 +951,20 @@ function SelectedImagePanel({
                   style={{ clipPath: 'inset(0 ' + (100 - comparisonPosition) + '% 0 0)' }}
                 />
                 <span
-                  className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.28)]"
+                  className={'pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.28)] ' + (comparisonPosition === 0 || comparisonPosition === 100 ? 'hidden' : '')}
                   style={{ left: 'calc(' + comparisonPosition + '% - 1px)' }}
                   aria-hidden="true"
                 >
                   <span className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/70 bg-black/55 text-[10px] font-black text-white shadow-lg">↔</span>
                 </span>
-                <span className="absolute left-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-                  {isTargetedResult ? 'Cleanup result' : 'Processed'}
-                </span>
-                <span className="absolute right-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">Original</span>
+                {comparisonPosition > 0 && (
+                  <span className="absolute left-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+                    {isTargetedResult ? 'Cleanup result' : 'Processed'}
+                  </span>
+                )}
+                {comparisonPosition < 100 && (
+                  <span className="absolute right-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">Original</span>
+                )}
               </>
             )}
             {isManualOpen && manualResolution && job.dimensions && (
@@ -975,7 +981,7 @@ function SelectedImagePanel({
                 <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-500 ring-2 ring-white" />
               </span>
             )}
-            {!isManualOpen && isMultiInstanceResult && job.dimensions && job.appliedRegions.map((region, index) => (
+            {!isManualOpen && comparisonPosition < 100 && isMultiInstanceResult && job.dimensions && job.appliedRegions.map((region, index) => (
               <span
                 key={`${region.x}-${region.y}`}
                 className="pointer-events-none absolute z-20 border border-emerald-400/90 bg-emerald-400/10 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
@@ -1002,22 +1008,46 @@ function SelectedImagePanel({
         </div>
 
         {job.outputUrl && (
-          <label className="mt-4 block">
-            <span className="mb-2 flex items-center justify-between text-[11px] font-bold text-[var(--cs-text-muted)]">
-              <span>{isTargetedResult ? 'Cleanup result' : 'Processed'}</span>
-              <span>Drag to compare</span>
-              <span>Original</span>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={comparisonPosition}
-              onChange={(event) => onComparisonPositionChange(Number(event.target.value))}
-              className="h-2 w-full accent-[var(--cs-primary)]"
-              aria-label="Before and after comparison position"
-            />
-          </label>
+          <div className="mt-4">
+            <div className="mb-3 flex flex-wrap justify-center gap-2" role="group" aria-label="Image comparison view">
+              {[
+                { label: 'Processed only', position: 100 },
+                { label: 'Compare', position: 50 },
+                { label: 'Original only', position: 0 },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  type="button"
+                  className={
+                    'rounded-full border px-3 py-1.5 text-[11px] font-extrabold transition ' +
+                    (comparisonPosition === option.position
+                      ? 'border-[var(--cs-primary)] bg-[var(--cs-primary)] text-white'
+                      : 'border-[var(--cs-border)] bg-[var(--cs-surface)] text-[var(--cs-text-muted)] hover:text-[var(--cs-text)]')
+                  }
+                  aria-pressed={comparisonPosition === option.position}
+                  onClick={() => onComparisonPositionChange(option.position)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <label className="block">
+              <span className="mb-2 flex items-center justify-between text-[11px] font-bold text-[var(--cs-text-muted)]">
+                <span>{isTargetedResult ? 'Cleanup result' : 'Processed'}</span>
+                <span>Drag to compare</span>
+                <span>Original</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={comparisonPosition}
+                onChange={(event) => onComparisonPositionChange(Number(event.target.value))}
+                className="h-2 w-full accent-[var(--cs-primary)]"
+                aria-label="Before and after comparison position"
+              />
+            </label>
+          </div>
         )}
 
         {canAdjust && (

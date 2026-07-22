@@ -1224,6 +1224,7 @@ export type WatermarkPictureAssetStatus =
   | 'uploading'
   | 'fixed'
   | 'no_watermark'
+  | 'needs_review'
   | 'missing'
   | 'error';
 
@@ -1237,6 +1238,10 @@ export interface WatermarkPictureAssetResult {
   processing_ms?: number;
   applied_passes?: number;
   stop_reason?: string;
+  method?: string;
+  confidence?: number | null;
+  region?: [number, number, number, number] | null;
+  review_reason?: string;
   error?: string;
 }
 
@@ -1249,6 +1254,7 @@ export interface WatermarkPictureFixPayload extends Record<string, unknown> {
   summary?: {
     fixed: number;
     already_clean: number;
+    needs_review?: number;
     missing: number;
     failed: number;
   };

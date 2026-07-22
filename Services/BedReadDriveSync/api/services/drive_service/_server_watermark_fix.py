@@ -325,6 +325,7 @@ class ServerWatermarkFixMixin:
                 detail["introImageUrl"] = self._known_intro_url(story_id, payload["story_title"])
             fixed = 0
             already_clean = 0
+            needs_review = 0
             missing = 0
             failed = 0
 
@@ -368,6 +369,20 @@ class ServerWatermarkFixMixin:
                     asset["processing_ms"] = result.processing_ms
                     asset["applied_passes"] = result.applied_passes
                     asset["stop_reason"] = result.stop_reason
+                    asset["method"] = result.method
+                    asset["confidence"] = result.confidence
+                    asset["region"] = result.region
+                    if result.needs_review:
+                        asset["status"] = "needs_review"
+                        asset["review_reason"] = result.error or result.stop_reason
+                        needs_review += 1
+                        self.append_job_log(
+                            job_id,
+                            "warning",
+                            f"{asset_type.title()}: possible or unsupported watermark preserved for review.",
+                        )
+                        self._persist_watermark_fix_payload(job_id, payload)
+                        continue
                     if result.error:
                         raise RuntimeError(result.error)
                     if not result.applied:
@@ -413,12 +428,13 @@ class ServerWatermarkFixMixin:
             payload["summary"] = {
                 "fixed": fixed,
                 "already_clean": already_clean,
+                "needs_review": needs_review,
                 "missing": missing,
                 "failed": failed,
             }
             self._persist_watermark_fix_payload(job_id, payload)
             message = (
-                f"Pictures checked: {fixed} fixed, {already_clean} already clean, "
+                f"Pictures checked: {fixed} fixed, {already_clean} already clean, {needs_review} need review, "
                 f"{missing} missing, {failed} failed."
             )
             self.update_job(
@@ -427,7 +443,7 @@ class ServerWatermarkFixMixin:
                 finished_at=datetime.now(timezone.utc).isoformat(),
                 result_message=message,
                 chapters_added=fixed,
-                chapters_skipped=already_clean + missing + failed,
+                chapters_skipped=already_clean + needs_review + missing + failed,
                 error=message if failed else None,
                 payload=payload,
             )

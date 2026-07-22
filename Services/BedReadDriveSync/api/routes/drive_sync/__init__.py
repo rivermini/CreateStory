@@ -16,6 +16,7 @@ from api.routes.drive_sync import (
     intro_update,
     title_update,
     watermark_picture_fix,
+    watermark_process,
 )
 from api.routes.drive_sync._ids import validate_drive_id_path_params
 
@@ -40,3 +41,4 @@ router.include_router(intro_update.router)
 router.include_router(metadata_update.router)
 router.include_router(title_update.router)
 router.include_router(watermark_picture_fix.router)
+router.include_router(watermark_process.router)

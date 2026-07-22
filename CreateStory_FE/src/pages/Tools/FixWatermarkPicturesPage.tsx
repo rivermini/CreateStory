@@ -42,6 +42,7 @@ const ASSET_STATUS_LABELS: Record<WatermarkPictureAssetStatus, string> = {
   uploading: 'Uploading',
   fixed: 'Fixed',
   no_watermark: 'Already clean',
+  needs_review: 'Needs review',
   missing: 'Missing',
   error: 'Failed',
 };
@@ -49,6 +50,7 @@ const ASSET_STATUS_LABELS: Record<WatermarkPictureAssetStatus, string> = {
 function assetStatusTone(status?: WatermarkPictureAssetStatus): BadgeTone {
   if (status === 'fixed' || status === 'no_watermark') return 'success';
   if (status === 'error') return 'danger';
+  if (status === 'needs_review') return 'warning';
   if (status === 'missing') return 'default';
   if (status && status !== 'pending') return 'primary';
   return 'warning';
@@ -101,6 +103,7 @@ function progressFor(job: SyncJob | null): number {
     uploading: 0.82,
     fixed: 1,
     no_watermark: 1,
+    needs_review: 1,
     missing: 1,
     error: 1,
   };
@@ -250,7 +253,7 @@ function StoryCard({
     missing: Math.max(0, summary.missing - recoveredMissing),
   } : null;
   const summaryText = displaySummary
-    ? `${displaySummary.fixed} fixed · ${displaySummary.already_clean} already clean · ${displaySummary.missing} missing · ${displaySummary.failed} failed${recoveredMissing ? ` · ${recoveredMissing} recovered, not checked` : ''}`
+    ? `${displaySummary.fixed} fixed · ${displaySummary.already_clean} already clean · ${displaySummary.needs_review ?? 0} need review · ${displaySummary.missing} missing · ${displaySummary.failed} failed${recoveredMissing ? ` · ${recoveredMissing} recovered, not checked` : ''}`
     : null;
   const canSelect = !active && selectedAssets.size > 0;
 

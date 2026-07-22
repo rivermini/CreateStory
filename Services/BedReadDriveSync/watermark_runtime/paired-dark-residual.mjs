@@ -15,6 +15,10 @@ const CORE_DILATE_RADIUS = 3;
 const CORE_TRANSLATION_RADIUS = 128;
 const CORE_TRANSLATION_STEP = 8;
 const CORE_FEATHER_RADIUS = 4;
+const DISTANT_COARSE_STEP = 2;
+const DISTANT_REFINE_RADIUS = 2;
+const DISTANT_MIN_LUMINANCE_SCORE = 0.45;
+const DISTANT_MIN_COMBINED_SCORE = 0.34;
 
 function createLuminance(pixels) {
   const output = new Float32Array(pixels.length / 4);
@@ -311,6 +315,130 @@ export function findPairedResidualCandidate(
 
 export function findPairedDarkResidualCandidate(pixels, width, height, alphaMap, anchor) {
   return findPairedResidualCandidate(pixels, width, height, alphaMap, anchor, 'dark');
+}
+
+/**
+ * Find the larger companion sparkle used by some Gemini banner exports.
+ *
+ * Those exports contain a normal small corner sparkle plus a second, larger
+ * neutral sparkle above-left of it. The larger mark can cross a foreground /
+ * background boundary, so its luminance silhouette remains persuasive while
+ * its full gradient correlation is intentionally allowed to be weak. This
+ * search is only run after the normal corner mark has been independently
+ * validated; a clean image never reaches this detector.
+ */
+export function findDistantSparkleCandidate(
+  pixels,
+  width,
+  height,
+  alphaMaps,
+  anchor,
+) {
+  if (!anchor
+    || anchor.width !== anchor.height
+    || pixels.length !== width * height * 4
+    || !Array.isArray(alphaMaps)
+    || alphaMaps.length === 0) return null;
+
+  const luminance = createLuminance(pixels);
+  const gradient = createGradient(luminance, width, height);
+  let strongest = null;
+
+  for (const entry of alphaMaps) {
+    const alphaMap = entry?.alphaMap;
+    const size = entry?.size ?? Math.round(Math.sqrt(alphaMap?.length ?? 0));
+    if (!(alphaMap instanceof Float32Array)
+      || size * size !== alphaMap.length
+      || size < Math.round(anchor.width * 1.45)
+      || size > Math.round(anchor.width * 2.25)) continue;
+
+    const alphaMagnitude = Float32Array.from(alphaMap, (value) => Math.abs(value));
+    const alphaGradient = createGradient(alphaMagnitude, size, size);
+    const left = Math.max(
+      0,
+      Math.floor(width * 0.68),
+      anchor.x - Math.round(anchor.width * 4.5),
+    );
+    const right = Math.min(
+      width - size,
+      anchor.x - Math.round(anchor.width * 0.45),
+    );
+    const top = Math.max(
+      0,
+      Math.floor(height * 0.55),
+      anchor.y - Math.round(anchor.height * 3.2),
+    );
+    const bottom = Math.min(
+      height - size,
+      anchor.y + Math.round(anchor.height * 0.25),
+    );
+    if (right < left || bottom < top) continue;
+
+    let bestForSize = null;
+    for (let y = top; y <= bottom; y += DISTANT_COARSE_STEP) {
+      for (let x = left; x <= right; x += DISTANT_COARSE_STEP) {
+        const centerDistance = Math.hypot(
+          x + size / 2 - (anchor.x + anchor.width / 2),
+          y + size / 2 - (anchor.y + anchor.height / 2),
+        );
+        if (centerDistance < anchor.width * 1.35) continue;
+        for (const polarity of ['light', 'dark']) {
+          const candidate = scoreAt(
+            luminance,
+            gradient,
+            width,
+            alphaMagnitude,
+            alphaGradient,
+            size,
+            x,
+            y,
+            polarity,
+          );
+          candidate.score = 0.72 * candidate.luminanceScore
+            + 0.28 * Math.max(0, candidate.gradientScore);
+          if (!bestForSize || candidate.score > bestForSize.score) bestForSize = candidate;
+        }
+      }
+    }
+    if (!bestForSize) continue;
+
+    let refined = bestForSize;
+    for (let y = bestForSize.region.y - DISTANT_REFINE_RADIUS;
+      y <= bestForSize.region.y + DISTANT_REFINE_RADIUS;
+      y += 1) {
+      for (let x = bestForSize.region.x - DISTANT_REFINE_RADIUS;
+        x <= bestForSize.region.x + DISTANT_REFINE_RADIUS;
+        x += 1) {
+        if (x < left || y < top || x > right || y > bottom) continue;
+        for (const polarity of ['light', 'dark']) {
+          const candidate = scoreAt(
+            luminance,
+            gradient,
+            width,
+            alphaMagnitude,
+            alphaGradient,
+            size,
+            x,
+            y,
+            polarity,
+          );
+          candidate.score = 0.72 * candidate.luminanceScore
+            + 0.28 * Math.max(0, candidate.gradientScore);
+          if (candidate.score > refined.score) refined = candidate;
+        }
+      }
+    }
+    refined.alphaMask = Array.from(
+      alphaMagnitude,
+      (value) => (value >= 0.008 ? 1 : 0),
+    );
+    if (!strongest || refined.score > strongest.score) strongest = refined;
+  }
+
+  if (!strongest
+    || strongest.luminanceScore < DISTANT_MIN_LUMINANCE_SCORE
+    || strongest.score < DISTANT_MIN_COMBINED_SCORE) return null;
+  return strongest;
 }
 
 export function detectPairedWatermarkLayers(pixels, width, height, alphaMap, anchor) {
