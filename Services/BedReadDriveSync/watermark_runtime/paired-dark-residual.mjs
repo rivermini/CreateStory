@@ -19,6 +19,9 @@ const DISTANT_COARSE_STEP = 2;
 const DISTANT_REFINE_RADIUS = 2;
 const DISTANT_MIN_LUMINANCE_SCORE = 0.45;
 const DISTANT_MIN_COMBINED_SCORE = 0.34;
+const COMPACT_MIN_LUMINANCE_SCORE = 0.48;
+const COMPACT_MIN_GRADIENT_SCORE = 0.34;
+const COMPACT_MIN_COMBINED_SCORE = 0.5;
 
 function createLuminance(pixels) {
   const output = new Float32Array(pixels.length / 4);
@@ -315,6 +318,61 @@ export function findPairedResidualCandidate(
 
 export function findPairedDarkResidualCandidate(pixels, width, height, alphaMap, anchor) {
   return findPairedResidualCandidate(pixels, width, height, alphaMap, anchor, 'dark');
+}
+
+/**
+ * Find the smaller light sparkle that some Gemini exports place down-right of
+ * the normal corner mark. The two silhouettes overlap, so a same-size global
+ * companion search can mistake their shared edge for a dark residual. Search
+ * only the expected down-right pocket with the compact mark's own alpha map.
+ */
+export function findCompactOffsetSparkleCandidate(
+  pixels,
+  width,
+  height,
+  alphaMap,
+  anchor,
+) {
+  const size = Math.round(Math.sqrt(alphaMap.length));
+  if (!anchor
+    || size * size !== alphaMap.length
+    || size < Math.round(anchor.width * 0.55)
+    || size > Math.round(anchor.width * 0.8)
+    || pixels.length !== width * height * 4) return null;
+
+  const luminance = createLuminance(pixels);
+  const gradient = createGradient(luminance, width, height);
+  const alphaMagnitude = Float32Array.from(alphaMap, (value) => Math.abs(value));
+  const alphaGradient = createGradient(alphaMagnitude, size, size);
+  const left = Math.max(0, anchor.x + Math.round(anchor.width * 0.18));
+  const top = Math.max(0, anchor.y + Math.round(anchor.height * 0.25));
+  const right = Math.min(width - size, anchor.x + Math.round(anchor.width * 0.8));
+  const bottom = Math.min(height - size, anchor.y + Math.round(anchor.height * 0.95));
+  if (right < left || bottom < top) return null;
+
+  let strongest = null;
+  for (let y = top; y <= bottom; y += 1) {
+    for (let x = left; x <= right; x += 1) {
+      const candidate = scoreAt(
+        luminance,
+        gradient,
+        width,
+        alphaMagnitude,
+        alphaGradient,
+        size,
+        x,
+        y,
+        'light',
+      );
+      if (!strongest || candidate.score > strongest.score) strongest = candidate;
+    }
+  }
+  if (!strongest
+    || strongest.score < COMPACT_MIN_COMBINED_SCORE
+    || strongest.luminanceScore < COMPACT_MIN_LUMINANCE_SCORE
+    || strongest.gradientScore < COMPACT_MIN_GRADIENT_SCORE) return null;
+  strongest.alphaMask = Array.from(alphaMagnitude, (value) => (value >= 0.008 ? 1 : 0));
+  return strongest;
 }
 
 /**

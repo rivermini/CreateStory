@@ -242,11 +242,25 @@ class WatermarkProcessingMixin:
 
             paired = metadata.get("pairedCandidate") or {}
             paired_region_data = paired.get("region") or {}
+            compact = metadata.get("compactCandidate") or {}
+            compact_region_data = compact.get("region") or {}
             secondary = metadata.get("secondaryCandidate") or {}
             secondary_region_data = secondary.get("region") or {}
             candidate_validation = pass_metadata.get("validation") or {}
             candidate_evidence = candidate_validation.get("evidence") or {}
             candidate_is_accepted = bool(candidate_validation.get("accepted"))
+            exceptional_dark_pair = (
+                metadata.get("stopReason") == "sdk-quality-review-required"
+                and candidate_region is not None
+                and bool(paired_region_data)
+                and paired.get("polarity") == "dark"
+                and float(candidate_evidence.get("score") or 0) >= 0.75
+                and float(candidate_evidence.get("gradientScore") or 0) >= 0.55
+                and float(candidate_evidence.get("luminanceScore") or 0) >= 0.70
+                and float(paired.get("score") or 0) >= 0.23
+                and float(paired.get("gradientScore") or 0) >= 0.20
+                and float(paired.get("luminanceScore") or 0) >= 0.22
+            )
             candidate_is_corroborated = (
                 candidate_region is not None
                 and float(candidate_evidence.get("score") or 0) >= 0.40
@@ -256,11 +270,33 @@ class WatermarkProcessingMixin:
                 and float(paired.get("gradientScore") or 0) >= 0.20
                 and float(paired.get("luminanceScore") or 0) >= 0.40
             )
-            paired_is_strong = (
-                (candidate_is_accepted or candidate_is_corroborated)
+            exceptional_compact_pair = (
+                metadata.get("stopReason") == "sdk-quality-review-required"
                 and candidate_region is not None
-                and float(paired.get("score") or 0) >= 0.32
-                and float(paired.get("luminanceScore") or 0) >= 0.35
+                and bool(compact_region_data)
+                and compact.get("polarity") == "light"
+                and float(candidate_evidence.get("score") or 0) >= 0.75
+                and float(candidate_evidence.get("gradientScore") or 0) >= 0.55
+                and float(candidate_evidence.get("luminanceScore") or 0) >= 0.70
+                and float(compact.get("score") or 0) >= 0.50
+                and float(compact.get("gradientScore") or 0) >= 0.34
+                and float(compact.get("luminanceScore") or 0) >= 0.48
+            )
+            compact_is_strong = (
+                (candidate_is_accepted or candidate_is_corroborated or exceptional_compact_pair)
+                and candidate_region is not None
+                and bool(compact_region_data)
+                and compact.get("polarity") == "light"
+                and float(compact.get("score") or 0) >= 0.50
+                and float(compact.get("gradientScore") or 0) >= 0.34
+                and float(compact.get("luminanceScore") or 0) >= 0.48
+            )
+            paired_is_strong = (
+                (candidate_is_accepted or candidate_is_corroborated or exceptional_dark_pair)
+                and not compact_is_strong
+                and candidate_region is not None
+                and float(paired.get("score") or 0) >= (0.23 if exceptional_dark_pair else 0.32)
+                and float(paired.get("luminanceScore") or 0) >= (0.22 if exceptional_dark_pair else 0.35)
                 and float(paired.get("gradientScore") or 0) >= 0.20
             )
             secondary_is_strong = (
@@ -282,7 +318,7 @@ class WatermarkProcessingMixin:
                     candidate_evidence,
                 )
             )
-            if paired_is_strong or flat_is_safe or secondary_is_strong:
+            if paired_is_strong or compact_is_strong or flat_is_safe or secondary_is_strong:
                 regions = [candidate_region]
                 shaped_regions: list[tuple[int, int, int, int]] = []
                 shaped_region_masks: dict[tuple[int, int, int, int], list[int]] = {}
@@ -292,11 +328,12 @@ class WatermarkProcessingMixin:
                     shaped_region_masks[candidate_region] = primary_alpha_mask
                 method = (
                     "sparkle-cluster"
-                    if secondary_is_strong
+                    if secondary_is_strong or compact_is_strong
                     else ("sparkle-pair" if paired_is_strong else "sparkle-flat")
                 )
                 confidence = max(
                     float(paired.get("score") or 0),
+                    float(compact.get("score") or 0),
                     float(secondary.get("score") or 0),
                     float(pass_metadata.get("confidence") or 0),
                 )
@@ -311,6 +348,18 @@ class WatermarkProcessingMixin:
                     if isinstance(primary_alpha_mask, list):
                         shaped_regions.append(paired_region)
                         shaped_region_masks[paired_region] = primary_alpha_mask
+                if compact_is_strong:
+                    compact_region = (
+                        int(compact_region_data["x"]),
+                        int(compact_region_data["y"]),
+                        int(compact_region_data["x"] + compact_region_data["width"]),
+                        int(compact_region_data["y"] + compact_region_data["height"]),
+                    )
+                    regions.append(compact_region)
+                    shaped_regions.append(compact_region)
+                    compact_alpha_mask = compact.get("alphaMask")
+                    if isinstance(compact_alpha_mask, list):
+                        shaped_region_masks[compact_region] = compact_alpha_mask
                 if secondary_is_strong:
                     secondary_width = int(secondary_region_data["width"])
                     secondary_x = max(
@@ -332,7 +381,7 @@ class WatermarkProcessingMixin:
                     working_image,
                     regions,
                     family=method,
-                    margin=5 if paired_is_strong else 8,
+                    margin=5 if paired_is_strong or compact_is_strong else 8,
                     confidence=confidence,
                     shaped_regions=shaped_regions,
                     shaped_region_masks=shaped_region_masks,

@@ -8,6 +8,7 @@ import {
 } from '@pilio/gemini-watermark-remover/image-data';
 
 import {
+  findCompactOffsetSparkleCandidate,
   findDistantSparkleCandidate,
   findPairedDarkResidualCandidate,
   scoreWatermarkPolarityAt,
@@ -291,6 +292,7 @@ export async function processImagePixels({
     reason: meta.skipReason || 'no-match',
   };
   let pairedCandidate = null;
+  let compactCandidate = null;
   let primaryAlphaMask = null;
   let secondaryCandidate = null;
   if (meta.applied && meta.position) {
@@ -309,6 +311,19 @@ export async function processImagePixels({
         alphaMap,
         meta.position,
       );
+      try {
+        const compactSize = Math.round(meta.position.width * (2 / 3));
+        const compactMap = await activeEngine.getAlphaMap(compactSize);
+        compactCandidate = findCompactOffsetSparkleCandidate(
+          original,
+          width,
+          height,
+          compactMap,
+          meta.position,
+        );
+      } catch {
+        // The compact companion is optional and never weakens primary validation.
+      }
       const originalEvidence = strongestOriginalEvidence(
         original,
         width,
@@ -383,6 +398,7 @@ export async function processImagePixels({
       needsReview: validation.needsReview === true,
       passes: [pass],
       pairedCandidate,
+      compactCandidate,
       primaryAlphaMask,
       secondaryCandidate,
       requestedMaxPasses,

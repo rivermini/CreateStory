@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   detectPairedDarkResidual,
+  findCompactOffsetSparkleCandidate,
   findDistantSparkleCandidate,
   removePairedDarkResidual,
   restorePairedWatermarkPatch,
@@ -95,6 +96,52 @@ test('does not invent a dark pair on a clean neighborhood', () => {
     height,
     diamond(size),
     { x: 92, y: 66, width: size, height: size },
+  ), null);
+});
+
+test('finds an overlapping smaller light sparkle down-right of the anchor', () => {
+  const width = 180;
+  const height = 130;
+  const anchor = { x: 135, y: 90, width: 24, height: 24 };
+  const compact = { x: 144, y: 102, width: 16, height: 16 };
+  const clean = new Uint8ClampedArray(width * height * 4);
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    clean[pixel * 4] = 24;
+    clean[pixel * 4 + 1] = 31;
+    clean[pixel * 4 + 2] = 38;
+    clean[pixel * 4 + 3] = 255;
+  }
+  const withAnchor = applyLayer(clean, width, diamond(anchor.width), anchor, 220);
+  const pixels = applyLayer(withAnchor, width, diamond(compact.width), compact, 220);
+
+  const detected = findCompactOffsetSparkleCandidate(
+    pixels,
+    width,
+    height,
+    diamond(compact.width),
+    anchor,
+  );
+
+  assert.deepEqual(
+    { x: detected?.region.x, y: detected?.region.y, size: detected?.region.width },
+    { x: compact.x, y: compact.y, size: compact.width },
+  );
+  assert.equal(detected?.polarity, 'light');
+  assert.equal(detected?.alphaMask.length, compact.width * compact.height);
+});
+
+test('does not reinterpret the lower arm of one sparkle as a compact companion', () => {
+  const width = 180;
+  const height = 130;
+  const anchor = { x: 135, y: 90, width: 24, height: 24 };
+  const pixels = applyLayer(image(width, height), width, diamond(anchor.width), anchor, 255);
+
+  assert.equal(findCompactOffsetSparkleCandidate(
+    pixels,
+    width,
+    height,
+    diamond(16),
+    anchor,
   ), null);
 });
 

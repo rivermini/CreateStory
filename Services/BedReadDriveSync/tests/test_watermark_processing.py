@@ -232,6 +232,161 @@ def test_independently_corroborated_pair_uses_shaped_reconstruction(monkeypatch)
     assert result.method == "sparkle-pair"
 
 
+def test_exceptional_dark_companion_salvages_sdk_quality_review(monkeypatch) -> None:
+    image = Image.new("RGB", (1024, 459), (18, 42, 55))
+    source = io.BytesIO()
+    image.save(source, format="WEBP", quality=90)
+    alpha_mask = [1] * (33 * 33)
+    monkeypatch.setattr(
+        module,
+        "_run_node_processor",
+        lambda *_args: (
+            None,
+            {
+                "applied": False,
+                "passes": [{
+                    "confidence": 0.842,
+                    "position": {"x": 970, "y": 405, "width": 33, "height": 33},
+                    "validation": {
+                        "accepted": False,
+                        "reason": "sdk-quality-review-required",
+                        "evidence": {
+                            "score": 0.842,
+                            "gradientScore": 0.835,
+                            "luminanceScore": 0.847,
+                        },
+                    },
+                }],
+                "pairedCandidate": {
+                    "score": 0.255,
+                    "luminanceScore": 0.266,
+                    "gradientScore": 0.240,
+                    "polarity": "dark",
+                    "region": {"x": 964, "y": 426, "width": 33, "height": 33},
+                },
+                "primaryAlphaMask": alpha_mask,
+                "stopReason": "sdk-quality-review-required",
+            },
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_reconstruct(working, regions, **kwargs):
+        captured["regions"] = regions
+        captured.update(kwargs)
+        return inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="sparkle-pair",
+            region=(959, 400, 1008, 459),
+            confidence=0.842,
+        )
+
+    monkeypatch.setattr(module, "reconstruct_watermark_regions", fake_reconstruct)
+
+    result = _Processor()._process_watermarks_for_upload(
+        source.getvalue(),
+        "banner.webp",
+        "banner",
+    )
+
+    primary = (970, 405, 1003, 438)
+    companion = (964, 426, 997, 459)
+    assert result.applied is True
+    assert result.applied_passes == 2
+    assert result.method == "sparkle-pair"
+    assert captured["regions"] == [primary, companion]
+    assert captured["shaped_regions"] == [primary, companion]
+    assert captured["shaped_region_masks"] == {
+        primary: alpha_mask,
+        companion: alpha_mask,
+    }
+
+
+def test_compact_light_companion_supersedes_false_dark_overlap(monkeypatch) -> None:
+    image = Image.new("RGB", (1024, 459), (18, 42, 55))
+    source = io.BytesIO()
+    image.save(source, format="WEBP", quality=90)
+    primary_mask = [1] * (33 * 33)
+    compact_mask = [1] * (22 * 22)
+    monkeypatch.setattr(
+        module,
+        "_run_node_processor",
+        lambda *_args: (
+            None,
+            {
+                "applied": False,
+                "passes": [{
+                    "confidence": 0.842,
+                    "position": {"x": 970, "y": 405, "width": 33, "height": 33},
+                    "validation": {
+                        "accepted": False,
+                        "reason": "sdk-quality-review-required",
+                        "evidence": {
+                            "score": 0.842,
+                            "gradientScore": 0.835,
+                            "luminanceScore": 0.847,
+                        },
+                    },
+                }],
+                "pairedCandidate": {
+                    "score": 0.255,
+                    "luminanceScore": 0.266,
+                    "gradientScore": 0.240,
+                    "polarity": "dark",
+                    "region": {"x": 964, "y": 426, "width": 33, "height": 33},
+                },
+                "compactCandidate": {
+                    "score": 0.690,
+                    "luminanceScore": 0.658,
+                    "gradientScore": 0.735,
+                    "polarity": "light",
+                    "region": {"x": 985, "y": 425, "width": 22, "height": 22},
+                    "alphaMask": compact_mask,
+                },
+                "primaryAlphaMask": primary_mask,
+                "stopReason": "sdk-quality-review-required",
+            },
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_reconstruct(working, regions, **kwargs):
+        captured["regions"] = regions
+        captured.update(kwargs)
+        return inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="sparkle-cluster",
+            region=(970, 405, 1007, 447),
+            confidence=0.842,
+        )
+
+    monkeypatch.setattr(module, "reconstruct_watermark_regions", fake_reconstruct)
+
+    result = _Processor()._process_watermarks_for_upload(
+        source.getvalue(),
+        "banner.webp",
+        "banner",
+    )
+
+    primary = (970, 405, 1003, 438)
+    compact = (985, 425, 1007, 447)
+    assert result.applied is True
+    assert result.applied_passes == 2
+    assert result.method == "sparkle-cluster"
+    assert captured["regions"] == [primary, compact]
+    assert captured["shaped_regions"] == [primary, compact]
+    assert captured["shaped_region_masks"] == {
+        primary: primary_mask,
+        compact: compact_mask,
+    }
+
+
 def test_low_evidence_flat_corner_candidate_preserves_decorative_border(monkeypatch) -> None:
     source = _image_bytes("JPEG")
     monkeypatch.setattr(module, "is_safe_flat_sparkle_candidate", lambda *_args: True)
