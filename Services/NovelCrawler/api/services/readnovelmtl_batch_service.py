@@ -52,9 +52,9 @@ READNOVELMTL_DISCOVER_RETRY_TIMES = int(os.getenv("READNOVELMTL_DISCOVER_RETRY_T
 READNOVELMTL_DISCOVER_RETRY_BASE_SECONDS = float(os.getenv("READNOVELMTL_DISCOVER_RETRY_BASE_SECONDS", "15"))
 READNOVELMTL_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("READNOVELMTL_DISCOVER_RETRY_MAX_SECONDS", "120"))
 READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS = max(
-    1.0, float(os.getenv("READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "1.0"))
+    0.1, float(os.getenv("READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "0.15"))
 )
-READNOVELMTL_MAX_IN_FLIGHT_REQUESTS = max(1, min(4, int(os.getenv("READNOVELMTL_MAX_IN_FLIGHT_REQUESTS", "2"))))
+READNOVELMTL_MAX_IN_FLIGHT_REQUESTS = max(1, min(8, int(os.getenv("READNOVELMTL_MAX_IN_FLIGHT_REQUESTS", "4"))))
 READNOVELMTL_RATE_LIMIT_BASE_COOLDOWN_SECONDS = max(
     1.0, float(os.getenv("READNOVELMTL_RATE_LIMIT_BASE_COOLDOWN_SECONDS", "60"))
 )
@@ -241,7 +241,7 @@ class ReadNovelMtlBatchService:
             max_pages_per_genre=clamp(max_pages_per_genre, 1, READNOVELMTL_BATCH_MAX_PAGES),
             discover_concurrency=clamp(discover_concurrency, 1, READNOVELMTL_BATCH_MAX_DISCOVER_WORKERS),
             crawl_concurrency=clamp(crawl_concurrency, 1, READNOVELMTL_BATCH_MAX_CRAWL_WORKERS),
-            request_delay_seconds=max(1.0, min(float(request_delay_seconds), 15.0)),
+            request_delay_seconds=max(0.1, min(float(request_delay_seconds), 15.0)),
             output_dir=str(self._prepare_output_dir(batch_id)),
             selected_genres=selected,
             cancel_requested=False,
@@ -280,7 +280,7 @@ class ReadNovelMtlBatchService:
             state.cancel_requested = False
             state.finished_at = None
             state.crawl_concurrency = clamp(crawl_concurrency, 1, READNOVELMTL_BATCH_MAX_CRAWL_WORKERS)
-            state.request_delay_seconds = max(1.0, min(float(request_delay_seconds), 15.0))
+            state.request_delay_seconds = max(0.1, min(float(request_delay_seconds), 15.0))
             initial_crawled_chapters = sum(int(row.crawled_chapters or 0) for row in available_rows)
             state.crawl_runs.append({
                 "run_id": run_id,

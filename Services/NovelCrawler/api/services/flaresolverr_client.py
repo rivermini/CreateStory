@@ -13,9 +13,16 @@ Enabled by setting ``FLARESOLVERR_URL`` (e.g. ``http://flaresolverr:8191/v1``).
 from __future__ import annotations
 
 import os
+import threading
+import time
 from typing import Any, Optional
 
 import requests
+
+# FlareSolverr runs a single headless Chrome, so concurrent solves overload it and it
+# returns HTTP 500. Serialize solves process-wide (across all batch crawl workers and
+# spiders in this process) so only one challenge is solved at a time.
+_SOLVE_LOCK = threading.Lock()
 
 
 def flaresolverr_url() -> str:
@@ -43,9 +50,25 @@ def solve(
     payload: dict[str, Any] = {"cmd": "request.get", "url": url, "maxTimeout": int(max_timeout_ms)}
     if cookies:
         payload["cookies"] = cookies
-    resp = requests.post(endpoint, json=payload, timeout=(max_timeout_ms / 1000) + 20)
-    resp.raise_for_status()
-    data = resp.json()
+    # Only one solve hits FlareSolverr at a time (single browser); retry once on a
+    # transient error (e.g. HTTP 500 when the browser was momentarily busy).
+    data: dict[str, Any] | None = None
+    with _SOLVE_LOCK:
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                resp = requests.post(endpoint, json=payload, timeout=(max_timeout_ms / 1000) + 20)
+                resp.raise_for_status()
+                data = resp.json()
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 0:
+                    time.sleep(3)
+                    continue
+                raise RuntimeError(f"FlareSolverr request failed: {last_exc}") from last_exc
+    if data is None:
+        raise RuntimeError("FlareSolverr request failed.")
 
     if data.get("status") != "ok":
         raise RuntimeError(f"FlareSolverr did not solve the challenge: {data.get('message')}")

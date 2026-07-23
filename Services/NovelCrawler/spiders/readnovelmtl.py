@@ -48,10 +48,10 @@ _MAX_FETCH_RETRIES = 3
 class ReadNovelMtlSpider(BaseSpider):
     name = "readnovelmtl"
     config_name = "readnovelmtl"
-    download_delay = 0.3
+    download_delay = 0.1
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 0.3,
+        "DOWNLOAD_DELAY": 0.1,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
     }
 
