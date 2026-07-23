@@ -1,49 +1,58 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  exportInkittBatchCatalog,
-  getInkittBatchDownloadUrl,
-  getInkittBatchRows,
-  getInkittBatchStatus,
-  importInkittDiscoveredCatalog,
-  crawlInkittBatch,
-  listInkittBatches,
-  pauseInkittBatch,
-  reorderInkittBatchGenres,
-  removeInkittBatch,
-  startInkittBatch,
-  type InkittBatchRow,
-  type InkittBatchCrawlRun,
-  type InkittBatchSummary,
+  exportNovelHallBatchCatalog,
+  getNovelHallBatchDownloadUrl,
+  getNovelHallBatchRows,
+  getNovelHallBatchStatus,
+  importNovelHallDiscoveredCatalog,
+  crawlNovelHallBatch,
+  listNovelHallBatches,
+  pauseNovelHallBatch,
+  reorderNovelHallBatchGenres,
+  removeNovelHallBatch,
+  startNovelHallBatch,
+  type NovelHallBatchRow,
+  type NovelHallBatchCrawlRun,
+  type NovelHallBatchSummary,
 } from '../../api';
 import { apiFetch, downloadWithAuth } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
-import { CRAWL_MODE_PRESETS, resolveCrawlMode, type CrawlMode } from './inkittCrawlModes';
-import { getInkittLogTone, inkittLogToneClass, splitInkittLogLine } from './inkittLogUtils';
+import { CRAWL_MODE_PRESETS, resolveCrawlMode, type CrawlMode } from './novelhallCrawlModes';
+import { getNovelHallLogTone, novelhallLogToneClass, splitNovelHallLogLine } from './novelhallLogUtils';
 
-interface InkittBatchPageProps {
+interface NovelHallBatchPageProps {
   readonly themeMode: ThemeMode;
 }
 
 const GENRES = [
-  ['action', 'Action'],
+  ['fantasy20223', 'Fantasy'],
+  ['romance20223', 'Romance'],
+  ['romantic3', 'Romantic'],
+  ['ceo2022', 'CEO'],
+  ['action3', 'Action'],
+  ['urban', 'Urban'],
+  ['billionaire20223', 'Billionaire'],
+  ['adult', 'Adult'],
+  ['game20233', 'Game'],
+  ['xianxia2022', 'Xianxia'],
+  ['scifi', 'Sci-fi'],
+  ['historical2023', 'Historical'],
+  ['drama20233', 'Drama'],
+  ['harem20223', 'Harem'],
+  ['comedy3', 'Comedy'],
   ['adventure', 'Adventure'],
-  ['drama', 'Drama'],
-  ['erotica', 'Erotica'],
-  ['fantasy', 'Fantasy'],
-  ['historical-fiction', 'Historical Fiction'],
-  ['horror', 'Horror'],
-  ['humor', 'Humor'],
-  ['lgbtq', 'LGBTQ+'],
-  ['literary-fiction', 'Literary Fiction'],
+  ['farming2023', 'Farming'],
+  ['military2023', 'Military'],
+  ['soninlaw2022', 'Son-In-Law'],
+  ['wuxia', 'Wuxia'],
+  ['games3', 'Games'],
+  ['josei', 'Josei'],
+  ['ecchi', 'Ecchi'],
+  ['yaoi3', 'Yaoi'],
   ['mystery', 'Mystery'],
-  ['other', 'Other'],
-  ['poetry', 'Poetry'],
-  ['romance', 'Romance'],
-  ['scifi', 'Scifi'],
-  ['thriller', 'Thriller'],
-  ['young-adult', 'Young Adult'],
+  ['eastern', 'Eastern'],
 ] as const;
 
 const ALL_GENRE_SLUGS = GENRES.map(([slug]) => slug);
@@ -71,8 +80,8 @@ function downloadJsonFile(payload: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-async function retryInkittFailedStories(batchId: string, rowIndex?: number): Promise<InkittBatchSummary> {
-  return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/retry-failed`, {
+async function retryNovelHallFailedStories(batchId: string, rowIndex?: number): Promise<NovelHallBatchSummary> {
+  return apiFetch<NovelHallBatchSummary>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/retry-failed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rowIndex ? { row_index: rowIndex } : {}),
@@ -131,16 +140,16 @@ function formatRemainingChapters(value: number, rawValue?: number): string {
   return `${formatted} est`;
 }
 
-function runProcessedCount(run: InkittBatchCrawlRun): number {
+function runProcessedCount(run: NovelHallBatchCrawlRun): number {
   return run.processed_count ?? run.completed_count + run.failed_count + run.skipped_count;
 }
 
-function runProgressPercent(run: InkittBatchCrawlRun): number {
+function runProgressPercent(run: NovelHallBatchCrawlRun): number {
   if (run.target_stories <= 0) return 0;
   return Math.min(100, (runProcessedCount(run) / run.target_stories) * 100);
 }
 
-export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
+export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>(() => GENRES.map(([slug]) => slug));
@@ -148,10 +157,10 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
   const [crawlMode, setCrawlMode] = useState<CrawlMode>('fast');
   const [storiesPerRun, setStoriesPerRun] = useState(200);
-  const [batchId, setBatchId] = useState(() => sessionStorage.getItem('inkitt_batch_id') || '');
-  const [summary, setSummary] = useState<InkittBatchSummary | null>(null);
-  const [history, setHistory] = useState<InkittBatchSummary[]>([]);
-  const [rows, setRows] = useState<InkittBatchRow[]>([]);
+  const [batchId, setBatchId] = useState(() => sessionStorage.getItem('novelhall_batch_id') || '');
+  const [summary, setSummary] = useState<NovelHallBatchSummary | null>(null);
+  const [history, setHistory] = useState<NovelHallBatchSummary[]>([]);
+  const [rows, setRows] = useState<NovelHallBatchRow[]>([]);
   const [rowTotal, setRowTotal] = useState(0);
   const [rowFilter, setRowFilter] = useState('all');
   const [isStarting, setIsStarting] = useState(false);
@@ -161,7 +170,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const [catalogMessage, setCatalogMessage] = useState('');
   const [rowsLoading, setRowsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<InkittBatchSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<NovelHallBatchSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState('');
   const [retryTarget, setRetryTarget] = useState('');
@@ -208,7 +217,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     if (historyRequestRef.current) return;
     historyRequestRef.current = true;
     setHistoryLoading(true);
-    listInkittBatches()
+    listNovelHallBatches()
       .then(setHistory)
       .catch(() => {})
       .finally(() => { historyRequestRef.current = false; setHistoryLoading(false); });
@@ -217,9 +226,9 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const fetchStatus = useCallback(() => {
     if (!batchId || statusRequestRef.current) return;
     statusRequestRef.current = true;
-    getInkittBatchStatus(batchId)
+    getNovelHallBatchStatus(batchId)
       .then(setSummary)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh Inkitt batch status.'))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh NovelHall batch status.'))
       .finally(() => { statusRequestRef.current = false; });
   }, [batchId]);
 
@@ -229,13 +238,13 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setRowsLoading(true);
     const requestKey = `${batchId}|${rowFilter}`;
     try {
-      const items: InkittBatchRow[] = [];
+      const items: NovelHallBatchRow[] = [];
       let cursor = offset;
       let remaining = Math.max(1, requestedLimit);
-      let lastResponse = null as Awaited<ReturnType<typeof getInkittBatchRows>> | null;
+      let lastResponse = null as Awaited<ReturnType<typeof getNovelHallBatchRows>> | null;
       while (remaining > 0) {
         const pageSize = Math.min(ROW_PAGE_SIZE, remaining);
-        const response = await getInkittBatchRows(batchId, { offset: cursor, limit: pageSize, status: rowFilter });
+        const response = await getNovelHallBatchRows(batchId, { offset: cursor, limit: pageSize, status: rowFilter });
         lastResponse = response;
         items.push(...response.items);
         cursor += response.items.length;
@@ -250,7 +259,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       setRowTotal(lastResponse.total);
       setSummary(lastResponse.batch);
     } catch (err) {
-      if (rowsRequestKeyRef.current === requestKey) setError(err instanceof Error ? err.message : 'Failed to load Inkitt batch rows.');
+      if (rowsRequestKeyRef.current === requestKey) setError(err instanceof Error ? err.message : 'Failed to load NovelHall batch rows.');
     } finally {
       rowsRequestRef.current = false;
       setRowsLoading(false);
@@ -267,7 +276,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
 
   useEffect(() => {
     if (!batchId) return;
-    sessionStorage.setItem('inkitt_batch_id', batchId);
+    sessionStorage.setItem('novelhall_batch_id', batchId);
     fetchRows(0);
   }, [batchId, fetchRows]);
 
@@ -301,20 +310,20 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setSelectedGenres(next);
     // Persist the new crawl priority live — safe at any time, including mid-crawl.
     if (batchId) {
-      void reorderInkittBatchGenres(batchId, next).catch(() => setError('Could not save crawl priority order.'));
+      void reorderNovelHallBatchGenres(batchId, next).catch(() => setError('Could not save crawl priority order.'));
     }
   }, [selectedGenres, batchId]);
 
   const handleDiscoverSelected = async () => {
     if (selectedGenres.length === 0) {
-      setError('Select at least one Inkitt genre.');
+      setError('Select at least one NovelHall genre.');
       return;
     }
     setIsStarting(true);
     setError('');
     try {
-      const response = await startInkittBatch({
-        batch_name: batchName || `Inkitt ${selectedGenres.length} genre batch`,
+      const response = await startNovelHallBatch({
+        batch_name: batchName || `NovelHall ${selectedGenres.length} genre batch`,
         genres: selectedGenres,
         max_pages_per_genre: maxPages,
         discover_concurrency: discoverConcurrency,
@@ -330,7 +339,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       setRowFilter('all');
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to discover Inkitt stories.');
+      setError(err instanceof Error ? err.message : 'Failed to discover NovelHall stories.');
     } finally {
       setIsStarting(false);
     }
@@ -340,8 +349,8 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setIsStarting(true);
     setError('');
     try {
-      const response = await startInkittBatch({
-        batch_name: batchName || 'Inkitt all free completed discovery',
+      const response = await startNovelHallBatch({
+        batch_name: batchName || 'NovelHall genre batch',
         genres: ALL_GENRE_SLUGS,
         max_pages_per_genre: DISCOVER_ALL_MAX_PAGES,
         discover_concurrency: discoverConcurrency,
@@ -359,7 +368,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       setRowFilter('all');
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to discover all Inkitt stories.');
+      setError(err instanceof Error ? err.message : 'Failed to discover all NovelHall stories.');
     } finally {
       setIsStarting(false);
     }
@@ -370,7 +379,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setIsStarting(true);
     setError('');
     try {
-      const response = await crawlInkittBatch(batchId, {
+      const response = await crawlNovelHallBatch(batchId, {
         crawl_concurrency: crawlPreset.workers,
         request_delay_seconds: crawlPreset.delaySeconds,
         max_stories: storiesPerRun,
@@ -379,7 +388,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       fetchRows(0);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start Inkitt crawl.');
+      setError(err instanceof Error ? err.message : 'Failed to start NovelHall crawl.');
     } finally {
       setIsStarting(false);
     }
@@ -390,12 +399,12 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setIsPausing(true);
     setError('');
     try {
-      const response = await pauseInkittBatch(batchId);
+      const response = await pauseNovelHallBatch(batchId);
       setSummary(response);
       fetchRows(0);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pause Inkitt crawl.');
+      setError(err instanceof Error ? err.message : 'Failed to pause NovelHall crawl.');
     } finally {
       setIsPausing(false);
     }
@@ -407,13 +416,13 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setRetryTarget(target);
     setError('');
     try {
-      const response = await retryInkittFailedStories(batchId, rowIndex);
+      const response = await retryNovelHallFailedStories(batchId, rowIndex);
       setSummary(response);
       setRows([]);
       fetchRows(0);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to queue failed Inkitt stories for retry.');
+      setError(err instanceof Error ? err.message : 'Failed to queue failed NovelHall stories for retry.');
     } finally {
       setRetryTarget('');
     }
@@ -424,9 +433,9 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setDownloadTarget('all');
     setError('');
     try {
-      await downloadWithAuth(getInkittBatchDownloadUrl(batchId), `inkitt_batch_${batchId}.zip`);
+      await downloadWithAuth(getNovelHallBatchDownloadUrl(batchId), `novelhall_batch_${batchId}.zip`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download Inkitt ZIP.');
+      setError(err instanceof Error ? err.message : 'Failed to download NovelHall ZIP.');
     } finally {
       setDownloadTarget('');
     }
@@ -438,9 +447,9 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setDownloadTarget(target);
     setError('');
     try {
-      await downloadWithAuth(getInkittBatchDownloadUrl(batchId, runId), `inkitt_batch_${batchId}_${runId}.zip`);
+      await downloadWithAuth(getNovelHallBatchDownloadUrl(batchId, runId), `novelhall_batch_${batchId}_${runId}.zip`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download Inkitt run ZIP.');
+      setError(err instanceof Error ? err.message : 'Failed to download NovelHall run ZIP.');
     } finally {
       setDownloadTarget('');
     }
@@ -449,19 +458,19 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
   const handleExportCatalog = async () => {
     const selectedBatchId = summary?.batch_id || batchId;
     if (!selectedBatchId) {
-      setError('Select an Inkitt batch before exporting its discovered catalog.');
+      setError('Select a NovelHall batch before exporting its discovered catalog.');
       return;
     }
     setIsCatalogExporting(true);
     setCatalogMessage('');
     setError('');
     try {
-      const backup = await exportInkittBatchCatalog(selectedBatchId);
+      const backup = await exportNovelHallBatchCatalog(selectedBatchId);
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJsonFile(backup, `inkitt_batch_catalog_${selectedBatchId}_${stamp}_${backup.story_count}.json`);
+      downloadJsonFile(backup, `novelhall_batch_catalog_${selectedBatchId}_${stamp}_${backup.story_count}.json`);
       setCatalogMessage(`Exported ${backup.story_count.toLocaleString()} story/stories from the selected batch.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export selected Inkitt batch catalog.');
+      setError(err instanceof Error ? err.message : 'Failed to export selected NovelHall batch catalog.');
     } finally {
       setIsCatalogExporting(false);
     }
@@ -480,7 +489,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setError('');
     try {
       const payload = JSON.parse(await file.text()) as unknown;
-      const response = await importInkittDiscoveredCatalog(payload);
+      const response = await importNovelHallDiscoveredCatalog(payload);
       syncedBatchIdRef.current = '';
       setShowAllRuns(false);
       setBatchId(response.batch.batch_id);
@@ -495,13 +504,13 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
       );
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import Inkitt discovered catalog.');
+      setError(err instanceof Error ? err.message : 'Failed to import NovelHall discovered catalog.');
     } finally {
       setIsCatalogImporting(false);
     }
   };
 
-  const handleSelectBatch = (batch: InkittBatchSummary) => {
+  const handleSelectBatch = (batch: NovelHallBatchSummary) => {
     syncedBatchIdRef.current = '';
     setShowAllRuns(false);
     setBatchId(batch.batch_id);
@@ -518,19 +527,19 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     setIsDeleting(true);
     setError('');
     try {
-      await removeInkittBatch(deletingId);
+      await removeNovelHallBatch(deletingId);
       setHistory((items) => items.filter((item) => item.batch_id !== deletingId));
       if (batchId === deletingId) {
         setBatchId('');
         setSummary(null);
         setRows([]);
         setRowTotal(0);
-        sessionStorage.removeItem('inkitt_batch_id');
+        sessionStorage.removeItem('novelhall_batch_id');
       }
       setDeleteTarget(null);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete Inkitt batch.');
+      setError(err instanceof Error ? err.message : 'Failed to delete NovelHall batch.');
       setDeleteTarget(null);
     } finally {
       setIsDeleting(false);
@@ -570,10 +579,10 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
           <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase" style={{ color: faint }}>Inkitt</div>
-                <h1 className="text-xl font-semibold sm:text-2xl" style={{ color: text }}>Free completed genre batch</h1>
+                <div className="text-xs font-semibold uppercase" style={{ color: faint }}>NovelHall</div>
+                <h1 className="text-xl font-semibold sm:text-2xl" style={{ color: text }}>Genre batch</h1>
                 <p className="max-w-3xl text-sm leading-5" style={{ color: soft }}>
-                  Crawl only free readable completed Inkitt stories, group them by genre, and download one ZIP with combined Markdown plus info.json per story.
+                  Discover NovelHall stories by genre, crawl them in your chosen genre priority, and download one ZIP with combined Markdown plus info.json per story.
                 </p>
               </div>
               {summary && (
@@ -701,7 +710,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                   style={{ borderColor: primary, background: 'var(--cs-primary-soft)', color: primary }}
                 >
                   {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.search} className="h-4 w-4" />}
-                  Discover all free completed
+                  Discover all
                 </button>
                 <button
                   type="button"
@@ -840,7 +849,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
               </div>
             ) : (
               <div className="mt-4 rounded-lg border px-4 py-6 text-center text-sm" style={{ borderColor: panelBorder, color: soft }}>
-                {historyLoading ? 'Loading batch history...' : 'No Inkitt batches yet.'}
+                {historyLoading ? 'Loading batch history...' : 'No NovelHall batches yet.'}
               </div>
             )}
           </section>
@@ -858,7 +867,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 <div className="flex items-center gap-2">
                   <span className="text-xs tabular-nums" style={{ color: faint }}>{summary.log_lines.length.toLocaleString()} latest lines</span>
                   <Link
-                    to={`/inkitt-batch/${encodeURIComponent(summary.batch_id)}/full-logs`}
+                    to={`/novelhall-batch/${encodeURIComponent(summary.batch_id)}/full-logs`}
                     className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold"
                     style={{ borderColor: panelBorder, background: muted, color: text }}
                   >
@@ -869,10 +878,10 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
               </div>
               <div className="mt-3 max-h-56 overflow-auto rounded-md border p-2 font-mono text-xs leading-5" style={{ borderColor: panelBorder, background: muted }}>
                 {summary.log_lines.slice().reverse().map((line, index) => {
-                  const { time, message } = splitInkittLogLine(line);
-                  const tone = getInkittLogTone(line);
+                  const { time, message } = splitNovelHallLogLine(line);
+                  const tone = getNovelHallLogTone(line);
                   return (
-                    <div key={`${line}-${index}`} className={`mb-1 rounded border-l-2 px-2 py-1 last:mb-0 ${inkittLogToneClass(tone)}`}>
+                    <div key={`${line}-${index}`} className={`mb-1 rounded border-l-2 px-2 py-1 last:mb-0 ${novelhallLogToneClass(tone)}`}>
                       {time && <span className="mr-2 font-semibold opacity-70">{time}</span>}
                       <span className="break-words">{message}</span>
                     </div>
@@ -1117,7 +1126,7 @@ function Progress({ label, value }: { readonly label: string; readonly value: nu
   );
 }
 
-function StatusChip({ row }: { readonly row: InkittBatchRow }) {
+function StatusChip({ row }: { readonly row: NovelHallBatchRow }) {
   const label = row.status === 'completed' ? 'Exported' : row.status.charAt(0).toUpperCase() + row.status.slice(1);
   const tone = row.status === 'completed' ? 'success' : row.status === 'skipped' ? 'warning' : row.status === 'failed' ? 'danger' : 'neutral';
   const colors = {
@@ -1129,8 +1138,8 @@ function StatusChip({ row }: { readonly row: InkittBatchRow }) {
   return <span className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold" style={{ background: colors.bg, color: colors.color, borderColor: colors.border }}>{label}</span>;
 }
 
-function phaseLabel(phase: InkittBatchSummary['phase']): string {
-  const labels: Record<InkittBatchSummary['phase'], string> = {
+function phaseLabel(phase: NovelHallBatchSummary['phase']): string {
+  const labels: Record<NovelHallBatchSummary['phase'], string> = {
     discovering: 'Discovering',
     ready: 'Ready',
     crawling: 'Crawling',

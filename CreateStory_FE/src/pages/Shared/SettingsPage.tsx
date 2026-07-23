@@ -5,6 +5,8 @@ import {
   checkInkittCookies,
   updateScribblehubCookies,
   checkScribblehubCookies,
+  updateNovelHallCookies,
+  checkNovelHallCookies,
   updateGoodnovelCookies,
   checkGoodnovelCookies,
   updateWebnovelCookies,
@@ -26,7 +28,7 @@ import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
 import { showToast } from '../../components/Shared/Toast';
 
-type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'goodnovel' | 'webnovel' | 'jobnib' | 'crawler' | 'audio' | 'danger';
+type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'novelhall' | 'goodnovel' | 'webnovel' | 'jobnib' | 'crawler' | 'audio' | 'danger';
 
 interface SettingsPageProps {
   themeMode: ThemeMode;
@@ -48,6 +50,7 @@ const CATEGORY_ITEMS: CategoryItem[] = [
   { id: 'driveSync', label: 'Drive Sync', description: 'Google Drive and API', icon: 'sync' },
   { id: 'inkitt', label: 'Inkitt Cookies', description: 'Crawler login cookies', icon: 'shield' },
   { id: 'scribblehub', label: 'ScribbleHub Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
+  { id: 'novelhall', label: 'NovelHall Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
   { id: 'goodnovel', label: 'GoodNovel Cookies', description: 'Login cookies to unlock chapters', icon: 'shield' },
   { id: 'webnovel', label: 'WebNovel Cookies', description: 'Cloudflare and login cookies', icon: 'shield' },
   { id: 'jobnib', label: 'Jobnib Session', description: 'Cloudflare cookies and User-Agent', icon: 'shield' },
@@ -142,6 +145,12 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
   const [checkingScribblehubCookies, setCheckingScribblehubCookies] = useState(false);
   const [scribblehubCookieError, setScribblehubCookieError] = useState('');
   const [scribblehubCookieMessage, setScribblehubCookieMessage] = useState('');
+  const [novelhallCookies, setNovelhallCookies] = useState('');
+  const [novelhallUserAgent, setNovelhallUserAgent] = useState('');
+  const [savingNovelhallCookies, setSavingNovelhallCookies] = useState(false);
+  const [checkingNovelhallCookies, setCheckingNovelhallCookies] = useState(false);
+  const [novelhallCookieError, setNovelhallCookieError] = useState('');
+  const [novelhallCookieMessage, setNovelhallCookieMessage] = useState('');
   const [goodnovelCookies, setGoodnovelCookies] = useState('');
   const [goodnovelUserAgent, setGoodnovelUserAgent] = useState('');
   const [goodnovelTestUrl, setGoodnovelTestUrl] = useState('');
@@ -614,6 +623,106 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
     }
   };
 
+  const handleSaveNovelhallCookies = async () => {
+    const cookies = novelhallCookies.trim();
+    const userAgent = novelhallUserAgent.trim();
+    if (!cookies) {
+      setNovelhallCookieError('Paste your NovelHall cookies (at least cf_clearance) before saving.');
+      setNovelhallCookieMessage('');
+      return;
+    }
+    if (!userAgent) {
+      setNovelhallCookieError('Paste your browser User-Agent — cf_clearance only works with the matching User-Agent.');
+      setNovelhallCookieMessage('');
+      return;
+    }
+
+    setSavingNovelhallCookies(true);
+    setNovelhallCookieError('');
+    setNovelhallCookieMessage('');
+    try {
+      const result = await updateNovelHallCookies(cookies, userAgent);
+      if (!result.has_cf_clearance) {
+        setNovelhallCookieError('Saved, but no cf_clearance cookie was found — crawling will still be blocked by Cloudflare.');
+      } else {
+        const message = `Saved ${result.cookie_count} NovelHall cookie${result.cookie_count === 1 ? '' : 's'}.`;
+        setNovelhallCookieMessage(message);
+        showToast(message, 'success', 2200, 'top-center');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update NovelHall cookies.';
+      setNovelhallCookieError(message);
+      showToast('Failed to update NovelHall cookies.', 'error', 2500, 'top-center');
+    } finally {
+      setSavingNovelhallCookies(false);
+    }
+  };
+
+  const handleCheckNovelhallCookies = async () => {
+    setCheckingNovelhallCookies(true);
+    setNovelhallCookieError('');
+    setNovelhallCookieMessage('');
+    try {
+      const result = await checkNovelHallCookies();
+      if (result.valid) {
+        setNovelhallCookieMessage(result.message);
+        showToast('NovelHall cookies are working.', 'success', 2200, 'top-center');
+      } else {
+        setNovelhallCookieError(result.message);
+      }
+    } catch (err) {
+      setNovelhallCookieError(err instanceof Error ? err.message : 'Failed to test NovelHall cookies.');
+    } finally {
+      setCheckingNovelhallCookies(false);
+    }
+  };
+
+  const handleNovelhallJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let json = JSON.parse(text);
+
+      // Extract user_agent from wrapper object before unwrapping
+      let extractedUA = '';
+      if (json && !Array.isArray(json) && typeof json === 'object') {
+        extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+      }
+
+      // Unwrap wrapper objects (our extractor saves { cookies: [...], user_agent: "..." })
+      if (json && !Array.isArray(json) && (json.cookies || json.data)) json = json.cookies || json.data;
+
+      // Array of cookie objects (Selenium / EditThisCookie export) → keep as JSON for the backend parser.
+      if (Array.isArray(json)) {
+        setNovelhallCookies(JSON.stringify(json));
+        // Also check if any cookie entry is named 'user-agent' (EditThisCookie style)
+        if (!extractedUA) {
+          const uaEntry = json.find((c) => (c?.name || '').toLowerCase() === 'user-agent');
+          if (uaEntry?.value) extractedUA = String(uaEntry.value);
+        }
+      } else if (json && typeof json === 'object') {
+        const cf = json.cf_clearance || json.cfClearance || '';
+        if (cf) setNovelhallCookies(`cf_clearance=${cf}`);
+        if (!extractedUA) extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+        if (!cf) setNovelhallCookies(text.trim());
+      }
+
+      // Auto-populate User-Agent if found
+      if (extractedUA) {
+        setNovelhallUserAgent(String(extractedUA));
+        showToast('NovelHall cookies + User-Agent loaded from file.', 'success', 2500, 'top-center');
+      } else {
+        showToast('NovelHall cookie values loaded from file. User-Agent not found — please enter it manually.', 'info', 3500, 'top-center');
+      }
+      setNovelhallCookieError('');
+    } catch (err) {
+      setNovelhallCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const handleSaveGoodnovelCookies = async () => {
     const cookies = goodnovelCookies.trim();
     const userAgent = goodnovelUserAgent.trim();
@@ -1042,6 +1151,37 @@ export function SettingsPage({ themeMode, onThemeChange, onClose, onLogout }: Re
             <p className="text-xs" style={{ color: tertiaryText }}>In Chrome at `https://www.scribblehub.com`: DevTools → Application → Cookies → copy `cf_clearance`. cf_clearance is tied to your IP + User-Agent, so the crawler must run on this machine and the User-Agent must match. It expires every ~30–60 min — re-paste when crawls start failing.</p>
             {scribblehubCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{scribblehubCookieMessage}</div>}
             {scribblehubCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{scribblehubCookieError}</div>}
+          </section>
+        );
+      case 'novelhall':
+        return (
+          <section className={sectionClassName} style={{ background: panelBackground, borderColor: panelBorder }}>
+            <SectionTitle title="NovelHall Cookies" description="NovelHall is behind a Cloudflare challenge. Paste a browser session cookie (cf_clearance) and its matching User-Agent so the crawler can read pages directly." pageText={pageText} secondaryText={secondaryText} />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label htmlFor="settings-novelhall-cookies" className={labelClassName}>Cookies — `cf_clearance=...`, a full Cookie header, or a JSON cookie array</label>
+                <textarea id="settings-novelhall-cookies" value={novelhallCookies} onChange={(e) => { setNovelhallCookies(e.target.value); setNovelhallCookieError(''); setNovelhallCookieMessage(''); }} rows={4} className={`${fieldClassName} min-h-[110px] resize-y font-mono text-xs`} placeholder={'cf_clearance=AbCd...'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+              <div>
+                <label htmlFor="settings-novelhall-ua" className={labelClassName}>Browser User-Agent (run `navigator.userAgent` in the DevTools console)</label>
+                <textarea id="settings-novelhall-ua" value={novelhallUserAgent} onChange={(e) => { setNovelhallUserAgent(e.target.value); setNovelhallCookieError(''); setNovelhallCookieMessage(''); }} rows={2} className={`${fieldClassName} resize-y font-mono text-xs`} placeholder={'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ... Chrome/... Safari/537.36'} style={{ background: inputBackground, borderColor: inputBorder }} />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={handleSaveNovelhallCookies} disabled={savingNovelhallCookies || !novelhallCookies.trim() || !novelhallUserAgent.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ background: savingNovelhallCookies || !novelhallCookies.trim() || !novelhallUserAgent.trim() ? subtleSurface : primaryButton, color: savingNovelhallCookies || !novelhallCookies.trim() || !novelhallUserAgent.trim() ? tertiaryText : '#fff' }}>
+                {savingNovelhallCookies ? 'Saving...' : 'Save Cookies'}
+              </button>
+              <button type="button" onClick={handleCheckNovelhallCookies} disabled={checkingNovelhallCookies} className="rounded-lg border px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                {checkingNovelhallCookies ? 'Testing...' : 'Test Cookies'}
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: subtleSurface, color: pageText }}>
+                <span>Upload Cookies JSON</span>
+                <input type="file" accept="application/json" onChange={handleNovelhallJsonFileUpload} className="hidden" />
+              </label>
+            </div>
+            <p className="text-xs" style={{ color: tertiaryText }}>In Chrome at `https://www.novelhall.com`: DevTools → Application → Cookies → copy `cf_clearance`. cf_clearance is tied to your IP + User-Agent, so the crawler must run on this machine and the User-Agent must match. It expires every ~30–60 min — re-paste when crawls start failing.</p>
+            {novelhallCookieMessage && <div className="text-sm" style={{ color: isDark ? 'rgb(74 222 128)' : 'rgb(21 128 61)' }}>{novelhallCookieMessage}</div>}
+            {novelhallCookieError && <div className="text-sm" style={{ color: isDark ? 'rgb(248 113 113)' : 'rgb(220 38 38)' }}>{novelhallCookieError}</div>}
           </section>
         );
       case 'goodnovel':

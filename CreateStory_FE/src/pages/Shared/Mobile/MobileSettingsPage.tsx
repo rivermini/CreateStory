@@ -9,6 +9,8 @@ import {
     checkInkittCookies,
     updateScribblehubCookies,
     checkScribblehubCookies,
+    updateNovelHallCookies,
+    checkNovelHallCookies,
     updateGoodnovelCookies,
     checkGoodnovelCookies,
     updateWebnovelCookies,
@@ -24,7 +26,7 @@ import {
 import { DriveConfig, type ConfigFormData } from '../../../components/Shared/DriveConfig';
 import type { ThemeMode } from '../../../types/theme';
 
-type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'goodnovel' | 'webnovel' | 'crawler' | 'audio' | 'danger';
+type SettingsCategory = 'profile' | 'appearance' | 'driveSync' | 'inkitt' | 'scribblehub' | 'novelhall' | 'goodnovel' | 'webnovel' | 'crawler' | 'audio' | 'danger';
 
 interface CategoryItem {
     id: SettingsCategory;
@@ -39,6 +41,7 @@ const CATEGORIES: CategoryItem[] = [
     { id: 'driveSync', label: 'Drive Sync', description: 'Google Drive and API', icon: 'sync' },
     { id: 'inkitt', label: 'Inkitt Cookies', description: 'Crawler login cookies', icon: 'shield' },
     { id: 'scribblehub', label: 'ScribbleHub Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
+    { id: 'novelhall', label: 'NovelHall Cookies', description: 'Cloudflare bypass cookies', icon: 'shield' },
     { id: 'goodnovel', label: 'GoodNovel Cookies', description: 'Login cookies to unlock chapters', icon: 'shield' },
     { id: 'webnovel', label: 'WebNovel Cookies', description: 'Cloudflare and login cookies', icon: 'shield' },
     { id: 'crawler', label: 'Crawler', description: 'Default crawl behavior', icon: 'settings' },
@@ -93,6 +96,14 @@ export function MobileSettingsPage({
     const [checkingScribblehubCookies, setCheckingScribblehubCookies] = useState(false);
     const [scribblehubCookieError, setScribblehubCookieError] = useState('');
     const [scribblehubCookieMessage, setScribblehubCookieMessage] = useState('');
+
+    // NovelHall cookies states
+    const [novelhallCookies, setNovelhallCookies] = useState('');
+    const [novelhallUserAgent, setNovelhallUserAgent] = useState('');
+    const [savingNovelhallCookies, setSavingNovelhallCookies] = useState(false);
+    const [checkingNovelhallCookies, setCheckingNovelhallCookies] = useState(false);
+    const [novelhallCookieError, setNovelhallCookieError] = useState('');
+    const [novelhallCookieMessage, setNovelhallCookieMessage] = useState('');
 
     // GoodNovel cookies states
     const [goodnovelCookies, setGoodnovelCookies] = useState('');
@@ -569,6 +580,101 @@ export function MobileSettingsPage({
         }
     };
 
+    const handleSaveNovelhallCookies = async () => {
+        const cookies = novelhallCookies.trim();
+        const userAgent = novelhallUserAgent.trim();
+        if (!cookies) {
+            setNovelhallCookieError('Paste your NovelHall cookies (at least cf_clearance) before saving.');
+            setNovelhallCookieMessage('');
+            return;
+        }
+        if (!userAgent) {
+            setNovelhallCookieError('Paste your browser User-Agent — cf_clearance only works with the matching User-Agent.');
+            setNovelhallCookieMessage('');
+            return;
+        }
+
+        setSavingNovelhallCookies(true);
+        setNovelhallCookieError('');
+        setNovelhallCookieMessage('');
+        try {
+            const result = await updateNovelHallCookies(cookies, userAgent);
+            if (!result.has_cf_clearance) {
+                setNovelhallCookieError('Saved, but no cf_clearance cookie was found — crawling will still be blocked by Cloudflare.');
+            } else {
+                const message = `Saved ${result.cookie_count} NovelHall cookie${result.cookie_count === 1 ? '' : 's'}.`;
+                setNovelhallCookieMessage(message);
+                showToast(message, 'success', 2200, 'top-center');
+            }
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to update NovelHall cookies.';
+            setNovelhallCookieError(message);
+            showToast('Failed to update NovelHall cookies.', 'error', 2500, 'top-center');
+        } finally {
+            setSavingNovelhallCookies(false);
+        }
+    };
+
+    const handleCheckNovelhallCookies = async () => {
+        setCheckingNovelhallCookies(true);
+        setNovelhallCookieError('');
+        setNovelhallCookieMessage('');
+        try {
+            const result = await checkNovelHallCookies();
+            if (result.valid) {
+                setNovelhallCookieMessage(result.message);
+                showToast('NovelHall cookies are working.', 'success', 2200, 'top-center');
+            } else {
+                setNovelhallCookieError(result.message);
+            }
+        } catch (err) {
+            setNovelhallCookieError(err instanceof Error ? err.message : 'Failed to test NovelHall cookies.');
+        } finally {
+            setCheckingNovelhallCookies(false);
+        }
+    };
+
+    const handleNovelhallJsonFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            let json = JSON.parse(text);
+
+            let extractedUA = '';
+            if (json && !Array.isArray(json) && typeof json === 'object') {
+                extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+            }
+
+            if (json && !Array.isArray(json) && (json.cookies || json.data)) json = json.cookies || json.data;
+
+            if (Array.isArray(json)) {
+                setNovelhallCookies(JSON.stringify(json));
+                if (!extractedUA) {
+                    const uaEntry = json.find((c) => (c?.name || '').toLowerCase() === 'user-agent');
+                    if (uaEntry?.value) extractedUA = String(uaEntry.value);
+                }
+            } else if (json && typeof json === 'object') {
+                const cf = json.cf_clearance || json.cfClearance || '';
+                if (cf) setNovelhallCookies(`cf_clearance=${cf}`);
+                if (!extractedUA) extractedUA = json.user_agent || json.userAgent || json['User-Agent'] || '';
+                if (!cf) setNovelhallCookies(text.trim());
+            }
+
+            if (extractedUA) {
+                setNovelhallUserAgent(String(extractedUA));
+                showToast('NovelHall cookies + User-Agent loaded from file.', 'success', 2500, 'top-center');
+            } else {
+                showToast('NovelHall cookie values loaded from file. User-Agent not found — please enter it manually.', 'info', 3500, 'top-center');
+            }
+            setNovelhallCookieError('');
+        } catch (err) {
+            setNovelhallCookieError(`Invalid JSON: ${err instanceof Error ? err.message : 'Parse error'}`);
+        } finally {
+            e.target.value = '';
+        }
+    };
+
     const handleSaveGoodnovelCookies = async () => {
         const cookies = goodnovelCookies.trim();
         const userAgent = goodnovelUserAgent.trim();
@@ -987,6 +1093,52 @@ export function MobileSettingsPage({
                         <p className="text-xs" style={{ color: textTertiary }}>Cookies expire every ~30-60 min. Re-paste when crawls fail.</p>
                         {scribblehubCookieMessage && <p className="text-sm" style={{ color: success }}>{scribblehubCookieMessage}</p>}
                         {scribblehubCookieError && <p className="text-sm" style={{ color: danger }}>{scribblehubCookieError}</p>}
+                    </div>
+                );
+            case 'novelhall':
+                return (
+                    <div className={`${sectionCard}`} style={{ background: cardBg, borderColor: cardBorder }}>
+                        <div>
+                            <p className={`text-sm font-semibold mb-0.5`} style={{ color: textPrimary }}>NovelHall Cookies</p>
+                            <p className="text-xs" style={{ color: textSecondary }}>Cloudflare bypass cookies.</p>
+                        </div>
+                        <div>
+                            <label htmlFor="mob-novelhall-cookies" className={labelCls}>Cookies — `cf_clearance=...`, Cookie header, or JSON cookie array</label>
+                            <textarea id="mob-novelhall-cookies" value={novelhallCookies} onChange={(e) => { setNovelhallCookies(e.target.value); setNovelhallCookieError(''); setNovelhallCookieMessage(''); }} rows={3} className={`${inputCls} min-h-[90px] resize-y font-mono text-xs`} style={{ background: inputBg, borderColor: inputBorder }} />
+                        </div>
+                        <div>
+                            <label htmlFor="mob-novelhall-ua" className={labelCls}>Browser User-Agent (run `navigator.userAgent` in DevTools)</label>
+                            <textarea id="mob-novelhall-ua" value={novelhallUserAgent} onChange={(e) => { setNovelhallUserAgent(e.target.value); setNovelhallCookieError(''); setNovelhallCookieMessage(''); }} rows={2} className={`${inputCls} resize-y font-mono text-xs`} style={{ background: inputBg, borderColor: inputBorder }} />
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={handleSaveNovelhallCookies}
+                                disabled={savingNovelhallCookies || !novelhallCookies.trim() || !novelhallUserAgent.trim()}
+                                className="flex-1 rounded-xl py-2.5 text-sm font-semibold disabled:cursor-not-allowed"
+                                style={{ background: savingNovelhallCookies || !novelhallCookies.trim() || !novelhallUserAgent.trim() ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') : primary, color: savingNovelhallCookies || !novelhallCookies.trim() || !novelhallUserAgent.trim() ? textTertiary : '#fff' }}
+                            >
+                                {savingNovelhallCookies ? 'Saving...' : 'Save Cookies'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCheckNovelhallCookies}
+                                disabled={checkingNovelhallCookies}
+                                className="flex-1 rounded-xl border py-2.5 text-sm font-semibold disabled:cursor-not-allowed"
+                                style={{ borderColor: cardBorder, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: textPrimary }}
+                            >
+                                {checkingNovelhallCookies ? 'Testing...' : 'Test Cookies'}
+                            </button>
+                        </div>
+                        <div className="pt-2">
+                            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium animate-transition" style={{ borderColor: cardBorder, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: textPrimary }}>
+                                <span>Upload Cookies JSON</span>
+                                <input type="file" accept="application/json" onChange={handleNovelhallJsonFileUpload} className="hidden" />
+                            </label>
+                        </div>
+                        <p className="text-xs" style={{ color: textTertiary }}>Cookies expire every ~30-60 min. Re-paste when crawls fail.</p>
+                        {novelhallCookieMessage && <p className="text-sm" style={{ color: success }}>{novelhallCookieMessage}</p>}
+                        {novelhallCookieError && <p className="text-sm" style={{ color: danger }}>{novelhallCookieError}</p>}
                     </div>
                 );
             case 'goodnovel':

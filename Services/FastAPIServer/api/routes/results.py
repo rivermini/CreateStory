@@ -75,6 +75,13 @@ async def download_inkitt_batch(batch_id: str, run_id: str | None = Query(defaul
     return await _proxy_download(f"/api/results/inkitt-batch/{batch_id}/download", params=params)
 
 
+@router.get("/novelhall-batch/{batch_id}/download")
+async def download_novelhall_batch(batch_id: str, run_id: str | None = Query(default=None)) -> StreamingResponse:
+    """Zip the genre-grouped combined files for a NovelHall batch."""
+    params = {"run_id": run_id} if run_id else None
+    return await _proxy_download(f"/api/results/novelhall-batch/{batch_id}/download", params=params)
+
+
 @router.get("/jobnib-batch/{batch_id}/download")
 async def download_jobnib_batch(
     batch_id: str,

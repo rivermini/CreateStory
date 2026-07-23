@@ -26,6 +26,7 @@ const NAV_ITEMS_CRAWL: NavItem[] = [
     { to: '/', label: 'New Crawl', iconKey: '/' },
     { to: '/goodnovel-batch', label: 'GoodNovel Batch', iconKey: '/goodnovel-batch' },
     { to: '/inkitt-batch', label: 'Inkitt Batch', iconKey: '/inkitt-batch' },
+    { to: '/novelhall-batch', label: 'NovelHall Batch', iconKey: '/novelhall-batch' },
     { to: '/jobnib-batch', label: 'Jobnib Batch', iconKey: '/jobnib-batch' },
     { to: '/results/all', label: 'Crawl History', iconKey: '/results/all' },
 ];

@@ -105,6 +105,34 @@ class ScribbleHubCookieStatusResponse(BaseModel):
     tested_url: str | None = None
 
 
+class NovelHallCookieUpdateRequest(BaseModel):
+    cookies: str = Field(..., min_length=1, description="NovelHall cookies as Selenium JSON or a raw Cookie header (must include cf_clearance).")
+    user_agent: str | None = Field(default=None, description="The exact browser User-Agent that generated cf_clearance.")
+
+
+class NovelHallCookieUpdateResponse(BaseModel):
+    updated: bool
+    cookie_count: int
+    has_cf_clearance: bool
+
+
+class NovelHallCookieStatusRequest(BaseModel):
+    story_url: str | None = Field(default=None, description="Optional NovelHall story/chapter URL to test against.")
+
+    @field_validator("story_url")
+    @classmethod
+    def _validate_story_url(cls, value: str | None) -> str | None:
+        return validate_external_url(value, ("novelhall.com",), field_name="story_url")
+
+
+class NovelHallCookieStatusResponse(BaseModel):
+    valid: bool | None
+    reason: str
+    message: str
+    cookie_count: int
+    tested_url: str | None = None
+
+
 class GoodNovelCookieUpdateRequest(BaseModel):
     cookies: str = Field(..., min_length=1, description="GoodNovel cookies as JSON (Selenium/EditThisCookie export) or a raw Cookie header. Include the TOKEN login cookie.")
     user_agent: str | None = Field(default=None, description="Optional User-Agent matching the cookies.")
@@ -220,6 +248,22 @@ class InkittBatchStartRequest(BaseModel):
 
 
 class InkittBatchCrawlRequest(BaseModel):
+    crawl_concurrency: int = Field(default=4, ge=1, le=4)
+    request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
+    max_stories: int | None = Field(default=None, ge=1, le=10000)
+
+
+class NovelHallBatchStartRequest(BaseModel):
+    batch_name: str | None = Field(default=None, max_length=160)
+    genres: list[str] | None = Field(default=None, description="NovelHall genre slugs. Empty means all supported genres.")
+    max_pages_per_genre: int = Field(default=3, ge=1, le=1000)
+    discover_concurrency: int = Field(default=4, ge=1, le=6)
+    crawl_concurrency: int = Field(default=4, ge=1, le=4)
+    request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
+    crawl_after_discovery: bool = Field(default=True)
+
+
+class NovelHallBatchCrawlRequest(BaseModel):
     crawl_concurrency: int = Field(default=4, ge=1, le=4)
     request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
     max_stories: int | None = Field(default=None, ge=1, le=10000)
@@ -395,6 +439,40 @@ async def check_scribblehub_cookies(request: ScribbleHubCookieStatusRequest, htt
     return ScribbleHubCookieStatusResponse(**result)
 
 
+@router.post("/novelhall-cookies", response_model=NovelHallCookieUpdateResponse)
+async def update_novelhall_cookies(request: NovelHallCookieUpdateRequest, http_request: Request) -> NovelHallCookieUpdateResponse:
+    """Update the saved NovelHall session cookies (cf_clearance + matching User-Agent)."""
+    require_operator_identity(http_request)
+    from api.services.novelhall_cookie_service import update_novelhall_cookies as save_cookies
+
+    try:
+        result = save_cookies(request.cookies, request.user_agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    logger.info(
+        "Updated NovelHall cookies: %d cookie(s), cf_clearance=%s",
+        result["cookie_count"],
+        result["has_cf_clearance"],
+    )
+    return NovelHallCookieUpdateResponse(**result)
+
+
+@router.post("/novelhall-cookies/status", response_model=NovelHallCookieStatusResponse)
+async def check_novelhall_cookies(request: NovelHallCookieStatusRequest, http_request: Request) -> NovelHallCookieStatusResponse:
+    """Check whether saved NovelHall cookies clear the Cloudflare challenge."""
+    require_operator_identity(http_request)
+    from api.services.novelhall_cookie_service import check_novelhall_cookies as run_check
+
+    result = run_check(request.story_url)
+    logger.info(
+        "Checked NovelHall cookies: valid=%s reason=%s tested_url=%s",
+        result["valid"],
+        result["reason"],
+        result.get("tested_url"),
+    )
+    return NovelHallCookieStatusResponse(**result)
+
 
 @router.post("/goodnovel-cookies", response_model=GoodNovelCookieUpdateResponse)
 async def update_goodnovel_cookies(request: GoodNovelCookieUpdateRequest, http_request: Request) -> GoodNovelCookieUpdateResponse:
@@ -526,6 +604,21 @@ def _require_inkitt_batch_owner(batch_id: str, request: Request):
     return service
 
 
+def _require_novelhall_batch_owner(batch_id: str, request: Request):
+    from api.services.novelhall_batch_service import get_novelhall_batch_service
+
+    service = get_novelhall_batch_service()
+    try:
+        service.require_owner(
+            batch_id=batch_id,
+            user_id=getattr(request.state, "create_story_user_id", None),
+            role=getattr(request.state, "create_story_role", None),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return service
+
+
 def _require_jobnib_batch_owner(batch_id: str, request: Request):
     from api.services.jobnib_batch_service import get_jobnib_batch_service
 
@@ -620,6 +713,21 @@ async def pause_inkitt_batch(batch_id: str, http_request: Request) -> dict:
     service = _require_inkitt_batch_owner(batch_id, http_request)
     try:
         state = service.pause_crawl(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/inkitt-batch/{batch_id}/genre-order")
+async def reorder_inkitt_batch_genres(batch_id: str, payload: dict, http_request: Request) -> dict:
+    """Reorder an Inkitt batch's genre crawl priority (safe at any time, including mid-crawl)."""
+    require_operator_identity(http_request)
+    service = _require_inkitt_batch_owner(batch_id, http_request)
+    genres = payload.get("genres") if isinstance(payload, dict) else None
+    try:
+        state = service.reorder_genres(batch_id, genres)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -730,6 +838,196 @@ async def delete_inkitt_batch(batch_id: str, http_request: Request) -> dict:
     """Delete a completed Inkitt batch history entry and generated output files."""
     require_operator_identity(http_request)
     service = _require_inkitt_batch_owner(batch_id, http_request)
+    try:
+        service.delete_batch(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"deleted": True, "batch_id": batch_id}
+
+
+@router.post("/novelhall-batch/start")
+async def start_novelhall_batch(
+    request: NovelHallBatchStartRequest,
+    http_request: Request,
+) -> dict:
+    """Start a one-click NovelHall batch for genre-listed stories."""
+    require_operator_identity(http_request)
+    from api.services.novelhall_batch_service import get_novelhall_batch_service
+
+    service = get_novelhall_batch_service()
+    try:
+        state = service.start(
+            created_by_user_id=current_owner(http_request),
+            batch_name=request.batch_name or "",
+            genres=request.genres,
+            max_pages_per_genre=request.max_pages_per_genre,
+            discover_concurrency=request.discover_concurrency,
+            crawl_concurrency=request.crawl_concurrency,
+            request_delay_seconds=request.request_delay_seconds,
+            crawl_after_discovery=request.crawl_after_discovery,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/novelhall-batch/{batch_id}/crawl")
+async def crawl_novelhall_batch(
+    batch_id: str,
+    request: NovelHallBatchCrawlRequest,
+    http_request: Request,
+) -> dict:
+    """Start or resume crawling a discovered NovelHall batch queue."""
+    require_operator_identity(http_request)
+    service = _require_novelhall_batch_owner(batch_id, http_request)
+    try:
+        state = service.start_crawl(
+            batch_id=batch_id,
+            crawl_concurrency=request.crawl_concurrency,
+            request_delay_seconds=request.request_delay_seconds,
+            max_stories=request.max_stories,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/novelhall-batch/{batch_id}/pause")
+async def pause_novelhall_batch(batch_id: str, http_request: Request) -> dict:
+    """Gracefully pause an active NovelHall batch crawl."""
+    require_operator_identity(http_request)
+    service = _require_novelhall_batch_owner(batch_id, http_request)
+    try:
+        state = service.pause_crawl(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/novelhall-batch/{batch_id}/genre-order")
+async def reorder_novelhall_batch_genres(batch_id: str, payload: dict, http_request: Request) -> dict:
+    """Reorder a NovelHall batch's genre crawl priority (safe at any time, including mid-crawl)."""
+    require_operator_identity(http_request)
+    service = _require_novelhall_batch_owner(batch_id, http_request)
+    genres = payload.get("genres") if isinstance(payload, dict) else None
+    try:
+        state = service.reorder_genres(batch_id, genres)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.post("/novelhall-batch/{batch_id}/retry-failed")
+async def retry_failed_novelhall_batch_rows(batch_id: str, payload: dict, http_request: Request) -> dict:
+    """Move failed NovelHall stories to the front of the next crawl queue."""
+    require_operator_identity(http_request)
+    service = _require_novelhall_batch_owner(batch_id, http_request)
+    row_index_raw = payload.get("row_index") if isinstance(payload, dict) else None
+    try:
+        row_index = int(row_index_raw) if row_index_raw is not None else None
+        state = service.retry_failed(batch_id, row_index=row_index)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return service.get_status(state.batch_id)
+
+
+@router.get("/novelhall-batch")
+async def list_novelhall_batches(request: Request) -> list[dict]:
+    """Return NovelHall batch history for the current user."""
+    from api.services.novelhall_batch_service import get_novelhall_batch_service
+
+    service = get_novelhall_batch_service()
+    return service.list_batches(
+        user_id=getattr(request.state, "create_story_user_id", None),
+        role=getattr(request.state, "create_story_role", None),
+    )
+
+
+@router.get("/novelhall-batch/catalog/export")
+async def export_novelhall_discovered_catalog(http_request: Request) -> dict:
+    """Export all discovered NovelHall story metadata for backup/restore."""
+    require_operator_identity(http_request)
+    from api.services.novelhall_batch_service import get_novelhall_batch_service
+
+    return get_novelhall_batch_service().export_discovered_catalog()
+
+
+@router.get("/novelhall-batch/{batch_id}/catalog/export")
+async def export_novelhall_batch_catalog(batch_id: str, request: Request) -> dict:
+    """Export discovered NovelHall story metadata from one selected batch."""
+    service = _require_novelhall_batch_owner(batch_id, request)
+    try:
+        return service.export_batch_catalog(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/novelhall-batch/catalog/import")
+async def import_novelhall_discovered_catalog(payload: dict, http_request: Request) -> dict:
+    """Import and merge a discovered NovelHall story catalog backup."""
+    require_operator_identity(http_request)
+    from api.services.novelhall_batch_service import get_novelhall_batch_service
+
+    try:
+        return get_novelhall_batch_service().import_discovered_catalog(
+            payload,
+            created_by_user_id=current_owner(http_request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/novelhall-batch/{batch_id}")
+async def get_novelhall_batch_status(batch_id: str, request: Request) -> dict:
+    """Return current NovelHall batch status."""
+    service = _require_novelhall_batch_owner(batch_id, request)
+    try:
+        return service.get_status(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/novelhall-batch/{batch_id}/rows")
+async def list_novelhall_batch_rows(
+    batch_id: str,
+    request: Request,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    status: str = Query(default="all"),
+) -> dict:
+    """Return a lazy page of NovelHall batch rows."""
+    service = _require_novelhall_batch_owner(batch_id, request)
+    try:
+        return service.list_rows(batch_id, offset=offset, limit=limit, status_filter=status)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/novelhall-batch/{batch_id}/logs")
+async def get_novelhall_batch_logs(batch_id: str, request: Request) -> dict:
+    """Return the full retained NovelHall batch log."""
+    service = _require_novelhall_batch_owner(batch_id, request)
+    try:
+        return service.get_full_logs(batch_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/novelhall-batch/{batch_id}")
+async def delete_novelhall_batch(batch_id: str, http_request: Request) -> dict:
+    """Delete a completed NovelHall batch history entry and generated output files."""
+    require_operator_identity(http_request)
+    service = _require_novelhall_batch_owner(batch_id, http_request)
     try:
         service.delete_batch(batch_id)
     except KeyError as exc:

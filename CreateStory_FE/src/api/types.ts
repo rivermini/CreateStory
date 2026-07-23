@@ -428,6 +428,174 @@ export interface InkittBatchCrawlRequest {
   max_stories?: number | null;
 }
 
+// NovelHall batch types mirror the Inkitt batch types exactly (backend response shapes are identical).
+export interface NovelHallCookieUpdateResponse {
+  updated: boolean;
+  cookie_count: number;
+  has_cf_clearance: boolean;
+}
+
+export interface NovelHallCookieStatusResponse {
+  valid: boolean | null;
+  reason: string;
+  message: string;
+  cookie_count: number;
+  tested_url?: string | null;
+}
+
+export type NovelHallBatchPhase = 'discovering' | 'ready' | 'crawling' | 'completed' | 'failed';
+export type NovelHallBatchRowStatus = 'discovered' | 'queued' | 'crawling' | 'completed' | 'skipped' | 'failed';
+
+export interface NovelHallBatchSummary {
+  batch_id: string;
+  batch_name: string;
+  phase: NovelHallBatchPhase;
+  total_stories: number;
+  discovered_count: number;
+  completed_count: number;
+  skipped_count: number;
+  failed_count: number;
+  processed_count: number;
+  total_chapters: number;
+  crawled_chapters: number;
+  crawl_estimate?: NovelHallBatchCrawlEstimate;
+  rate_limit?: NovelHallBatchRateLimit;
+  download_ready: boolean;
+  error_message: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  max_pages_per_genre: number;
+  discover_concurrency: number;
+  crawl_concurrency: number;
+  request_delay_seconds: number;
+  selected_genres: string[];
+  crawl_runs: NovelHallBatchCrawlRun[];
+  cancel_requested: boolean;
+  log_lines: string[];
+}
+
+export interface NovelHallBatchRateLimit {
+  events: number;
+  total: number;
+  request_interval_seconds: number;
+  cooldown_remaining_seconds: number;
+  last_rate_limit_at: string;
+  in_flight_requests?: number;
+  max_in_flight_requests?: number;
+  configured_max_in_flight_requests?: number;
+  peak_in_flight_requests?: number;
+  request_total?: number;
+  completed_request_total?: number;
+  average_request_latency_seconds?: number;
+}
+
+export interface NovelHallBatchCrawlEstimate {
+  remaining_stories: number;
+  remaining_chapters: number;
+  known_remaining_chapters: number;
+  raw_remaining_chapters?: number;
+  active_remaining_chapters?: number;
+  chapter_yield_ratio?: number;
+  estimated_total_chapters: number;
+  known_total_chapters: number;
+  elapsed_seconds: number;
+  chapters_per_hour: number | null;
+  recent_chapters_per_hour: number | null;
+  effective_chapters_per_hour?: number | null;
+  stories_per_hour: number | null;
+  recent_stories_per_hour?: number | null;
+  recent_window_seconds?: number | null;
+  estimated_remaining_seconds: number | null;
+  estimated_finished_at: string | null;
+  source: 'blended_chapters' | 'recent_chapters' | 'all_time_chapters' | 'recent_stories' | 'all_time_stories' | 'complete' | 'insufficient_data' | string;
+}
+
+export interface NovelHallBatchCrawlRun {
+  run_id: string;
+  started_at: string;
+  finished_at: string | null;
+  target_stories: number;
+  completed_count: number;
+  failed_count: number;
+  skipped_count: number;
+  processed_count?: number;
+  crawled_chapters?: number;
+  total_chapters?: number;
+  status: string;
+}
+
+export interface NovelHallBatchRow {
+  index: number;
+  genre: string;
+  genre_slug: string;
+  title: string;
+  url: string;
+  story_id: string;
+  author: string;
+  status: NovelHallBatchRowStatus;
+  retry_priority?: number;
+  completion_status: string;
+  total_chapters: number | null;
+  crawled_chapters: number;
+  rating: number | null;
+  review_count: number | null;
+  read_count: number | null;
+  output_file: string;
+  metadata_file: string;
+  error: string;
+}
+
+export interface NovelHallBatchRowsResponse {
+  batch: NovelHallBatchSummary;
+  items: NovelHallBatchRow[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface NovelHallBatchLogsResponse {
+  batch: NovelHallBatchSummary;
+  log_lines: string[];
+  total: number;
+}
+
+export interface NovelHallCatalogBackup {
+  kind: 'novelhall_discovered_catalog' | 'novelhall_batch_discovered_catalog';
+  version: number;
+  exported_at: string;
+  batch_id?: string;
+  batch_name?: string;
+  story_count: number;
+  selected_genres?: string[];
+  genres: Array<{ slug: string; label: string }>;
+  stories: Array<Record<string, unknown>>;
+}
+
+export interface NovelHallCatalogImportResponse {
+  imported_count: number;
+  new_count: number;
+  total_count: number;
+  queued_count: number;
+  batch: NovelHallBatchSummary;
+}
+
+export interface NovelHallBatchStartRequest {
+  batch_name?: string | null;
+  genres?: string[] | null;
+  max_pages_per_genre: number;
+  discover_concurrency: number;
+  crawl_concurrency: number;
+  request_delay_seconds: number;
+  crawl_after_discovery?: boolean;
+}
+
+export interface NovelHallBatchCrawlRequest {
+  crawl_concurrency: number;
+  request_delay_seconds: number;
+  max_stories?: number | null;
+}
+
 export type JobnibCrawlMode = 'slow' | 'fast';
 export type JobnibBatchPhase = 'discovering' | 'ready' | 'crawling' | 'waiting_for_session' | 'completed' | 'failed';
 export type JobnibBatchRowStatus = InkittBatchRowStatus | 'needs_session';

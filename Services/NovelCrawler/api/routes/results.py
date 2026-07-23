@@ -24,6 +24,7 @@ from utils.sanitize import sanitize_filename
 
 logger = logging.getLogger(__name__)
 INKITT_ARCHIVE_COMPRESSION_LEVEL = max(0, min(int(os.getenv("INKITT_ARCHIVE_COMPRESSION_LEVEL", "1")), 9))
+NOVELHALL_ARCHIVE_COMPRESSION_LEVEL = max(0, min(int(os.getenv("NOVELHALL_ARCHIVE_COMPRESSION_LEVEL", "1")), 9))
 
 
 class DeleteRequest(BaseModel):
@@ -286,6 +287,45 @@ def download_inkitt_batch(
     return _range_file_response(
         archive_path,
         f"inkitt_batch_{batch_id}{suffix}.zip",
+        request,
+    )
+
+
+@router.get("/novelhall-batch/{batch_id}/download", response_model=None)
+def download_novelhall_batch(
+    batch_id: str,
+    request: Request,
+    run_id: str | None = Query(default=None),
+) -> FileResponse | StreamingResponse | Response:
+    """Zip the genre-grouped combined files for a completed NovelHall batch."""
+    from api.services.novelhall_batch_service import get_novelhall_batch_service
+
+    service = get_novelhall_batch_service()
+    try:
+        service.require_owner(
+            batch_id=batch_id,
+            user_id=getattr(request.state, "create_story_user_id", None),
+            role=getattr(request.state, "create_story_role", None),
+        )
+        state, files = service.get_download_files(batch_id, run_id=run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    suffix = f"_{run_id}" if run_id else ""
+    output_dir = Path(state.output_dir).resolve()
+    archive_path = get_or_build_cached_zip(
+        files,
+        output_dir / ".archives",
+        f"novelhall_batch_{batch_id}{suffix}",
+        compression_level=NOVELHALL_ARCHIVE_COMPRESSION_LEVEL,
+    )
+    return _range_file_response(
+        archive_path,
+        f"novelhall_batch_{batch_id}{suffix}.zip",
         request,
     )
 

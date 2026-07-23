@@ -76,6 +76,18 @@ async def check_scribblehub_cookies(request: dict | None = Body(default=None)) -
     return await _forward_request("POST", "/api/crawl/scribblehub-cookies/status", json_body=request or {})
 
 
+@router.post("/novelhall-cookies", dependencies=[Depends(require_operator)])
+async def update_novelhall_cookies(request: dict = Body(...)) -> JSONResponse:
+    """Update saved NovelHall session cookies (cf_clearance + User-Agent) in the NovelCrawler service."""
+    return await _forward_request("POST", "/api/crawl/novelhall-cookies", json_body=request)
+
+
+@router.post("/novelhall-cookies/status", dependencies=[Depends(require_operator)])
+async def check_novelhall_cookies(request: dict | None = Body(default=None)) -> JSONResponse:
+    """Check saved NovelHall session cookies in the NovelCrawler service."""
+    return await _forward_request("POST", "/api/crawl/novelhall-cookies/status", json_body=request or {})
+
+
 @router.post("/goodnovel-cookies", dependencies=[Depends(require_operator)])
 async def update_goodnovel_cookies(request: dict = Body(...)) -> JSONResponse:
     """Update saved GoodNovel session cookies in the NovelCrawler service."""
@@ -166,6 +178,12 @@ async def pause_inkitt_batch(batch_id: str) -> JSONResponse:
     return await _forward_request("POST", f"/api/crawl/inkitt-batch/{batch_id}/pause", json_body={})
 
 
+@router.post("/inkitt-batch/{batch_id}/genre-order", dependencies=[Depends(require_operator)])
+async def reorder_inkitt_batch_genres(batch_id: str, request: dict = Body(...)) -> JSONResponse:
+    """Reorder an Inkitt batch's genre crawl priority (safe at any time, including mid-crawl)."""
+    return await _forward_request("POST", f"/api/crawl/inkitt-batch/{batch_id}/genre-order", json_body=request)
+
+
 @router.post("/inkitt-batch/{batch_id}/retry-failed", dependencies=[Depends(require_operator)])
 async def retry_failed_inkitt_batch_rows(batch_id: str, request: dict | None = Body(default=None)) -> JSONResponse:
     """Move failed Inkitt stories to the front of the next crawl queue."""
@@ -197,6 +215,93 @@ async def get_inkitt_batch_logs(batch_id: str) -> JSONResponse:
 async def delete_inkitt_batch(batch_id: str) -> JSONResponse:
     """Delete an Inkitt batch history entry."""
     return await _forward_request("DELETE", f"/api/crawl/inkitt-batch/{batch_id}")
+
+
+@router.post("/novelhall-batch/start", dependencies=[Depends(require_job_creation_rate)])
+async def start_novelhall_batch(request: dict = Body(...)) -> JSONResponse:
+    """Start a NovelHall genre batch."""
+    return await _forward_request("POST", "/api/crawl/novelhall-batch/start", json_body=request)
+
+
+@router.get("/novelhall-batch")
+async def list_novelhall_batches() -> JSONResponse:
+    """Return NovelHall batch history."""
+    return await _forward_request("GET", "/api/crawl/novelhall-batch")
+
+
+@router.get("/novelhall-batch/catalog/export", dependencies=[Depends(require_operator)])
+async def export_novelhall_discovered_catalog() -> JSONResponse:
+    """Export all discovered NovelHall story metadata for backup/restore."""
+    return await _forward_request("GET", "/api/crawl/novelhall-batch/catalog/export", timeout=300.0)
+
+
+@router.get("/novelhall-batch/{batch_id}/catalog/export")
+async def export_novelhall_batch_catalog(batch_id: str) -> JSONResponse:
+    """Export discovered NovelHall story metadata from one selected batch."""
+    return await _forward_request("GET", f"/api/crawl/novelhall-batch/{batch_id}/catalog/export", timeout=300.0)
+
+
+@router.post("/novelhall-batch/catalog/import", dependencies=[Depends(require_operator)])
+async def import_novelhall_discovered_catalog(request: dict = Body(...)) -> JSONResponse:
+    """Import and merge a discovered NovelHall story catalog backup."""
+    return await _forward_request("POST", "/api/crawl/novelhall-batch/catalog/import", json_body=request, timeout=300.0)
+
+
+@router.get("/novelhall-batch/{batch_id}")
+async def get_novelhall_batch_status(batch_id: str) -> JSONResponse:
+    """Return NovelHall batch status."""
+    return await _forward_request("GET", f"/api/crawl/novelhall-batch/{batch_id}")
+
+
+@router.post("/novelhall-batch/{batch_id}/crawl", dependencies=[Depends(require_job_creation_rate)])
+async def crawl_novelhall_batch(batch_id: str, request: dict = Body(...)) -> JSONResponse:
+    """Start or resume a NovelHall batch crawl."""
+    return await _forward_request("POST", f"/api/crawl/novelhall-batch/{batch_id}/crawl", json_body=request)
+
+
+@router.post("/novelhall-batch/{batch_id}/pause", dependencies=[Depends(require_operator)])
+async def pause_novelhall_batch(batch_id: str) -> JSONResponse:
+    """Gracefully pause an active NovelHall batch crawl."""
+    return await _forward_request("POST", f"/api/crawl/novelhall-batch/{batch_id}/pause", json_body={})
+
+
+@router.post("/novelhall-batch/{batch_id}/genre-order", dependencies=[Depends(require_operator)])
+async def reorder_novelhall_batch_genres(batch_id: str, request: dict = Body(...)) -> JSONResponse:
+    """Reorder a NovelHall batch's genre crawl priority (safe at any time, including mid-crawl)."""
+    return await _forward_request("POST", f"/api/crawl/novelhall-batch/{batch_id}/genre-order", json_body=request)
+
+
+@router.post("/novelhall-batch/{batch_id}/retry-failed", dependencies=[Depends(require_operator)])
+async def retry_failed_novelhall_batch_rows(batch_id: str, request: dict | None = Body(default=None)) -> JSONResponse:
+    """Move failed NovelHall stories to the front of the next crawl queue."""
+    return await _forward_request("POST", f"/api/crawl/novelhall-batch/{batch_id}/retry-failed", json_body=request or {})
+
+
+@router.get("/novelhall-batch/{batch_id}/rows")
+async def list_novelhall_batch_rows(
+    batch_id: str,
+    offset: int = Query(default=0),
+    limit: int = Query(default=100),
+    status: str = Query(default="all"),
+) -> JSONResponse:
+    """Return a paged slice of NovelHall batch rows."""
+    return await _forward_request(
+        "GET",
+        f"/api/crawl/novelhall-batch/{batch_id}/rows",
+        params={"offset": offset, "limit": limit, "status": status},
+    )
+
+
+@router.get("/novelhall-batch/{batch_id}/logs")
+async def get_novelhall_batch_logs(batch_id: str) -> JSONResponse:
+    """Return the full retained NovelHall batch log."""
+    return await _forward_request("GET", f"/api/crawl/novelhall-batch/{batch_id}/logs")
+
+
+@router.delete("/novelhall-batch/{batch_id}", dependencies=[Depends(require_operator)])
+async def delete_novelhall_batch(batch_id: str) -> JSONResponse:
+    """Delete a NovelHall batch history entry."""
+    return await _forward_request("DELETE", f"/api/crawl/novelhall-batch/{batch_id}")
 
 
 @router.post("/jobnib-batch/start", dependencies=[Depends(require_job_creation_rate)])

@@ -22,6 +22,15 @@ import type {
   InkittBatchRowsResponse,
   InkittBatchStartRequest,
   InkittBatchSummary,
+  NovelHallCookieUpdateResponse,
+  NovelHallCookieStatusResponse,
+  NovelHallBatchCrawlRequest,
+  NovelHallCatalogBackup,
+  NovelHallCatalogImportResponse,
+  NovelHallBatchLogsResponse,
+  NovelHallBatchRowsResponse,
+  NovelHallBatchStartRequest,
+  NovelHallBatchSummary,
   JobnibCookieUpdateResponse,
   JobnibCookieStatusResponse,
   JobnibBatchCrawlRequest,
@@ -224,6 +233,15 @@ export async function crawlInkittBatch(batchId: string, request: InkittBatchCraw
   });
 }
 
+export async function reorderInkittBatchGenres(batchId: string, genres: string[]): Promise<InkittBatchSummary> {
+  return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/genre-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ genres }),
+    timeout: 60000,
+  });
+}
+
 export async function pauseInkittBatch(batchId: string): Promise<InkittBatchSummary> {
   return apiFetch<InkittBatchSummary>(`/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}/pause`, {
     method: 'POST',
@@ -287,6 +305,121 @@ export async function importInkittDiscoveredCatalog(payload: unknown): Promise<I
 export async function removeInkittBatch(batchId: string): Promise<{ deleted: boolean; batch_id: string }> {
   return apiFetch<{ deleted: boolean; batch_id: string }>(
     `/api/crawl/inkitt-batch/${encodeURIComponent(batchId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// NovelHall batch endpoints mirror the Inkitt ones exactly (identical response shapes).
+export async function updateNovelHallCookies(
+  cookies: string,
+  userAgent?: string,
+): Promise<NovelHallCookieUpdateResponse> {
+  return apiFetch<NovelHallCookieUpdateResponse>('/api/crawl/novelhall-cookies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies, user_agent: userAgent }),
+  });
+}
+
+export async function checkNovelHallCookies(storyUrl?: string): Promise<NovelHallCookieStatusResponse> {
+  return apiFetch<NovelHallCookieStatusResponse>('/api/crawl/novelhall-cookies/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ story_url: storyUrl }),
+    timeout: 45000,
+  });
+}
+
+export async function startNovelHallBatch(request: NovelHallBatchStartRequest): Promise<NovelHallBatchSummary> {
+  return apiFetch<NovelHallBatchSummary>('/api/crawl/novelhall-batch/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    timeout: 60000,
+  });
+}
+
+export async function crawlNovelHallBatch(batchId: string, request: NovelHallBatchCrawlRequest): Promise<NovelHallBatchSummary> {
+  return apiFetch<NovelHallBatchSummary>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/crawl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    timeout: 60000,
+  });
+}
+
+export async function reorderNovelHallBatchGenres(batchId: string, genres: string[]): Promise<NovelHallBatchSummary> {
+  return apiFetch<NovelHallBatchSummary>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/genre-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ genres }),
+    timeout: 60000,
+  });
+}
+
+export async function pauseNovelHallBatch(batchId: string): Promise<NovelHallBatchSummary> {
+  return apiFetch<NovelHallBatchSummary>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/pause`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+    timeout: 60000,
+  });
+}
+
+export async function retryNovelHallFailedStories(batchId: string, rowIndex?: number): Promise<NovelHallBatchSummary> {
+  return apiFetch<NovelHallBatchSummary>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/retry-failed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rowIndex ? { row_index: rowIndex } : {}),
+    timeout: 60000,
+  });
+}
+
+export async function listNovelHallBatches(): Promise<NovelHallBatchSummary[]> {
+  return apiFetch<NovelHallBatchSummary[]>('/api/crawl/novelhall-batch');
+}
+
+export async function getNovelHallBatchStatus(batchId: string): Promise<NovelHallBatchSummary> {
+  return apiFetch<NovelHallBatchSummary>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}`);
+}
+
+export async function getNovelHallBatchRows(
+  batchId: string,
+  options: { offset?: number; limit?: number; status?: string } = {},
+): Promise<NovelHallBatchRowsResponse> {
+  const params = new URLSearchParams({
+    offset: String(options.offset ?? 0),
+    limit: String(options.limit ?? 100),
+    status: options.status ?? 'all',
+  });
+  return apiFetch<NovelHallBatchRowsResponse>(
+    `/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/rows?${params.toString()}`
+  );
+}
+
+export async function getNovelHallBatchLogs(batchId: string): Promise<NovelHallBatchLogsResponse> {
+  return apiFetch<NovelHallBatchLogsResponse>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/logs`);
+}
+
+export async function exportNovelHallBatchCatalog(batchId: string): Promise<NovelHallCatalogBackup> {
+  return apiFetch<NovelHallCatalogBackup>(
+    `/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/catalog/export`,
+    { timeout: 300000 },
+  );
+}
+
+export async function importNovelHallDiscoveredCatalog(payload: unknown): Promise<NovelHallCatalogImportResponse> {
+  return apiFetch<NovelHallCatalogImportResponse>('/api/crawl/novelhall-batch/catalog/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    timeout: 300000,
+  });
+}
+
+export async function removeNovelHallBatch(batchId: string): Promise<{ deleted: boolean; batch_id: string }> {
+  return apiFetch<{ deleted: boolean; batch_id: string }>(
+    `/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}`,
     { method: 'DELETE' },
   );
 }

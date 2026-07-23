@@ -51,6 +51,11 @@ export function getInkittBatchDownloadUrl(batchId: string, runId?: string): stri
   return `${BASE_URL}/api/results/inkitt-batch/${encodeURIComponent(batchId)}/download${params}`;
 }
 
+export function getNovelHallBatchDownloadUrl(batchId: string, runId?: string): string {
+  const params = runId ? `?run_id=${encodeURIComponent(runId)}` : '';
+  return `${BASE_URL}/api/results/novelhall-batch/${encodeURIComponent(batchId)}/download${params}`;
+}
+
 export function getJobnibBatchDownloadUrl(
   batchId: string,
   runId?: string,

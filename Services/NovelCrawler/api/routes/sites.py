@@ -71,6 +71,12 @@ def is_webnovel_chapter_url(url: str) -> bool:
     return bool(re.search(r"/book/[^/]+_\d+/[^/]+_\d+$", parsed_path, re.IGNORECASE))
 
 
+def is_novelhall_chapter_url(url: str) -> bool:
+    # Story: /<slug>-<id>/   Chapter: /<slug>-<id>/<chapterId>.html
+    parsed_path = urllib.parse.urlparse(url).path
+    return bool(re.search(r"/[^/]+-\d+/\d+\.html$", parsed_path, re.IGNORECASE))
+
+
 def is_chapter_url(url: str) -> bool:
     from urllib.parse import urlparse
 
@@ -100,6 +106,9 @@ def is_chapter_url(url: str) -> bool:
 
     if "webnovel" in parsed.netloc:
         return is_webnovel_chapter_url(url)
+
+    if "novelhall" in parsed.netloc:
+        return is_novelhall_chapter_url(url)
 
     return False
 
@@ -571,6 +580,32 @@ def _fetch_scribblehub_chapters(story_url: str, timeout: int = 75) -> tuple[list
     return entries, None, total_count or len(links), story_title
 
 
+def _fetch_novelhall_chapters(story_url: str, timeout: int = 75) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
+    try:
+        from spiders.novelhall import NovelHallSpider
+
+        spider = NovelHallSpider(novel=story_url, limit=50)
+        series_url = spider._story_url_from_any_url(spider._normalize_url(story_url))
+        html = spider._fetch_page_html(series_url, timeout=timeout)
+        soup = BeautifulSoup(html, "html.parser")
+        story_title = spider._extract_story_title(soup)
+        refs = spider._parse_chapter_refs(soup, series_url)
+    except Exception as exc:
+        logger.warning("[novelhall] Chapter list fetch failed: %s", exc)
+        return [], "NovelHall chapter list failed.", None, None
+
+    total_count = len(refs)
+    entries = [
+        ChapterEntry(
+            chapter_number=int(ref["chapter_number"]),
+            title=ref.get("title") or f"Chapter {ref['chapter_number']}",
+            url=ref["url"],
+        )
+        for ref in refs[:50]
+    ]
+    return entries, None, total_count, story_title
+
+
 def _fetch_novellunar_chapters(story_url: str, timeout: int = 30) -> tuple[list[ChapterEntry], Optional[str], Optional[int], Optional[str]]:
     """Build a chapter list for a Novellunar story.
 
@@ -846,6 +881,12 @@ def get_chapters(url: str = Query(..., description="Story-level novel URL")) -> 
                 story_title = fetched_story_title
         elif site_info.config_name == "webnovel":
             chapters, fetch_warning, total_chapter_count, fetched_story_title, extra_counts = _fetch_webnovel_chapters(story_url)
+            if fetch_warning:
+                warning = fetch_warning
+            if fetched_story_title:
+                story_title = fetched_story_title
+        elif site_info.config_name == "novelhall":
+            chapters, fetch_warning, total_chapter_count, fetched_story_title = _fetch_novelhall_chapters(story_url)
             if fetch_warning:
                 warning = fetch_warning
             if fetched_story_title:

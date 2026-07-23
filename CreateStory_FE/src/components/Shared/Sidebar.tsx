@@ -18,6 +18,7 @@ const NAV_ICONS = {
     '/': 'add',
     '/goodnovel-batch': 'batch',
     '/inkitt-batch': 'batch',
+    '/novelhall-batch': 'batch',
     '/jobnib-batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread/jobs': 'audioJobs',

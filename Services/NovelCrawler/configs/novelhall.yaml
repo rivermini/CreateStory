@@ -1,0 +1,34 @@
+site_name: NovelHall
+base_url: https://www.novelhall.com
+
+mirror_domains:
+  - novelhall.com
+  - www.novelhall.com
+
+domains:
+  - www.novelhall.com
+  - novelhall.com
+
+# Story page: https://www.novelhall.com/<slug>-<id>/
+# Chapter page: https://www.novelhall.com/<slug>-<id>/<chapterId>.html
+story_url_pattern: "^https?://(?:www\\.)?novelhall\\.com/[^/]+-\\d+/?$"
+
+rate_limit: 0.25
+
+selectors:
+  novel_title: "h1"
+  chapter_list: "#morelist a"          # full ascending catalogue on the story page
+  chapter_body: "#htmlContent"
+  next_chapter: ".nav-btn a[href$='.html']"
+  cover_image: 'meta[property="og:image"]'
+  author: ".book-info a[href*='author']"
+  description: ".intro"
+
+promo_patterns:
+  - "all content from the Internet"
+  - "novelhall.com"
+
+spider_settings:
+  DOWNLOAD_DELAY: 0.0
+  CONCURRENT_REQUESTS_PER_DOMAIN: 1
+  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
