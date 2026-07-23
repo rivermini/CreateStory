@@ -1,8 +1,8 @@
 export type CrawlMode = 'fast' | 'slow';
 
 export const CRAWL_MODE_PRESETS = {
-  fast: { workers: 4, delaySeconds: 0.15, label: 'Fast', detail: '4 workers · fast' },
-  slow: { workers: 2, delaySeconds: 1, label: 'Slow', detail: '2 workers · 1s delay' },
+  fast: { workers: 6, delaySeconds: 0.1, label: 'Fast', detail: '6 workers · fast' },
+  slow: { workers: 2, delaySeconds: 0.5, label: 'Slow', detail: '2 workers · gentle' },
 } as const;
 
 export function resolveCrawlMode(workers: number, delaySeconds: number): CrawlMode {

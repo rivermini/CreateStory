@@ -43,6 +43,9 @@ _RNM_USER_AGENT = (
     "Chrome/149.0.0.0 Safari/537.36"
 )
 _MAX_FETCH_RETRIES = 3
+# On a Cloudflare challenge, first try reloading a freshly-warmed cf_clearance from the DB
+# (the batch cookie-warmer keeps one ready) before paying for a ~13s inline solve.
+_MAX_WARM_RELOAD_ATTEMPTS = 2
 
 
 class ReadNovelMtlSpider(BaseSpider):
@@ -51,8 +54,13 @@ class ReadNovelMtlSpider(BaseSpider):
     download_delay = 0.1
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 0.1,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
+        # This spider self-fetches (Scrapy's downloader is unused), but AutoThrottle /
+        # DOWNLOAD_DELAY still pace how fast the engine consumes start(), adding ~2s per
+        # chapter. Disable them so single-story crawls run at fetch speed.
+        "AUTOTHROTTLE_ENABLED": False,
+        "DOWNLOAD_DELAY": 0,
+        "CONCURRENT_REQUESTS": 16,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 16,
     }
 
     def __init__(self, *args, novel: str = "", limit: int = 1, chapter_range: str = "", **kwargs):
@@ -409,6 +417,20 @@ class ReadNovelMtlSpider(BaseSpider):
             if attempt >= _MAX_FETCH_RETRIES:
                 break
 
+        # Cheap path first: a background cookie-warmer keeps a fresh cf_clearance in the DB,
+        # so reload it and retry the plain request. When the warmer is keeping up this turns
+        # ReadNovelMtl's ~150-request session death into a ~0.3s reload instead of a ~13s solve.
+        if challenged:
+            for _ in range(_MAX_WARM_RELOAD_ATTEMPTS):
+                self._reload_saved_cookies()
+                try:
+                    response = self._session.get(url, timeout=timeout)
+                except Exception:
+                    break
+                if response.status_code == 200 and not self._is_cloudflare_challenge(response.text):
+                    self._html_cache[url] = response.text
+                    return response.text
+
         solved = self._solve_with_flaresolverr(url)
         if solved is not None:
             self._html_cache[url] = solved
@@ -434,11 +456,27 @@ class ReadNovelMtlSpider(BaseSpider):
             return None
         if not is_configured() or self._fs_solves >= 5:
             return None
+
+        def _recheck() -> str | None:
+            # A peer worker may have already refreshed cf_clearance while we queued for the
+            # single-browser solve lock: reload it and retry the plain request before paying
+            # for another ~12s solve.
+            self._reload_saved_cookies()
+            try:
+                response = self._session.get(url, timeout=20)
+            except Exception:
+                return None
+            if response.status_code == 200 and not self._is_cloudflare_challenge(response.text):
+                return response.text
+            return None
+
         try:
-            result = solve(url)
+            result = solve(url, recheck=_recheck)
         except Exception as exc:
             self.logger.warning("[readnovelmtl] FlareSolverr solve failed for %s: %s", url, exc)
             return None
+        if result.get("reused"):
+            return result.get("html")
         self._fs_solves += 1
 
         html = result.get("html", "")
@@ -485,6 +523,17 @@ class ReadNovelMtlSpider(BaseSpider):
                 len(cookies), " (with saved User-Agent)" if user_agent else "",
             )
         return len(cookies)
+
+    def _reload_saved_cookies(self) -> None:
+        # Drop the (possibly stale) cf_clearance, then reload the freshest cookies from the DB
+        # (a peer worker may have just refreshed them via FlareSolverr).
+        try:
+            for cookie in list(self._session.cookies):
+                if cookie.name == "cf_clearance":
+                    self._session.cookies.clear(cookie.domain, cookie.path, cookie.name)
+        except Exception:
+            pass
+        self._load_saved_cookies()
 
     # ------------------------------------------------------------------ #
     # URL helpers

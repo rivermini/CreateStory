@@ -37,11 +37,19 @@ def solve(
     url: str,
     max_timeout_ms: int = 75000,
     cookies: list[dict[str, Any]] | None = None,
+    recheck: "Optional[Any]" = None,
 ) -> dict[str, Any]:
     """Ask FlareSolverr to fetch ``url``, solving any Cloudflare challenge.
 
     Returns ``{"html", "cookies": {name: value}, "raw_cookies": [...], "user_agent"}``.
     Raises RuntimeError on failure or if FlareSolverr is not configured.
+
+    ``recheck`` is an optional zero-arg callable run UNDER the single-browser solve lock,
+    just before a solve. When several crawl workers hit a Cloudflare wall at once they all
+    queue here; the first solves and refreshes cf_clearance, and the rest can reload that
+    fresh cookie + retry the plain request via ``recheck`` instead of each paying for another
+    ~12s solve. If ``recheck`` returns truthy HTML, that is returned with ``reused=True`` and
+    no FlareSolverr call is made (prevents a thundering herd of redundant re-solves).
     """
     endpoint = flaresolverr_url()
     if not endpoint:
@@ -54,6 +62,13 @@ def solve(
     # transient error (e.g. HTTP 500 when the browser was momentarily busy).
     data: dict[str, Any] | None = None
     with _SOLVE_LOCK:
+        if recheck is not None:
+            try:
+                reused_html = recheck()
+            except Exception:
+                reused_html = None
+            if reused_html:
+                return {"html": reused_html, "cookies": {}, "raw_cookies": [], "user_agent": "", "status_code": 200, "reused": True}
         last_exc: Exception | None = None
         for attempt in range(2):
             try:

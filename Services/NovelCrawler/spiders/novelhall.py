@@ -49,8 +49,13 @@ class NovelHallSpider(BaseSpider):
     download_delay = 0.1
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 0.1,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
+        # This spider self-fetches (Scrapy's downloader is unused), but AutoThrottle /
+        # DOWNLOAD_DELAY still pace how fast the engine consumes start(), adding ~2s per
+        # chapter. Disable them so single-story crawls run at fetch speed.
+        "AUTOTHROTTLE_ENABLED": False,
+        "DOWNLOAD_DELAY": 0,
+        "CONCURRENT_REQUESTS": 16,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 16,
     }
 
     def __init__(self, *args, novel: str = "", limit: int = 1, chapter_range: str = "", **kwargs):
@@ -381,11 +386,27 @@ class NovelHallSpider(BaseSpider):
             return None
         if not is_configured() or self._fs_solves >= 5:
             return None
+
+        def _recheck() -> str | None:
+            # A peer worker may have already refreshed cf_clearance while we queued for the
+            # single-browser solve lock: reload it and retry the plain request before paying
+            # for another ~12s solve.
+            self._reload_saved_cookies()
+            try:
+                response = self._session.get(url, timeout=20)
+            except Exception:
+                return None
+            if response.status_code == 200 and not self._is_cloudflare_challenge(response.text):
+                return response.text
+            return None
+
         try:
-            result = solve(url)
+            result = solve(url, recheck=_recheck)
         except Exception as exc:
             self.logger.warning("[novelhall] FlareSolverr solve failed for %s: %s", url, exc)
             return None
+        if result.get("reused"):
+            return result.get("html")
         self._fs_solves += 1
 
         html = result.get("html", "")
@@ -432,6 +453,17 @@ class NovelHallSpider(BaseSpider):
                 len(cookies), " (with saved User-Agent)" if user_agent else "",
             )
         return len(cookies)
+
+    def _reload_saved_cookies(self) -> None:
+        # Drop the (possibly stale) cf_clearance, then reload the freshest cookies from the DB
+        # (a peer worker may have just refreshed them via FlareSolverr).
+        try:
+            for cookie in list(self._session.cookies):
+                if cookie.name == "cf_clearance":
+                    self._session.cookies.clear(cookie.domain, cookie.path, cookie.name)
+        except Exception:
+            pass
+        self._load_saved_cookies()
 
     # ------------------------------------------------------------------ #
     # URL helpers

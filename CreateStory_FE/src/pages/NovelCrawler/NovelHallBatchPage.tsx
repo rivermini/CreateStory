@@ -152,7 +152,17 @@ function runProgressPercent(run: NovelHallBatchCrawlRun): number {
 export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('');
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(() => GENRES.map(([slug]) => slug));
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(() => {
+    // Restore the saved crawl-priority order across sessions.
+    try {
+      const saved = JSON.parse(localStorage.getItem('novelhall_genre_order') || 'null');
+      if (Array.isArray(saved) && saved.length) {
+        const valid = saved.filter((s: string) => (ALL_GENRE_SLUGS as readonly string[]).includes(s));
+        return [...valid, ...ALL_GENRE_SLUGS.filter((s) => !valid.includes(s))];
+      }
+    } catch { /* ignore malformed storage */ }
+    return GENRES.map(([slug]) => slug);
+  });
   const [maxPages, setMaxPages] = useState(3);
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
   const [crawlMode, setCrawlMode] = useState<CrawlMode>('fast');
@@ -202,6 +212,11 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     [selectedGenres],
   );
   const crawlPreset = CRAWL_MODE_PRESETS[crawlMode];
+
+  useEffect(() => {
+    // Persist the crawl-priority order so it survives reloads / new sessions.
+    try { localStorage.setItem('novelhall_genre_order', JSON.stringify(selectedGenres)); } catch { /* ignore */ }
+  }, [selectedGenres]);
 
   useEffect(() => {
     if (!summary || syncedBatchIdRef.current === summary.batch_id) return;
@@ -801,7 +816,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                     <Stat label="Remaining stories" value={crawlEstimate.remaining_stories} />
                     <Stat label="Remaining chapters" value={formatRemainingChapters(crawlEstimate.remaining_chapters, crawlEstimate.raw_remaining_chapters)} />
                     <Stat label="Chapter yield" value={formatPercentRatio(crawlEstimate.chapter_yield_ratio)} />
-                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.effective_chapters_per_hour ?? crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.recent_stories_per_hour ?? crawlEstimate.stories_per_hour)} />
+                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.effective_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.recent_stories_per_hour ?? crawlEstimate.stories_per_hour)} />
                     <Stat label="Elapsed" value={formatDuration(crawlEstimate.elapsed_seconds)} />
                     <Stat label="ETA" value={formatDuration(crawlEstimate.estimated_remaining_seconds)} />
                     <Stat className="col-span-2" label="Finish" value={crawlEstimate.estimated_finished_at || '-'} />

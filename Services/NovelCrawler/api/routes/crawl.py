@@ -286,14 +286,14 @@ class NovelHallBatchStartRequest(BaseModel):
     genres: list[str] | None = Field(default=None, description="NovelHall genre slugs. Empty means all supported genres.")
     max_pages_per_genre: int = Field(default=3, ge=1, le=1000)
     discover_concurrency: int = Field(default=4, ge=1, le=6)
-    crawl_concurrency: int = Field(default=4, ge=1, le=4)
-    request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
+    crawl_concurrency: int = Field(default=6, ge=1, le=8)
+    request_delay_seconds: float = Field(default=0.1, ge=0.02, le=15)
     crawl_after_discovery: bool = Field(default=True)
 
 
 class NovelHallBatchCrawlRequest(BaseModel):
-    crawl_concurrency: int = Field(default=4, ge=1, le=4)
-    request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
+    crawl_concurrency: int = Field(default=6, ge=1, le=8)
+    request_delay_seconds: float = Field(default=0.1, ge=0.02, le=15)
     max_stories: int | None = Field(default=None, ge=1, le=10000)
 
 
@@ -302,15 +302,21 @@ class ReadNovelMtlBatchStartRequest(BaseModel):
     genres: list[str] | None = Field(default=None, description="ReadNovelMtl discovery source slugs. Empty means all supported sources.")
     max_pages_per_genre: int = Field(default=3, ge=1, le=1000)
     discover_concurrency: int = Field(default=4, ge=1, le=6)
-    crawl_concurrency: int = Field(default=4, ge=1, le=4)
-    request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
+    crawl_concurrency: int = Field(default=6, ge=1, le=8)
+    request_delay_seconds: float = Field(default=0.1, ge=0.02, le=15)
     crawl_after_discovery: bool = Field(default=True)
 
 
 class ReadNovelMtlBatchCrawlRequest(BaseModel):
-    crawl_concurrency: int = Field(default=4, ge=1, le=4)
-    request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
+    crawl_concurrency: int = Field(default=6, ge=1, le=8)
+    request_delay_seconds: float = Field(default=0.1, ge=0.02, le=15)
     max_stories: int | None = Field(default=None, ge=1, le=10000)
+    # Auto-run chaining: crawl the queue in fixed-size chunks with a cooldown between them so
+    # ReadNovelMtl's per-IP throttle resets each chunk (fully automatic multi-run crawling).
+    auto_continue: bool = Field(default=False)
+    stories_per_run: int | None = Field(default=None, ge=1, le=10000)
+    auto_target_stories: int | None = Field(default=None, ge=0, le=1000000)
+    cooldown_seconds: float | None = Field(default=None, ge=0, le=3600)
 
 
 class JobnibBatchStartRequest(BaseModel):
@@ -1172,6 +1178,10 @@ async def crawl_readnovelmtl_batch(
             crawl_concurrency=request.crawl_concurrency,
             request_delay_seconds=request.request_delay_seconds,
             max_stories=request.max_stories,
+            stories_per_run=request.stories_per_run,
+            auto_continue=request.auto_continue,
+            auto_target_stories=request.auto_target_stories,
+            cooldown_seconds=request.cooldown_seconds,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

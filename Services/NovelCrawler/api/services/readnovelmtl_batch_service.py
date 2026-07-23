@@ -47,14 +47,22 @@ _READNOVELMTL_BASE = "https://readnovelmtl.com"
 READNOVELMTL_BATCH_MAX_PAGES = int(os.getenv("READNOVELMTL_BATCH_MAX_PAGES", "1000"))
 READNOVELMTL_BATCH_MAX_STORIES = int(os.getenv("READNOVELMTL_BATCH_MAX_STORIES", "100000"))
 READNOVELMTL_BATCH_MAX_DISCOVER_WORKERS = int(os.getenv("READNOVELMTL_BATCH_MAX_DISCOVER_WORKERS", "6"))
-READNOVELMTL_BATCH_MAX_CRAWL_WORKERS = min(4, max(1, int(os.getenv("READNOVELMTL_BATCH_MAX_CRAWL_WORKERS", "4"))))
+READNOVELMTL_BATCH_MAX_CRAWL_WORKERS = min(8, max(1, int(os.getenv("READNOVELMTL_BATCH_MAX_CRAWL_WORKERS", "6"))))
 READNOVELMTL_DISCOVER_RETRY_TIMES = int(os.getenv("READNOVELMTL_DISCOVER_RETRY_TIMES", "6"))
 READNOVELMTL_DISCOVER_RETRY_BASE_SECONDS = float(os.getenv("READNOVELMTL_DISCOVER_RETRY_BASE_SECONDS", "15"))
 READNOVELMTL_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("READNOVELMTL_DISCOVER_RETRY_MAX_SECONDS", "120"))
 READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS = max(
-    0.1, float(os.getenv("READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "0.15"))
+    0.05, float(os.getenv("READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "0.1"))
 )
-READNOVELMTL_MAX_IN_FLIGHT_REQUESTS = max(1, min(8, int(os.getenv("READNOVELMTL_MAX_IN_FLIGHT_REQUESTS", "4"))))
+READNOVELMTL_MAX_IN_FLIGHT_REQUESTS = max(1, min(16, int(os.getenv("READNOVELMTL_MAX_IN_FLIGHT_REQUESTS", "8"))))
+# Optional background cf_clearance warmer (default OFF). ReadNovelMtl's Cloudflare throttles
+# the crawler's IP itself after ~150 fast requests, so fresh cookies do NOT bypass it and
+# continuous solving can aggravate the block — the reliable fix is chunked runs with a
+# cooldown between them (see auto-run chaining). Kept as an opt-in knob: >0 enables a warmer
+# that re-solves every N seconds; 0 disables it.
+READNOVELMTL_COOKIE_WARM_INTERVAL_SECONDS = max(
+    0.0, float(os.getenv("READNOVELMTL_COOKIE_WARM_INTERVAL_SECONDS", "0"))
+)
 READNOVELMTL_RATE_LIMIT_BASE_COOLDOWN_SECONDS = max(
     1.0, float(os.getenv("READNOVELMTL_RATE_LIMIT_BASE_COOLDOWN_SECONDS", "60"))
 )
@@ -163,6 +171,13 @@ class ReadNovelMtlBatchState:
     selected_genres: list[str] = field(default_factory=list)
     crawl_runs: list[dict[str, Any]] = field(default_factory=list)
     cancel_requested: bool = False
+    # Auto-run chaining: crawl the queue in fixed-size chunks, tearing each run down cleanly
+    # and cooling down between them so ReadNovelMtl's per-IP throttle resets each chunk.
+    auto_run_enabled: bool = False
+    auto_run_chunk: int = 0
+    auto_run_target: int = 0          # total stories to auto-crawl; 0 = until the queue is empty
+    auto_run_cooldown_seconds: float = 45.0
+    auto_run_processed: int = 0       # stories processed across the auto-run chain so far
     log_lines: list[str] = field(default_factory=list)
     log_file: str = ""
     progress_samples: list[dict[str, Any]] = field(default_factory=list)
@@ -241,7 +256,7 @@ class ReadNovelMtlBatchService:
             max_pages_per_genre=clamp(max_pages_per_genre, 1, READNOVELMTL_BATCH_MAX_PAGES),
             discover_concurrency=clamp(discover_concurrency, 1, READNOVELMTL_BATCH_MAX_DISCOVER_WORKERS),
             crawl_concurrency=clamp(crawl_concurrency, 1, READNOVELMTL_BATCH_MAX_CRAWL_WORKERS),
-            request_delay_seconds=max(0.1, min(float(request_delay_seconds), 15.0)),
+            request_delay_seconds=max(0.02, min(float(request_delay_seconds), 15.0)),
             output_dir=str(self._prepare_output_dir(batch_id)),
             selected_genres=selected,
             cancel_requested=False,
@@ -263,11 +278,31 @@ class ReadNovelMtlBatchService:
         crawl_concurrency: int,
         request_delay_seconds: float,
         max_stories: int | None = None,
+        stories_per_run: int | None = None,
+        auto_continue: bool = False,
+        auto_target_stories: int | None = None,
+        cooldown_seconds: float | None = None,
+        _auto_chain: bool = False,
     ) -> ReadNovelMtlBatchState:
         with self._lock:
             state = self._get_state_locked(batch_id)
-            if state.phase in {"discovering", "crawling"}:
+            # ``_auto_chain`` restarts come from the chain itself while the batch is still shown
+            # as "crawling" during the inter-chunk cooldown, so they skip the active guard.
+            if state.phase in {"discovering", "crawling"} and not _auto_chain:
                 raise ValueError("This ReadNovelMtl batch is already active.")
+            # Configure auto-run chaining. A run started by the chain itself (``_auto_chain``)
+            # keeps the config already on the state; a fresh user start (re)initializes it.
+            if not _auto_chain:
+                chunk = int(stories_per_run or 0)
+                state.auto_run_enabled = bool(auto_continue and chunk > 0)
+                state.auto_run_chunk = chunk if state.auto_run_enabled else 0
+                state.auto_run_target = max(0, int(auto_target_stories or 0))
+                state.auto_run_processed = 0
+                if cooldown_seconds is not None:
+                    state.auto_run_cooldown_seconds = max(0.0, float(cooldown_seconds))
+            # An auto-run crawls one chunk at a time; a normal run honors max_stories as given.
+            if state.auto_run_enabled and state.auto_run_chunk > 0:
+                max_stories = state.auto_run_chunk
             available_rows = self._available_rows_for_crawl_locked(state, max_stories)
             if not available_rows:
                 raise ValueError("This ReadNovelMtl batch has no queued stories to crawl.")
@@ -280,7 +315,7 @@ class ReadNovelMtlBatchService:
             state.cancel_requested = False
             state.finished_at = None
             state.crawl_concurrency = clamp(crawl_concurrency, 1, READNOVELMTL_BATCH_MAX_CRAWL_WORKERS)
-            state.request_delay_seconds = max(0.1, min(float(request_delay_seconds), 15.0))
+            state.request_delay_seconds = max(0.02, min(float(request_delay_seconds), 15.0))
             initial_crawled_chapters = sum(int(row.crawled_chapters or 0) for row in available_rows)
             state.crawl_runs.append({
                 "run_id": run_id,
@@ -736,6 +771,32 @@ class ReadNovelMtlBatchService:
                     state.add_log(f"Batch failed: {exc}")
                     self._persist_locked(force=True)
 
+    def _cooldown_wait(self, batch_id: str, seconds: float) -> bool:
+        """Sleep ``seconds`` between auto-run chunks, but wake early if the crawl is paused.
+
+        Returns True if the full cooldown elapsed uninterrupted, False if a pause was requested."""
+        waited = 0.0
+        step = 0.5
+        while waited < seconds:
+            if self._is_cancel_requested(batch_id):
+                return False
+            time.sleep(min(step, seconds - waited))
+            waited += step
+        return not self._is_cancel_requested(batch_id)
+
+    def _reset_transient_crawl_state(self) -> None:
+        """Fresh slate between auto-run chunks: clear lingering in-flight accounting so a chunk
+        never inherits the previous one's counters. Per-story spiders + html caches are already
+        discarded when each story finishes; this just zeroes the shared request-capacity gauge."""
+        try:
+            capacity = self._ensure_request_capacity()
+            with capacity:
+                self._active_requests = 0
+                self._peak_active_requests = 0
+                self._adaptive_max_in_flight = READNOVELMTL_MAX_IN_FLIGHT_REQUESTS
+        except Exception:
+            pass
+
     def _crawl_thread(self, batch_id: str, run_id: str) -> None:
         try:
             self._crawl_rows(batch_id, run_id)
@@ -746,20 +807,73 @@ class ReadNovelMtlBatchService:
                 paused = state.cancel_requested
                 state.cancel_requested = False
                 remaining = any(row.status in {"queued", "discovered", "failed"} for row in state.rows)
-                state.phase = "ready" if paused or remaining else "completed"
-                state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 completed = sum(1 for row in state.rows if row.status == "completed")
                 skipped = sum(1 for row in state.rows if row.status == "skipped")
                 failed = sum(1 for row in state.rows if row.status == "failed")
                 self._finish_crawl_run_locked(state, run_id, status="paused" if paused else "completed")
-                if paused:
-                    state.add_log(f"Crawl run {run_id} paused. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                # Decide whether to auto-chain another chunk. A chunk that just finished counts
+                # its processed rows toward the chain target.
+                run_processed = sum(
+                    1 for row in state.rows
+                    if row.crawl_run_id == run_id and row.status in {"completed", "skipped", "failed"}
+                )
+                if state.auto_run_enabled:
+                    state.auto_run_processed = int(state.auto_run_processed or 0) + run_processed
+                target = int(state.auto_run_target or 0)
+                target_reached = target > 0 and int(state.auto_run_processed or 0) >= target
+                auto_next = bool(state.auto_run_enabled and not paused and remaining and not target_reached)
+                if auto_next:
+                    # Stay "crawling" through the cooldown so the batch reads as active and Pause works.
+                    next_concurrency = state.crawl_concurrency
+                    next_delay = state.request_delay_seconds
+                    cooldown = float(state.auto_run_cooldown_seconds or 0.0)
+                    state.add_log(
+                        f"Auto-run: chunk {run_id} done ({state.auto_run_processed} stories total). "
+                        f"Cleaning up + cooling down {cooldown:.0f}s, then next chunk of {state.auto_run_chunk}."
+                    )
                 else:
-                    state.add_log(f"Crawl run {run_id} finished. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                    state.phase = "ready" if paused or remaining else "completed"
+                    state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    if state.auto_run_enabled:
+                        why = "paused" if paused else ("target reached" if target_reached else "queue empty")
+                        state.add_log(f"Auto-run chain finished ({why}): {state.auto_run_processed} stories total.")
+                        state.auto_run_enabled = False
+                    if paused:
+                        state.add_log(f"Crawl run {run_id} paused. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                    else:
+                        state.add_log(f"Crawl run {run_id} finished. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
                 self._persist_locked(force=True)
             if completed > 0:
                 self._schedule_archive_preparation(batch_id, run_id=run_id)
                 self._schedule_archive_preparation(batch_id)
+            if auto_next:
+                # Clean teardown between chunks: reset in-flight accounting, cool down (so the
+                # per-IP throttle resets), then launch the next chunk as a brand-new run.
+                self._reset_transient_crawl_state()
+                if self._cooldown_wait(batch_id, cooldown):
+                    try:
+                        self.start_crawl(batch_id, next_concurrency, next_delay, _auto_chain=True)
+                    except ValueError as exc:
+                        with self._lock:
+                            state = self._batches.get(batch_id)
+                            if state is not None:
+                                state.auto_run_enabled = False
+                                state.phase = "completed" if not any(
+                                    row.status in {"queued", "discovered", "failed"} for row in state.rows
+                                ) else "ready"
+                                state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                state.add_log(f"Auto-run chain stopped: {exc}")
+                                self._persist_locked(force=True)
+                else:
+                    with self._lock:
+                        state = self._batches.get(batch_id)
+                        if state is not None:
+                            state.cancel_requested = False
+                            state.auto_run_enabled = False
+                            state.phase = "ready"
+                            state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            state.add_log("Auto-run paused during cooldown; chain stopped.")
+                            self._persist_locked(force=True)
         except Exception as exc:
             logger.exception("[readnovelmtl-batch/%s] crawl failed", batch_id)
             with self._lock:
@@ -1061,10 +1175,56 @@ class ReadNovelMtlBatchService:
                     self._append_progress_sample_locked(state, crawled_chapters, processed_count, total_chapters)
                     self._persist_locked()
 
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = [pool.submit(worker) for _ in range(min(max_workers, len(pending_indices)))]
-            for future in as_completed(futures):
-                future.result()
+        # Keep cf_clearance perpetually fresh in the background so workers never block on
+        # an inline ~13s solve when ReadNovelMtl expires the session mid-crawl.
+        warm_stop = threading.Event()
+        warmer: threading.Thread | None = None
+        if READNOVELMTL_COOKIE_WARM_INTERVAL_SECONDS > 0:
+            warmer = threading.Thread(
+                target=self._run_cookie_warmer, args=(batch_id, warm_stop), daemon=True,
+                name=f"rn-cookie-warmer-{batch_id[:8]}",
+            )
+            warmer.start()
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = [pool.submit(worker) for _ in range(min(max_workers, len(pending_indices)))]
+                for future in as_completed(futures):
+                    future.result()
+        finally:
+            warm_stop.set()
+            if warmer is not None:
+                warmer.join(timeout=2.0)
+
+    def _run_cookie_warmer(self, batch_id: str, stop_event: threading.Event) -> None:
+        """Proactively refresh cf_clearance so crawl workers never pay an inline solve.
+
+        ReadNovelMtl's Cloudflare kills the session roughly every ~150 requests; each death
+        would otherwise stall every worker while one re-solves (~13s). A single FlareSolverr
+        solve also takes ~13s, so running one continuously (small breather between) keeps a
+        fresh cookie in the DB ahead of the ~18s expiry window. Workers pick it up via
+        ``_reload_saved_cookies`` on challenge (~0.3s) instead of solving. Serialized with
+        worker solves by the client's ``_SOLVE_LOCK`` (single headless browser)."""
+        try:
+            from api.services.flaresolverr_client import is_configured, solve
+            from api.services.readnovelmtl_cookie_service import persist_solved_cookies
+        except Exception:
+            return
+        if not is_configured():
+            return
+        warm_url = "https://readnovelmtl.com/"
+        solves = 0
+        while not stop_event.is_set() and not self._is_cancel_requested(batch_id):
+            try:
+                result = solve(warm_url)
+                if not result.get("reused"):
+                    persist_solved_cookies(result.get("raw_cookies") or [], result.get("user_agent") or "")
+                    solves += 1
+            except Exception as exc:
+                logger.debug("[readnovelmtl-batch/%s] cookie warmer solve failed: %s", batch_id, exc)
+                stop_event.wait(3.0)
+                continue
+            stop_event.wait(max(0.0, READNOVELMTL_COOKIE_WARM_INTERVAL_SECONDS))
+        logger.info("[readnovelmtl-batch/%s] cookie warmer stopped after %d refresh(es).", batch_id, solves)
 
     def _crawl_one(self, batch_id: str, row: ReadNovelMtlBatchRow, output_dir: Path, delay: float) -> dict[str, Any]:
         if self._is_cancel_requested(batch_id):
@@ -1147,9 +1307,13 @@ class ReadNovelMtlBatchService:
                     continue
                 chapters.append((int(link["chapter_number"]), title, cleaned, chapter_url))
                 processed_urls.add(chapter_url)
-                self._save_story_checkpoint(output_dir, row, chapters, skipped_chapters)
-                self._update_row_progress(batch_id, row.index, crawled_chapters=len(chapters))
+                # Throttle persistence to every 25 chapters (plus the first and last): the
+                # checkpoint write and _update_row_progress (which takes the global lock,
+                # sums over every row, and persists the batch index to disk) otherwise
+                # dominate per-chapter time and cap throughput at high crawl rates.
                 if len(chapters) == 1 or len(chapters) % 25 == 0 or len(chapters) == len(chapter_links):
+                    self._save_story_checkpoint(output_dir, row, chapters, skipped_chapters)
+                    self._update_row_progress(batch_id, row.index, crawled_chapters=len(chapters))
                     self._log_batch(
                         batch_id,
                         f"{row.title}: crawled {len(chapters)}/{len(chapter_links)} chapter(s).",
@@ -1950,7 +2114,12 @@ class ReadNovelMtlBatchService:
         ]
         average_exported_chapters = (sum(completed_story_totals) / len(completed_story_totals)) if completed_story_totals else 0.0
         average_known_chapters = (sum(known_story_totals) / len(known_story_totals)) if known_story_totals else 0.0
-        average_unknown_chapters = average_exported_chapters or average_known_chapters
+        # Extrapolate the unknown stories from the LARGER, monotonically-growing sample:
+        # every started story (in-progress + completed) carries its true catalogue length in
+        # total_chapters. Preferring the completed-only mean (a tiny, noisy sample) made the
+        # total lurch by millions as each story finished; the known-total mean converges and
+        # stays stable.
+        average_unknown_chapters = average_known_chapters or average_exported_chapters
         active_remaining_chapters = 0
         queued_known_remaining_chapters = 0
         unknown_remaining_stories = 0
@@ -2084,6 +2253,11 @@ class ReadNovelMtlBatchService:
             "selected_genres": state.selected_genres,
             "crawl_runs": self._crawl_run_summaries_locked(state),
             "cancel_requested": state.cancel_requested,
+            "auto_run_enabled": state.auto_run_enabled,
+            "auto_run_chunk": state.auto_run_chunk,
+            "auto_run_target": state.auto_run_target,
+            "auto_run_processed": state.auto_run_processed,
+            "auto_run_cooldown_seconds": state.auto_run_cooldown_seconds,
             "log_lines": state.log_lines[-180:],
         }
 
@@ -2242,13 +2416,17 @@ class ReadNovelMtlBatchService:
 
     def _persist_locked(self, force: bool = False) -> None:
         now = time.time()
-        if not force and now - self._last_persist_at < 2.0:
+        # Serializing every row to JSON + disk is O(stories); at tens of thousands of rows it
+        # is expensive and runs under the global lock, so throttle non-forced persists (per-story
+        # checkpoints already cover crash recovery between index writes). Compact JSON, no indent.
+        if not force and now - self._last_persist_at < 20.0:
             return
         self._last_persist_at = now
+        self._index_file.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._index_file.with_suffix(".tmp")
         payload = {"batches": [asdict(state) for state in self._batches.values()]}
         try:
-            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             tmp_path.replace(self._index_file)
         except Exception as exc:
             logger.warning("Failed to persist ReadNovelMtl batch index: %s", exc)

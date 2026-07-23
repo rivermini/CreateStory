@@ -43,14 +43,14 @@ _NOVELHALL_BASE = "https://www.novelhall.com"
 NOVELHALL_BATCH_MAX_PAGES = int(os.getenv("NOVELHALL_BATCH_MAX_PAGES", "1000"))
 NOVELHALL_BATCH_MAX_STORIES = int(os.getenv("NOVELHALL_BATCH_MAX_STORIES", "100000"))
 NOVELHALL_BATCH_MAX_DISCOVER_WORKERS = int(os.getenv("NOVELHALL_BATCH_MAX_DISCOVER_WORKERS", "6"))
-NOVELHALL_BATCH_MAX_CRAWL_WORKERS = min(4, max(1, int(os.getenv("NOVELHALL_BATCH_MAX_CRAWL_WORKERS", "4"))))
+NOVELHALL_BATCH_MAX_CRAWL_WORKERS = min(8, max(1, int(os.getenv("NOVELHALL_BATCH_MAX_CRAWL_WORKERS", "6"))))
 NOVELHALL_DISCOVER_RETRY_TIMES = int(os.getenv("NOVELHALL_DISCOVER_RETRY_TIMES", "6"))
 NOVELHALL_DISCOVER_RETRY_BASE_SECONDS = float(os.getenv("NOVELHALL_DISCOVER_RETRY_BASE_SECONDS", "15"))
 NOVELHALL_DISCOVER_RETRY_MAX_SECONDS = float(os.getenv("NOVELHALL_DISCOVER_RETRY_MAX_SECONDS", "120"))
 NOVELHALL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS = max(
-    0.1, float(os.getenv("NOVELHALL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "0.15"))
+    0.05, float(os.getenv("NOVELHALL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS", "0.1"))
 )
-NOVELHALL_MAX_IN_FLIGHT_REQUESTS = max(1, min(8, int(os.getenv("NOVELHALL_MAX_IN_FLIGHT_REQUESTS", "4"))))
+NOVELHALL_MAX_IN_FLIGHT_REQUESTS = max(1, min(16, int(os.getenv("NOVELHALL_MAX_IN_FLIGHT_REQUESTS", "8"))))
 NOVELHALL_RATE_LIMIT_BASE_COOLDOWN_SECONDS = max(
     1.0, float(os.getenv("NOVELHALL_RATE_LIMIT_BASE_COOLDOWN_SECONDS", "60"))
 )
@@ -253,7 +253,7 @@ class NovelHallBatchService:
             max_pages_per_genre=clamp(max_pages_per_genre, 1, NOVELHALL_BATCH_MAX_PAGES),
             discover_concurrency=clamp(discover_concurrency, 1, NOVELHALL_BATCH_MAX_DISCOVER_WORKERS),
             crawl_concurrency=clamp(crawl_concurrency, 1, NOVELHALL_BATCH_MAX_CRAWL_WORKERS),
-            request_delay_seconds=max(0.1, min(float(request_delay_seconds), 15.0)),
+            request_delay_seconds=max(0.02, min(float(request_delay_seconds), 15.0)),
             output_dir=str(self._prepare_output_dir(batch_id)),
             selected_genres=selected,
             cancel_requested=False,
@@ -292,7 +292,7 @@ class NovelHallBatchService:
             state.cancel_requested = False
             state.finished_at = None
             state.crawl_concurrency = clamp(crawl_concurrency, 1, NOVELHALL_BATCH_MAX_CRAWL_WORKERS)
-            state.request_delay_seconds = max(0.1, min(float(request_delay_seconds), 15.0))
+            state.request_delay_seconds = max(0.02, min(float(request_delay_seconds), 15.0))
             initial_crawled_chapters = sum(int(row.crawled_chapters or 0) for row in available_rows)
             state.crawl_runs.append({
                 "run_id": run_id,
@@ -1143,9 +1143,13 @@ class NovelHallBatchService:
                     continue
                 chapters.append((int(link["chapter_number"]), title, cleaned, chapter_url))
                 processed_urls.add(chapter_url)
-                self._save_story_checkpoint(output_dir, row, chapters, skipped_chapters)
-                self._update_row_progress(batch_id, row.index, crawled_chapters=len(chapters))
+                # Throttle persistence to every 25 chapters (plus the first and last): the
+                # checkpoint write and _update_row_progress (which takes the global lock,
+                # sums over every row, and persists the batch index to disk) otherwise
+                # dominate per-chapter time and cap throughput at high crawl rates.
                 if len(chapters) == 1 or len(chapters) % 25 == 0 or len(chapters) == len(chapter_links):
+                    self._save_story_checkpoint(output_dir, row, chapters, skipped_chapters)
+                    self._update_row_progress(batch_id, row.index, crawled_chapters=len(chapters))
                     self._log_batch(
                         batch_id,
                         f"{row.title}: crawled {len(chapters)}/{len(chapter_links)} chapter(s).",
@@ -1893,7 +1897,12 @@ class NovelHallBatchService:
         ]
         average_exported_chapters = (sum(completed_story_totals) / len(completed_story_totals)) if completed_story_totals else 0.0
         average_known_chapters = (sum(known_story_totals) / len(known_story_totals)) if known_story_totals else 0.0
-        average_unknown_chapters = average_exported_chapters or average_known_chapters
+        # Extrapolate the unknown stories from the LARGER, monotonically-growing sample:
+        # every started story (in-progress + completed) carries its true catalogue length in
+        # total_chapters. Preferring the completed-only mean (a tiny, noisy sample) made the
+        # total lurch by millions as each story finished; the known-total mean converges and
+        # stays stable.
+        average_unknown_chapters = average_known_chapters or average_exported_chapters
         active_remaining_chapters = 0
         queued_known_remaining_chapters = 0
         unknown_remaining_stories = 0
@@ -2185,13 +2194,17 @@ class NovelHallBatchService:
 
     def _persist_locked(self, force: bool = False) -> None:
         now = time.time()
-        if not force and now - self._last_persist_at < 2.0:
+        # Serializing every row to JSON + disk is O(stories); at tens of thousands of rows it
+        # is expensive and runs under the global lock, so throttle non-forced persists (per-story
+        # checkpoints already cover crash recovery between index writes). Compact JSON, no indent.
+        if not force and now - self._last_persist_at < 20.0:
             return
         self._last_persist_at = now
+        self._index_file.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._index_file.with_suffix(".tmp")
         payload = {"batches": [asdict(state) for state in self._batches.values()]}
         try:
-            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             tmp_path.replace(self._index_file)
         except Exception as exc:
             logger.warning("Failed to persist NovelHall batch index: %s", exc)
@@ -2238,6 +2251,21 @@ def extract_story_refs_from_genre_html(html: str, genre_slug: str, genre_label: 
         if absolute in {ref["url"] for ref in refs.values()}:
             continue
         title = clean_text(anchor.get_text(" ", strip=True)) or path.strip("/")
+        # The listing row shows the latest chapter (e.g. "Chapter 1841 ...") in a sibling
+        # <chapterId>.html link; capture that number as total_chapters so the batch total is
+        # an EXACT, stable sum instead of an extrapolation from crawled stories.
+        total_chapters = None
+        row = anchor.find_parent("tr")
+        if row is not None:
+            for chapter_anchor in row.select("a[href]"):
+                chapter_path = urllib.parse.urlparse(
+                    urllib.parse.urljoin(_NOVELHALL_BASE, str(chapter_anchor.get("href") or ""))
+                ).path
+                if re.search(r"/\d+\.html$", chapter_path):
+                    num = re.search(r"chapter\s*(\d+)", chapter_anchor.get_text(" ", strip=True), re.IGNORECASE)
+                    if num:
+                        total_chapters = int(num.group(1))
+                    break
         refs[absolute] = {
             "title": title,
             "url": absolute,
@@ -2246,7 +2274,7 @@ def extract_story_refs_from_genre_html(html: str, genre_slug: str, genre_label: 
             "genre_slug": genre_slug,
             "author": "",
             "completion_status": "Complete",
-            "total_chapters": None,
+            "total_chapters": total_chapters,
             "rating": None,
             "review_count": None,
             "read_count": None,

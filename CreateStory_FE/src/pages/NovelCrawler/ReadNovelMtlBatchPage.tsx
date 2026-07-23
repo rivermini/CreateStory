@@ -131,11 +131,26 @@ function runProgressPercent(run: ReadNovelMtlBatchCrawlRun): number {
 export function ReadNovelMtlBatchPage({ themeMode }: ReadNovelMtlBatchPageProps) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('');
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(() => GENRES.map(([slug]) => slug));
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(() => {
+    // Restore the saved crawl-priority order across sessions.
+    try {
+      const saved = JSON.parse(localStorage.getItem('readnovelmtl_genre_order') || 'null');
+      if (Array.isArray(saved) && saved.length) {
+        const valid = saved.filter((s: string) => (ALL_GENRE_SLUGS as readonly string[]).includes(s));
+        return [...valid, ...ALL_GENRE_SLUGS.filter((s) => !valid.includes(s))];
+      }
+    } catch { /* ignore malformed storage */ }
+    return GENRES.map(([slug]) => slug);
+  });
   const [maxPages, setMaxPages] = useState(3);
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
   const [crawlMode, setCrawlMode] = useState<CrawlMode>('fast');
-  const [storiesPerRun, setStoriesPerRun] = useState(200);
+  const [storiesPerRun, setStoriesPerRun] = useState(100);
+  // Auto-run chaining: crawl the queue in chunks with a cooldown between them so ReadNovelMtl's
+  // per-IP throttle resets each chunk (hands-off multi-run crawling).
+  const [autoContinue, setAutoContinue] = useState(true);
+  const [autoTarget, setAutoTarget] = useState(0); // 0 = keep going until the queue is empty
+  const [cooldownSeconds, setCooldownSeconds] = useState(45);
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('readnovelmtl_batch_id') || '');
   const [summary, setSummary] = useState<ReadNovelMtlBatchSummary | null>(null);
   const [history, setHistory] = useState<ReadNovelMtlBatchSummary[]>([]);
@@ -181,6 +196,11 @@ export function ReadNovelMtlBatchPage({ themeMode }: ReadNovelMtlBatchPageProps)
     [selectedGenres],
   );
   const crawlPreset = CRAWL_MODE_PRESETS[crawlMode];
+
+  useEffect(() => {
+    // Persist the crawl-priority order so it survives reloads / new sessions.
+    try { localStorage.setItem('readnovelmtl_genre_order', JSON.stringify(selectedGenres)); } catch { /* ignore */ }
+  }, [selectedGenres]);
 
   useEffect(() => {
     if (!summary || syncedBatchIdRef.current === summary.batch_id) return;
@@ -362,6 +382,10 @@ export function ReadNovelMtlBatchPage({ themeMode }: ReadNovelMtlBatchPageProps)
         crawl_concurrency: crawlPreset.workers,
         request_delay_seconds: crawlPreset.delaySeconds,
         max_stories: storiesPerRun,
+        auto_continue: autoContinue,
+        stories_per_run: autoContinue ? storiesPerRun : undefined,
+        auto_target_stories: autoContinue ? autoTarget : undefined,
+        cooldown_seconds: autoContinue ? cooldownSeconds : undefined,
       });
       setSummary(response);
       fetchRows(0);
@@ -635,7 +659,26 @@ export function ReadNovelMtlBatchPage({ themeMode }: ReadNovelMtlBatchPageProps)
               <div className="flex flex-wrap items-end gap-3">
                 <NumberField label="Pages/source" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
                 <NumberField label="Discover workers" value={discoverConcurrency} min={1} max={6} onChange={setDiscoverConcurrency} />
-                <NumberField label="Stories/run" value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
+                <NumberField label={autoContinue ? 'Stories/run (chunk)' : 'Stories/run'} value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
+                <div>
+                  <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide" style={{ color: faint }}>Auto-run</span>
+                  <button
+                    type="button"
+                    aria-pressed={autoContinue}
+                    onClick={() => setAutoContinue((v) => !v)}
+                    className="flex h-[42px] items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors"
+                    style={{ borderColor: panelBorder, background: autoContinue ? primary : muted, color: autoContinue ? '#fff' : text }}
+                    title="Crawl the queue in chunks, cleanly restarting + cooling down between each so ReadNovelMtl's per-IP throttle resets."
+                  >
+                    <span>{autoContinue ? '⟳ Chained runs ON' : 'Chained runs OFF'}</span>
+                  </button>
+                </div>
+                {autoContinue && (
+                  <NumberField label="Total target (0=all)" value={autoTarget} min={0} max={1000000} onChange={setAutoTarget} />
+                )}
+                {autoContinue && (
+                  <NumberField label="Cooldown (s)" value={cooldownSeconds} min={0} max={3600} onChange={setCooldownSeconds} />
+                )}
                 <div className="min-w-[280px]">
                   <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide" style={{ color: faint }}>Crawl mode</span>
                   <div className="grid grid-cols-2 rounded-md border p-1" style={{ borderColor: panelBorder, background: muted }}>
@@ -739,6 +782,20 @@ export function ReadNovelMtlBatchPage({ themeMode }: ReadNovelMtlBatchPageProps)
                   onChange={handleImportCatalogFile}
                 />
               </div>
+              {summary?.auto_run_enabled && (
+                <div className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: primary, background: muted, color: text }}>
+                  <span className="font-semibold">⟳ Auto-run active</span>
+                  {' — '}
+                  {summary.auto_run_processed ?? 0}
+                  {summary.auto_run_target ? ` / ${summary.auto_run_target}` : ''}
+                  {' stories crawled in chunks of '}
+                  {summary.auto_run_chunk}
+                  {summary.cancel_requested
+                    ? ' · stopping after this chunk'
+                    : ` · ${Math.round(summary.auto_run_cooldown_seconds ?? 0)}s cooldown between runs`}
+                  .
+                </div>
+              )}
               {catalogMessage && (
                 <div className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.08)', color: isDark ? '#86efac' : '#15803d' }}>
                   {catalogMessage}
@@ -780,7 +837,7 @@ export function ReadNovelMtlBatchPage({ themeMode }: ReadNovelMtlBatchPageProps)
                     <Stat label="Remaining stories" value={crawlEstimate.remaining_stories} />
                     <Stat label="Remaining chapters" value={formatRemainingChapters(crawlEstimate.remaining_chapters, crawlEstimate.raw_remaining_chapters)} />
                     <Stat label="Chapter yield" value={formatPercentRatio(crawlEstimate.chapter_yield_ratio)} />
-                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.effective_chapters_per_hour ?? crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.recent_stories_per_hour ?? crawlEstimate.stories_per_hour)} />
+                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.effective_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.recent_stories_per_hour ?? crawlEstimate.stories_per_hour)} />
                     <Stat label="Elapsed" value={formatDuration(crawlEstimate.elapsed_seconds)} />
                     <Stat label="ETA" value={formatDuration(crawlEstimate.estimated_remaining_seconds)} />
                     <Stat className="col-span-2" label="Finish" value={crawlEstimate.estimated_finished_at || '-'} />

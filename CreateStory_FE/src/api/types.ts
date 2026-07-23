@@ -640,6 +640,11 @@ export interface ReadNovelMtlBatchSummary {
   selected_genres: string[];
   crawl_runs: ReadNovelMtlBatchCrawlRun[];
   cancel_requested: boolean;
+  auto_run_enabled?: boolean;
+  auto_run_chunk?: number;
+  auto_run_target?: number;
+  auto_run_processed?: number;
+  auto_run_cooldown_seconds?: number;
   log_lines: string[];
 }
 
@@ -762,6 +767,12 @@ export interface ReadNovelMtlBatchCrawlRequest {
   crawl_concurrency: number;
   request_delay_seconds: number;
   max_stories?: number | null;
+  // Auto-run chaining: crawl the queue in fixed-size chunks with a cooldown between them so
+  // ReadNovelMtl's per-IP throttle resets each chunk (hands-off multi-run crawling).
+  auto_continue?: boolean;
+  stories_per_run?: number | null;
+  auto_target_stories?: number | null;
+  cooldown_seconds?: number | null;
 }
 
 export type JobnibCrawlMode = 'slow' | 'fast';
