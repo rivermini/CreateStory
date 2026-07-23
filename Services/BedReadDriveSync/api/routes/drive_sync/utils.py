@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 def _is_valid_upload_format(folder_name: str) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Correct format: PREFIX_{...}_{platform} - {title}
-    Valid platforms include wp, gd, Goodnovel, nw, ink, jn, wn, and nh (case-insensitive).
+    Valid platforms include wp, gd, Goodnovel, nw, ink, jn, wn, nh, and rn (case-insensitive).
     Returns (is_valid, raw_token, recognized_source) where:
       - raw_token is the token found between prefix '_' and ' - ', or None
       - recognized_source is the normalized source name if recognized, or None
@@ -44,6 +44,8 @@ def _is_valid_upload_format(folder_name: str) -> Tuple[bool, Optional[str], Opti
             return True, "wn", "WebNovel"
         if token_lower in ("nh", "novelhall"):
             return True, "nh", "NovelHall"
+        if token_lower in ("rn", "readnovelmtl"):
+            return True, "rn", "ReadNovelMtl"
         if token_lower in ("goodnovel", "novelworm"):
             return True, token_lower, token_lower.capitalize()
         # Not recognized

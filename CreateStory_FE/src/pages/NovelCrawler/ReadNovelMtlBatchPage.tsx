@@ -1,58 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  exportNovelHallBatchCatalog,
-  getNovelHallBatchDownloadUrl,
-  getNovelHallBatchRows,
-  getNovelHallBatchStatus,
-  importNovelHallDiscoveredCatalog,
-  crawlNovelHallBatch,
-  listNovelHallBatches,
-  pauseNovelHallBatch,
-  reorderNovelHallBatchGenres,
-  removeNovelHallBatch,
-  startNovelHallBatch,
-  type NovelHallBatchRow,
-  type NovelHallBatchCrawlRun,
-  type NovelHallBatchSummary,
+  exportReadNovelMtlBatchCatalog,
+  getReadNovelMtlBatchDownloadUrl,
+  getReadNovelMtlBatchRows,
+  getReadNovelMtlBatchStatus,
+  importReadNovelMtlDiscoveredCatalog,
+  crawlReadNovelMtlBatch,
+  listReadNovelMtlBatches,
+  pauseReadNovelMtlBatch,
+  reorderReadNovelMtlBatchGenres,
+  removeReadNovelMtlBatch,
+  startReadNovelMtlBatch,
+  type ReadNovelMtlBatchRow,
+  type ReadNovelMtlBatchCrawlRun,
+  type ReadNovelMtlBatchSummary,
 } from '../../api';
 import { apiFetch, downloadWithAuth } from '../../api/client';
 import { Icon, appIcons } from '../../components/Shared/Icon';
 import type { ThemeMode } from '../../types/theme';
-import { CRAWL_MODE_PRESETS, resolveCrawlMode, type CrawlMode } from './novelhallCrawlModes';
-import { getNovelHallLogTone, novelhallLogToneClass, splitNovelHallLogLine } from './novelhallLogUtils';
+import { CRAWL_MODE_PRESETS, resolveCrawlMode, type CrawlMode } from './readnovelmtlCrawlModes';
+import { getReadNovelMtlLogTone, readnovelmtlLogToneClass, splitReadNovelMtlLogLine } from './readnovelmtlLogUtils';
 
-interface NovelHallBatchPageProps {
+interface ReadNovelMtlBatchPageProps {
   readonly themeMode: ThemeMode;
 }
 
 const GENRES = [
-  ['fantasy20223', 'Fantasy'],
-  ['romance20223', 'Romance'],
-  ['romantic3', 'Romantic'],
-  ['ceo2022', 'CEO'],
-  ['action3', 'Action'],
-  ['urban', 'Urban'],
-  ['billionaire20223', 'Billionaire'],
-  ['adult', 'Adult'],
-  ['game20233', 'Game'],
-  ['xianxia2022', 'Xianxia'],
-  ['scifi', 'Sci-fi'],
-  ['historical2023', 'Historical'],
-  ['drama20233', 'Drama'],
-  ['harem20223', 'Harem'],
-  ['comedy3', 'Comedy'],
-  ['adventure', 'Adventure'],
-  ['farming2023', 'Farming'],
-  ['military2023', 'Military'],
-  ['soninlaw2022', 'Son-In-Law'],
-  ['wuxia', 'Wuxia'],
-  ['games3', 'Games'],
-  ['josei', 'Josei'],
-  ['ecchi', 'Ecchi'],
-  ['yaoi3', 'Yaoi'],
-  ['mystery', 'Mystery'],
-  ['eastern', 'Eastern'],
+  ['latest', 'Latest'],
+  ['ranking-all-time', 'All-Time Ranking'],
+  ['ranking-monthly', 'Monthly Ranking'],
+  ['ranking-weekly', 'Weekly Ranking'],
+  ['ranking-daily', 'Daily Ranking'],
 ] as const;
 
 const ALL_GENRE_SLUGS = GENRES.map(([slug]) => slug);
@@ -80,8 +59,8 @@ function downloadJsonFile(payload: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-async function retryNovelHallFailedStories(batchId: string, rowIndex?: number): Promise<NovelHallBatchSummary> {
-  return apiFetch<NovelHallBatchSummary>(`/api/crawl/novelhall-batch/${encodeURIComponent(batchId)}/retry-failed`, {
+async function retryReadNovelMtlFailedStories(batchId: string, rowIndex?: number): Promise<ReadNovelMtlBatchSummary> {
+  return apiFetch<ReadNovelMtlBatchSummary>(`/api/crawl/readnovelmtl-batch/${encodeURIComponent(batchId)}/retry-failed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rowIndex ? { row_index: rowIndex } : {}),
@@ -140,16 +119,16 @@ function formatRemainingChapters(value: number, rawValue?: number): string {
   return `${formatted} est`;
 }
 
-function runProcessedCount(run: NovelHallBatchCrawlRun): number {
+function runProcessedCount(run: ReadNovelMtlBatchCrawlRun): number {
   return run.processed_count ?? run.completed_count + run.failed_count + run.skipped_count;
 }
 
-function runProgressPercent(run: NovelHallBatchCrawlRun): number {
+function runProgressPercent(run: ReadNovelMtlBatchCrawlRun): number {
   if (run.target_stories <= 0) return 0;
   return Math.min(100, (runProcessedCount(run) / run.target_stories) * 100);
 }
 
-export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
+export function ReadNovelMtlBatchPage({ themeMode }: ReadNovelMtlBatchPageProps) {
   const isDark = themeMode === 'dark';
   const [batchName, setBatchName] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>(() => GENRES.map(([slug]) => slug));
@@ -157,10 +136,10 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
   const [crawlMode, setCrawlMode] = useState<CrawlMode>('fast');
   const [storiesPerRun, setStoriesPerRun] = useState(200);
-  const [batchId, setBatchId] = useState(() => sessionStorage.getItem('novelhall_batch_id') || '');
-  const [summary, setSummary] = useState<NovelHallBatchSummary | null>(null);
-  const [history, setHistory] = useState<NovelHallBatchSummary[]>([]);
-  const [rows, setRows] = useState<NovelHallBatchRow[]>([]);
+  const [batchId, setBatchId] = useState(() => sessionStorage.getItem('readnovelmtl_batch_id') || '');
+  const [summary, setSummary] = useState<ReadNovelMtlBatchSummary | null>(null);
+  const [history, setHistory] = useState<ReadNovelMtlBatchSummary[]>([]);
+  const [rows, setRows] = useState<ReadNovelMtlBatchRow[]>([]);
   const [rowTotal, setRowTotal] = useState(0);
   const [rowFilter, setRowFilter] = useState('all');
   const [isStarting, setIsStarting] = useState(false);
@@ -170,7 +149,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const [catalogMessage, setCatalogMessage] = useState('');
   const [rowsLoading, setRowsLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<NovelHallBatchSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ReadNovelMtlBatchSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState('');
   const [retryTarget, setRetryTarget] = useState('');
@@ -217,7 +196,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     if (historyRequestRef.current) return;
     historyRequestRef.current = true;
     setHistoryLoading(true);
-    listNovelHallBatches()
+    listReadNovelMtlBatches()
       .then(setHistory)
       .catch(() => {})
       .finally(() => { historyRequestRef.current = false; setHistoryLoading(false); });
@@ -226,9 +205,9 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const fetchStatus = useCallback(() => {
     if (!batchId || statusRequestRef.current) return;
     statusRequestRef.current = true;
-    getNovelHallBatchStatus(batchId)
+    getReadNovelMtlBatchStatus(batchId)
       .then(setSummary)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh NovelHall batch status.'))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh ReadNovelMtl batch status.'))
       .finally(() => { statusRequestRef.current = false; });
   }, [batchId]);
 
@@ -238,13 +217,13 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setRowsLoading(true);
     const requestKey = `${batchId}|${rowFilter}`;
     try {
-      const items: NovelHallBatchRow[] = [];
+      const items: ReadNovelMtlBatchRow[] = [];
       let cursor = offset;
       let remaining = Math.max(1, requestedLimit);
-      let lastResponse = null as Awaited<ReturnType<typeof getNovelHallBatchRows>> | null;
+      let lastResponse = null as Awaited<ReturnType<typeof getReadNovelMtlBatchRows>> | null;
       while (remaining > 0) {
         const pageSize = Math.min(ROW_PAGE_SIZE, remaining);
-        const response = await getNovelHallBatchRows(batchId, { offset: cursor, limit: pageSize, status: rowFilter });
+        const response = await getReadNovelMtlBatchRows(batchId, { offset: cursor, limit: pageSize, status: rowFilter });
         lastResponse = response;
         items.push(...response.items);
         cursor += response.items.length;
@@ -259,7 +238,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
       setRowTotal(lastResponse.total);
       setSummary(lastResponse.batch);
     } catch (err) {
-      if (rowsRequestKeyRef.current === requestKey) setError(err instanceof Error ? err.message : 'Failed to load NovelHall batch rows.');
+      if (rowsRequestKeyRef.current === requestKey) setError(err instanceof Error ? err.message : 'Failed to load ReadNovelMtl batch rows.');
     } finally {
       rowsRequestRef.current = false;
       setRowsLoading(false);
@@ -276,7 +255,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
 
   useEffect(() => {
     if (!batchId) return;
-    sessionStorage.setItem('novelhall_batch_id', batchId);
+    sessionStorage.setItem('readnovelmtl_batch_id', batchId);
     fetchRows(0);
   }, [batchId, fetchRows]);
 
@@ -310,20 +289,20 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setSelectedGenres(next);
     // Persist the new crawl priority live — safe at any time, including mid-crawl.
     if (batchId) {
-      void reorderNovelHallBatchGenres(batchId, next).catch(() => setError('Could not save crawl priority order.'));
+      void reorderReadNovelMtlBatchGenres(batchId, next).catch(() => setError('Could not save crawl priority order.'));
     }
   }, [selectedGenres, batchId]);
 
   const handleDiscoverSelected = async () => {
     if (selectedGenres.length === 0) {
-      setError('Select at least one NovelHall genre.');
+      setError('Select at least one ReadNovelMtl source.');
       return;
     }
     setIsStarting(true);
     setError('');
     try {
-      const response = await startNovelHallBatch({
-        batch_name: batchName || `NovelHall ${selectedGenres.length} genre batch`,
+      const response = await startReadNovelMtlBatch({
+        batch_name: batchName || `ReadNovelMtl ${selectedGenres.length} source batch`,
         genres: selectedGenres,
         max_pages_per_genre: maxPages,
         discover_concurrency: discoverConcurrency,
@@ -339,7 +318,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
       setRowFilter('all');
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to discover NovelHall stories.');
+      setError(err instanceof Error ? err.message : 'Failed to discover ReadNovelMtl stories.');
     } finally {
       setIsStarting(false);
     }
@@ -349,8 +328,8 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setIsStarting(true);
     setError('');
     try {
-      const response = await startNovelHallBatch({
-        batch_name: batchName || 'NovelHall genre batch',
+      const response = await startReadNovelMtlBatch({
+        batch_name: batchName || 'ReadNovelMtl source batch',
         genres: ALL_GENRE_SLUGS,
         max_pages_per_genre: DISCOVER_ALL_MAX_PAGES,
         discover_concurrency: discoverConcurrency,
@@ -368,7 +347,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
       setRowFilter('all');
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to discover all NovelHall stories.');
+      setError(err instanceof Error ? err.message : 'Failed to discover all ReadNovelMtl stories.');
     } finally {
       setIsStarting(false);
     }
@@ -379,7 +358,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setIsStarting(true);
     setError('');
     try {
-      const response = await crawlNovelHallBatch(batchId, {
+      const response = await crawlReadNovelMtlBatch(batchId, {
         crawl_concurrency: crawlPreset.workers,
         request_delay_seconds: crawlPreset.delaySeconds,
         max_stories: storiesPerRun,
@@ -388,7 +367,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
       fetchRows(0);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start NovelHall crawl.');
+      setError(err instanceof Error ? err.message : 'Failed to start ReadNovelMtl crawl.');
     } finally {
       setIsStarting(false);
     }
@@ -399,12 +378,12 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setIsPausing(true);
     setError('');
     try {
-      const response = await pauseNovelHallBatch(batchId);
+      const response = await pauseReadNovelMtlBatch(batchId);
       setSummary(response);
       fetchRows(0);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pause NovelHall crawl.');
+      setError(err instanceof Error ? err.message : 'Failed to pause ReadNovelMtl crawl.');
     } finally {
       setIsPausing(false);
     }
@@ -416,13 +395,13 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setRetryTarget(target);
     setError('');
     try {
-      const response = await retryNovelHallFailedStories(batchId, rowIndex);
+      const response = await retryReadNovelMtlFailedStories(batchId, rowIndex);
       setSummary(response);
       setRows([]);
       fetchRows(0);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to queue failed NovelHall stories for retry.');
+      setError(err instanceof Error ? err.message : 'Failed to queue failed ReadNovelMtl stories for retry.');
     } finally {
       setRetryTarget('');
     }
@@ -433,9 +412,9 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setDownloadTarget('all');
     setError('');
     try {
-      await downloadWithAuth(getNovelHallBatchDownloadUrl(batchId), `novelhall_batch_${batchId}.zip`);
+      await downloadWithAuth(getReadNovelMtlBatchDownloadUrl(batchId), `readnovelmtl_batch_${batchId}.zip`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download NovelHall ZIP.');
+      setError(err instanceof Error ? err.message : 'Failed to download ReadNovelMtl ZIP.');
     } finally {
       setDownloadTarget('');
     }
@@ -447,9 +426,9 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setDownloadTarget(target);
     setError('');
     try {
-      await downloadWithAuth(getNovelHallBatchDownloadUrl(batchId, runId), `novelhall_batch_${batchId}_${runId}.zip`);
+      await downloadWithAuth(getReadNovelMtlBatchDownloadUrl(batchId, runId), `readnovelmtl_batch_${batchId}_${runId}.zip`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download NovelHall run ZIP.');
+      setError(err instanceof Error ? err.message : 'Failed to download ReadNovelMtl run ZIP.');
     } finally {
       setDownloadTarget('');
     }
@@ -458,19 +437,19 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const handleExportCatalog = async () => {
     const selectedBatchId = summary?.batch_id || batchId;
     if (!selectedBatchId) {
-      setError('Select a NovelHall batch before exporting its discovered catalog.');
+      setError('Select a ReadNovelMtl batch before exporting its discovered catalog.');
       return;
     }
     setIsCatalogExporting(true);
     setCatalogMessage('');
     setError('');
     try {
-      const backup = await exportNovelHallBatchCatalog(selectedBatchId);
+      const backup = await exportReadNovelMtlBatchCatalog(selectedBatchId);
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJsonFile(backup, `novelhall_batch_catalog_${selectedBatchId}_${stamp}_${backup.story_count}.json`);
+      downloadJsonFile(backup, `readnovelmtl_batch_catalog_${selectedBatchId}_${stamp}_${backup.story_count}.json`);
       setCatalogMessage(`Exported ${backup.story_count.toLocaleString()} story/stories from the selected batch.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export selected NovelHall batch catalog.');
+      setError(err instanceof Error ? err.message : 'Failed to export selected ReadNovelMtl batch catalog.');
     } finally {
       setIsCatalogExporting(false);
     }
@@ -489,7 +468,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setError('');
     try {
       const payload = JSON.parse(await file.text()) as unknown;
-      const response = await importNovelHallDiscoveredCatalog(payload);
+      const response = await importReadNovelMtlDiscoveredCatalog(payload);
       syncedBatchIdRef.current = '';
       setShowAllRuns(false);
       setBatchId(response.batch.batch_id);
@@ -504,13 +483,13 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
       );
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import NovelHall discovered catalog.');
+      setError(err instanceof Error ? err.message : 'Failed to import ReadNovelMtl discovered catalog.');
     } finally {
       setIsCatalogImporting(false);
     }
   };
 
-  const handleSelectBatch = (batch: NovelHallBatchSummary) => {
+  const handleSelectBatch = (batch: ReadNovelMtlBatchSummary) => {
     syncedBatchIdRef.current = '';
     setShowAllRuns(false);
     setBatchId(batch.batch_id);
@@ -527,19 +506,19 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     setIsDeleting(true);
     setError('');
     try {
-      await removeNovelHallBatch(deletingId);
+      await removeReadNovelMtlBatch(deletingId);
       setHistory((items) => items.filter((item) => item.batch_id !== deletingId));
       if (batchId === deletingId) {
         setBatchId('');
         setSummary(null);
         setRows([]);
         setRowTotal(0);
-        sessionStorage.removeItem('novelhall_batch_id');
+        sessionStorage.removeItem('readnovelmtl_batch_id');
       }
       setDeleteTarget(null);
       fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete NovelHall batch.');
+      setError(err instanceof Error ? err.message : 'Failed to delete ReadNovelMtl batch.');
       setDeleteTarget(null);
     } finally {
       setIsDeleting(false);
@@ -579,10 +558,10 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
           <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase" style={{ color: faint }}>NovelHall</div>
-                <h1 className="text-xl font-semibold sm:text-2xl" style={{ color: text }}>Genre batch</h1>
+                <div className="text-xs font-semibold uppercase" style={{ color: faint }}>ReadNovelMtl</div>
+                <h1 className="text-xl font-semibold sm:text-2xl" style={{ color: text }}>Browse & rankings batch</h1>
                 <p className="max-w-3xl text-sm leading-5" style={{ color: soft }}>
-                  Discover NovelHall stories by genre, crawl them in your chosen genre priority, and download one ZIP with combined Markdown plus info.json per story.
+                  Discover ReadNovelMtl stories from the Latest feed and the daily/weekly/monthly/all-time rankings, crawl them in your chosen priority, and download one ZIP with combined Markdown plus a full info.json per story.
                 </p>
               </div>
               {summary && (
@@ -598,7 +577,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
             <div className="space-y-4 rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
               <div>
                 <h2 className="text-base font-semibold" style={{ color: text }}>Batch setup</h2>
-                <p className="text-sm" style={{ color: soft }}>{selectedGenres.length} selected genre{selectedGenres.length === 1 ? '' : 's'}</p>
+                <p className="text-sm" style={{ color: soft }}>{selectedGenres.length} selected source{selectedGenres.length === 1 ? '' : 's'}</p>
               </div>
 
               <input
@@ -654,7 +633,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
               )}
 
               <div className="flex flex-wrap items-end gap-3">
-                <NumberField label="Pages/genre" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
+                <NumberField label="Pages/source" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
                 <NumberField label="Discover workers" value={discoverConcurrency} min={1} max={6} onChange={setDiscoverConcurrency} />
                 <NumberField label="Stories/run" value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
                 <div className="min-w-[280px]">
@@ -775,7 +754,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                 <Stat label="Exported" value={summary?.completed_count ?? 0} />
                 <Stat label="Skipped" value={summary?.skipped_count ?? 0} />
                 <Stat label="Failed" value={summary?.failed_count ?? 0} />
-                <Stat label="Genres" value={selectedGenres.length} />
+                <Stat label="Sources" value={selectedGenres.length} />
                 <Stat className="col-span-2" label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${estimateTotalChapters.toLocaleString()}${estimateTotalChapters > (summary?.total_chapters ?? 0) ? ' est' : ''}`} />
                 {summary?.rate_limit && (
                   <>
@@ -849,7 +828,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
               </div>
             ) : (
               <div className="mt-4 rounded-lg border px-4 py-6 text-center text-sm" style={{ borderColor: panelBorder, color: soft }}>
-                {historyLoading ? 'Loading batch history...' : 'No NovelHall batches yet.'}
+                {historyLoading ? 'Loading batch history...' : 'No ReadNovelMtl batches yet.'}
               </div>
             )}
           </section>
@@ -867,7 +846,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                 <div className="flex items-center gap-2">
                   <span className="text-xs tabular-nums" style={{ color: faint }}>{summary.log_lines.length.toLocaleString()} latest lines</span>
                   <Link
-                    to={`/novelhall-batch/${encodeURIComponent(summary.batch_id)}/full-logs`}
+                    to={`/readnovelmtl-batch/${encodeURIComponent(summary.batch_id)}/full-logs`}
                     className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold"
                     style={{ borderColor: panelBorder, background: muted, color: text }}
                   >
@@ -878,10 +857,10 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
               </div>
               <div className="mt-3 max-h-56 overflow-auto rounded-md border p-2 font-mono text-xs leading-5" style={{ borderColor: panelBorder, background: muted }}>
                 {summary.log_lines.slice().reverse().map((line, index) => {
-                  const { time, message } = splitNovelHallLogLine(line);
-                  const tone = getNovelHallLogTone(line);
+                  const { time, message } = splitReadNovelMtlLogLine(line);
+                  const tone = getReadNovelMtlLogTone(line);
                   return (
-                    <div key={`${line}-${index}`} className={`mb-1 rounded border-l-2 px-2 py-1 last:mb-0 ${novelhallLogToneClass(tone)}`}>
+                    <div key={`${line}-${index}`} className={`mb-1 rounded border-l-2 px-2 py-1 last:mb-0 ${readnovelmtlLogToneClass(tone)}`}>
                       {time && <span className="mr-2 font-semibold opacity-70">{time}</span>}
                       <span className="break-words">{message}</span>
                     </div>
@@ -1015,7 +994,7 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                   <thead style={{ color: faint }}>
                     <tr className="border-b" style={{ borderColor: panelBorder }}>
                       <th className="w-24 min-w-[6rem] whitespace-nowrap px-4 py-3 font-medium">#</th>
-                      <th className="min-w-[110px] px-4 py-3 font-medium">Genre</th>
+                      <th className="min-w-[110px] px-4 py-3 font-medium">Source</th>
                       <th className="min-w-[260px] px-4 py-3 font-medium">Story</th>
                       <th className="min-w-[120px] px-4 py-3 font-medium">Rating</th>
                       <th className="min-w-[120px] px-4 py-3 font-medium">Chapters</th>
@@ -1126,7 +1105,7 @@ function Progress({ label, value }: { readonly label: string; readonly value: nu
   );
 }
 
-function StatusChip({ row }: { readonly row: NovelHallBatchRow }) {
+function StatusChip({ row }: { readonly row: ReadNovelMtlBatchRow }) {
   const label = row.status === 'completed' ? 'Exported' : row.status.charAt(0).toUpperCase() + row.status.slice(1);
   const tone = row.status === 'completed' ? 'success' : row.status === 'skipped' ? 'warning' : row.status === 'failed' ? 'danger' : 'neutral';
   const colors = {
@@ -1138,8 +1117,8 @@ function StatusChip({ row }: { readonly row: NovelHallBatchRow }) {
   return <span className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold" style={{ background: colors.bg, color: colors.color, borderColor: colors.border }}>{label}</span>;
 }
 
-function phaseLabel(phase: NovelHallBatchSummary['phase']): string {
-  const labels: Record<NovelHallBatchSummary['phase'], string> = {
+function phaseLabel(phase: ReadNovelMtlBatchSummary['phase']): string {
+  const labels: Record<ReadNovelMtlBatchSummary['phase'], string> = {
     discovering: 'Discovering',
     ready: 'Ready',
     crawling: 'Crawling',

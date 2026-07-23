@@ -19,6 +19,7 @@ const NAV_ICONS = {
     '/goodnovel-batch': 'batch',
     '/inkitt-batch': 'batch',
     '/novelhall-batch': 'batch',
+    '/readnovelmtl-batch': 'batch',
     '/jobnib-batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread/jobs': 'audioJobs',

@@ -22,6 +22,7 @@ const NAV_ICONS_MOBILE: Record<string, keyof typeof appIcons> = {
     '/goodnovel-batch': 'batch',
     '/inkitt-batch': 'batch',
     '/novelhall-batch': 'batch',
+    '/readnovelmtl-batch': 'batch',
     '/jobnib-batch': 'batch',
     '/results/all': 'crawlHistory',
     '/bedread/jobs': 'audioJobs',

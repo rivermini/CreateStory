@@ -82,6 +82,13 @@ async def download_novelhall_batch(batch_id: str, run_id: str | None = Query(def
     return await _proxy_download(f"/api/results/novelhall-batch/{batch_id}/download", params=params)
 
 
+@router.get("/readnovelmtl-batch/{batch_id}/download")
+async def download_readnovelmtl_batch(batch_id: str, run_id: str | None = Query(default=None)) -> StreamingResponse:
+    """Zip the source-grouped combined files for a ReadNovelMtl batch."""
+    params = {"run_id": run_id} if run_id else None
+    return await _proxy_download(f"/api/results/readnovelmtl-batch/{batch_id}/download", params=params)
+
+
 @router.get("/jobnib-batch/{batch_id}/download")
 async def download_jobnib_batch(
     batch_id: str,

@@ -56,6 +56,11 @@ export function getNovelHallBatchDownloadUrl(batchId: string, runId?: string): s
   return `${BASE_URL}/api/results/novelhall-batch/${encodeURIComponent(batchId)}/download${params}`;
 }
 
+export function getReadNovelMtlBatchDownloadUrl(batchId: string, runId?: string): string {
+  const params = runId ? `?run_id=${encodeURIComponent(runId)}` : '';
+  return `${BASE_URL}/api/results/readnovelmtl-batch/${encodeURIComponent(batchId)}/download${params}`;
+}
+
 export function getJobnibBatchDownloadUrl(
   batchId: string,
   runId?: string,

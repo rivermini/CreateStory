@@ -767,7 +767,7 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
                 <Stat label="Skipped" value={summary?.skipped_count ?? 0} />
                 <Stat label="Failed" value={summary?.failed_count ?? 0} />
                 <Stat label="Genres" value={selectedGenres.length} />
-                <Stat className="col-span-2" label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${(summary?.total_chapters ?? 0).toLocaleString()}`} />
+                <Stat className="col-span-2" label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${estimateTotalChapters.toLocaleString()}${estimateTotalChapters > (summary?.total_chapters ?? 0) ? ' est' : ''}`} />
                 {summary?.rate_limit && (
                   <>
                     <Stat label="Request starts" value={`${summary.rate_limit.request_interval_seconds.toFixed(1)}s cadence`} />
