@@ -1203,7 +1203,7 @@ class ReadNovelMtlBatchService:
         solve also takes ~13s, so running one continuously (small breather between) keeps a
         fresh cookie in the DB ahead of the ~18s expiry window. Workers pick it up via
         ``_reload_saved_cookies`` on challenge (~0.3s) instead of solving. Serialized with
-        worker solves by the client's ``_SOLVE_LOCK`` (single headless browser)."""
+        worker solves by the client's per-instance FlareSolverr lock pool."""
         try:
             from api.services.flaresolverr_client import is_configured, solve
             from api.services.readnovelmtl_cookie_service import persist_solved_cookies
@@ -2317,7 +2317,19 @@ class ReadNovelMtlBatchService:
         max_stories: int | None,
     ) -> list[ReadNovelMtlBatchRow]:
         available_rows = [row for row in state.rows if row.status in {"queued", "discovered", "failed"}]
-        available_rows.sort(key=lambda row: (0 if int(row.retry_priority or 0) > 0 else 1, -int(row.retry_priority or 0), row.index))
+        # Draw the run's stories in the user's live crawl-priority order (retried first, then
+        # genre priority, then discovery index) so a bounded run / auto-run chunk crawls the
+        # prioritized sources first across the WHOLE queue — not just whatever was discovered
+        # first. Without the genre_rank term a bounded run picks by discovery order, so a source
+        # moved to the top but discovered late never enters the run (crawl priority looks ignored).
+        genre_rank = {slug: pos for pos, slug in enumerate(state.selected_genres)}
+        fallback_rank = len(genre_rank)
+        available_rows.sort(key=lambda row: (
+            0 if int(row.retry_priority or 0) > 0 else 1,
+            -int(row.retry_priority or 0),
+            genre_rank.get(row.genre_slug, fallback_rank),
+            row.index,
+        ))
         if max_stories is not None:
             return available_rows[:max(1, int(max_stories))]
         return available_rows

@@ -159,6 +159,13 @@ class InkittBatchState:
     selected_genres: list[str] = field(default_factory=list)
     crawl_runs: list[dict[str, Any]] = field(default_factory=list)
     cancel_requested: bool = False
+    # Auto-run chaining: crawl the queue in fixed-size chunks, tearing each run down cleanly and
+    # cooling down between them so the origin's per-IP rate limit resets each chunk.
+    auto_run_enabled: bool = False
+    auto_run_chunk: int = 0
+    auto_run_target: int = 0          # total stories to auto-crawl; 0 = until the queue is empty
+    auto_run_cooldown_seconds: float = 45.0
+    auto_run_processed: int = 0       # stories processed across the auto-run chain so far
     log_lines: list[str] = field(default_factory=list)
     log_file: str = ""
     progress_samples: list[dict[str, Any]] = field(default_factory=list)
@@ -260,11 +267,31 @@ class InkittBatchService:
         crawl_concurrency: int,
         request_delay_seconds: float,
         max_stories: int | None = None,
+        stories_per_run: int | None = None,
+        auto_continue: bool = False,
+        auto_target_stories: int | None = None,
+        cooldown_seconds: float | None = None,
+        _auto_chain: bool = False,
     ) -> InkittBatchState:
         with self._lock:
             state = self._get_state_locked(batch_id)
-            if state.phase in {"discovering", "crawling"}:
+            # ``_auto_chain`` restarts come from the chain itself while the batch is still shown
+            # as "crawling" during the inter-chunk cooldown, so they skip the active guard.
+            if state.phase in {"discovering", "crawling"} and not _auto_chain:
                 raise ValueError("This Inkitt batch is already active.")
+            # Configure auto-run chaining. A run started by the chain itself (``_auto_chain``)
+            # keeps the config already on the state; a fresh user start (re)initializes it.
+            if not _auto_chain:
+                chunk = int(stories_per_run or 0)
+                state.auto_run_enabled = bool(auto_continue and chunk > 0)
+                state.auto_run_chunk = chunk if state.auto_run_enabled else 0
+                state.auto_run_target = max(0, int(auto_target_stories or 0))
+                state.auto_run_processed = 0
+                if cooldown_seconds is not None:
+                    state.auto_run_cooldown_seconds = max(0.0, float(cooldown_seconds))
+            # An auto-run crawls one chunk at a time; a normal run honors max_stories as given.
+            if state.auto_run_enabled and state.auto_run_chunk > 0:
+                max_stories = state.auto_run_chunk
             available_rows = self._available_rows_for_crawl_locked(state, max_stories)
             if not available_rows:
                 raise ValueError("This Inkitt batch has no queued stories to crawl.")
@@ -733,6 +760,32 @@ class InkittBatchService:
                     state.add_log(f"Batch failed: {exc}")
                     self._persist_locked(force=True)
 
+    def _cooldown_wait(self, batch_id: str, seconds: float) -> bool:
+        """Sleep ``seconds`` between auto-run chunks, but wake early if the crawl is paused.
+
+        Returns True if the full cooldown elapsed uninterrupted, False if a pause was requested."""
+        waited = 0.0
+        step = 0.5
+        while waited < seconds:
+            if self._is_cancel_requested(batch_id):
+                return False
+            time.sleep(min(step, seconds - waited))
+            waited += step
+        return not self._is_cancel_requested(batch_id)
+
+    def _reset_transient_crawl_state(self) -> None:
+        """Fresh slate between auto-run chunks: clear lingering in-flight accounting so a chunk
+        never inherits the previous one's counters. Per-story spiders + html caches are already
+        discarded when each story finishes; this just zeroes the shared request-capacity gauge."""
+        try:
+            capacity = self._ensure_request_capacity()
+            with capacity:
+                self._active_requests = 0
+                self._peak_active_requests = 0
+                self._adaptive_max_in_flight = INKITT_MAX_IN_FLIGHT_REQUESTS
+        except Exception:
+            pass
+
     def _crawl_thread(self, batch_id: str, run_id: str) -> None:
         try:
             self._crawl_rows(batch_id, run_id)
@@ -743,20 +796,73 @@ class InkittBatchService:
                 paused = state.cancel_requested
                 state.cancel_requested = False
                 remaining = any(row.status in {"queued", "discovered", "failed"} for row in state.rows)
-                state.phase = "ready" if paused or remaining else "completed"
-                state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 completed = sum(1 for row in state.rows if row.status == "completed")
                 skipped = sum(1 for row in state.rows if row.status == "skipped")
                 failed = sum(1 for row in state.rows if row.status == "failed")
                 self._finish_crawl_run_locked(state, run_id, status="paused" if paused else "completed")
-                if paused:
-                    state.add_log(f"Crawl run {run_id} paused. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                # Decide whether to auto-chain another chunk. A chunk that just finished counts
+                # its processed rows toward the chain target.
+                run_processed = sum(
+                    1 for row in state.rows
+                    if row.crawl_run_id == run_id and row.status in {"completed", "skipped", "failed"}
+                )
+                if state.auto_run_enabled:
+                    state.auto_run_processed = int(state.auto_run_processed or 0) + run_processed
+                target = int(state.auto_run_target or 0)
+                target_reached = target > 0 and int(state.auto_run_processed or 0) >= target
+                auto_next = bool(state.auto_run_enabled and not paused and remaining and not target_reached)
+                if auto_next:
+                    # Stay "crawling" through the cooldown so the batch reads as active and Pause works.
+                    next_concurrency = state.crawl_concurrency
+                    next_delay = state.request_delay_seconds
+                    cooldown = float(state.auto_run_cooldown_seconds or 0.0)
+                    state.add_log(
+                        f"Auto-run: chunk {run_id} done ({state.auto_run_processed} stories total). "
+                        f"Cleaning up + cooling down {cooldown:.0f}s, then next chunk of {state.auto_run_chunk}."
+                    )
                 else:
-                    state.add_log(f"Crawl run {run_id} finished. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                    state.phase = "ready" if paused or remaining else "completed"
+                    state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    if state.auto_run_enabled:
+                        why = "paused" if paused else ("target reached" if target_reached else "queue empty")
+                        state.add_log(f"Auto-run chain finished ({why}): {state.auto_run_processed} stories total.")
+                        state.auto_run_enabled = False
+                    if paused:
+                        state.add_log(f"Crawl run {run_id} paused. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
+                    else:
+                        state.add_log(f"Crawl run {run_id} finished. Total progress: {completed} exported, {skipped} skipped, {failed} failed.")
                 self._persist_locked(force=True)
             if completed > 0:
                 self._schedule_archive_preparation(batch_id, run_id=run_id)
                 self._schedule_archive_preparation(batch_id)
+            if auto_next:
+                # Clean teardown between chunks: reset in-flight accounting, cool down (so the
+                # origin's rate limit resets), then launch the next chunk as a brand-new run.
+                self._reset_transient_crawl_state()
+                if self._cooldown_wait(batch_id, cooldown):
+                    try:
+                        self.start_crawl(batch_id, next_concurrency, next_delay, _auto_chain=True)
+                    except ValueError as exc:
+                        with self._lock:
+                            state = self._batches.get(batch_id)
+                            if state is not None:
+                                state.auto_run_enabled = False
+                                state.phase = "completed" if not any(
+                                    row.status in {"queued", "discovered", "failed"} for row in state.rows
+                                ) else "ready"
+                                state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                state.add_log(f"Auto-run chain stopped: {exc}")
+                                self._persist_locked(force=True)
+                else:
+                    with self._lock:
+                        state = self._batches.get(batch_id)
+                        if state is not None:
+                            state.cancel_requested = False
+                            state.auto_run_enabled = False
+                            state.phase = "ready"
+                            state.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            state.add_log("Auto-run paused during cooldown; chain stopped.")
+                            self._persist_locked(force=True)
         except Exception as exc:
             logger.exception("[inkitt-batch/%s] crawl failed", batch_id)
             with self._lock:
@@ -2325,6 +2431,11 @@ class InkittBatchService:
             "selected_genres": state.selected_genres,
             "crawl_runs": self._crawl_run_summaries_locked(state),
             "cancel_requested": state.cancel_requested,
+            "auto_run_enabled": state.auto_run_enabled,
+            "auto_run_chunk": state.auto_run_chunk,
+            "auto_run_target": state.auto_run_target,
+            "auto_run_processed": state.auto_run_processed,
+            "auto_run_cooldown_seconds": state.auto_run_cooldown_seconds,
             "log_lines": state.log_lines[-180:],
         }
 
@@ -2384,7 +2495,19 @@ class InkittBatchService:
         max_stories: int | None,
     ) -> list[InkittBatchRow]:
         available_rows = [row for row in state.rows if row.status in {"queued", "discovered", "failed"}]
-        available_rows.sort(key=lambda row: (0 if int(row.retry_priority or 0) > 0 else 1, -int(row.retry_priority or 0), row.index))
+        # Draw the run's stories in the user's live crawl-priority order (retried first, then
+        # genre priority, then discovery index) so a bounded run / STORIES-PER-RUN chunk crawls
+        # the prioritized genres first across the WHOLE queue — not just whatever was discovered
+        # first. Without the genre_rank term a bounded run picks by discovery order, so a genre
+        # moved to the top but discovered late never enters the run (crawl priority looks ignored).
+        genre_rank = {slug: pos for pos, slug in enumerate(state.selected_genres)}
+        fallback_rank = len(genre_rank)
+        available_rows.sort(key=lambda row: (
+            0 if int(row.retry_priority or 0) > 0 else 1,
+            -int(row.retry_priority or 0),
+            genre_rank.get(row.genre_slug, fallback_rank),
+            row.index,
+        ))
         if max_stories is not None:
             return available_rows[:max(1, int(max_stories))]
         return available_rows

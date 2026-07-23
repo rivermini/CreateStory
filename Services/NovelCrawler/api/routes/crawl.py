@@ -279,6 +279,12 @@ class InkittBatchCrawlRequest(BaseModel):
     crawl_concurrency: int = Field(default=4, ge=1, le=4)
     request_delay_seconds: float = Field(default=1.0, ge=1, le=5)
     max_stories: int | None = Field(default=None, ge=1, le=10000)
+    # Auto-run chaining: crawl the queue in fixed-size chunks with a cooldown between them so the
+    # origin's rate limit resets each chunk (hands-off multi-run crawling).
+    auto_continue: bool = Field(default=False)
+    stories_per_run: int | None = Field(default=None, ge=1, le=10000)
+    auto_target_stories: int | None = Field(default=None, ge=0, le=1000000)
+    cooldown_seconds: float | None = Field(default=None, ge=0, le=3600)
 
 
 class NovelHallBatchStartRequest(BaseModel):
@@ -295,6 +301,12 @@ class NovelHallBatchCrawlRequest(BaseModel):
     crawl_concurrency: int = Field(default=6, ge=1, le=8)
     request_delay_seconds: float = Field(default=0.1, ge=0.02, le=15)
     max_stories: int | None = Field(default=None, ge=1, le=10000)
+    # Auto-run chaining: crawl the queue in fixed-size chunks with a cooldown between them so the
+    # origin's rate limit resets each chunk (hands-off multi-run crawling).
+    auto_continue: bool = Field(default=False)
+    stories_per_run: int | None = Field(default=None, ge=1, le=10000)
+    auto_target_stories: int | None = Field(default=None, ge=0, le=1000000)
+    cooldown_seconds: float | None = Field(default=None, ge=0, le=3600)
 
 
 class ReadNovelMtlBatchStartRequest(BaseModel):
@@ -798,6 +810,10 @@ async def crawl_inkitt_batch(
             crawl_concurrency=request.crawl_concurrency,
             request_delay_seconds=request.request_delay_seconds,
             max_stories=request.max_stories,
+            stories_per_run=request.stories_per_run,
+            auto_continue=request.auto_continue,
+            auto_target_stories=request.auto_target_stories,
+            cooldown_seconds=request.cooldown_seconds,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -988,6 +1004,10 @@ async def crawl_novelhall_batch(
             crawl_concurrency=request.crawl_concurrency,
             request_delay_seconds=request.request_delay_seconds,
             max_stories=request.max_stories,
+            stories_per_run=request.stories_per_run,
+            auto_continue=request.auto_continue,
+            auto_target_stories=request.auto_target_stories,
+            cooldown_seconds=request.cooldown_seconds,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

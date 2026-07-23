@@ -304,6 +304,11 @@ export interface InkittBatchSummary {
   selected_genres: string[];
   crawl_runs: InkittBatchCrawlRun[];
   cancel_requested: boolean;
+  auto_run_enabled?: boolean;
+  auto_run_chunk?: number;
+  auto_run_target?: number;
+  auto_run_processed?: number;
+  auto_run_cooldown_seconds?: number;
   log_lines: string[];
 }
 
@@ -426,6 +431,11 @@ export interface InkittBatchCrawlRequest {
   crawl_concurrency: number;
   request_delay_seconds: number;
   max_stories?: number | null;
+  // Auto-run chaining: crawl the queue in fixed-size chunks with a cooldown between them.
+  auto_continue?: boolean;
+  stories_per_run?: number | null;
+  auto_target_stories?: number | null;
+  cooldown_seconds?: number | null;
 }
 
 // NovelHall batch types mirror the Inkitt batch types exactly (backend response shapes are identical).
@@ -472,6 +482,11 @@ export interface NovelHallBatchSummary {
   selected_genres: string[];
   crawl_runs: NovelHallBatchCrawlRun[];
   cancel_requested: boolean;
+  auto_run_enabled?: boolean;
+  auto_run_chunk?: number;
+  auto_run_target?: number;
+  auto_run_processed?: number;
+  auto_run_cooldown_seconds?: number;
   log_lines: string[];
 }
 
@@ -594,6 +609,11 @@ export interface NovelHallBatchCrawlRequest {
   crawl_concurrency: number;
   request_delay_seconds: number;
   max_stories?: number | null;
+  // Auto-run chaining: crawl the queue in fixed-size chunks with a cooldown between them.
+  auto_continue?: boolean;
+  stories_per_run?: number | null;
+  auto_target_stories?: number | null;
+  cooldown_seconds?: number | null;
 }
 
 // ReadNovelMtl batch types mirror the NovelHall batch types exactly (backend response shapes are identical).

@@ -167,6 +167,11 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const [discoverConcurrency, setDiscoverConcurrency] = useState(4);
   const [crawlMode, setCrawlMode] = useState<CrawlMode>('fast');
   const [storiesPerRun, setStoriesPerRun] = useState(200);
+  // Auto-run chaining: crawl the queue in chunks with a cooldown between them so the origin's
+  // rate limit resets each chunk (hands-off multi-run crawling).
+  const [autoContinue, setAutoContinue] = useState(true);
+  const [autoTarget, setAutoTarget] = useState(0); // 0 = keep going until the queue is empty
+  const [cooldownSeconds, setCooldownSeconds] = useState(45);
   const [batchId, setBatchId] = useState(() => sessionStorage.getItem('novelhall_batch_id') || '');
   const [summary, setSummary] = useState<NovelHallBatchSummary | null>(null);
   const [history, setHistory] = useState<NovelHallBatchSummary[]>([]);
@@ -398,6 +403,10 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
         crawl_concurrency: crawlPreset.workers,
         request_delay_seconds: crawlPreset.delaySeconds,
         max_stories: storiesPerRun,
+        auto_continue: autoContinue,
+        stories_per_run: autoContinue ? storiesPerRun : undefined,
+        auto_target_stories: autoContinue ? autoTarget : undefined,
+        cooldown_seconds: autoContinue ? cooldownSeconds : undefined,
       });
       setSummary(response);
       fetchRows(0);
@@ -671,7 +680,26 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
               <div className="flex flex-wrap items-end gap-3">
                 <NumberField label="Pages/genre" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
                 <NumberField label="Discover workers" value={discoverConcurrency} min={1} max={6} onChange={setDiscoverConcurrency} />
-                <NumberField label="Stories/run" value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
+                <NumberField label={autoContinue ? 'Stories/run (chunk)' : 'Stories/run'} value={storiesPerRun} min={1} max={10000} onChange={setStoriesPerRun} />
+                <div>
+                  <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide" style={{ color: faint }}>Auto-run</span>
+                  <button
+                    type="button"
+                    aria-pressed={autoContinue}
+                    onClick={() => setAutoContinue((v) => !v)}
+                    className="flex h-[42px] items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors"
+                    style={{ borderColor: panelBorder, background: autoContinue ? primary : muted, color: autoContinue ? '#fff' : text }}
+                    title="Crawl the queue in chunks, cleanly restarting + cooling down between each so the origin's rate limit resets."
+                  >
+                    <span>{autoContinue ? '⟳ Chained runs ON' : 'Chained runs OFF'}</span>
+                  </button>
+                </div>
+                {autoContinue && (
+                  <NumberField label="Total target (0=all)" value={autoTarget} min={0} max={1000000} onChange={setAutoTarget} />
+                )}
+                {autoContinue && (
+                  <NumberField label="Cooldown (s)" value={cooldownSeconds} min={0} max={3600} onChange={setCooldownSeconds} />
+                )}
                 <div className="min-w-[280px]">
                   <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide" style={{ color: faint }}>Crawl mode</span>
                   <div className="grid grid-cols-2 rounded-md border p-1" style={{ borderColor: panelBorder, background: muted }}>
@@ -775,6 +803,20 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                   onChange={handleImportCatalogFile}
                 />
               </div>
+              {summary?.auto_run_enabled && (
+                <div className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: primary, background: muted, color: text }}>
+                  <span className="font-semibold">⟳ Auto-run active</span>
+                  {' — '}
+                  {summary.auto_run_processed ?? 0}
+                  {summary.auto_run_target ? ` / ${summary.auto_run_target}` : ''}
+                  {' stories crawled in chunks of '}
+                  {summary.auto_run_chunk}
+                  {summary.cancel_requested
+                    ? ' · stopping after this chunk'
+                    : ` · ${Math.round(summary.auto_run_cooldown_seconds ?? 0)}s cooldown between runs`}
+                  .
+                </div>
+              )}
               {catalogMessage && (
                 <div className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.08)', color: isDark ? '#86efac' : '#15803d' }}>
                   {catalogMessage}
