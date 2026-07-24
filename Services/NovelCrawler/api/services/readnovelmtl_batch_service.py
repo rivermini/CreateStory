@@ -1533,9 +1533,15 @@ class ReadNovelMtlBatchService:
                 self._wait_for_request_slot_locked(delay, batch_id=batch_id)
                 started_at = time.monotonic()
                 self._last_request_at = started_at
-            if preserve_query:
-                return self._fetch_listing_html(spider, url)
-            return spider._fetch_page_html(url)
+            html = self._fetch_listing_html(spider, url) if preserve_query else spider._fetch_page_html(url)
+            self._note_request_success()
+            return html
+        except RuntimeError as exc:
+            # A page/chapter fetch hit HTTP 429 — throttle EVERY worker (shared escalating cooldown)
+            # so we stop hammering the origin, then let it propagate (the story stays retryable).
+            if "Rate limited (HTTP 429)" in str(exc):
+                self._register_rate_limit(batch_id)
+            raise
         finally:
             latency = max(0.0, time.monotonic() - started_at) if started_at else 0.0
             self._release_request_capacity(latency)
@@ -1645,6 +1651,42 @@ class ReadNovelMtlBatchService:
                 raise ReadNovelMtlCrawlPaused("Crawl paused; the current story remains queued.")
             step = wait if batch_id is None else min(0.5, wait)
             time.sleep(step)
+
+    def _register_rate_limit(self, batch_id: str | None = None) -> None:
+        """A worker hit HTTP 429. Back the WHOLE crawler off: set a shared cooldown (escalating with
+        repeated hits, capped at the max) and stretch the global request interval, so every worker
+        waits until the origin's per-IP limit resets instead of hammering it and failing stories."""
+        if not hasattr(self, "_rate_lock"):
+            self._rate_lock = threading.Lock()
+        with self._rate_lock:
+            self._rate_limit_events = int(getattr(self, "_rate_limit_events", 0) or 0) + 1
+            self._rate_limit_total = int(getattr(self, "_rate_limit_total", 0) or 0) + 1
+            self._successes_since_rate_limit = 0
+            self._last_rate_limit_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            events = min(self._rate_limit_events, READNOVELMTL_RATE_LIMIT_MAX_EVENTS)
+            cooldown = min(
+                READNOVELMTL_RATE_LIMIT_MAX_COOLDOWN_SECONDS,
+                READNOVELMTL_RATE_LIMIT_BASE_COOLDOWN_SECONDS * (2 ** (events - 1)),
+            )
+            self._rate_cooldown_until = time.monotonic() + cooldown
+            self._adaptive_request_interval = min(
+                READNOVELMTL_RATE_LIMIT_MAX_REQUEST_INTERVAL_SECONDS,
+                float(getattr(self, "_adaptive_request_interval", READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS)) * 1.5 + 0.2,
+            )
+            hits = self._rate_limit_events
+        self._log_batch(batch_id, f"Rate limited (HTTP 429): backing off all workers for {cooldown:.0f}s (event #{hits}).")
+
+    def _note_request_success(self) -> None:
+        """After a healthy streak of successful fetches, relax the rate-limit backoff so throughput
+        recovers once the origin stops throttling."""
+        if not getattr(self, "_rate_limit_events", 0) or not hasattr(self, "_rate_lock"):
+            return
+        with self._rate_lock:
+            self._successes_since_rate_limit = int(getattr(self, "_successes_since_rate_limit", 0) or 0) + 1
+            if self._successes_since_rate_limit >= READNOVELMTL_RATE_LIMIT_RECOVERY_SUCCESSES:
+                self._rate_limit_events = 0
+                self._successes_since_rate_limit = 0
+                self._adaptive_request_interval = READNOVELMTL_GLOBAL_MIN_REQUEST_INTERVAL_SECONDS
 
     def _rate_limit_snapshot(self) -> dict[str, float | int | str]:
         if not hasattr(self, "_rate_lock"):

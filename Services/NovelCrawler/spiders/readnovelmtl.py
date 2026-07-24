@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 import urllib.parse
 from typing import Any, Generator, Optional
 
@@ -43,6 +44,9 @@ _RNM_USER_AGENT = (
     "Chrome/149.0.0.0 Safari/537.36"
 )
 _MAX_FETCH_RETRIES = 3
+# HTTP 429 (origin rate-limiting the IP) is NOT a Cloudflare challenge — re-solving does not help.
+# Back off with these escalating waits (seconds), reloading cookies between tries, before giving up.
+_RATE_LIMIT_BACKOFFS = (8, 20, 45, 90)
 # On a Cloudflare challenge, first try reloading a freshly-warmed cf_clearance from the DB
 # (the batch cookie-warmer keeps one ready) before paying for a ~13s inline solve.
 _MAX_WARM_RELOAD_ATTEMPTS = 2
@@ -400,6 +404,8 @@ class ReadNovelMtlSpider(BaseSpider):
             return cached
 
         challenged = False
+        rate_limited = False
+        rate_limit_hits = 0
         for attempt in range(_MAX_FETCH_RETRIES + 1):
             try:
                 response = self._session.get(url, timeout=timeout)
@@ -411,11 +417,33 @@ class ReadNovelMtlSpider(BaseSpider):
             if response.status_code == 200 and not self._is_cloudflare_challenge(response.text):
                 self._html_cache[url] = response.text
                 return response.text
+            # HTTP 429 = the origin is throttling this IP. It is NOT a Cloudflare challenge, so
+            # re-solving does not help. Back off (escalating), reload cookies, and retry — never
+            # return the 429 page, which downstream would drop as an empty "skipped" chapter and
+            # permanently lose it.
+            if response.status_code == 429:
+                rate_limited = True
+                if rate_limit_hits < len(_RATE_LIMIT_BACKOFFS):
+                    backoff = _RATE_LIMIT_BACKOFFS[rate_limit_hits]
+                    rate_limit_hits += 1
+                    self.logger.warning("[readnovelmtl] HTTP 429 for %s; backing off %ss before retry %d.", url, backoff, rate_limit_hits)
+                    time.sleep(backoff)
+                    self._reload_saved_cookies()
+                    continue
+                break
             challenged = response.status_code in (403, 503) or self._is_cloudflare_challenge(response.text)
             if challenged:
                 break
             if attempt >= _MAX_FETCH_RETRIES:
                 break
+
+        if rate_limited and not challenged:
+            # Origin still throttling after our backoff budget. Raise so the batch marks the STORY
+            # failed (retryable) instead of skipping the chapter as empty — no data is silently lost.
+            raise RuntimeError(
+                f"Rate limited (HTTP 429) fetching {url} — the origin is throttling this IP. "
+                "Lower crawl workers / raise the delay and let the limit reset before retrying."
+            )
 
         # Cheap path first: a background cookie-warmer keeps a fresh cf_clearance in the DB,
         # so reload it and retry the plain request. When the warmer is keeping up this turns
