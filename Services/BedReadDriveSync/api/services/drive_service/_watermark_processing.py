@@ -37,6 +37,12 @@ _PRIMARY_RESIDUE_MIN_SCORE = 0.2
 _PRIMARY_RESIDUE_MIN_GRADIENT = 0.12
 _PRIMARY_RESIDUE_MIN_LUMINANCE = 0.25
 _PRIMARY_REGION_GROWTH = 0.30
+_ESCALATED_REGION_GROWTH = 0.60
+# A standalone dark silhouette this strong is a legacy over-subtraction hole,
+# not scene content; thresholds validated against real damaged outputs.
+_DARK_RESIDUAL_MIN_SCORE = 0.45
+_DARK_RESIDUAL_MIN_GRADIENT = 0.25
+_DARK_RESIDUAL_MIN_LUMINANCE = 0.40
 
 
 @dataclass(frozen=True)
@@ -204,14 +210,54 @@ def _expanded_primary_region(
     region: tuple[int, int, int, int],
     width: int,
     height: int,
+    growth_factor: float = _PRIMARY_REGION_GROWTH,
 ) -> tuple[int, int, int, int]:
     x0, y0, x1, y1 = region
-    growth = max(4, round((x1 - x0) * _PRIMARY_REGION_GROWTH))
+    growth = max(4, round((x1 - x0) * growth_factor))
     return (
         max(0, x0 - growth),
         max(0, y0 - growth),
         min(width, x1 + growth),
         min(height, y1 + growth),
+    )
+
+
+def _region_tuple(data: Any) -> tuple[int, int, int, int] | None:
+    if not isinstance(data, dict):
+        return None
+    try:
+        return (
+            int(data["x"]),
+            int(data["y"]),
+            int(data["x"] + data["width"]),
+            int(data["y"] + data["height"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _dark_candidate_is_strong(candidate: dict[str, Any]) -> bool:
+    return (
+        candidate.get("polarity") == "dark"
+        and float(candidate.get("score") or 0) >= _DARK_RESIDUAL_MIN_SCORE
+        and float(candidate.get("gradientScore") or 0) >= _DARK_RESIDUAL_MIN_GRADIENT
+        and float(candidate.get("luminanceScore") or 0) >= _DARK_RESIDUAL_MIN_LUMINANCE
+    )
+
+
+def _expected_sparkle_corner(width: int, height: int) -> tuple[int, int, int, int]:
+    """Where Gemini stamps the sparkle, derived from observed exports.
+
+    The mark measures ~5.7-6.8% of the min dimension and sits inset from the
+    bottom-right corner by roughly 0.7x its own size. The returned box pads
+    both ends of that range so a repaint fully covers any residue there.
+    """
+    unit = 0.067 * min(width, height)
+    return (
+        max(0, round(width - 2.2 * unit)),
+        max(0, round(height - 2.2 * unit)),
+        min(width, round(width - 0.3 * unit)),
+        min(height, round(height - 0.3 * unit)),
     )
 
 
@@ -223,45 +269,117 @@ def _encoded_sparkle_residue(
 ) -> bool:
     """Re-detect on the exact upload bytes; True when a ghost survives the repair.
 
-    The SDK's template position can slightly undersize a small sparkle's halo,
-    so a shaped repaint may leave a pale echo — and the size-matched lossy
-    re-encode can sharpen that echo back above detection thresholds. Evidence
-    on the encoded output that still clears every original-evidence minimum at
-    the same corner means the repair is not visually complete.
+    Both polarities count: a pale echo of the sparkle (undersized template or
+    the size-matched lossy re-encode sharpening it back) and a dark
+    over-subtraction hole. When the detector itself cannot run, the repair is
+    unverifiable and must not ship — the caller escalates or preserves the
+    original for review.
     """
     try:
         with Image.open(io.BytesIO(encoded_bytes)) as decoded:
             pixels = decoded.convert("RGBA").tobytes()
         _, metadata = _run_node_processor(pixels, width, height)
     except Exception:
-        # Verification is a best-effort extra guard on an already validated
-        # reconstruction; a runtime hiccup here must not discard the repair.
-        return False
+        return True
     passes = tuple(metadata.get("passes") or ())
     position = (passes[0].get("position") if passes else None) or {}
-    if not position:
-        return False
-    found = (
-        int(position["x"]),
-        int(position["y"]),
-        int(position["x"] + position["width"]),
-        int(position["y"] + position["height"]),
-    )
-    if not _regions_intersect(found, region):
-        return False
-    if bool(metadata.get("applied")):
-        return True
-    evidence = ((passes[0].get("validation") or {}).get("evidence")) or {}
+    found = _region_tuple(position)
+    if found is not None and _regions_intersect(found, region):
+        if bool(metadata.get("applied")):
+            return True
+        evidence = ((passes[0].get("validation") or {}).get("evidence")) or {}
+        if (
+            evidence.get("polarity") == "light"
+            and float(evidence.get("score") or 0) >= _PRIMARY_RESIDUE_MIN_SCORE
+            and float(evidence.get("gradientScore") or 0) >= _PRIMARY_RESIDUE_MIN_GRADIENT
+            and float(evidence.get("luminanceScore") or 0) >= _PRIMARY_RESIDUE_MIN_LUMINANCE
+        ):
+            return True
+    dark = metadata.get("darkCandidate") or {}
+    dark_region = _region_tuple(dark.get("region"))
     return (
-        evidence.get("polarity") == "light"
-        and float(evidence.get("score") or 0) >= _PRIMARY_RESIDUE_MIN_SCORE
-        and float(evidence.get("gradientScore") or 0) >= _PRIMARY_RESIDUE_MIN_GRADIENT
-        and float(evidence.get("luminanceScore") or 0) >= _PRIMARY_RESIDUE_MIN_LUMINANCE
+        dark_region is not None
+        and _regions_intersect(dark_region, region)
+        and _dark_candidate_is_strong(dark)
     )
 
 
 class WatermarkProcessingMixin:
     """Adds best-effort watermark cleanup before image bytes leave DriveSync."""
+
+    def _repaint_expected_sparkle_corner(
+        self,
+        image_bytes: bytes,
+        filename: str,
+    ) -> WatermarkProcessingResult:
+        """Force-repaint the standard sparkle corner of a legacy repair output.
+
+        Outputs written by the retired multi-pass subtraction can carry dark
+        holes shaped too irregularly for template detection to find. Their
+        provenance is certain (job history), and the stamp position is
+        deterministic, so the corner is repainted outright and the result held
+        to the normal verification bar.
+        """
+        started_at = time.perf_counter()
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as source:
+                image_format = (source.format or "").upper()
+                width, height = source.size
+                source_info = dict(source.info)
+                rgb_image = source.convert("RGB")
+            corner = _expected_sparkle_corner(width, height)
+            # Legacy damage can outsize the sparkle stamp (badge-era repairs),
+            # so allow one escalation to a grown box before giving up.
+            targets = (
+                corner,
+                _expanded_primary_region(corner, width, height, _ESCALATED_REGION_GROWTH),
+            )
+            for target in targets:
+                repaint = reconstruct_watermark_regions(
+                    rgb_image,
+                    [target],
+                    family="legacy-corner-repaint",
+                    margin=8,
+                )
+                if not repaint.applied or repaint.image is None:
+                    break
+                encoded = _encode_processed_pixels(
+                    repaint.image.convert("RGBA").tobytes(),
+                    width,
+                    height,
+                    image_format,
+                    source_info,
+                    len(image_bytes),
+                )
+                if not _encoded_sparkle_residue(encoded, width, height, corner):
+                    return WatermarkProcessingResult(
+                        image_bytes=encoded,
+                        applied=True,
+                        applied_passes=1,
+                        processing_ms=round((time.perf_counter() - started_at) * 1000),
+                        stop_reason="legacy-corner-repaint-reconstructed",
+                        method="legacy-corner-repaint",
+                        region=target,
+                    )
+            return WatermarkProcessingResult(
+                image_bytes=image_bytes,
+                applied=False,
+                applied_passes=0,
+                processing_ms=round((time.perf_counter() - started_at) * 1000),
+                stop_reason="legacy-corner-repaint-unverified",
+                needs_review=True,
+                method="legacy-corner-repaint",
+                region=corner,
+            )
+        except Exception as exc:
+            return WatermarkProcessingResult(
+                image_bytes=image_bytes,
+                applied=False,
+                applied_passes=0,
+                processing_ms=round((time.perf_counter() - started_at) * 1000),
+                stop_reason="processor-error",
+                error=str(exc),
+            )
 
     def _process_watermarks_for_upload(
         self,
@@ -433,6 +551,13 @@ class WatermarkProcessingMixin:
                     method = "sparkle-primary"
                 else:
                     method = "sparkle-flat"
+                if method == "sparkle-primary":
+                    # A lone sparkle's template box regularly undersizes its
+                    # halo, and a shape-tight repaint leaves a pale echo.
+                    # Repaint the whole grown corner box from the start.
+                    regions = [_expanded_primary_region(candidate_region, width, height)]
+                    shaped_regions = []
+                    shaped_region_masks = {}
                 confidence = max(
                     float(paired.get("score") or 0),
                     float(compact.get("score") or 0),
@@ -517,10 +642,15 @@ class WatermarkProcessingMixin:
                     height,
                     candidate_region,
                 ):
-                    # The shaped repaint left a visible echo; repaint the whole
-                    # grown corner box once, then insist the detector is quiet
-                    # on the exact bytes that would be uploaded.
-                    expanded_region = _expanded_primary_region(candidate_region, width, height)
+                    # A ghost survived (or verification could not run); repaint
+                    # a larger corner box once, then insist the detector is
+                    # quiet on the exact bytes that would be uploaded.
+                    expanded_region = _expanded_primary_region(
+                        candidate_region,
+                        width,
+                        height,
+                        _ESCALATED_REGION_GROWTH,
+                    )
                     rectangle = reconstruct_watermark_regions(
                         working_image,
                         [expanded_region],
@@ -579,6 +709,22 @@ class WatermarkProcessingMixin:
                         source_info,
                         len(image_bytes),
                     )
+                    with Image.open(io.BytesIO(encoded)) as decoded:
+                        opaque_leftover = detect_opaque_watermark(decoded.convert("RGB"))
+                    elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+                    if opaque_leftover is not None:
+                        return WatermarkProcessingResult(
+                            image_bytes=image_bytes,
+                            applied=False,
+                            applied_passes=0,
+                            processing_ms=elapsed_ms,
+                            stop_reason=f"{opaque_method}-residual",
+                            passes=passes,
+                            needs_review=True,
+                            method=opaque_method,
+                            region=opaque.region,
+                            confidence=opaque.confidence,
+                        )
                     return WatermarkProcessingResult(
                         image_bytes=encoded,
                         applied=True,
@@ -589,6 +735,55 @@ class WatermarkProcessingMixin:
                         method=opaque_method,
                         region=opaque.region,
                         confidence=opaque.confidence,
+                    )
+                dark = metadata.get("darkCandidate") or {}
+                dark_region = _region_tuple(dark.get("region"))
+                if dark_region is not None and _dark_candidate_is_strong(dark):
+                    # A standalone dark sparkle hole: damage left on the server
+                    # by the retired multi-pass subtraction. Repaint it like
+                    # any confirmed sparkle and hold it to the same verify bar.
+                    dark_confidence = float(dark.get("score") or 0)
+                    repaint = reconstruct_watermark_regions(
+                        working_image,
+                        [_expanded_primary_region(dark_region, width, height)],
+                        family="sparkle-dark-residual",
+                        margin=8,
+                        confidence=dark_confidence,
+                    )
+                    if repaint.applied and repaint.image is not None:
+                        encoded = _encode_processed_pixels(
+                            repaint.image.convert("RGBA").tobytes(),
+                            width,
+                            height,
+                            image_format,
+                            source_info,
+                            len(image_bytes),
+                        )
+                        if not _encoded_sparkle_residue(encoded, width, height, dark_region):
+                            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+                            return WatermarkProcessingResult(
+                                image_bytes=encoded,
+                                applied=True,
+                                applied_passes=1,
+                                processing_ms=elapsed_ms,
+                                stop_reason="sparkle-dark-residual-reconstructed",
+                                passes=passes,
+                                method="sparkle-dark-residual",
+                                region=repaint.region,
+                                confidence=dark_confidence,
+                            )
+                    elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+                    return WatermarkProcessingResult(
+                        image_bytes=image_bytes,
+                        applied=False,
+                        applied_passes=0,
+                        processing_ms=elapsed_ms,
+                        stop_reason="sparkle-dark-residual-unrepaired",
+                        passes=passes,
+                        needs_review=True,
+                        method="sparkle-dark-residual",
+                        region=dark_region,
+                        confidence=dark_confidence,
                     )
                 return WatermarkProcessingResult(
                     image_bytes=image_bytes,
@@ -614,6 +809,63 @@ class WatermarkProcessingMixin:
                 source_info,
                 len(image_bytes),
             )
+            sdk_method = f"{opaque_method}+sparkle" if opaque_applied else "sparkle"
+            sdk_confidence = float(pass_metadata.get("confidence") or 0) or None
+            if candidate_region is not None and _encoded_sparkle_residue(
+                encoded,
+                width,
+                height,
+                candidate_region,
+            ):
+                # The SDK's own subtraction shipped with a visible echo or a
+                # dark hole. Fall back to repainting the corner from the
+                # untouched source, and hold that to the same verify bar.
+                repaint = reconstruct_watermark_regions(
+                    working_image,
+                    [_expanded_primary_region(candidate_region, width, height)],
+                    family="sparkle-repaint",
+                    margin=8,
+                    confidence=sdk_confidence,
+                )
+                rescued_bytes = None
+                if repaint.applied and repaint.image is not None:
+                    rescued_bytes = _encode_processed_pixels(
+                        repaint.image.convert("RGBA").tobytes(),
+                        width,
+                        height,
+                        image_format,
+                        source_info,
+                        len(image_bytes),
+                    )
+                    if _encoded_sparkle_residue(rescued_bytes, width, height, candidate_region):
+                        rescued_bytes = None
+                elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+                if rescued_bytes is None:
+                    return WatermarkProcessingResult(
+                        image_bytes=image_bytes,
+                        applied=False,
+                        applied_passes=0,
+                        processing_ms=elapsed_ms,
+                        stop_reason="sparkle-subtraction-residual",
+                        passes=passes,
+                        needs_review=True,
+                        method=sdk_method,
+                        region=candidate_region,
+                        confidence=sdk_confidence,
+                    )
+                return WatermarkProcessingResult(
+                    image_bytes=rescued_bytes,
+                    applied=True,
+                    applied_passes=1 + int(opaque_applied),
+                    processing_ms=elapsed_ms,
+                    stop_reason=(f"{opaque_method}+" if opaque_applied else "")
+                    + "sparkle-repaint-reconstructed",
+                    passes=passes,
+                    method=f"{opaque_method}+sparkle-repaint" if opaque_applied else "sparkle-repaint",
+                    region=repaint.region,
+                    confidence=sdk_confidence,
+                )
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
             return WatermarkProcessingResult(
                 image_bytes=encoded,
                 applied=True,
@@ -623,7 +875,7 @@ class WatermarkProcessingMixin:
                 + str(metadata.get("stopReason") or "completed"),
                 passes=passes,
                 needs_review=bool(metadata.get("needsReview")),
-                method=f"{opaque_method}+sparkle" if opaque_applied else "sparkle",
+                method=sdk_method,
             )
         except Exception as exc:
             elapsed_ms = round((time.perf_counter() - started_at) * 1000)

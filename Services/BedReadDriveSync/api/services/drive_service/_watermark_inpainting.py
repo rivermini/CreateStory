@@ -424,6 +424,35 @@ def _infer(bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return cv2.resize(generated, (bgr.shape[1], bgr.shape[0]), interpolation=cv2.INTER_CUBIC)
 
 
+def _infer_window(bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Run LaMa on a local window around the mask instead of the whole frame.
+
+    Squeezing a full banner into the model's 512x512 input throws away most of
+    the corner's detail and returns a soft, smeary fill. A window a bit larger
+    than the mask keeps the repair at (or above) native resolution while the
+    surrounding pixels stay byte-identical.
+    """
+    height, width = bgr.shape[:2]
+    ys, xs = np.nonzero(mask)
+    if ys.size == 0:
+        return bgr.copy()
+    top, bottom = int(ys.min()), int(ys.max()) + 1
+    left, right = int(xs.min()), int(xs.max()) + 1
+    side = max(256, round(1.75 * max(bottom - top, right - left)))
+    side = min(side, width, height)
+    center_x = (left + right) // 2
+    center_y = (top + bottom) // 2
+    window_left = max(0, min(width - side, center_x - side // 2))
+    window_top = max(0, min(height - side, center_y - side // 2))
+    window = (slice(window_top, window_top + side), slice(window_left, window_left + side))
+    if mask[window].sum() < mask.sum():
+        # The mask does not fit in a square window; fall back to full-frame.
+        return _infer(bgr, mask)
+    generated = bgr.copy()
+    generated[window] = _infer(bgr[window], mask[window])
+    return generated
+
+
 def reconstruct_opaque_watermark(
     image: Image.Image,
     detection: OpaqueWatermarkDetection | None = None,
@@ -443,7 +472,7 @@ def reconstruct_opaque_watermark(
         bgr = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR)
         margin = 14 if detection.family == "badge" else 9
         core, expanded = _masks(bgr.shape, detection.box, margin)
-        generated = _infer(bgr, expanded)
+        generated = _infer_window(bgr, expanded)
         alpha = _alpha_ramp(core, expanded, margin)
         output = np.clip(bgr * (1 - alpha[:, :, None]) + generated * alpha[:, :, None], 0, 255).astype(np.uint8)
         rgb = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
@@ -545,7 +574,7 @@ def reconstruct_watermark_regions(
                     max(0, x0 - margin) : min(width, x1 + margin),
                 ] = 255
         inference_mask = np.maximum(expanded, shaped)
-        generated = _infer(bgr, inference_mask)
+        generated = _infer_window(bgr, inference_mask)
         alpha = _alpha_ramp(core, expanded, margin) if np.any(core) else np.zeros((height, width), np.float32)
         if np.any(shaped):
             shaped_alpha = cv2.GaussianBlur(shaped.astype(np.float32) / 255, (0, 0), 2.0)

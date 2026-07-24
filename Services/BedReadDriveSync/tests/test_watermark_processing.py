@@ -140,7 +140,12 @@ def test_wordmark_is_removed_without_touching_decorative_frame(monkeypatch) -> N
     draw.rectangle((26, 26, 997, 432), outline=(246, 242, 232), width=2)
     source = io.BytesIO()
     image.save(source, format="JPEG", quality=92)
-    monkeypatch.setattr(module, "detect_opaque_watermark", lambda _image: object())
+    detections = iter([object()])
+    monkeypatch.setattr(
+        module,
+        "detect_opaque_watermark",
+        lambda _image: next(detections, None),
+    )
     monkeypatch.setattr(
         module,
         "reconstruct_opaque_watermark",
@@ -394,13 +399,13 @@ def test_strong_single_sparkle_salvages_sdk_quality_review(monkeypatch) -> None:
         "banner",
     )
 
-    primary = (971, 406, 1002, 437)
+    grown_rectangle = (962, 397, 1011, 446)
     assert result.applied is True
     assert result.applied_passes == 1
     assert result.method == "sparkle-primary"
-    assert captured["regions"] == [primary]
-    assert captured["shaped_regions"] == [primary]
-    assert captured["shaped_region_masks"] == {primary: [1] * (31 * 31)}
+    assert captured["regions"] == [grown_rectangle]
+    assert captured["shaped_regions"] == []
+    assert captured["shaped_region_masks"] == {}
     assert captured["margin"] == 8
 
 
@@ -434,8 +439,10 @@ def test_primary_ghost_escalates_to_expanded_rectangle_repaint(monkeypatch) -> N
     assert result.applied is True
     assert result.method == "sparkle-primary"
     assert len(reconstruct_calls) == 2
-    # 31px box grown by max(4, round(31 * 0.30)) = 9 on each side, clamped.
-    assert reconstruct_calls[1]["regions"] == [(962, 397, 1011, 446)]
+    # First attempt: 31px box grown by round(31 * 0.30) = 9 per side.
+    assert reconstruct_calls[0]["regions"] == [(962, 397, 1011, 446)]
+    # Escalation: grown by round(31 * 0.60) = 19 per side.
+    assert reconstruct_calls[1]["regions"] == [(952, 387, 1021, 456)]
     assert "shaped_regions" not in reconstruct_calls[1]
 
 
@@ -465,6 +472,226 @@ def test_primary_ghost_surviving_escalation_preserves_original(monkeypatch) -> N
     assert result.needs_review is True
     assert result.stop_reason == "sparkle-primary-residual"
     assert result.image_bytes is source
+
+
+def test_standalone_dark_ghost_is_repainted(monkeypatch) -> None:
+    _sequential_node_processor(
+        monkeypatch,
+        [
+            {
+                "applied": False,
+                "passes": [],
+                "darkCandidate": {
+                    "polarity": "dark",
+                    "score": 0.55,
+                    "gradientScore": 0.32,
+                    "luminanceScore": 0.52,
+                    "region": {"x": 965, "y": 400, "width": 40, "height": 40},
+                },
+                "stopReason": "no-match",
+            },
+            _CLEAN_RESCAN,
+        ],
+    )
+    captured: dict[str, object] = {}
+
+    def fake_reconstruct(working, regions, **kwargs):
+        captured["regions"] = regions
+        captured.update(kwargs)
+        return inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="sparkle-dark-residual",
+            region=regions[0],
+            confidence=0.55,
+        )
+
+    monkeypatch.setattr(module, "reconstruct_watermark_regions", fake_reconstruct)
+
+    result = _Processor()._process_watermarks_for_upload(
+        _single_sparkle_source(),
+        "banner.webp",
+        "banner",
+    )
+
+    assert result.applied is True
+    assert result.method == "sparkle-dark-residual"
+    assert result.stop_reason == "sparkle-dark-residual-reconstructed"
+    # 40px ghost grown by round(40 * 0.30) = 12 per side.
+    assert captured["regions"] == [(953, 388, 1017, 452)]
+
+
+def test_weak_dark_candidate_is_left_alone(monkeypatch) -> None:
+    _sequential_node_processor(
+        monkeypatch,
+        [
+            {
+                "applied": False,
+                "passes": [],
+                "darkCandidate": {
+                    "polarity": "dark",
+                    "score": 0.31,
+                    "gradientScore": 0.09,
+                    "luminanceScore": 0.44,
+                    "region": {"x": 965, "y": 400, "width": 40, "height": 40},
+                },
+                "stopReason": "no-match",
+            },
+        ],
+    )
+
+    source = _single_sparkle_source()
+    result = _Processor()._process_watermarks_for_upload(source, "banner.webp", "banner")
+
+    assert result.applied is False
+    assert result.needs_review is False
+    assert result.image_bytes is source
+    assert result.stop_reason == "no-match"
+
+
+def test_sdk_accepted_with_visible_residue_falls_back_to_repaint(monkeypatch) -> None:
+    calls = {"count": 0}
+    detection_meta = {
+        "applied": True,
+        "appliedPassCount": 1,
+        "passes": [{
+            "confidence": 0.9,
+            "position": {"x": 971, "y": 406, "width": 31, "height": 31},
+            "validation": {"accepted": True, "evidence": {"score": 0.9}},
+        }],
+        "stopReason": "validated-original-pixel-match",
+    }
+
+    def fake_processor(raw_pixels, _width, _height):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            changed = bytearray(raw_pixels)
+            changed[0:4] = bytes((1, 2, 3, 255))
+            return bytes(changed), detection_meta
+        if calls["count"] == 2:
+            return None, _RESIDUAL_GHOST_RESCAN
+        return None, _CLEAN_RESCAN
+
+    monkeypatch.setattr(module, "_run_node_processor", fake_processor)
+    monkeypatch.setattr(
+        module,
+        "reconstruct_watermark_regions",
+        lambda working, regions, **_kwargs: inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="sparkle-repaint",
+            region=regions[0],
+            confidence=0.9,
+        ),
+    )
+
+    result = _Processor()._process_watermarks_for_upload(
+        _single_sparkle_source(),
+        "banner.webp",
+        "banner",
+    )
+
+    assert result.applied is True
+    assert result.method == "sparkle-repaint"
+    assert result.stop_reason == "sparkle-repaint-reconstructed"
+    assert result.applied_passes == 1
+
+
+def test_expected_sparkle_corner_covers_observed_gemini_stamps() -> None:
+    observed = {
+        (1024, 459): (971, 406, 1002, 437),
+        (1024, 1526): (927, 1429, 985, 1487),
+        (1600, 722): (1524, 638, 1572, 686),
+    }
+    for (width, height), stamp in observed.items():
+        corner = module._expected_sparkle_corner(width, height)
+        assert corner[0] <= stamp[0] and corner[1] <= stamp[1]
+        assert corner[2] >= stamp[2] - 2 and corner[3] >= stamp[3] - 2
+
+
+def test_legacy_corner_repaint_verifies_before_shipping(monkeypatch) -> None:
+    _sequential_node_processor(monkeypatch, [_CLEAN_RESCAN])
+    captured: dict[str, object] = {}
+
+    def fake_reconstruct(working, regions, **kwargs):
+        captured["regions"] = regions
+        return inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="legacy-corner-repaint",
+            region=regions[0],
+        )
+
+    monkeypatch.setattr(module, "reconstruct_watermark_regions", fake_reconstruct)
+
+    result = _Processor()._repaint_expected_sparkle_corner(
+        _single_sparkle_source(),
+        "banner.webp",
+    )
+
+    assert result.applied is True
+    assert result.method == "legacy-corner-repaint"
+    assert captured["regions"] == [module._expected_sparkle_corner(1024, 459)]
+
+
+def test_legacy_corner_repaint_escalates_to_grown_box(monkeypatch) -> None:
+    _sequential_node_processor(monkeypatch, [_RESIDUAL_GHOST_RESCAN, _CLEAN_RESCAN])
+    calls: list[list[tuple[int, int, int, int]]] = []
+
+    def fake_reconstruct(working, regions, **_kwargs):
+        calls.append(regions)
+        return inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="legacy-corner-repaint",
+            region=regions[0],
+        )
+
+    monkeypatch.setattr(module, "reconstruct_watermark_regions", fake_reconstruct)
+
+    result = _Processor()._repaint_expected_sparkle_corner(
+        _single_sparkle_source(),
+        "banner.webp",
+    )
+
+    corner = module._expected_sparkle_corner(1024, 459)
+    assert result.applied is True
+    assert len(calls) == 2
+    assert calls[0] == [corner]
+    assert calls[1] == [module._expanded_primary_region(corner, 1024, 459, 0.60)]
+    assert result.region == calls[1][0]
+
+
+def test_legacy_corner_repaint_with_residue_preserves_original(monkeypatch) -> None:
+    _sequential_node_processor(monkeypatch, [_RESIDUAL_GHOST_RESCAN, _RESIDUAL_GHOST_RESCAN])
+    monkeypatch.setattr(
+        module,
+        "reconstruct_watermark_regions",
+        lambda working, regions, **_kwargs: inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="legacy-corner-repaint",
+            region=regions[0],
+        ),
+    )
+
+    source = _single_sparkle_source()
+    result = _Processor()._repaint_expected_sparkle_corner(source, "banner.webp")
+
+    assert result.applied is False
+    assert result.needs_review is True
+    assert result.image_bytes is source
+    assert result.stop_reason == "legacy-corner-repaint-unverified"
 
 
 def test_moderate_single_sparkle_without_companion_still_needs_review(monkeypatch) -> None:

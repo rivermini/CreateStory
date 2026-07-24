@@ -51,11 +51,11 @@ def _service(job: SyncJob):
         f"{asset}.jpg",
         "image/jpeg",
     )
-    service._known_watermark_fix_output_urls = lambda: {
-        "cover": set(),
-        "banner": set(),
-        "intro": set(),
-    }
+    empty = {"cover": set(), "banner": set(), "intro": set()}
+    service._prior_repair_output_urls = lambda: (
+        {key: set(value) for key, value in empty.items()},
+        {key: set(value) for key, value in empty.items()},
+    )
     service._known_intro_url = lambda *_args: None
     return service, updates, logs
 
@@ -238,32 +238,160 @@ def test_server_repair_processes_only_selected_picture_types() -> None:
     }
 
 
-def test_server_repair_never_processes_its_own_completed_output_again() -> None:
+def test_server_repair_reexamines_prior_repair_outputs() -> None:
+    # Outputs written by retired pipeline versions can carry ghosts (e.g. the
+    # multi-pass era's dark holes), so a repair job must re-detect on whatever
+    # is live instead of trusting its own history.
     job = _job()
     job.payload["selected_assets"] = ["cover"]
-    service, updates, logs = _service(job)
+    service, updates, _logs = _service(job)
     service._get_server_story_picture_detail = lambda _story_id: {
         "id": "story-1",
         "title": "Example Story",
         "coverImageUrl": "https://cdn.test/already-fixed.jpg",
     }
-    service._known_watermark_fix_output_urls = lambda: {
-        "cover": {"https://cdn.test/already-fixed.jpg"},
-        "banner": set(),
-        "intro": set(),
-    }
     processed: list[str] = []
-    service._process_watermarks_for_upload = (
-        lambda _bytes, _filename, asset: processed.append(asset)
-    )
+
+    def fake_process(_bytes, _filename, asset):
+        processed.append(asset)
+        return WatermarkProcessingResult(
+            image_bytes=b"unchanged",
+            applied=False,
+            applied_passes=0,
+            processing_ms=1,
+            stop_reason="no-match",
+        )
+
+    service._process_watermarks_for_upload = fake_process
 
     service.sync_watermark_picture_fix_as_job(job.id, "story-1")
 
-    assert processed == []
+    assert processed == ["cover"]
     assert updates[-1]["status"] == JobStatus.SUCCESS
-    assert updates[-1]["payload"]["assets"]["cover"]["skip_reason"] == "already-repaired-output"
     assert updates[-1]["payload"]["summary"]["already_clean"] == 1
-    assert any("already a completed repair output" in message for _level, message in logs)
+
+
+def test_legacy_multipass_output_gets_forced_corner_repaint() -> None:
+    job = _job()
+    job.payload["selected_assets"] = ["banner"]
+    service, updates, logs = _service(job)
+    service._get_server_story_picture_detail = lambda _story_id: {
+        "id": "story-1",
+        "title": "Example Story",
+        "bannerImageUrl": "https://cdn.test/old-multipass-output.webp",
+    }
+    service._prior_repair_output_urls = lambda: (
+        {
+            "cover": set(),
+            "banner": {"https://cdn.test/old-multipass-output.webp"},
+            "intro": set(),
+        },
+        {
+            "cover": set(),
+            "banner": {"https://cdn.test/old-multipass-output.webp"},
+            "intro": set(),
+        },
+    )
+    service._process_watermarks_for_upload = lambda _bytes, _filename, _asset: (
+        WatermarkProcessingResult(
+            image_bytes=b"unchanged",
+            applied=False,
+            applied_passes=0,
+            processing_ms=1,
+            stop_reason="no-match",
+        )
+    )
+    service._repaint_expected_sparkle_corner = lambda _bytes, _filename: (
+        WatermarkProcessingResult(
+            image_bytes=b"repainted",
+            applied=True,
+            applied_passes=1,
+            processing_ms=2,
+            stop_reason="legacy-corner-repaint-reconstructed",
+            method="legacy-corner-repaint",
+            region=(956, 391, 1015, 450),
+        )
+    )
+    uploaded: list[bytes] = []
+
+    def fake_upload(_story_id, _asset_type, image_bytes, _filename, _content_type):
+        uploaded.append(image_bytes)
+        return "https://cdn.test/new-banner.webp"
+
+    service._upload_cleaned_server_picture = fake_upload
+
+    service.sync_watermark_picture_fix_as_job(job.id, "story-1")
+
+    banner = updates[-1]["payload"]["assets"]["banner"]
+    assert uploaded == [b"repainted"]
+    assert banner["status"] == "fixed"
+    assert banner["prior_output_repaint"] is True
+    assert banner["method"] == "legacy-corner-repaint"
+    assert updates[-1]["payload"]["summary"]["fixed"] == 1
+    assert any("prior repair output" in message for _level, message in logs)
+
+
+def test_ghosted_new_pipeline_output_gets_forced_corner_repaint() -> None:
+    # An output this pipeline itself uploaded that now scans as needs-review
+    # residue is repair damage, never artwork — repaint it, don't park it.
+    job = _job()
+    job.payload["selected_assets"] = ["banner"]
+    service, updates, _logs = _service(job)
+    service._get_server_story_picture_detail = lambda _story_id: {
+        "id": "story-1",
+        "title": "Example Story",
+        "bannerImageUrl": "https://cdn.test/ghosted-new-output.webp",
+    }
+    service._prior_repair_output_urls = lambda: (
+        {
+            "cover": set(),
+            "banner": {"https://cdn.test/ghosted-new-output.webp"},
+            "intro": set(),
+        },
+        {"cover": set(), "banner": set(), "intro": set()},
+    )
+    service._process_watermarks_for_upload = lambda _bytes, _filename, _asset: (
+        WatermarkProcessingResult(
+            image_bytes=b"unchanged",
+            applied=False,
+            applied_passes=0,
+            processing_ms=1,
+            stop_reason="unverified-aggressive-detector-source",
+            needs_review=True,
+        )
+    )
+    service._repaint_expected_sparkle_corner = lambda _bytes, _filename: (
+        WatermarkProcessingResult(
+            image_bytes=b"repainted",
+            applied=True,
+            applied_passes=1,
+            processing_ms=2,
+            stop_reason="legacy-corner-repaint-reconstructed",
+            method="legacy-corner-repaint",
+            region=(956, 391, 1015, 450),
+        )
+    )
+    uploaded: list[bytes] = []
+
+    def fake_upload(_story_id, _asset_type, image_bytes, _filename, _content_type):
+        uploaded.append(image_bytes)
+        return "https://cdn.test/new-banner.webp"
+
+    service._upload_cleaned_server_picture = fake_upload
+
+    service.sync_watermark_picture_fix_as_job(job.id, "story-1")
+
+    banner = updates[-1]["payload"]["assets"]["banner"]
+    assert uploaded == [b"repainted"]
+    assert banner["status"] == "fixed"
+    assert banner["prior_output_repaint"] is True
+    assert updates[-1]["payload"]["summary"] == {
+        "fixed": 1,
+        "already_clean": 0,
+        "needs_review": 0,
+        "missing": 0,
+        "failed": 0,
+    }
 
 
 def test_intro_url_falls_back_to_persistent_upload_log_when_story_api_omits_it() -> None:

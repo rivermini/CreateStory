@@ -11,6 +11,7 @@ import {
   findCompactOffsetSparkleCandidate,
   findDistantSparkleCandidate,
   findPairedDarkResidualCandidate,
+  findStandaloneDarkCornerCandidate,
   scoreWatermarkPolarityAt,
 } from './paired-dark-residual.mjs';
 
@@ -378,6 +379,28 @@ export async function processImagePixels({
   }
 
   const applied = validation.accepted === true;
+  let darkCandidate = null;
+  if (!applied) {
+    // Legacy multi-pass cleanups left standalone dark sparkle holes with no
+    // light instance for the SDK to anchor on. Sweep the corner directly so
+    // the caller can decide whether such a ghost warrants reconstruction.
+    // Legacy over-subtraction holes can be noticeably larger than the normal
+    // sparkle (repeat passes bled outward), so sweep well past the 6-7% of
+    // min-dimension that a fresh Gemini mark occupies.
+    const minDimension = Math.min(width, height);
+    const scanSizes = [...new Set([0.055, 0.065, 0.075, 0.09, 0.11]
+      .map((factor) => Math.round(minDimension * factor))
+      .map((size) => Math.max(24, Math.min(112, size))))];
+    const scanMaps = [];
+    for (const size of scanSizes) {
+      try {
+        scanMaps.push({ alphaMap: await activeEngine.getAlphaMap(size), size });
+      } catch {
+        // A missing scale simply narrows the sweep.
+      }
+    }
+    darkCandidate = findStandaloneDarkCornerCandidate(original, width, height, scanMaps);
+  }
   const pass = {
     applied,
     confidence: validation.evidence?.score ?? meta.detection?.adaptiveConfidence ?? null,
@@ -399,6 +422,7 @@ export async function processImagePixels({
       passes: [pass],
       pairedCandidate,
       compactCandidate,
+      darkCandidate,
       primaryAlphaMask,
       secondaryCandidate,
       requestedMaxPasses,

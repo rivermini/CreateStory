@@ -321,6 +321,77 @@ export function findPairedDarkResidualCandidate(pixels, width, height, alphaMap,
 }
 
 /**
+ * Find a standalone dark sparkle silhouette in the expected corner zone.
+ *
+ * Earlier multi-pass cleanups could over-subtract the light sparkle and leave
+ * a dark hole shaped exactly like the mark, with no light instance left for
+ * the SDK to anchor on. This sweeps the bottom-right corner directly so those
+ * legacy dark ghosts can be found (and cleaned) without a light primary.
+ */
+export function findStandaloneDarkCornerCandidate(pixels, width, height, alphaMaps) {
+  if (pixels.length !== width * height * 4 || !alphaMaps?.length) return null;
+  const luminance = createLuminance(pixels);
+  const gradient = createGradient(luminance, width, height);
+  const sweepStep = 3;
+  let strongest = null;
+  let strongestScale = null;
+
+  for (const { alphaMap, size } of alphaMaps) {
+    if (!alphaMap || size * size !== alphaMap.length) continue;
+    if (size > width || size > height) continue;
+    const alphaMagnitude = Float32Array.from(alphaMap, (value) => Math.abs(value));
+    const alphaGradient = createGradient(alphaMagnitude, size, size);
+    const left = Math.max(0, Math.floor(width * 0.7));
+    const top = Math.max(0, Math.floor(height * 0.62));
+    const right = width - size;
+    const bottom = height - size;
+    if (right < left || bottom < top) continue;
+    for (let y = top; y <= bottom; y += sweepStep) {
+      for (let x = left; x <= right; x += sweepStep) {
+        const candidate = scoreAt(
+          luminance,
+          gradient,
+          width,
+          alphaMagnitude,
+          alphaGradient,
+          size,
+          x,
+          y,
+          'dark',
+        );
+        if (!strongest || candidate.score > strongest.score) {
+          strongest = candidate;
+          strongestScale = { alphaMagnitude, alphaGradient, size };
+        }
+      }
+    }
+  }
+  if (!strongest || !strongestScale) return null;
+
+  let refined = strongest;
+  const { alphaMagnitude, alphaGradient, size } = strongestScale;
+  for (let y = strongest.region.y - sweepStep; y <= strongest.region.y + sweepStep; y += 1) {
+    for (let x = strongest.region.x - sweepStep; x <= strongest.region.x + sweepStep; x += 1) {
+      if (x < 0 || y < 0 || x + size > width || y + size > height) continue;
+      const candidate = scoreAt(
+        luminance,
+        gradient,
+        width,
+        alphaMagnitude,
+        alphaGradient,
+        size,
+        x,
+        y,
+        'dark',
+      );
+      if (candidate.score > refined.score) refined = candidate;
+    }
+  }
+  refined.alphaMask = Array.from(alphaMagnitude, (value) => (value >= 0.008 ? 1 : 0));
+  return refined;
+}
+
+/**
  * Find the smaller light sparkle that some Gemini exports place down-right of
  * the normal corner mark. The two silhouettes overlap, so a same-size global
  * companion search can mistake their shared edge for a dark residual. Search

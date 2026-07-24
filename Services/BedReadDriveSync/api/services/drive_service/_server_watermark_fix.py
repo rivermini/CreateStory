@@ -127,10 +127,18 @@ class ServerWatermarkFixMixin:
                 by_title.setdefault(title_key, candidate)
         return by_story_id, by_title
 
-    def _known_watermark_fix_output_urls(self) -> dict[str, set[str]]:
-        """Return assets already produced by this repair queue so they are never repaired recursively."""
+    def _prior_repair_output_urls(self) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+        """Return (all prior repair outputs, legacy multi-pass outputs) by asset.
+
+        Any residue found on one of our own outputs is repair damage, never
+        artwork, so it is safe to repaint outright. Legacy multi-pass outputs
+        (payloads without a ``method`` field) can additionally carry dark holes
+        too irregular for template detection — those are repainted even when
+        detection reports nothing.
+        """
         jobs, _, _ = self.list_jobs(2000, 0, None, None)
-        output_urls = {asset_type: set() for asset_type in _ASSET_FIELDS}
+        all_outputs = {asset_type: set() for asset_type in _ASSET_FIELDS}
+        legacy_outputs = {asset_type: set() for asset_type in _ASSET_FIELDS}
         for job in jobs:
             assets = (job.payload or {}).get("assets")
             if not isinstance(assets, dict):
@@ -140,9 +148,12 @@ class ServerWatermarkFixMixin:
                 if not isinstance(asset, dict) or asset.get("status") != "fixed":
                     continue
                 output_url = asset.get("output_url")
-                if isinstance(output_url, str) and output_url:
-                    output_urls[asset_type].add(output_url)
-        return output_urls
+                if not isinstance(output_url, str) or not output_url:
+                    continue
+                all_outputs[asset_type].add(output_url)
+                if "method" not in asset:
+                    legacy_outputs[asset_type].add(output_url)
+        return all_outputs, legacy_outputs
 
     def _known_intro_url(
         self,
@@ -332,7 +343,7 @@ class ServerWatermarkFixMixin:
 
         try:
             detail = self._get_server_story_picture_detail(story_id)
-            prior_repair_outputs = self._known_watermark_fix_output_urls()
+            prior_outputs, legacy_outputs = self._prior_repair_output_urls()
             payload["story_title"] = str(detail.get("title") or payload.get("story_title") or job.display_name)
             if not detail.get("introImageUrl"):
                 detail["introImageUrl"] = self._known_intro_url(story_id, payload["story_title"])
@@ -355,18 +366,6 @@ class ServerWatermarkFixMixin:
                     self._persist_watermark_fix_payload(job_id, payload)
                     continue
 
-                if str(original_url) in prior_repair_outputs[asset_type]:
-                    asset["status"] = "no_watermark"
-                    asset["skip_reason"] = "already-repaired-output"
-                    already_clean += 1
-                    self.append_job_log(
-                        job_id,
-                        "info",
-                        f"{asset_type.title()}: current server image is already a completed repair output; skipped.",
-                    )
-                    self._persist_watermark_fix_payload(job_id, payload)
-                    continue
-
                 try:
                     asset["status"] = "downloading"
                     self._persist_watermark_fix_payload(job_id, payload)
@@ -379,6 +378,21 @@ class ServerWatermarkFixMixin:
                     asset["status"] = "detecting"
                     self._persist_watermark_fix_payload(job_id, payload)
                     result = self._process_watermarks_for_upload(image_bytes, filename, asset_type)
+                    in_prior = str(original_url) in prior_outputs.get(asset_type, set())
+                    in_legacy = str(original_url) in legacy_outputs.get(asset_type, set())
+                    if (
+                        not result.applied
+                        and result.error is None
+                        and ((result.needs_review and in_prior) or (not result.needs_review and in_legacy))
+                    ):
+                        self.append_job_log(
+                            job_id,
+                            "info",
+                            f"{asset_type.title()}: live image is a prior repair output; "
+                            "repainting the standard sparkle corner instead of trusting it.",
+                        )
+                        asset["prior_output_repaint"] = True
+                        result = self._repaint_expected_sparkle_corner(image_bytes, filename)
                     asset["processing_ms"] = result.processing_ms
                     asset["applied_passes"] = result.applied_passes
                     asset["stop_reason"] = result.stop_reason
