@@ -305,6 +305,210 @@ def test_exceptional_dark_companion_salvages_sdk_quality_review(monkeypatch) -> 
     }
 
 
+_SINGLE_SPARKLE_DETECTION = {
+    "applied": False,
+    "passes": [{
+        "confidence": 0.692,
+        "position": {"x": 971, "y": 406, "width": 31, "height": 31},
+        "validation": {
+            "accepted": False,
+            "reason": "sdk-quality-review-required",
+            "evidence": {
+                "score": 0.692,
+                "gradientScore": 0.608,
+                "luminanceScore": 0.753,
+            },
+        },
+    }],
+    "pairedCandidate": {
+        "score": 0.283,
+        "luminanceScore": 0.412,
+        "gradientScore": 0.104,
+        "polarity": "dark",
+        "region": {"x": 935, "y": 369, "width": 31, "height": 31},
+    },
+    "primaryAlphaMask": [1] * (31 * 31),
+    "stopReason": "sdk-quality-review-required",
+}
+
+_RESIDUAL_GHOST_RESCAN = {
+    "applied": False,
+    "passes": [{
+        "position": {"x": 977, "y": 416, "width": 31, "height": 31},
+        "validation": {
+            "accepted": False,
+            "reason": "unverified-aggressive-detector-source",
+            "evidence": {
+                "score": 0.485,
+                "gradientScore": 0.303,
+                "luminanceScore": 0.616,
+                "polarity": "light",
+            },
+        },
+    }],
+    "stopReason": "unverified-aggressive-detector-source",
+}
+
+_CLEAN_RESCAN = {"applied": False, "passes": [], "stopReason": "no-match"}
+
+
+def _single_sparkle_source() -> bytes:
+    image = Image.new("RGB", (1024, 459), (18, 42, 55))
+    source = io.BytesIO()
+    image.save(source, format="WEBP", quality=90)
+    return source.getvalue()
+
+
+def _sequential_node_processor(monkeypatch, responses: list[dict]) -> None:
+    calls: list[dict] = list(responses)
+
+    def fake(*_args):
+        metadata = calls.pop(0) if calls else _CLEAN_RESCAN
+        return None, metadata
+
+    monkeypatch.setattr(module, "_run_node_processor", fake)
+
+
+def test_strong_single_sparkle_salvages_sdk_quality_review(monkeypatch) -> None:
+    _sequential_node_processor(monkeypatch, [_SINGLE_SPARKLE_DETECTION, _CLEAN_RESCAN])
+    captured: dict[str, object] = {}
+
+    def fake_reconstruct(working, regions, **kwargs):
+        captured["regions"] = regions
+        captured.update(kwargs)
+        return inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="sparkle-primary",
+            region=(971, 406, 1002, 437),
+            confidence=0.692,
+        )
+
+    monkeypatch.setattr(module, "reconstruct_watermark_regions", fake_reconstruct)
+
+    result = _Processor()._process_watermarks_for_upload(
+        _single_sparkle_source(),
+        "banner.webp",
+        "banner",
+    )
+
+    primary = (971, 406, 1002, 437)
+    assert result.applied is True
+    assert result.applied_passes == 1
+    assert result.method == "sparkle-primary"
+    assert captured["regions"] == [primary]
+    assert captured["shaped_regions"] == [primary]
+    assert captured["shaped_region_masks"] == {primary: [1] * (31 * 31)}
+    assert captured["margin"] == 8
+
+
+def test_primary_ghost_escalates_to_expanded_rectangle_repaint(monkeypatch) -> None:
+    _sequential_node_processor(
+        monkeypatch,
+        [_SINGLE_SPARKLE_DETECTION, _RESIDUAL_GHOST_RESCAN, _CLEAN_RESCAN],
+    )
+    reconstruct_calls: list[dict] = []
+
+    def fake_reconstruct(working, regions, **kwargs):
+        reconstruct_calls.append({"regions": regions, **kwargs})
+        return inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="sparkle-primary",
+            region=regions[0],
+            confidence=0.692,
+        )
+
+    monkeypatch.setattr(module, "reconstruct_watermark_regions", fake_reconstruct)
+
+    result = _Processor()._process_watermarks_for_upload(
+        _single_sparkle_source(),
+        "banner.webp",
+        "banner",
+    )
+
+    assert result.applied is True
+    assert result.method == "sparkle-primary"
+    assert len(reconstruct_calls) == 2
+    # 31px box grown by max(4, round(31 * 0.30)) = 9 on each side, clamped.
+    assert reconstruct_calls[1]["regions"] == [(962, 397, 1011, 446)]
+    assert "shaped_regions" not in reconstruct_calls[1]
+
+
+def test_primary_ghost_surviving_escalation_preserves_original(monkeypatch) -> None:
+    _sequential_node_processor(
+        monkeypatch,
+        [_SINGLE_SPARKLE_DETECTION, _RESIDUAL_GHOST_RESCAN, _RESIDUAL_GHOST_RESCAN],
+    )
+    monkeypatch.setattr(
+        module,
+        "reconstruct_watermark_regions",
+        lambda working, regions, **_kwargs: inpainting.OpaqueWatermarkResult(
+            image=working,
+            detected=True,
+            applied=True,
+            processing_ms=1,
+            family="sparkle-primary",
+            region=regions[0],
+            confidence=0.692,
+        ),
+    )
+
+    source = _single_sparkle_source()
+    result = _Processor()._process_watermarks_for_upload(source, "banner.webp", "banner")
+
+    assert result.applied is False
+    assert result.needs_review is True
+    assert result.stop_reason == "sparkle-primary-residual"
+    assert result.image_bytes is source
+
+
+def test_moderate_single_sparkle_without_companion_still_needs_review(monkeypatch) -> None:
+    image = Image.new("RGB", (1024, 459), (18, 42, 55))
+    source = io.BytesIO()
+    image.save(source, format="WEBP", quality=90)
+    monkeypatch.setattr(
+        module,
+        "_run_node_processor",
+        lambda *_args: (
+            None,
+            {
+                "applied": False,
+                "needsReview": True,
+                "passes": [{
+                    "confidence": 0.55,
+                    "position": {"x": 971, "y": 406, "width": 31, "height": 31},
+                    "validation": {
+                        "accepted": False,
+                        "reason": "sdk-quality-review-required",
+                        "evidence": {
+                            "score": 0.55,
+                            "gradientScore": 0.35,
+                            "luminanceScore": 0.68,
+                        },
+                    },
+                }],
+                "primaryAlphaMask": [1] * (31 * 31),
+                "stopReason": "sdk-quality-review-required",
+            },
+        ),
+    )
+
+    result = _Processor()._process_watermarks_for_upload(
+        source.getvalue(),
+        "banner.webp",
+        "banner",
+    )
+
+    assert result.applied is False
+    assert result.needs_review is True
+    assert result.stop_reason == "sdk-quality-review-required"
+
+
 def test_compact_light_companion_supersedes_false_dark_overlap(monkeypatch) -> None:
     image = Image.new("RGB", (1024, 459), (18, 42, 55))
     source = io.BytesIO()
