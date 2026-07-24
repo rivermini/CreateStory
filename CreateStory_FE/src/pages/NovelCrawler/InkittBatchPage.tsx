@@ -262,6 +262,16 @@ export function InkittBatchPage({ themeMode }: InkittBatchPageProps) {
     fetchHistory();
   }, [fetchHistory]);
 
+  // Auto-select the most recent batch when none is chosen yet (e.g. a fresh browser on a server
+  // that already has batch history) so its card — and the Switch-batch menu inside it — are
+  // reachable. Also falls back to the next batch after the current one is deleted.
+  useEffect(() => {
+    if (batchId || history.length === 0) return;
+    const latest = history[0];
+    setBatchId(latest.batch_id);
+    setSummary(latest);
+  }, [batchId, history]);
+
   useEffect(() => {
     if (summary?.phase) fetchHistory();
   }, [fetchHistory, summary?.phase]);
