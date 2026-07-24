@@ -57,7 +57,7 @@ const GENRES = [
 
 const ALL_GENRE_SLUGS = GENRES.map(([slug]) => slug);
 const DISCOVER_ALL_MAX_PAGES = 1000;
-const ROW_PAGE_SIZE = 500;
+const ROW_PAGE_SIZE = 10;
 
 const FILTERS = [
   { value: 'all', label: 'All' },
@@ -172,7 +172,13 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
   const [autoContinue, setAutoContinue] = useState(true);
   const [autoTarget, setAutoTarget] = useState(0); // 0 = keep going until the queue is empty
   const [cooldownSeconds, setCooldownSeconds] = useState(45);
-  const [batchId, setBatchId] = useState(() => sessionStorage.getItem('novelhall_batch_id') || '');
+  // Remember the chosen batch across sessions (localStorage), so returning re-opens it.
+  const [batchId, setBatchId] = useState(() => localStorage.getItem('novelhall_batch_id') || sessionStorage.getItem('novelhall_batch_id') || '');
+  const [rowsPage, setRowsPage] = useState(0);
+  const rowsPageRef = useRef(0);
+  const [openMenu, setOpenMenu] = useState<'switch' | 'discover' | 'more' | null>(null);
+  const [showRateDetails, setShowRateDetails] = useState(false);
+  const [showSources, setShowSources] = useState(false);
   const [summary, setSummary] = useState<NovelHallBatchSummary | null>(null);
   const [history, setHistory] = useState<NovelHallBatchSummary[]>([]);
   const [rows, setRows] = useState<NovelHallBatchRow[]>([]);
@@ -252,32 +258,22 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
       .finally(() => { statusRequestRef.current = false; });
   }, [batchId]);
 
-  const fetchRows = useCallback(async (offset = 0, requestedLimit = ROW_PAGE_SIZE) => {
+  // Paginated: fetch exactly one page of ROW_PAGE_SIZE rows and REPLACE the current page.
+  const fetchRows = useCallback(async (page = 0) => {
     if (!batchId || rowsRequestRef.current) return;
     rowsRequestRef.current = true;
     setRowsLoading(true);
     const requestKey = `${batchId}|${rowFilter}`;
     try {
-      const items: NovelHallBatchRow[] = [];
-      let cursor = offset;
-      let remaining = Math.max(1, requestedLimit);
-      let lastResponse = null as Awaited<ReturnType<typeof getNovelHallBatchRows>> | null;
-      while (remaining > 0) {
-        const pageSize = Math.min(ROW_PAGE_SIZE, remaining);
-        const response = await getNovelHallBatchRows(batchId, { offset: cursor, limit: pageSize, status: rowFilter });
-        lastResponse = response;
-        items.push(...response.items);
-        cursor += response.items.length;
-        remaining -= response.items.length;
-        if (response.items.length < pageSize || cursor >= response.total) break;
-      }
-      if (rowsRequestKeyRef.current !== requestKey || !lastResponse) return;
-      setRows((current) => offset > 0 ? [...current, ...items] : items);
-      loadedRowCountRef.current = offset > 0
-        ? Math.max(ROW_PAGE_SIZE, offset + items.length)
-        : Math.max(ROW_PAGE_SIZE, items.length);
-      setRowTotal(lastResponse.total);
-      setSummary(lastResponse.batch);
+      const targetPage = Math.max(0, page);
+      const response = await getNovelHallBatchRows(batchId, { offset: targetPage * ROW_PAGE_SIZE, limit: ROW_PAGE_SIZE, status: rowFilter });
+      if (rowsRequestKeyRef.current !== requestKey) return;
+      setRows(response.items);
+      setRowTotal(response.total);
+      setRowsPage(targetPage);
+      rowsPageRef.current = targetPage;
+      loadedRowCountRef.current = ROW_PAGE_SIZE;
+      setSummary(response.batch);
     } catch (err) {
       if (rowsRequestKeyRef.current === requestKey) setError(err instanceof Error ? err.message : 'Failed to load NovelHall batch rows.');
     } finally {
@@ -296,14 +292,24 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
 
   useEffect(() => {
     if (!batchId) return;
-    sessionStorage.setItem('novelhall_batch_id', batchId);
+    localStorage.setItem('novelhall_batch_id', batchId);
     fetchRows(0);
   }, [batchId, fetchRows]);
+
+  // Close any open dropdown when clicking outside it (no overlay, so menu items stay clickable).
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDown = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('[data-menu-root]')) setOpenMenu(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [openMenu]);
 
   useEffect(() => {
     if (!batchId || !active) return;
     const statusId = window.setInterval(() => { fetchStatus(); }, 2500);
-    const rowsId = window.setInterval(() => { fetchRows(0, loadedRowCountRef.current); }, 10000);
+    const rowsId = window.setInterval(() => { fetchRows(rowsPageRef.current); }, 10000);
     const historyId = window.setInterval(() => { fetchHistory(); }, 30000);
     return () => {
       window.clearInterval(statusId);
@@ -329,6 +335,21 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
     [next[idx], next[target]] = [next[target], next[idx]];
     setSelectedGenres(next);
     // Persist the new crawl priority live — safe at any time, including mid-crawl.
+    if (batchId) {
+      void reorderNovelHallBatchGenres(batchId, next).catch(() => setError('Could not save crawl priority order.'));
+    }
+  }, [selectedGenres, batchId]);
+
+  const draggedGenreRef = useRef<string | null>(null);
+  const reorderGenreTo = useCallback((fromSlug: string, toSlug: string) => {
+    if (fromSlug === toSlug) return;
+    const from = selectedGenres.indexOf(fromSlug);
+    const to = selectedGenres.indexOf(toSlug);
+    if (from < 0 || to < 0) return;
+    const next = [...selectedGenres];
+    next.splice(from, 1);
+    next.splice(to, 0, fromSlug);
+    setSelectedGenres(next);
     if (batchId) {
       void reorderNovelHallBatchGenres(batchId, next).catch(() => setError('Could not save crawl priority order.'));
     }
@@ -598,8 +619,8 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
         </div>
       )}
 
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
-        <main className="space-y-4">
+      <div className="flex min-h-screen w-full flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <main className="space-y-5">
           <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
@@ -618,54 +639,132 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
             </div>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-4 rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
-              <div>
-                <h2 className="text-base font-semibold" style={{ color: text }}>Batch setup</h2>
-                <p className="text-sm" style={{ color: soft }}>{selectedGenres.length} selected genre{selectedGenres.length === 1 ? '' : 's'}</p>
-              </div>
-
-              <input
-                value={batchName}
-                onChange={(event) => setBatchName(event.target.value)}
-                placeholder="Optional batch name"
-                className="w-full rounded-md border px-3 py-2 text-sm outline-none"
-                style={{ background: muted, borderColor: panelBorder, color: text }}
-              />
-
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {GENRES.map(([slug, label]) => {
-                  const checked = selectedGenres.includes(slug);
-                  return (
-                    <button
-                      key={slug}
-                      type="button"
-                      onClick={() => handleToggleGenre(slug)}
-                      className="inline-flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold"
-                      style={{
-                        borderColor: checked ? primary : panelBorder,
-                        background: checked ? 'var(--cs-primary-soft)' : muted,
-                        color: checked ? primary : soft,
-                      }}
-                    >
-                      <span>{label}</span>
-                      {checked && <Icon icon={appIcons.check} className="h-3.5 w-3.5" />}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {selectedGenres.length > 1 && (
-                <div className="rounded-md border px-3 py-3" style={{ borderColor: panelBorder, background: muted }}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: faint }}>Crawl priority</span>
-                    <span className="text-[11px]" style={{ color: soft }}>{active ? 'live — reorder anytime' : 'top = crawled first'}</span>
+          {summary && (
+            <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-base font-semibold" style={{ color: text }}>{summary.batch_name || 'NovelHall batch'}</span>
+                      <span className="shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold" style={{ borderColor: panelBorder, background: muted, color: soft }}>{phaseLabel(summary.phase)}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: soft }}>
+                      <span>id {summary.batch_id}</span>
+                      <span className="tabular-nums">{summary.total_stories.toLocaleString()} stories</span>
+                      <span className="tabular-nums">{summary.completed_count.toLocaleString()} files</span>
+                      <span className="truncate">{selectedGenreLabels.slice(0, 5).join(', ')}</span>
+                    </div>
                   </div>
-                  <ol className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                </div>
+                <div className="relative" data-menu-root>
+                  <button type="button" onClick={() => setOpenMenu((m) => (m === 'switch' ? null : 'switch'))} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                    ⇄ Switch batch
+                    <Icon icon={appIcons.chevronDown} className={`h-3.5 w-3.5 transition-transform ${openMenu === 'switch' ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openMenu === 'switch' && (
+                    <div className="absolute right-0 z-30 mt-1.5 max-h-80 w-80 overflow-auto rounded-md border p-1 shadow-lg" style={{ background: panelBg, borderColor: panelBorder }}>
+                      <div className="flex items-center justify-between px-2 py-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: faint }}>Batches</span>
+                        <button type="button" onClick={fetchHistory} disabled={historyLoading} className="text-xs disabled:opacity-50" style={{ color: soft }}>{historyLoading ? 'Refreshing…' : 'Refresh'}</button>
+                      </div>
+                      {history.length === 0 && <div className="px-2 py-3 text-xs" style={{ color: soft }}>No batches yet.</div>}
+                      {history.slice(0, 20).map((batch) => (
+                        <div key={batch.batch_id} className="flex items-center gap-1 rounded-md" style={{ background: batch.batch_id === batchId ? 'var(--cs-primary-soft)' : 'transparent' }}>
+                          <button type="button" onClick={() => { handleSelectBatch(batch); setOpenMenu(null); }} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left" style={{ color: text }}>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-medium">{batch.batch_name || batch.batch_id}</div>
+                              <div className="mt-0.5 truncate text-[11px]" style={{ color: soft }}>{phaseLabel(batch.phase)} · {batch.total_stories.toLocaleString()} stories · {batch.created_at}</div>
+                            </div>
+                            {batch.batch_id === batchId && <Icon icon={appIcons.check} className="h-4 w-4 shrink-0" style={{ color: primary }} />}
+                          </button>
+                          <button type="button" onClick={() => { setDeleteTarget(batch); setOpenMenu(null); }} disabled={batch.phase === 'discovering' || batch.phase === 'crawling'} className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-md disabled:opacity-30" style={{ color: batch.phase === 'discovering' || batch.phase === 'crawling' ? faint : '#dc2626' }} aria-label="Delete batch">
+                            <Icon icon={appIcons.delete} className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {summary && (
+            <section className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-semibold" style={{ color: text }}>Batch totals</h2>
+                  {summary.rate_limit && (
+                    <button type="button" onClick={() => setShowRateDetails((v) => !v)} className="text-xs font-medium" style={{ color: soft }}>Rate details {showRateDetails ? '▴' : '▾'}</button>
+                  )}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <Stat label="Found" value={summary.discovered_count ?? 0} />
+                  <Stat label="Processed" value={summary.processed_count ?? 0} />
+                  <Stat label="Exported" value={summary.completed_count ?? 0} />
+                  <Stat label="Failed" value={summary.failed_count ?? 0} />
+                  <Stat className="col-span-2" label="Chapters" value={`${(summary.crawled_chapters ?? 0).toLocaleString()}/${estimateTotalChapters.toLocaleString()}${estimateTotalChapters > (summary.total_chapters ?? 0) ? ' est' : ''}`} />
+                  {showRateDetails && summary.rate_limit && (
+                    <>
+                      <Stat label="Request starts" value={`${summary.rate_limit.request_interval_seconds.toFixed(1)}s`} />
+                      <Stat label="In flight" value={`${summary.rate_limit.in_flight_requests ?? 0}/${summary.rate_limit.max_in_flight_requests ?? 1}`} />
+                      <Stat label="Avg response" value={`${(summary.rate_limit.average_request_latency_seconds ?? 0).toFixed(2)}s`} />
+                      <Stat label="429 cooldown" value={summary.rate_limit.cooldown_remaining_seconds > 0 ? formatDuration(summary.rate_limit.cooldown_remaining_seconds) : 'Ready'} />
+                    </>
+                  )}
+                </div>
+                <div className="mt-4"><Progress label="Progress" value={progressPercent} /></div>
+              </div>
+
+              <div className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-base font-semibold" style={{ color: text }}>Time estimate</h2>
+                  {crawlEstimate && <span className="rounded border px-2 py-1 text-xs font-medium" style={{ borderColor: panelBorder, background: muted, color: soft }}>{estimateSourceLabel(crawlEstimate.source)}</span>}
+                </div>
+                {crawlEstimate ? (
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.effective_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.recent_stories_per_hour ?? crawlEstimate.stories_per_hour)} />
+                    <Stat label="Chapter yield" value={formatPercentRatio(crawlEstimate.chapter_yield_ratio)} />
+                    <Stat label="Remaining stories" value={crawlEstimate.remaining_stories} />
+                    <Stat label="Remaining chapters" value={formatRemainingChapters(crawlEstimate.remaining_chapters, crawlEstimate.raw_remaining_chapters)} />
+                    <Stat label="Elapsed" value={formatDuration(crawlEstimate.elapsed_seconds)} />
+                    <Stat label="ETA" value={formatDuration(crawlEstimate.estimated_remaining_seconds)} />
+                    <Stat className="col-span-2" label="Finish" value={crawlEstimate.estimated_finished_at || '-'} />
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm" style={{ color: soft }}>Start a crawl to see speed and ETA.</p>
+                )}
+                {activeRun && (
+                  <div className="mt-4 border-t pt-3" style={{ borderColor: panelBorder }}>
+                    <div className="flex items-center gap-2 text-xs" style={{ color: soft }}>
+                      <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--cs-primary)] opacity-50" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--cs-primary)]" /></span>
+                      Active run {activeRun.run_id} · {runProcessedCount(activeRun).toLocaleString()}/{activeRun.target_stories.toLocaleString()} stories
+                    </div>
+                    <div className="mt-2"><Progress label="This run" value={runProgressPercent(activeRun)} /></div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-semibold" style={{ color: text }}>Crawl priority</h2>
+                  <span className="text-[11px]" style={{ color: soft }}>{active ? 'live · reorder anytime' : 'top = crawled first'}</span>
+                </div>
+                {selectedGenres.length > 1 ? (
+                  <ol className="mt-4 max-h-64 space-y-1 overflow-y-auto pr-1">
                     {selectedGenres.map((slug, idx) => {
                       const label = GENRES.find(([s]) => s === slug)?.[1] ?? slug;
                       return (
-                        <li key={slug} className="flex items-center gap-2 rounded px-2 py-1 text-xs" style={{ background: panelBg, color: text }}>
+                        <li
+                          key={slug}
+                          draggable
+                          onDragStart={() => { draggedGenreRef.current = slug; }}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => { event.preventDefault(); if (draggedGenreRef.current) reorderGenreTo(draggedGenreRef.current, slug); draggedGenreRef.current = null; }}
+                          className="flex cursor-grab items-center gap-2 rounded px-2 py-1.5 text-xs active:cursor-grabbing"
+                          style={{ background: muted, color: text }}
+                        >
+                          <span className="select-none text-sm leading-none" style={{ color: faint }} aria-hidden>⠿</span>
                           <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: 'var(--cs-primary-soft)', color: primary }}>{idx + 1}</span>
                           <span className="flex-1 truncate font-semibold">{label}</span>
                           <button type="button" onClick={() => moveGenre(slug, -1)} disabled={idx === 0} className="rounded px-1.5 py-0.5 text-sm leading-none disabled:opacity-25" style={{ color: soft }} aria-label={`Move ${label} up`}>↑</button>
@@ -674,8 +773,41 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                       );
                     })}
                   </ol>
-                </div>
-              )}
+                ) : (
+                  <p className="mt-4 text-sm" style={{ color: soft }}>Select 2+ genres to set a crawl order.</p>
+                )}
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-4 rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+              <div>
+                <h2 className="text-base font-semibold" style={{ color: text }}>Setup &amp; run</h2>
+                <p className="text-sm" style={{ color: soft }}>{selectedGenres.length} selected genre{selectedGenres.length === 1 ? '' : 's'}</p>
+              </div>
+
+              <div>
+                <button type="button" onClick={() => setShowSources((v) => !v)} className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm font-medium" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                  <span>{selectedGenres.length} genre{selectedGenres.length === 1 ? '' : 's'} selected</span>
+                  <span className="flex items-center gap-1 text-xs" style={{ color: soft }}>
+                    {showSources ? 'Hide' : 'Choose genres'}
+                    <Icon icon={appIcons.chevronDown} className={`h-3.5 w-3.5 transition-transform ${showSources ? 'rotate-180' : ''}`} />
+                  </span>
+                </button>
+                {showSources && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                    {GENRES.map(([slug, label]) => {
+                      const checked = selectedGenres.includes(slug);
+                      return (
+                        <button key={slug} type="button" onClick={() => handleToggleGenre(slug)} className="inline-flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs font-semibold" style={{ borderColor: checked ? primary : panelBorder, background: checked ? 'var(--cs-primary-soft)' : muted, color: checked ? primary : soft }}>
+                          <span>{label}</span>
+                          {checked && <Icon icon={appIcons.check} className="h-3.5 w-3.5" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-wrap items-end gap-3">
                 <NumberField label="Pages/genre" value={maxPages} min={1} max={DISCOVER_ALL_MAX_PAGES} onChange={setMaxPages} />
@@ -700,23 +832,25 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                 {autoContinue && (
                   <NumberField label="Cooldown (s)" value={cooldownSeconds} min={0} max={3600} onChange={setCooldownSeconds} />
                 )}
-                <div className="min-w-[280px]">
-                  <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide" style={{ color: faint }}>Crawl mode</span>
-                  <div className="grid grid-cols-2 rounded-md border p-1" style={{ borderColor: panelBorder, background: muted }}>
+                <div>
+                  <span className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide" style={{ color: faint }}>
+                    Crawl mode
+                    <span className="group relative inline-flex cursor-help" style={{ color: soft }}>
+                      <span className="grid h-4 w-4 place-items-center rounded-full border text-[10px] font-bold normal-case" style={{ borderColor: panelBorder }}>i</span>
+                      <span className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 hidden w-52 -translate-x-1/2 rounded-md border px-3 py-2 text-[11px] font-normal normal-case shadow-lg group-hover:block" style={{ borderColor: panelBorder, background: panelBg, color: soft }}>
+                        {(Object.keys(CRAWL_MODE_PRESETS) as CrawlMode[]).map((m) => (
+                          <span key={m} className="mb-1 block last:mb-0"><b style={{ color: text }}>{CRAWL_MODE_PRESETS[m].label}</b> — {CRAWL_MODE_PRESETS[m].detail}</span>
+                        ))}
+                      </span>
+                    </span>
+                  </span>
+                  <div className="inline-grid grid-cols-2 rounded-md border p-0.5" style={{ borderColor: panelBorder, background: muted }}>
                     {(Object.keys(CRAWL_MODE_PRESETS) as CrawlMode[]).map((mode) => {
                       const preset = CRAWL_MODE_PRESETS[mode];
                       const selected = crawlMode === mode;
                       return (
-                        <button
-                          key={mode}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => setCrawlMode(mode)}
-                          className="rounded px-3 py-2 text-left transition-colors"
-                          style={{ background: selected ? primary : 'transparent', color: selected ? '#fff' : text }}
-                        >
-                          <span className="block text-sm font-semibold">{preset.label}</span>
-                          <span className="block text-[11px] opacity-80">{preset.detail}</span>
+                        <button key={mode} type="button" aria-pressed={selected} onClick={() => setCrawlMode(mode)} title={preset.detail} className="rounded px-4 py-1.5 text-sm font-semibold transition-colors" style={{ background: selected ? primary : 'transparent', color: selected ? '#fff' : text }}>
+                          {preset.label}
                         </button>
                       );
                     })}
@@ -724,84 +858,53 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleCrawlSelected}
-                  disabled={isStarting || active || !summary || summary.phase === 'completed' || summary.total_stories === 0}
-                  className="inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ background: primary, color: '#fff' }}
-                >
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button type="button" onClick={handleCrawlSelected} disabled={isStarting || active || !summary || summary.phase === 'completed' || summary.total_stories === 0} className="inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60" style={{ background: primary, color: '#fff' }}>
                   {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.play} className="h-4 w-4" />}
                   Start/Resume crawl
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDiscoverSelected}
-                  disabled={isStarting || active || selectedGenres.length === 0}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ borderColor: panelBorder, background: muted, color: text }}
-                >
-                  {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.search} className="h-4 w-4" />}
-                  Discover only
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDiscoverAll}
-                  disabled={isStarting || active}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ borderColor: primary, background: 'var(--cs-primary-soft)', color: primary }}
-                >
-                  {isStarting ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.search} className="h-4 w-4" />}
-                  Discover all
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePauseCrawl}
-                  disabled={isPausing || summary?.phase !== 'crawling' || summary?.cancel_requested}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ borderColor: panelBorder, background: muted, color: text }}
-                >
+                <button type="button" onClick={handlePauseCrawl} disabled={isPausing || summary?.phase !== 'crawling' || summary?.cancel_requested} className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
                   {isPausing || summary?.cancel_requested ? <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" /> : <Icon icon={appIcons.pause} className="h-4 w-4" />}
-                  {summary?.cancel_requested ? 'Pausing...' : 'Pause crawl'}
+                  {summary?.cancel_requested ? 'Pausing...' : 'Pause'}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  disabled={!summary?.download_ready || Boolean(downloadTarget)}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ borderColor: panelBorder, background: muted, color: text }}
-                >
-                  <Icon icon={downloadTarget === 'all' ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${downloadTarget === 'all' ? 'animate-spin' : ''}`} />
-                  {downloadTarget === 'all' ? 'Preparing ZIP' : 'Download exported ZIP'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportCatalog}
-                  disabled={isCatalogExporting || !summary}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ borderColor: panelBorder, background: muted, color: text }}
-                >
-                  <Icon icon={isCatalogExporting ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${isCatalogExporting ? 'animate-spin' : ''}`} />
-                  {isCatalogExporting ? 'Exporting batch' : 'Export selected batch'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleImportCatalogClick}
-                  disabled={isCatalogImporting || active}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ borderColor: panelBorder, background: muted, color: text }}
-                >
-                  <Icon icon={isCatalogImporting ? appIcons.spinner : appIcons.uploadFile} className={`h-4 w-4 ${isCatalogImporting ? 'animate-spin' : ''}`} />
-                  {isCatalogImporting ? 'Importing catalog' : 'Import catalog'}
-                </button>
-                <input
-                  ref={catalogFileInputRef}
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
-                  onChange={handleImportCatalogFile}
-                />
+                <div className="relative" data-menu-root>
+                  <button type="button" onClick={() => setOpenMenu((m) => (m === 'discover' ? null : 'discover'))} disabled={isStarting || active} className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60" style={{ borderColor: primary, background: 'var(--cs-primary-soft)', color: primary }}>
+                    <Icon icon={appIcons.search} className="h-4 w-4" /> Discover
+                    <Icon icon={appIcons.chevronDown} className={`h-3.5 w-3.5 transition-transform ${openMenu === 'discover' ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openMenu === 'discover' && (
+                    <div className="absolute left-0 z-30 mt-1.5 w-60 rounded-md border p-1 shadow-lg" style={{ background: panelBg, borderColor: panelBorder }}>
+                      <button type="button" onClick={() => { setOpenMenu(null); void handleDiscoverSelected(); }} disabled={selectedGenres.length === 0} className="flex w-full flex-col rounded px-3 py-2 text-left transition-colors hover:bg-[var(--cs-surface-muted)] disabled:opacity-40" style={{ color: text }}>
+                        <span className="text-sm font-semibold">Discover selected</span>
+                        <span className="text-[11px]" style={{ color: soft }}>Scan the chosen genres</span>
+                      </button>
+                      <button type="button" onClick={() => { setOpenMenu(null); void handleDiscoverAll(); }} className="flex w-full flex-col rounded px-3 py-2 text-left transition-colors hover:bg-[var(--cs-surface-muted)]" style={{ color: text }}>
+                        <span className="text-sm font-semibold">Discover all</span>
+                        <span className="text-[11px]" style={{ color: soft }}>Every genre, all pages</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="relative ml-auto" data-menu-root>
+                  <button type="button" onClick={() => setOpenMenu((m) => (m === 'more' ? null : 'more'))} className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                    More
+                    <Icon icon={appIcons.chevronDown} className={`h-3.5 w-3.5 transition-transform ${openMenu === 'more' ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openMenu === 'more' && (
+                    <div className="absolute right-0 z-30 mt-1.5 w-64 rounded-md border p-1 shadow-lg" style={{ background: panelBg, borderColor: panelBorder }}>
+                      <button type="button" onClick={() => { setOpenMenu(null); void handleDownload(); }} disabled={!summary?.download_ready || Boolean(downloadTarget)} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-[var(--cs-surface-muted)] disabled:opacity-40" style={{ color: text }}>
+                        <Icon icon={appIcons.download} className="h-4 w-4" /> Download exported ZIP
+                      </button>
+                      <button type="button" onClick={() => { setOpenMenu(null); void handleExportCatalog(); }} disabled={isCatalogExporting || !summary} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-[var(--cs-surface-muted)] disabled:opacity-40" style={{ color: text }}>
+                        <Icon icon={appIcons.download} className="h-4 w-4" /> Export selected batch
+                      </button>
+                      <button type="button" onClick={() => { setOpenMenu(null); handleImportCatalogClick(); }} disabled={isCatalogImporting || active} className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-[var(--cs-surface-muted)] disabled:opacity-40" style={{ color: text }}>
+                        <Icon icon={appIcons.uploadFile} className="h-4 w-4" /> Import catalog
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <input ref={catalogFileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={handleImportCatalogFile} />
               </div>
               {summary?.auto_run_enabled && (
                 <div className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: primary, background: muted, color: text }}>
@@ -822,129 +925,11 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                   {catalogMessage}
                 </div>
               )}
-            </div>
-
-            <div className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
-              <h2 className="text-base font-semibold" style={{ color: text }}>Batch totals</h2>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <Stat label="Found" value={summary?.discovered_count ?? 0} />
-                <Stat label="Processed" value={summary?.processed_count ?? 0} />
-                <Stat label="Exported" value={summary?.completed_count ?? 0} />
-                <Stat label="Skipped" value={summary?.skipped_count ?? 0} />
-                <Stat label="Failed" value={summary?.failed_count ?? 0} />
-                <Stat label="Genres" value={selectedGenres.length} />
-                <Stat className="col-span-2" label="Chapters" value={`${(summary?.crawled_chapters ?? 0).toLocaleString()}/${estimateTotalChapters.toLocaleString()}${estimateTotalChapters > (summary?.total_chapters ?? 0) ? ' est' : ''}`} />
-                {summary?.rate_limit && (
-                  <>
-                    <Stat label="Request starts" value={`${summary.rate_limit.request_interval_seconds.toFixed(1)}s cadence`} />
-                    <Stat label="In flight" value={`${summary.rate_limit.in_flight_requests ?? 0}/${summary.rate_limit.max_in_flight_requests ?? 1}`} />
-                    <Stat label="Avg response" value={`${(summary.rate_limit.average_request_latency_seconds ?? 0).toFixed(2)}s`} />
-                    <Stat label="429 cooldown" value={summary.rate_limit.cooldown_remaining_seconds > 0 ? formatDuration(summary.rate_limit.cooldown_remaining_seconds) : 'Ready'} />
-                  </>
-                )}
-              </div>
-              <div className="mt-4">
-                <Progress label="Progress" value={progressPercent} />
-              </div>
-              {summary && crawlEstimate && (
-                <div className="mt-4 border-t pt-4" style={{ borderColor: panelBorder }}>
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold" style={{ color: text }}>Time estimate</h3>
-                    <span className="rounded border px-2 py-1 text-xs font-medium" style={{ borderColor: panelBorder, background: muted, color: soft }}>
-                      {estimateSourceLabel(crawlEstimate.source)}
-                    </span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <Stat label="Remaining stories" value={crawlEstimate.remaining_stories} />
-                    <Stat label="Remaining chapters" value={formatRemainingChapters(crawlEstimate.remaining_chapters, crawlEstimate.raw_remaining_chapters)} />
-                    <Stat label="Chapter yield" value={formatPercentRatio(crawlEstimate.chapter_yield_ratio)} />
-                    <Stat label="Speed" value={formatEstimateSpeed(crawlEstimate.recent_chapters_per_hour ?? crawlEstimate.effective_chapters_per_hour ?? crawlEstimate.chapters_per_hour, crawlEstimate.recent_stories_per_hour ?? crawlEstimate.stories_per_hour)} />
-                    <Stat label="Elapsed" value={formatDuration(crawlEstimate.elapsed_seconds)} />
-                    <Stat label="ETA" value={formatDuration(crawlEstimate.estimated_remaining_seconds)} />
-                    <Stat className="col-span-2" label="Finish" value={crawlEstimate.estimated_finished_at || '-'} />
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold" style={{ color: text }}>Batch history</h2>
-                <p className="text-sm" style={{ color: soft }}>{selectedGenreLabels.slice(0, 4).join(', ')}{selectedGenreLabels.length > 4 ? ', ...' : ''}</p>
-              </div>
-              <button type="button" onClick={fetchHistory} disabled={historyLoading} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
-                <Icon icon={appIcons.refresh} className={`h-4 w-4 ${historyLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-            </div>
-
-            {history.length > 0 ? (
-              <div className="mt-4 overflow-hidden rounded-md border" style={{ borderColor: panelBorder }}>
-                {history.slice(0, 12).map((batch, index) => {
-                  const selected = batch.batch_id === batchId;
-                  return (
-                    <div key={batch.batch_id} className="grid gap-2 px-3 py-3 md:grid-cols-[minmax(220px,1fr)_110px_90px_90px_74px] md:items-center" style={{ borderTop: index === 0 ? 'none' : `1px solid ${panelBorder}`, borderLeft: selected ? '3px solid var(--cs-primary)' : '3px solid transparent', background: selected ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)') : panelBg, color: text }}>
-                      <button type="button" onClick={() => handleSelectBatch(batch)} className="grid text-left md:contents">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold">{batch.batch_name || batch.batch_id}</p>
-                          <p className="mt-1 text-xs" style={{ color: soft }}>{batch.created_at} - {batch.batch_id}</p>
-                        </div>
-                        <span className="w-fit rounded border px-2 py-1 text-xs font-medium" style={{ borderColor: panelBorder, background: muted, color: soft }}>{phaseLabel(batch.phase)}</span>
-                        <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.completed_count.toLocaleString()} files</span>
-                        <span className="text-xs tabular-nums" style={{ color: soft }}>{batch.total_stories.toLocaleString()} stories</span>
-                      </button>
-                      <div className="flex justify-end">
-                        <button type="button" onClick={() => setDeleteTarget(batch)} disabled={batch.phase === 'discovering' || batch.phase === 'crawling'} className="inline-flex h-9 w-9 items-center justify-center rounded-md border disabled:cursor-not-allowed disabled:opacity-45" style={{ borderColor: panelBorder, background: muted, color: batch.phase === 'discovering' || batch.phase === 'crawling' ? faint : '#dc2626' }}>
-                          <Icon icon={appIcons.delete} className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-lg border px-4 py-6 text-center text-sm" style={{ borderColor: panelBorder, color: soft }}>
-                {historyLoading ? 'Loading batch history...' : 'No NovelHall batches yet.'}
-              </div>
-            )}
           </section>
 
           {error && (
             <section className="rounded-lg border px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.22)', color: isDark ? '#fca5a5' : '#dc2626' }}>
               <span className="inline-flex items-center gap-2"><Icon icon={appIcons.error} className="h-4 w-4" />{error}</span>
-            </section>
-          )}
-
-          {summary && summary.log_lines.length > 0 && (
-            <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-base font-semibold" style={{ color: text }}>Batch log</h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs tabular-nums" style={{ color: faint }}>{summary.log_lines.length.toLocaleString()} latest lines</span>
-                  <Link
-                    to={`/novelhall-batch/${encodeURIComponent(summary.batch_id)}/full-logs`}
-                    className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold"
-                    style={{ borderColor: panelBorder, background: muted, color: text }}
-                  >
-                    <Icon icon={appIcons.file} className="h-3.5 w-3.5" />
-                    Full logs
-                  </Link>
-                </div>
-              </div>
-              <div className="mt-3 max-h-56 overflow-auto rounded-md border p-2 font-mono text-xs leading-5" style={{ borderColor: panelBorder, background: muted }}>
-                {summary.log_lines.slice().reverse().map((line, index) => {
-                  const { time, message } = splitNovelHallLogLine(line);
-                  const tone = getNovelHallLogTone(line);
-                  return (
-                    <div key={`${line}-${index}`} className={`mb-1 rounded border-l-2 px-2 py-1 last:mb-0 ${novelhallLogToneClass(tone)}`}>
-                      {time && <span className="mr-2 font-semibold opacity-70">{time}</span>}
-                      <span className="break-words">{message}</span>
-                    </div>
-                  );
-                })}
-              </div>
             </section>
           )}
 
@@ -956,43 +941,13 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                     <h2 className="text-base font-semibold" style={{ color: text }}>Crawl runs</h2>
                     <span className="rounded-full border px-2 py-0.5 text-xs tabular-nums" style={{ borderColor: panelBorder, background: muted, color: soft }}>{crawlRuns.length}</span>
                   </div>
-                  <p className="text-sm" style={{ color: soft }}>Live progress for the current run, with compact access to previous exports.</p>
+                  <p className="text-sm" style={{ color: soft }}>Download the ZIP for any run. Live progress is in the cards above.</p>
                 </div>
                 <button type="button" onClick={handleDownload} disabled={!summary.download_ready || Boolean(downloadTarget)} className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
                   <Icon icon={downloadTarget === 'all' ? appIcons.spinner : appIcons.download} className={`h-4 w-4 ${downloadTarget === 'all' ? 'animate-spin' : ''}`} />
                   {downloadTarget === 'all' ? 'Preparing ZIP' : 'Download all'}
                 </button>
               </div>
-
-              {activeRun && (
-                <div className="mt-4 rounded-lg border p-4" style={{ borderColor: 'var(--cs-primary)', background: 'var(--cs-primary-soft)', color: text }}>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="relative flex h-2.5 w-2.5">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--cs-primary)] opacity-50" />
-                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--cs-primary)]" />
-                        </span>
-                        <span className="text-sm font-semibold">Active run</span>
-                        <span className="font-mono text-xs" style={{ color: soft }}>{activeRun.run_id}</span>
-                      </div>
-                      <p className="mt-1 text-xs" style={{ color: soft }}>Started {activeRun.started_at} · refreshes every 2.5 seconds</p>
-                    </div>
-                    <span className="w-fit rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide" style={{ borderColor: 'var(--cs-primary)', color: primary }}>Crawling</span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-                    <RunMetric label="Stories processed" value={`${runProcessedCount(activeRun).toLocaleString()} / ${activeRun.target_stories.toLocaleString()}`} />
-                    <RunMetric label="Exported" value={activeRun.completed_count.toLocaleString()} />
-                    <RunMetric label="Chapters" value={`${(activeRun.crawled_chapters ?? 0).toLocaleString()} / ${(activeRun.total_chapters ?? 0).toLocaleString()}`} />
-                    <RunMetric label="Skipped / failed" value={`${activeRun.skipped_count.toLocaleString()} / ${activeRun.failed_count.toLocaleString()}`} />
-                  </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <Progress label="Stories processed" value={runProgressPercent(activeRun)} />
-                    <Progress label="Known chapters crawled" value={(activeRun.total_chapters ?? 0) > 0 ? ((activeRun.crawled_chapters ?? 0) / (activeRun.total_chapters ?? 1)) * 100 : 0} />
-                  </div>
-                </div>
-              )}
 
               {previousRuns.length > 0 ? (
                 <div className="mt-4 overflow-hidden rounded-lg border" style={{ borderColor: panelBorder }}>
@@ -1124,14 +1079,45 @@ export function NovelHallBatchPage({ themeMode }: NovelHallBatchPageProps) {
                 </div>
               )}
 
-              {rows.length < rowTotal && (
-                <div className="border-t px-4 py-4 sm:px-5" style={{ borderColor: panelBorder }}>
-                  <button type="button" onClick={() => fetchRows(rows.length)} disabled={rowsLoading} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60" style={{ borderColor: panelBorder, background: muted, color: text }}>
-                    {rowsLoading && <Icon icon={appIcons.spinner} className="h-4 w-4 animate-spin" />}
-                    Load more
-                  </button>
+              {rowTotal > ROW_PAGE_SIZE && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:px-5" style={{ borderColor: panelBorder }}>
+                  <span className="text-xs" style={{ color: soft }}>
+                    Showing <span className="font-semibold tabular-nums" style={{ color: text }}>{(rowsPage * ROW_PAGE_SIZE + (rows.length ? 1 : 0)).toLocaleString()}–{(rowsPage * ROW_PAGE_SIZE + rows.length).toLocaleString()}</span> of <span className="font-semibold tabular-nums" style={{ color: text }}>{rowTotal.toLocaleString()}</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => { void fetchRows(rowsPage - 1); }} disabled={rowsPage <= 0 || rowsLoading} className="rounded-md border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: panelBorder, background: muted, color: text }}>‹ Prev</button>
+                    <span className="px-2 text-xs tabular-nums" style={{ color: soft }}>Page {rowsPage + 1} / {Math.max(1, Math.ceil(rowTotal / ROW_PAGE_SIZE)).toLocaleString()}</span>
+                    <button type="button" onClick={() => { void fetchRows(rowsPage + 1); }} disabled={(rowsPage + 1) * ROW_PAGE_SIZE >= rowTotal || rowsLoading} className="rounded-md border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: panelBorder, background: muted, color: text }}>Next ›</button>
+                  </div>
                 </div>
               )}
+            </section>
+          )}
+
+          {summary && summary.log_lines.length > 0 && (
+            <section className="rounded-lg border px-4 py-4 sm:px-5" style={{ background: panelBg, borderColor: panelBorder }}>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold" style={{ color: text }}>Batch log</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs tabular-nums" style={{ color: faint }}>{summary.log_lines.length.toLocaleString()} latest lines</span>
+                  <Link to={`/novelhall-batch/${encodeURIComponent(summary.batch_id)}/full-logs`} className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-semibold" style={{ borderColor: panelBorder, background: muted, color: text }}>
+                    <Icon icon={appIcons.file} className="h-3.5 w-3.5" />
+                    Full logs
+                  </Link>
+                </div>
+              </div>
+              <div className="mt-3 max-h-72 overflow-auto rounded-md border p-2 font-mono text-xs leading-5" style={{ borderColor: panelBorder, background: muted }}>
+                {summary.log_lines.slice().reverse().map((line, index) => {
+                  const { time, message } = splitNovelHallLogLine(line);
+                  const tone = getNovelHallLogTone(line);
+                  return (
+                    <div key={`${line}-${index}`} className={`mb-1 rounded border-l-2 px-2 py-1 last:mb-0 ${novelhallLogToneClass(tone)}`}>
+                      {time && <span className="mr-2 font-semibold opacity-70">{time}</span>}
+                      <span className="break-words">{message}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           )}
         </main>
@@ -1154,15 +1140,6 @@ function Stat({ label, value, className = '' }: { readonly label: string; readon
     <div className={`min-w-0 rounded-md border px-3 py-2 ${className}`} style={{ borderColor: 'var(--cs-border)', background: 'var(--cs-surface-muted)' }}>
       <div className="text-xs" style={{ color: 'var(--cs-text-faint)' }}>{label}</div>
       <div className="mt-1 break-words text-base font-semibold leading-tight sm:text-lg" style={{ color: 'var(--cs-text)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
-    </div>
-  );
-}
-
-function RunMetric({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <div className="min-w-0 rounded-md border px-3 py-2" style={{ borderColor: 'var(--cs-border)', background: 'var(--cs-surface)' }}>
-      <div className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--cs-text-faint)' }}>{label}</div>
-      <div className="mt-1 truncate text-sm font-semibold tabular-nums" style={{ color: 'var(--cs-text)' }} title={value}>{value}</div>
     </div>
   );
 }
